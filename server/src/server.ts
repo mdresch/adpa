@@ -9,6 +9,7 @@ import { errorHandler } from "./middleware/errorHandler"
 import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
+import { initializeQueues } from "./services/queueService"
 
 // Routes
 import authRoutes from "./routes/auth"
@@ -95,6 +96,10 @@ async function startServer() {
     await connectRedis()
     logger.info("Redis connected successfully")
 
+    // Initialize job queues and AI services
+    await initializeQueues()
+    logger.info("Job queues initialized successfully")
+
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`)
       logger.info(`Environment: ${process.env.NODE_ENV || "development"}`)
@@ -105,6 +110,9 @@ async function startServer() {
   }
 }
 
-startServer()
+// Only start server if this file is run directly
+if (require.main === module) {
+  startServer()
+}
 
-export { io }
+export { app, io }

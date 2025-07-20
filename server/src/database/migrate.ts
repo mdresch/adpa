@@ -1,0 +1,69 @@
+import { readFileSync } from "fs"
+import { join } from "path"
+import { pool } from "./connection"
+import { logger } from "../utils/logger"
+
+async function runMigrations() {
+  try {
+    logger.info("Starting database migrations...")
+
+    // Read and execute schema.sql
+    const schemaPath = join(__dirname, "schema.sql")
+    const schema = readFileSync(schemaPath, "utf-8")
+
+    // Split by semicolon and execute each statement
+    const statements = schema
+      .split(";")
+      .map(stmt => stmt.trim())
+      .filter(stmt => stmt.length > 0 && !stmt.startsWith("--"))
+
+    for (const statement of statements) {
+      try {
+        await pool.query(statement)
+        logger.info(`Executed: ${statement.substring(0, 50)}...`)
+      } catch (error) {
+        // Ignore "already exists" errors
+        if (error instanceof Error && error.message.includes("already exists")) {
+          logger.info(`Skipped (already exists): ${statement.substring(0, 50)}...`)
+        } else {
+          throw error
+        }
+      }
+    }
+
+    // Create migrations table if it doesn't exist
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS migrations (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+
+    // Record this migration
+    await pool.query(
+      "INSERT INTO migrations (name) VALUES ($1) ON CONFLICT DO NOTHING",
+      ["initial_schema"]
+    )
+
+    logger.info("Database migrations completed successfully")
+  } catch (error) {
+    logger.error("Migration failed:", error)
+    throw error
+  }
+}
+
+// Run migrations if this file is executed directly
+if (require.main === module) {
+  runMigrations()
+    .then(() => {
+      logger.info("Migrations completed")
+      process.exit(0)
+    })
+    .catch((error) => {
+      logger.error("Migration failed:", error)
+      process.exit(1)
+    })
+}
+
+export { runMigrations }
