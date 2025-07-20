@@ -433,4 +433,3 @@ router.get("/audit",
 )
 
 export default router
-export { logSecurityEvent }
