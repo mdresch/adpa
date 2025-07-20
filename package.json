@@ -47,7 +47,7 @@
     "http": "latest",
     "jsonwebtoken": "latest",
     "lucide-react": "^0.454.0",
-    "next": "14.2.16",
+    "next": "14.2.30",
     "next-themes": "latest",
     "pg": "latest",
     "pg-native": "latest",
