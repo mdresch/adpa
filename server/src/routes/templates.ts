@@ -1,0 +1,430 @@
+import express from "express"
+import Joi from "joi"
+import { pool } from "../database/connection"
+import { authenticateToken, requirePermission } from "../middleware/auth"
+import { validate, validateParams, validateQuery, schemas } from "../middleware/validation"
+import { logger } from "../utils/logger"
+import { cache } from "../utils/redis"
+import { v4 as uuidv4 } from "uuid"
+
+const router = express.Router()
+
+// Get templates
+router.get("/", 
+  authenticateToken,
+  validateQuery(Joi.object({
+    page: Joi.number().integer().min(1).default(1),
+    limit: Joi.number().integer().min(1).max(100).default(10),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").optional(),
+    category: Joi.string().max(100).optional(),
+    search: Joi.string().max(100).optional(),
+    is_public: Joi.boolean().optional(),
+  })),
+  async (req, res) => {
+    try {
+      const { page = 1, limit = 10, framework, category, search, is_public } = req.query
+      const offset = (Number(page) - 1) * Number(limit)
+
+      let query = `
+        SELECT t.*, u.name as created_by_name
+        FROM templates t
+        LEFT JOIN users u ON t.created_by = u.id
+        WHERE (t.is_public = true OR t.created_by = $1)
+      `
+
+      const params: any[] = [req.user?.id]
+      let paramCount = 1
+
+      if (framework) {
+        paramCount++
+        query += ` AND t.framework = $${paramCount}`
+        params.push(framework)
+      }
+
+      if (category) {
+        paramCount++
+        query += ` AND t.category = $${paramCount}`
+        params.push(category)
+      }
+
+      if (search) {
+        paramCount++
+        query += ` AND (t.name ILIKE $${paramCount} OR t.description ILIKE $${paramCount})`
+        params.push(`%${search}%`)
+      }
+
+      if (is_public !== undefined) {
+        paramCount++
+        query += ` AND t.is_public = $${paramCount}`
+        params.push(is_public)
+      }
+
+      query += ` ORDER BY t.usage_count DESC, t.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
+      params.push(limit, offset)
+
+      const result = await pool.query(query, params)
+
+      // Get total count
+      let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1)"
+      const countParams = [req.user?.id]
+      let countParamCount = 1
+
+      if (framework) {
+        countParamCount++
+        countQuery += ` AND t.framework = $${countParamCount}`
+        countParams.push(framework)
+      }
+
+      if (category) {
+        countParamCount++
+        countQuery += ` AND t.category = $${countParamCount}`
+        countParams.push(category)
+      }
+
+      if (search) {
+        countParamCount++
+        countQuery += ` AND (t.name ILIKE $${countParamCount} OR t.description ILIKE $${countParamCount})`
+        countParams.push(`%${search}%`)
+      }
+
+      if (is_public !== undefined) {
+        countParamCount++
+        countQuery += ` AND t.is_public = $${countParamCount}`
+        countParams.push(is_public)
+      }
+
+      const countResult = await pool.query(countQuery, countParams)
+      const total = Number.parseInt(countResult.rows[0].count)
+
+      res.json({
+        templates: result.rows,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
+      })
+    } catch (error) {
+      logger.error("Get templates error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get template by ID
+router.get("/:id", 
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+
+      // Check cache first
+      const cacheKey = `template:${id}`
+      const cached = await cache.get(cacheKey)
+      if (cached) {
+        return res.json({ template: cached })
+      }
+
+      const result = await pool.query(
+        `
+        SELECT t.*, u.name as created_by_name
+        FROM templates t
+        LEFT JOIN users u ON t.created_by = u.id
+        WHERE t.id = $1 AND (t.is_public = true OR t.created_by = $2)
+      `,
+        [id, req.user?.id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      const template = result.rows[0]
+
+      // Cache the template
+      await cache.set(cacheKey, template, 3600) // 1 hour
+
+      res.json({ template })
+    } catch (error) {
+      logger.error("Get template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Create template
+router.post("/", 
+  authenticateToken, 
+  requirePermission("templates.create"),
+  validate(schemas.createTemplate),
+  async (req, res) => {
+    try {
+      const { name, description, framework, category, content, variables, is_public } = req.body
+
+      const id = uuidv4()
+
+      const result = await pool.query(
+        `
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `,
+        [
+          id,
+          name,
+          description,
+          framework,
+          category,
+          JSON.stringify(content),
+          JSON.stringify(variables),
+          is_public,
+          req.user?.id,
+        ]
+      )
+
+      logger.info(`Template created: ${name} by ${req.user?.email}`)
+
+      res.status(201).json({
+        message: "Template created successfully",
+        template: result.rows[0],
+      })
+    } catch (error) {
+      logger.error("Create template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Update template
+router.put("/:id", 
+  authenticateToken, 
+  requirePermission("templates.update"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validate(Joi.object({
+    name: Joi.string().min(2).max(255).optional(),
+    description: Joi.string().max(1000).optional(),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").optional(),
+    category: Joi.string().max(100).optional(),
+    content: Joi.object().optional(),
+    variables: Joi.array().optional(),
+    is_public: Joi.boolean().optional(),
+  })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const { name, description, framework, category, content, variables, is_public } = req.body
+
+      // Check if template exists and user has permission
+      const templateCheck = await pool.query(
+        "SELECT created_by FROM templates WHERE id = $1",
+        [id]
+      )
+
+      if (templateCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      const template = templateCheck.rows[0]
+
+      if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE templates 
+        SET name = COALESCE($1, name),
+            description = COALESCE($2, description),
+            framework = COALESCE($3, framework),
+            category = COALESCE($4, category),
+            content = COALESCE($5, content),
+            variables = COALESCE($6, variables),
+            is_public = COALESCE($7, is_public),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $8
+        RETURNING *
+      `,
+        [
+          name,
+          description,
+          framework,
+          category,
+          content ? JSON.stringify(content) : null,
+          variables ? JSON.stringify(variables) : null,
+          is_public,
+          id,
+        ]
+      )
+
+      // Clear cache
+      await cache.del(`template:${id}`)
+
+      logger.info(`Template updated: ${id} by ${req.user?.email}`)
+
+      res.json({
+        message: "Template updated successfully",
+        template: result.rows[0],
+      })
+    } catch (error) {
+      logger.error("Update template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Delete template
+router.delete("/:id", 
+  authenticateToken, 
+  requirePermission("templates.delete"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+
+      // Check if template exists and user has permission
+      const templateCheck = await pool.query(
+        "SELECT created_by, name FROM templates WHERE id = $1",
+        [id]
+      )
+
+      if (templateCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      const template = templateCheck.rows[0]
+
+      if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      // Check if template is being used
+      const usageCheck = await pool.query(
+        "SELECT COUNT(*) FROM documents WHERE template_id = $1",
+        [id]
+      )
+
+      const usageCount = Number.parseInt(usageCheck.rows[0].count)
+      if (usageCount > 0) {
+        return res.status(400).json({ 
+          error: "Template is being used by documents and cannot be deleted",
+          usage_count: usageCount,
+        })
+      }
+
+      await pool.query("DELETE FROM templates WHERE id = $1", [id])
+
+      // Clear cache
+      await cache.del(`template:${id}`)
+
+      logger.info(`Template deleted: ${id} by ${req.user?.email}`)
+
+      res.json({ message: "Template deleted successfully" })
+    } catch (error) {
+      logger.error("Delete template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Clone template
+router.post("/:id/clone", 
+  authenticateToken, 
+  requirePermission("templates.create"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validate(Joi.object({
+    name: Joi.string().min(2).max(255).required(),
+    description: Joi.string().max(1000).optional(),
+    is_public: Joi.boolean().default(false),
+  })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const { name, description, is_public } = req.body
+
+      // Get original template
+      const originalResult = await pool.query(
+        `
+        SELECT * FROM templates 
+        WHERE id = $1 AND (is_public = true OR created_by = $2)
+      `,
+        [id, req.user?.id]
+      )
+
+      if (originalResult.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      const original = originalResult.rows[0]
+      const newId = uuidv4()
+
+      const result = await pool.query(
+        `
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        RETURNING *
+      `,
+        [
+          newId,
+          name,
+          description || `Clone of ${original.name}`,
+          original.framework,
+          original.category,
+          original.content,
+          original.variables,
+          is_public,
+          req.user?.id,
+        ]
+      )
+
+      logger.info(`Template cloned: ${id} -> ${newId} by ${req.user?.email}`)
+
+      res.status(201).json({
+        message: "Template cloned successfully",
+        template: result.rows[0],
+      })
+    } catch (error) {
+      logger.error("Clone template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Increment template usage
+router.post("/:id/use", 
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+
+      const result = await pool.query(
+        `
+        UPDATE templates 
+        SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND (is_public = true OR created_by = $2)
+        RETURNING usage_count
+      `,
+        [id, req.user?.id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      // Clear cache to refresh usage count
+      await cache.del(`template:${id}`)
+
+      res.json({
+        message: "Template usage recorded",
+        usage_count: result.rows[0].usage_count,
+      })
+    } catch (error) {
+      logger.error("Record template usage error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+export default router
