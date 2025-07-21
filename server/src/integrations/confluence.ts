@@ -117,7 +117,17 @@ export class ConfluenceIntegration implements IntegrationProvider {
       }
 
       // Convert ADPA document content to Confluence storage format
-      const confluenceContent = this.service.convertMarkdownToStorage(doc.content)
+      // Extract markdown content from JSON object if needed
+      let markdownContent: string
+      if (typeof doc.content === 'string') {
+        markdownContent = doc.content
+      } else if (doc.content && typeof doc.content === 'object' && doc.content.markdown) {
+        markdownContent = doc.content.markdown
+      } else {
+        throw new Error("Document content is not in a supported format")
+      }
+
+      const confluenceContent = this.service.convertMarkdownToStorage(markdownContent)
 
       // Check if this document was previously synced from Confluence
       const existingMapping = await this.getSyncMetadata(doc.id)
