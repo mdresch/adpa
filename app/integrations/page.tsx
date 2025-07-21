@@ -71,6 +71,28 @@ export default function Integrations() {
       console.log("Loading integrations from backend...")
       const backendIntegrations = await apiClient.getIntegrations()
       console.log("Backend integrations:", backendIntegrations)
+
+      // Handle case where API returns non-array data
+      if (!Array.isArray(backendIntegrations)) {
+        console.error("Backend integrations is not an array:", backendIntegrations)
+        setRealIntegrations([])
+        setIntegrations([
+          {
+            id: "sharepoint-default",
+            name: "Microsoft SharePoint",
+            type: "sharepoint",
+            status: "not_configured",
+            enabled: false,
+            baseUrl: "",
+            lastSync: "Never",
+            documentsPublished: 0,
+            authType: "Azure AD",
+            sites: [],
+          }
+        ])
+        return
+      }
+
       setRealIntegrations(backendIntegrations)
 
       // Process integrations for display
@@ -310,13 +332,6 @@ export default function Integrations() {
     console.log("Testing SharePoint connection...")
     setTesting(true)
     try {
-      const token = localStorage.getItem('token')
-      if (!token) {
-        toast.error("Please login first")
-        setTesting(false)
-        return
-      }
-
       console.log("SharePoint config:", {
         tenantId: sharepointConfig.tenantId ? "***" : "empty",
         clientId: sharepointConfig.clientId ? "***" : "empty",
@@ -327,7 +342,6 @@ export default function Integrations() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           tenantId: sharepointConfig.tenantId,
@@ -337,19 +351,27 @@ export default function Integrations() {
       })
 
       console.log("Response status:", response.status)
+      console.log("Response headers:", response.headers)
+
+      if (!response.ok) {
+        const text = await response.text()
+        console.log("Error response text:", text)
+        throw new Error(`HTTP ${response.status}: ${text}`)
+      }
+
       const data = await response.json()
       console.log("Response data:", data)
 
-      if (response.ok && data.success) {
-        toast.success("SharePoint connection successful! ✅")
+      if (data.success) {
+        toast.success(`SharePoint connection successful! Found ${data.sitesFound || 0} sites ✅`)
       } else {
         const errorMessage = data.error || data.message || "Connection failed"
         toast.error(`SharePoint connection failed: ${errorMessage}`)
         console.error("SharePoint connection test failed:", data)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("SharePoint connection test failed:", error)
-      toast.error(`SharePoint connection test failed: ${error.message}`)
+      toast.error(`Connection test failed: ${error.message}`)
     } finally {
       setTesting(false)
     }
