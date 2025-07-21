@@ -123,7 +123,7 @@ class ApiClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
-  ): Promise<ApiResponse<T>> {
+  ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -143,7 +143,7 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || `HTTP error! status: ${response.status}`)
+        throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
       }
 
       return data
@@ -180,16 +180,19 @@ class ApiClient {
 
   // Authentication API
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string }>("/auth/login", {
+    const response = await this.request<{ user: User; token: string; message: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     })
 
-    if (response.data) {
-      this.setToken(response.data.token)
+    if (response.token) {
+      this.setToken(response.token)
     }
 
-    return response.data!
+    return {
+      user: response.user,
+      token: response.token
+    }
   }
 
   async register(userData: {
@@ -198,21 +201,24 @@ class ApiClient {
     name: string
     role?: string
   }): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string }>("/auth/register", {
+    const response = await this.request<{ user: User; token: string; message: string }>("/auth/register", {
       method: "POST",
       body: JSON.stringify(userData),
     })
 
-    if (response.data) {
-      this.setToken(response.data.token)
+    if (response.token) {
+      this.setToken(response.token)
     }
 
-    return response.data!
+    return {
+      user: response.user,
+      token: response.token
+    }
   }
 
   async getCurrentUser(): Promise<User> {
     const response = await this.request<{ user: User }>("/auth/me")
-    return response.data!.user
+    return response.user || response as any
   }
 
   async logout(): Promise<void> {
@@ -239,12 +245,12 @@ class ApiClient {
     const response = await this.request<{ projects: Project[]; pagination: any }>(
       `/projects?${queryParams}`
     )
-    return response.data!
+    return response
   }
 
   async getProject(id: string): Promise<Project> {
     const response = await this.request<{ project: Project }>(`/projects/${id}`)
-    return response.data!.project
+    return response.project
   }
 
   async createProject(projectData: Partial<Project>): Promise<Project> {
@@ -252,7 +258,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(projectData),
     })
-    return response.data!.project
+    return response.project
   }
 
   async updateProject(id: string, projectData: Partial<Project>): Promise<Project> {
@@ -260,7 +266,7 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(projectData),
     })
-    return response.data!.project
+    return response.project
   }
 
   async deleteProject(id: string): Promise<void> {
