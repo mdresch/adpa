@@ -388,6 +388,22 @@ export default function Integrations() {
     console.log("Saving SharePoint configuration...")
     setSaving(true)
     try {
+      // Check authentication
+      const token = localStorage.getItem('token')
+      console.log("Auth token present:", !!token)
+      console.log("API Client token present:", !!(apiClient as any).token)
+
+      if (!token) {
+        toast.error("Please log in to save configuration")
+        setSaving(false)
+        return
+      }
+
+      // Ensure API client has the token
+      if (!(apiClient as any).token) {
+        console.log("Setting token in API client...")
+        ;(apiClient as any).setToken(token)
+      }
       const configData = {
         name: "SharePoint",
         type: "sharepoint",
@@ -421,10 +437,12 @@ export default function Integrations() {
 
       if (existingSharepointIntegration) {
         console.log("Updating existing integration...")
+        console.log("API Client token present:", !!(apiClient as any).token)
         await apiClient.updateIntegration(existingSharepointIntegration.id, configData)
         toast.success("SharePoint configuration updated successfully! ✅")
       } else {
         console.log("Creating new integration...")
+        console.log("API Client token present:", !!(apiClient as any).token)
         await apiClient.createIntegration(configData)
         toast.success("SharePoint configuration saved successfully! ✅")
       }
