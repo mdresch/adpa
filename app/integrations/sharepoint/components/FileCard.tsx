@@ -5,20 +5,19 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { 
-  FileText, 
-  FileImage, 
-  FileSpreadsheet, 
-  FileCode, 
-  FilePpt, 
-  FileArchive, 
-  FileAudio, 
-  FileVideo, 
-  File, 
-  ExternalLink, 
-  Download, 
-  ArrowDownToLine, 
-  Info 
+import {
+  FileText,
+  FileImage,
+  FileSpreadsheet,
+  FileCode,
+  FileArchive,
+  FileAudio,
+  FileVideo,
+  File,
+  ExternalLink,
+  Download,
+  ArrowDownToLine,
+  Info
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -90,7 +89,7 @@ export function FileCard({ file, onImport, integrationId, driveId }: FileCardPro
     }
     
     if (mimeType?.includes('presentation') || ['pptx', 'ppt'].includes(extension || '')) {
-      return <FilePpt className="h-8 w-8 text-orange-500" />
+      return <FileText className="h-8 w-8 text-orange-500" />
     }
     
     if (['js', 'ts', 'py', 'java', 'c', 'cpp', 'html', 'css', 'php', 'rb'].includes(extension || '')) {
