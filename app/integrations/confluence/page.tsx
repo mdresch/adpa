@@ -305,14 +305,30 @@ export default function ConfluenceIntegrationPage() {
   }
 
   const viewInConfluence = (webUrl: string) => {
-    // Open Confluence page in new tab
-    const fullUrl = webUrl.startsWith('http') ? webUrl : `${config.baseUrl}${webUrl}`
+    // Open Confluence space in new tab
+    // Ensure the URL includes /wiki for Confluence Cloud spaces
+    let fullUrl
+    if (webUrl.startsWith('http')) {
+      fullUrl = webUrl
+    } else {
+      // For relative URLs, construct the full Confluence URL with /wiki
+      const baseUrl = config.baseUrl || 'https://cba-adpa.atlassian.net'
+      fullUrl = `${baseUrl}/wiki${webUrl}`
+    }
     window.open(fullUrl, '_blank', 'noopener,noreferrer')
   }
 
   const viewPage = (webUrl: string) => {
     // Open Confluence page in new tab
-    const fullUrl = webUrl.startsWith('http') ? webUrl : `${config.baseUrl}${webUrl}`
+    // Ensure the URL includes /wiki for Confluence Cloud pages
+    let fullUrl
+    if (webUrl.startsWith('http')) {
+      fullUrl = webUrl
+    } else {
+      // For relative URLs, construct the full Confluence URL with /wiki
+      const baseUrl = config.baseUrl || 'https://cba-adpa.atlassian.net'
+      fullUrl = `${baseUrl}/wiki${webUrl}`
+    }
     window.open(fullUrl, '_blank', 'noopener,noreferrer')
   }
 
