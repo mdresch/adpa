@@ -539,9 +539,11 @@ export default function Settings() {
                 </Card>
               </TabsContent>
             </Tabs>
-          </div>
-        </main>
+              </div>
+            </AnimatedLayout>
+          </main>
+        </div>
       </div>
-    </div>
+    </PageTransition>
   )
 }
