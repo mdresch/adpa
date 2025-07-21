@@ -143,7 +143,10 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
+        // Create an error object that includes the response data for better error handling
+        const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
+        ;(error as any).response = { data, status: response.status }
+        throw error
       }
 
       return data
@@ -458,13 +461,6 @@ class ApiClient {
   }
 
   // Integrations endpoints (duplicate removed - using the one at line 337)
-
-  async createIntegration(integrationData: any) {
-    return this.request<any>("/integrations", {
-      method: "POST",
-      body: JSON.stringify(integrationData),
-    })
-  }
   // Documents API
   async getProjectDocuments(
     projectId: string,
