@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,10 @@ import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
+import { useAuth } from "@/contexts/AuthContext"
+import { useWebSocket } from "@/contexts/WebSocketContext"
+import { apiClient } from "@/lib/api"
+import { toast } from "sonner"
 import {
   BarChart,
   Bar,
@@ -96,11 +100,34 @@ const topUsersData = [
 ]
 
 export default function AnalyticsPage() {
-  const [timeRange, setTimeRange] = useState("7d")
+  const { user, hasPermission } = useAuth()
+  const { isConnected } = useWebSocket()
 
+  const [timeRange, setTimeRange] = useState("7d")
+  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true)
+      const data = await apiClient.getSystemAnalytics(timeRange)
+      setAnalyticsData(data)
+    } catch (error) {
+      console.error("Failed to fetch analytics:", error)
+      toast.error("Failed to load analytics data")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchAnalytics()
+  }, [timeRange])
+
+  // Mock stats with real-time capability
   const stats = {
-    totalUsers: 12450,
-    activeUsers: 3280,
+    totalUsers: analyticsData?.total_users || 12450,
+    activeUsers: analyticsData?.active_users || 3280,
     totalDocuments: 45680,
     documentsToday: 234,
     totalSessions: 89340,
@@ -114,6 +141,28 @@ export default function AnalyticsPage() {
     documents: 8.3,
     sessions: 15.7,
     performance: -2.1,
+  }
+
+  if (!hasPermission("analytics.view")) {
+    return (
+      <PageTransition>
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-6">
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                  <BarChart3 className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+                  <p className="text-muted-foreground">You don't have permission to view analytics.</p>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </PageTransition>
+    )
   }
 
   return (
@@ -136,6 +185,12 @@ export default function AnalyticsPage() {
                     </p>
                   </div>
                   <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <span className="text-sm text-muted-foreground">
+                        {isConnected ? 'Live data' : 'Offline'}
+                      </span>
+                    </div>
                     <Select value={timeRange} onValueChange={setTimeRange}>
                       <SelectTrigger className="w-32">
                         <Calendar className="h-4 w-4 mr-2" />
@@ -148,6 +203,10 @@ export default function AnalyticsPage() {
                         <SelectItem value="90d">Last 90 days</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button onClick={fetchAnalytics} variant="outline" size="sm">
+                      <Activity className="h-4 w-4 mr-2" />
+                      Refresh
+                    </Button>
                     <Button variant="outline" size="sm">
                       <Download className="h-4 w-4 mr-2" />
                       Export
