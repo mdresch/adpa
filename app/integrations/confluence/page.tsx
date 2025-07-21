@@ -180,7 +180,6 @@ export default function ConfluenceIntegrationPage() {
 
       const configData = {
         name: "Confluence",
-        type: "confluence",
         configuration: {
           base_url: config.baseUrl,
           target_space_key: config.targetSpaceKey,
