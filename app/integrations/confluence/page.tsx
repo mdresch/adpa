@@ -167,8 +167,7 @@ export default function ConfluenceIntegrationPage() {
 
   const saveConfiguration = async () => {
     try {
-      // First, refresh the integration data to ensure we have the correct ID
-      await fetchIntegration()
+      console.log("Starting save configuration...")
 
       const configData = {
         name: "Confluence",
@@ -187,10 +186,14 @@ export default function ConfluenceIntegrationPage() {
         is_active: true,
       }
 
-      // Get the latest integration data
+      // Always fetch fresh integration data to avoid stale IDs
+      console.log("Fetching latest integrations...")
       const response = await apiClient.getIntegrations()
       const integrations = response.integrations || response
+      console.log("Found integrations:", integrations)
+
       const currentIntegration = integrations.find(i => i.type === "confluence")
+      console.log("Current Confluence integration:", currentIntegration)
 
       if (currentIntegration) {
         console.log("Updating integration with ID:", currentIntegration.id)
@@ -204,6 +207,7 @@ export default function ConfluenceIntegrationPage() {
         toast.success("Integration created successfully")
       }
 
+      // Refresh the integration data
       await fetchIntegration()
     } catch (error) {
       console.error("Failed to save configuration:", error)
