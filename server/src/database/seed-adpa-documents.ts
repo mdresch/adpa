@@ -246,14 +246,34 @@ async function seedAdpaDocuments() {
 
     // Get generated documents directory
     const documentsDir = join(process.cwd(), "..", "generated-documents")
-    
-    if (!statSync(documentsDir).isDirectory()) {
+
+    logger.info(`Looking for documents in: ${documentsDir}`)
+
+    try {
+      const stat = statSync(documentsDir)
+      if (!stat.isDirectory()) {
+        throw new Error(`Path exists but is not a directory: ${documentsDir}`)
+      }
+    } catch (error) {
+      logger.error(`Generated documents directory not found: ${documentsDir}`)
+      logger.error("Error:", error)
       throw new Error(`Generated documents directory not found: ${documentsDir}`)
     }
 
     // Get all markdown files
     const markdownFiles = getAllMarkdownFiles(documentsDir)
     logger.info(`Found ${markdownFiles.length} markdown files to process`)
+
+    if (markdownFiles.length === 0) {
+      logger.warn("No markdown files found. Checking directory contents...")
+      try {
+        const dirContents = readdirSync(documentsDir)
+        logger.info("Directory contents:", dirContents.slice(0, 10)) // Show first 10 items
+      } catch (error) {
+        logger.error("Failed to read directory contents:", error)
+      }
+      return
+    }
 
     let successCount = 0
     let skipCount = 0
@@ -294,7 +314,7 @@ async function seedAdpaDocuments() {
           )`,
           [
             metadata.title,
-            content,
+            JSON.stringify({ markdown: content }), // Store content as JSON with markdown field
             projectId,
             metadata.framework || "PMBOK",
             "published",
