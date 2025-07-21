@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Cloud } from "lucide-react"
+import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Cloud, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
@@ -68,7 +68,9 @@ export default function Integrations() {
   const loadExistingIntegrations = async () => {
     try {
       setLoading(true)
+      console.log("Loading integrations from backend...")
       const backendIntegrations = await apiClient.getIntegrations()
+      console.log("Backend integrations:", backendIntegrations)
       setRealIntegrations(backendIntegrations)
 
       // Process integrations for display
@@ -139,6 +141,7 @@ export default function Integrations() {
       })
 
       setIntegrations(finalIntegrations)
+      console.log("Final integrations for display:", finalIntegrations)
 
       // Load specific configurations
       const confluenceIntegration = backendIntegrations.find((i: any) => i.type === "confluence")
@@ -296,6 +299,7 @@ export default function Integrations() {
 
   // SharePoint handlers
   const handleSharepointConfigChange = (field: string, value: any) => {
+    console.log("SharePoint config change:", field, value)
     setSharepointConfig(prev => ({
       ...prev,
       [field]: value
@@ -303,13 +307,21 @@ export default function Integrations() {
   }
 
   const testSharepointConnection = async () => {
+    console.log("Testing SharePoint connection...")
     setTesting(true)
     try {
       const token = localStorage.getItem('token')
       if (!token) {
         toast.error("Please login first")
+        setTesting(false)
         return
       }
+
+      console.log("SharePoint config:", {
+        tenantId: sharepointConfig.tenantId ? "***" : "empty",
+        clientId: sharepointConfig.clientId ? "***" : "empty",
+        clientSecret: sharepointConfig.clientSecret ? "***" : "empty"
+      })
 
       const response = await fetch("/api/integrations/sharepoint/test", {
         method: "POST",
@@ -324,7 +336,9 @@ export default function Integrations() {
         }),
       })
 
+      console.log("Response status:", response.status)
       const data = await response.json()
+      console.log("Response data:", data)
 
       if (response.ok && data.success) {
         toast.success("SharePoint connection successful! ✅")
@@ -335,13 +349,14 @@ export default function Integrations() {
       }
     } catch (error) {
       console.error("SharePoint connection test failed:", error)
-      toast.error("SharePoint connection test failed - please check your network connection")
+      toast.error(`SharePoint connection test failed: ${error.message}`)
     } finally {
       setTesting(false)
     }
   }
 
   const saveSharepointConfiguration = async () => {
+    console.log("Saving SharePoint configuration...")
     setSaving(true)
     try {
       const configData = {
@@ -359,21 +374,33 @@ export default function Integrations() {
         is_active: true,
       }
 
+      console.log("Config data:", {
+        ...configData,
+        configuration: {
+          ...configData.configuration,
+          client_secret: configData.configuration.client_secret ? "***" : "empty"
+        }
+      })
+
       const existingSharepointIntegration = realIntegrations.find(i => i.type === "sharepoint")
+      console.log("Existing integration:", existingSharepointIntegration?.id || "none")
 
       if (existingSharepointIntegration) {
+        console.log("Updating existing integration...")
         await apiClient.updateIntegration(existingSharepointIntegration.id, configData)
         toast.success("SharePoint configuration updated successfully! ✅")
       } else {
+        console.log("Creating new integration...")
         await apiClient.createIntegration(configData)
         toast.success("SharePoint configuration saved successfully! ✅")
       }
 
+      console.log("Reloading integrations...")
       await loadExistingIntegrations()
 
     } catch (error) {
       console.error("Failed to save SharePoint configuration:", error)
-      const errorMessage = error.message || "Failed to save configuration"
+      const errorMessage = error.message || error.toString() || "Failed to save configuration"
       toast.error(`Save failed: ${errorMessage}`)
     } finally {
       setSaving(false)
@@ -382,6 +409,7 @@ export default function Integrations() {
 
   // Overview tab handlers
   const handleTestIntegration = async (integration: any) => {
+    console.log("Testing integration:", integration.name, integration.type)
     if (integration.type === "confluence") {
       await testConfluenceConnection()
     } else if (integration.type === "sharepoint") {
@@ -438,19 +466,28 @@ export default function Integrations() {
   }
 
   const handleToggleIntegration = async (integration: any, enabled: boolean) => {
+    console.log("Toggling integration:", integration.name, "to", enabled)
     try {
       const realIntegration = realIntegrations.find(i => i.id === integration.id)
+      console.log("Real integration found:", realIntegration?.id || "none")
+
       if (realIntegration) {
-        await apiClient.updateIntegration(integration.id, {
+        const updateData = {
           ...realIntegration,
           is_active: enabled
-        })
+        }
+        console.log("Updating with data:", updateData)
+
+        await apiClient.updateIntegration(integration.id, updateData)
         toast.success(`${integration.name} ${enabled ? 'enabled' : 'disabled'}`)
         await loadExistingIntegrations()
+      } else {
+        console.error("Real integration not found for:", integration.id)
+        toast.error("Integration not found")
       }
     } catch (error) {
       console.error("Failed to toggle integration:", error)
-      toast.error("Failed to update integration status")
+      toast.error(`Failed to update integration status: ${error.message}`)
     }
   }
 
@@ -522,6 +559,25 @@ export default function Integrations() {
               </TabsList>
 
               <TabsContent value="overview" className="space-y-4">
+                {/* Debug Info - Remove in production */}
+                {process.env.NODE_ENV === 'development' && (
+                  <Card className="bg-gray-50 border-dashed">
+                    <CardHeader>
+                      <CardTitle className="text-sm">Debug Info</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-xs">
+                      <p>Integrations loaded: {integrations.length}</p>
+                      <p>Real integrations: {realIntegrations.length}</p>
+                      <p>Loading: {loading.toString()}</p>
+                      <p>SharePoint config: {JSON.stringify({
+                        tenantId: sharepointConfig.tenantId ? "***" : "empty",
+                        clientId: sharepointConfig.clientId ? "***" : "empty",
+                        clientSecret: sharepointConfig.clientSecret ? "***" : "empty"
+                      })}</p>
+                    </CardContent>
+                  </Card>
+                )}
+
                 <div className="grid gap-4">
                   {integrations.map((integration) => (
                     <Card key={integration.id}>
@@ -559,16 +615,24 @@ export default function Integrations() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleTestIntegration(integration)}
+                              onClick={() => {
+                                console.log("Test button clicked for:", integration.name)
+                                handleTestIntegration(integration)
+                              }}
                               disabled={!integration.enabled || integration.status === "not_configured"}
+                              title={`Test ${integration.name} connection`}
                             >
                               <TestTube className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleSyncIntegration(integration)}
+                              onClick={() => {
+                                console.log("Sync button clicked for:", integration.name)
+                                handleSyncIntegration(integration)
+                              }}
                               disabled={!integration.enabled || integration.status !== "connected"}
+                              title={`Sync ${integration.name} documents`}
                             >
                               <RefreshCw className="h-4 w-4" />
                             </Button>
@@ -943,12 +1007,15 @@ export default function Integrations() {
                         <div className="flex gap-2 pt-4 border-t">
                           <Button
                             variant="outline"
-                            onClick={testSharepointConnection}
+                            onClick={() => {
+                              console.log("Test Connection button clicked")
+                              testSharepointConnection()
+                            }}
                             disabled={testing || !sharepointConfig.tenantId || !sharepointConfig.clientId || !sharepointConfig.clientSecret}
                           >
                             {testing ? (
                               <>
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                 Testing...
                               </>
                             ) : (
@@ -959,12 +1026,15 @@ export default function Integrations() {
                             )}
                           </Button>
                           <Button
-                            onClick={saveSharepointConfiguration}
+                            onClick={() => {
+                              console.log("Save Configuration button clicked")
+                              saveSharepointConfiguration()
+                            }}
                             disabled={saving || !sharepointConfig.tenantId || !sharepointConfig.clientId}
                           >
                             {saving ? (
                               <>
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                                 Saving...
                               </>
                             ) : (

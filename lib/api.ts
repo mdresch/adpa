@@ -468,6 +468,14 @@ class ApiClient {
       body: JSON.stringify(integrationData),
     })
   }
+
+  async updateIntegration(id: string, integrationData: any) {
+    return this.request<any>(`/integrations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(integrationData),
+    })
+  }
+
   // Documents API
   async getProjectDocuments(
     projectId: string,
