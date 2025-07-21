@@ -273,6 +273,66 @@ class ApiClient {
     await this.request(`/projects/${id}`, { method: "DELETE" })
   }
 
+  // Templates API
+  async getTemplates(params?: {
+    page?: number
+    limit?: number
+    framework?: string
+    category?: string
+    search?: string
+  }): Promise<{ templates: any[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ templates: any[]; pagination: any }>(
+      `/templates?${queryParams}`
+    )
+    return response
+  }
+
+  async createTemplate(templateData: any): Promise<any> {
+    const response = await this.request<{ template: any }>("/templates", {
+      method: "POST",
+      body: JSON.stringify(templateData),
+    })
+    return response.template
+  }
+
+  // Search API
+  async search(query: string, filters?: any): Promise<any[]> {
+    const response = await this.request<{ results: any[] }>("/search", {
+      method: "POST",
+      body: JSON.stringify({ query, filters }),
+    })
+    return response.results
+  }
+
+  // Analytics API
+  async getSystemAnalytics(period: string): Promise<any> {
+    const response = await this.request<any>(`/analytics/system?period=${period}`)
+    return response
+  }
+
+  // System Settings API
+  async getSystemSettings(): Promise<any> {
+    const response = await this.request<any>("/settings/system")
+    return response
+  }
+
+  async updateSystemSettings(settings: any): Promise<any> {
+    const response = await this.request<any>("/settings/system", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    })
+    return response
+  }
+
   // Documents endpoints
   async getDocuments(projectId?: string) {
     const query = projectId ? `?projectId=${projectId}` : ""
