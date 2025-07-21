@@ -126,7 +126,7 @@ export default function ConfluenceIntegrationPage() {
 
   const fetchSpaces = async (integrationId: string) => {
     try {
-      const response = await apiClient.makeRequest(`/integrations/confluence/${integrationId}/spaces`)
+      const response = await apiClient.request(`/integrations/confluence/${integrationId}/spaces`)
 
       if (response.success) {
         setSpaces(response.spaces)
@@ -141,7 +141,7 @@ export default function ConfluenceIntegrationPage() {
     try {
       setTesting(true)
 
-      const response = await apiClient.makeRequest("/integrations/confluence/test", {
+      const response = await apiClient.request("/integrations/confluence/test", {
         method: "POST",
         body: JSON.stringify({
           baseUrl: config.baseUrl,
@@ -206,7 +206,7 @@ export default function ConfluenceIntegrationPage() {
     try {
       setSyncing(true)
 
-      const response = await apiClient.makeRequest(`/integrations/confluence/${integration.id}/sync`, {
+      const response = await apiClient.request(`/integrations/confluence/${integration.id}/sync`, {
         method: "POST",
       })
 
@@ -228,7 +228,7 @@ export default function ConfluenceIntegrationPage() {
     if (!integration || !searchQuery) return
 
     try {
-      const response = await apiClient.makeRequest(
+      const response = await apiClient.request(
         `/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace ? `&spaceKey=${selectedSpace}` : ""}`
       )
 
@@ -247,7 +247,7 @@ export default function ConfluenceIntegrationPage() {
     if (!integration) return
 
     try {
-      const response = await apiClient.makeRequest(`/integrations/confluence/${integration.id}/import`, {
+      const response = await apiClient.request(`/integrations/confluence/${integration.id}/import`, {
         method: "POST",
         body: JSON.stringify({ pageId }),
       })
