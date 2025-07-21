@@ -420,8 +420,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
       if (result.rows.length > 0) {
         const config = result.rows[0].configuration
-        // Amend here: read from credentials
-        return config.credentials?.target_space_key || null
+        // Check both credentials and root level for target_space_key
+        return config.target_space_key || config.credentials?.target_space_key || null
       }
 
       return null
