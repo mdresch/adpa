@@ -278,7 +278,7 @@ export default function ConfluenceIntegrationPage() {
     })
   }
 
-  if (!hasPermission("integrations.manage")) {
+  if (!hasPermission("integrations.create") && !hasPermission("integrations.update")) {
     return (
       <PageTransition>
         <div className="flex h-screen bg-background">
