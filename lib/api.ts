@@ -120,7 +120,7 @@ class ApiClient {
     }
   }
 
-  private async request<T>(
+  public async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -457,10 +457,7 @@ class ApiClient {
     return this.request<any>("/security/metrics")
   }
 
-  // Integrations endpoints
-  async getIntegrations() {
-    return this.request<any[]>("/integrations")
-  }
+  // Integrations endpoints (duplicate removed - using the one at line 337)
 
   async createIntegration(integrationData: any) {
     return this.request<any>("/integrations", {
