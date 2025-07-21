@@ -343,7 +343,7 @@ export default function Integrations() {
         clientSecret: sharepointConfig.clientSecret ? "***" : "empty"
       })
 
-      const response = await fetch("/api/integrations/sharepoint/test", {
+      const response = await fetch("http://localhost:5000/api/integrations/sharepoint/test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -357,10 +357,12 @@ export default function Integrations() {
 
       console.log("Response status:", response.status)
       console.log("Response headers:", response.headers)
+      console.log("Response URL:", response.url)
 
       if (!response.ok) {
         const text = await response.text()
         console.log("Error response text:", text)
+        console.log("Full response:", response)
         throw new Error(`HTTP ${response.status}: ${text}`)
       }
 
