@@ -99,7 +99,8 @@ export default function ConfluenceIntegrationPage() {
     try {
       setLoading(true)
       // Get Confluence integration
-      const integrations = await apiClient.getIntegrations()
+      const response = await apiClient.getIntegrations()
+      const integrations = response.integrations || response // Handle both formats
       const confluenceIntegration = integrations.find(i => i.type === "confluence")
       
       if (confluenceIntegration) {

@@ -457,10 +457,7 @@ class ApiClient {
     return this.request<any>("/security/metrics")
   }
 
-  // Integrations endpoints
-  async getIntegrations() {
-    return this.request<any[]>("/integrations")
-  }
+  // Integrations endpoints (duplicate removed - using the one at line 337)
 
   async createIntegration(integrationData: any) {
     return this.request<any>("/integrations", {
