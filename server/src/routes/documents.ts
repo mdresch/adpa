@@ -10,6 +10,66 @@ import { v4 as uuidv4 } from "uuid"
 
 const router = express.Router()
 
+// Get all documents (for export functionality)
+router.get("/", authenticateToken, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, search } = req.query
+    const offset = (Number(page) - 1) * Number(limit)
+
+    let query = `
+      SELECT
+        d.id,
+        d.name,
+        d.framework,
+        d.status,
+        d.created_at,
+        d.updated_at,
+        p.name as project_name
+      FROM documents d
+      LEFT JOIN projects p ON d.project_id = p.id
+      WHERE 1=1
+    `
+    const params: any[] = []
+
+    // Add search filter if provided
+    if (search) {
+      query += ` AND (d.name ILIKE $${params.length + 1} OR p.name ILIKE $${params.length + 1})`
+      params.push(`%${search}%`)
+    }
+
+    // Add ordering and pagination
+    query += ` ORDER BY d.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+    params.push(Number(limit), offset)
+
+    const result = await pool.query(query, params)
+
+    // Get total count for pagination
+    let countQuery = `SELECT COUNT(*) FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE 1=1`
+    const countParams: any[] = []
+
+    if (search) {
+      countQuery += ` AND (d.name ILIKE $1 OR p.name ILIKE $1)`
+      countParams.push(`%${search}%`)
+    }
+
+    const countResult = await pool.query(countQuery, countParams)
+    const total = parseInt(countResult.rows[0].count)
+
+    res.json({
+      documents: result.rows,
+      pagination: {
+        page: Number(page),
+        limit: Number(limit),
+        total,
+        pages: Math.ceil(total / Number(limit))
+      }
+    })
+  } catch (error) {
+    logger.error("Failed to get documents:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 // Configure multer for file uploads
 const upload = multer({
   dest: "uploads/documents/",

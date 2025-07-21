@@ -48,6 +48,7 @@ export default function Integrations() {
   const [existingIntegration, setExistingIntegration] = useState<any>(null)
   const [integrations, setIntegrations] = useState<any[]>([])
   const [realIntegrations, setRealIntegrations] = useState<any[]>([])
+  const [allIntegrations, setAllIntegrations] = useState<any[]>([])
 
   // SharePoint configuration state
   const [sharepointConfig, setSharepointConfig] = useState({
@@ -69,13 +70,15 @@ export default function Integrations() {
     try {
       setLoading(true)
       console.log("Loading integrations from backend...")
-      const backendIntegrations = await apiClient.getIntegrations()
+      const response = await apiClient.getIntegrations()
+      const backendIntegrations = response.integrations || response // Handle both formats
       console.log("Backend integrations:", backendIntegrations)
 
       // Handle case where API returns non-array data
       if (!Array.isArray(backendIntegrations)) {
         console.error("Backend integrations is not an array:", backendIntegrations)
         setRealIntegrations([])
+        setAllIntegrations([])
         setIntegrations([
           {
             id: "sharepoint-default",
@@ -94,6 +97,7 @@ export default function Integrations() {
       }
 
       setRealIntegrations(backendIntegrations)
+      setAllIntegrations(backendIntegrations)
 
       // Process integrations for display
       const processedIntegrations = backendIntegrations.map((integration: any) => {
@@ -168,7 +172,6 @@ export default function Integrations() {
       // Load specific configurations
       const confluenceIntegration = backendIntegrations.find((i: any) => i.type === "confluence")
       const sharepointIntegration = backendIntegrations.find((i: any) => i.type === "sharepoint")
-
       if (confluenceIntegration) {
         setExistingIntegration(confluenceIntegration)
         const config = confluenceIntegration.configuration || {}
@@ -176,8 +179,8 @@ export default function Integrations() {
           ...prev,
           baseUrl: config.base_url || prev.baseUrl,
           defaultSpace: config.target_space_key || prev.defaultSpace,
-          username: config.username || "",
-          apiToken: config.api_token || "",
+          username: "", // Credentials are encrypted and not returned
+          apiToken: "", // Credentials are encrypted and not returned
           oauthClientId: config.oauth_client_id || "",
           oauthClientSecret: config.oauth_client_secret || "",
           autoPublish: config.auto_publish !== undefined ? config.auto_publish : prev.autoPublish,
@@ -284,14 +287,16 @@ export default function Integrations() {
         type: "confluence",
         configuration: {
           base_url: confluenceConfig.baseUrl,
-          username: confluenceConfig.username,
-          api_token: confluenceConfig.apiToken,
           target_space_key: confluenceConfig.defaultSpace,
           oauth_client_id: confluenceConfig.oauthClientId,
           oauth_client_secret: confluenceConfig.oauthClientSecret,
           auto_publish: confluenceConfig.autoPublish,
           sync_on_update: confluenceConfig.syncOnUpdate,
           create_projects_for_spaces: confluenceConfig.createProjectsForSpaces,
+        },
+        credentials: {
+          username: confluenceConfig.username,
+          api_token: confluenceConfig.apiToken,
         },
         is_active: true,
       }

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { useAuth } from "@/contexts/AuthContext"
 import {
   LayoutDashboard,
   Settings,
@@ -21,6 +22,7 @@ import {
   FolderOpen,
   Search,
   Layers,
+  LogOut,
 } from "lucide-react"
 
 const navigation = [
@@ -41,6 +43,7 @@ const navigation = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
   const pathname = usePathname()
+  const { user, logout } = useAuth()
 
   return (
     <div
@@ -131,9 +134,24 @@ export function Sidebar() {
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0 animate-slide-in-right">
-              <p className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200">Admin User</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">admin@company.com</p>
+              <p className="text-sm font-semibold truncate text-slate-700 dark:text-slate-200">
+                {user?.name || "User"}
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 truncate">
+                {user?.email || "user@example.com"}
+              </p>
             </div>
+          )}
+          {!collapsed && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="hover:bg-red-100 dark:hover:bg-red-900/20 hover:text-red-600 dark:hover:text-red-400 transition-all duration-200"
+              title="Logout"
+            >
+              <LogOut className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </div>
