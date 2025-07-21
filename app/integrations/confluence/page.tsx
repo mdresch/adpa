@@ -39,7 +39,11 @@ interface ConfluenceSpace {
   id: string
   key: string
   name: string
-  description?: string
+  description?: {
+    plain?: string
+    view?: string
+    _expandable?: any
+  } | string
   type: string
   status: string
   _links?: {
@@ -568,7 +572,9 @@ export default function ConfluenceIntegrationPage() {
                                       <Badge variant="outline">{space.key}</Badge>
                                     </div>
                                     <p className="text-sm text-muted-foreground line-clamp-2">
-                                      {space.description || "No description"}
+                                      {typeof space.description === 'string'
+                                        ? space.description
+                                        : space.description?.plain || space.description?.view || "No description"}
                                     </p>
                                     <div className="flex items-center gap-2">
                                       <Badge variant="secondary" className="text-xs">
