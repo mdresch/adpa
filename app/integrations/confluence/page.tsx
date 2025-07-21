@@ -109,12 +109,19 @@ export default function ConfluenceIntegrationPage() {
     try {
       setLoading(true)
       // Get Confluence integration
+      console.log("=== FETCH INTEGRATION DEBUG ===")
       const response = await apiClient.getIntegrations()
+      console.log("Raw API response:", response)
+
       const integrations = response.integrations || response // Handle both formats
+      console.log("Integrations array:", integrations)
+
       const confluenceIntegration = integrations.find(i => i.type === "confluence")
-      
+      console.log("Found Confluence integration:", confluenceIntegration)
+
       if (confluenceIntegration) {
         setIntegration(confluenceIntegration)
+        console.log("Set integration state to:", confluenceIntegration)
         setConfig({
           baseUrl: confluenceIntegration.configuration.base_url || "",
           username: "", // Credentials are encrypted and not returned
@@ -323,9 +330,17 @@ export default function ConfluenceIntegrationPage() {
   const handleExportConfirm = async () => {
     if (!selectedDocument || !integration) return
 
+    console.log("=== EXPORT DEBUG ===")
+    console.log("Integration object:", integration)
+    console.log("Integration ID:", integration.id)
+    console.log("Selected document:", selectedDocument)
+
     setExporting(true)
     try {
-      const response = await apiClient.request(`/integrations/confluence/${integration.id}/export`, {
+      const exportUrl = `/integrations/confluence/${integration.id}/export`
+      console.log("Export URL:", exportUrl)
+
+      const response = await apiClient.request(exportUrl, {
         method: "POST",
         body: JSON.stringify({ documentId: selectedDocument.id }),
       })
