@@ -143,7 +143,7 @@ export default function AnalyticsPage() {
     performance: -2.1,
   }
 
-  if (!hasPermission("analytics.view")) {
+  if (!hasPermission("analytics.system")) {
     return (
       <PageTransition>
         <div className="flex h-screen bg-background">
