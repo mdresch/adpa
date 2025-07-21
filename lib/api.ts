@@ -143,7 +143,10 @@ class ApiClient {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
+        // Create an error object that includes the response data for better error handling
+        const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
+        ;(error as any).response = { data, status: response.status }
+        throw error
       }
 
       return data
@@ -458,13 +461,6 @@ class ApiClient {
   }
 
   // Integrations endpoints (duplicate removed - using the one at line 337)
-
-  async createIntegration(integrationData: any) {
-    return this.request<any>("/integrations", {
-      method: "POST",
-      body: JSON.stringify(integrationData),
-    })
-  }
   // Documents API
   async getProjectDocuments(
     projectId: string,
@@ -587,6 +583,60 @@ class ApiClient {
       body: JSON.stringify(data),
     })
     return response.data
+  }
+
+  // GitHub Integration API
+  async getGitHubRepository(integrationId: string): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/repository`)
+  }
+
+  async getGitHubPullRequests(integrationId: string, state: string = "open"): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/pull-requests?state=${state}`)
+  }
+
+  async getGitHubIssues(integrationId: string, state: string = "open"): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/issues?state=${state}`)
+  }
+
+  async testGitHubConnection(integrationId: string): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/test`, {
+      method: "POST"
+    })
+  }
+
+  async syncGitHubTemplates(integrationId: string, options?: {
+    syncType?: string,
+    targetBranch?: string,
+    createPullRequests?: boolean
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/sync`, {
+      method: "POST",
+      body: JSON.stringify(options || { syncType: "templates" }),
+    })
+  }
+
+  async createGitHubPullRequest(integrationId: string, data: {
+    title: string,
+    description: string,
+    sourceBranch: string,
+    targetBranch?: string
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/pull-request`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async createGitHubIssue(integrationId: string, data: {
+    title: string,
+    description: string,
+    labels?: string[],
+    assignees?: string[]
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/issue`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
   }
 
   // Jobs API
