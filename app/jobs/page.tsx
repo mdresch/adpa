@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -27,8 +27,14 @@ import {
   Server,
   Cpu,
   MemoryStickIcon as Memory,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useAuth } from "@/contexts/AuthContext"
+import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
+import { apiClient, Job } from "@/lib/api"
+import { toast } from "sonner"
 
 // Mock data for jobs
 const mockJobs = [
@@ -241,12 +247,51 @@ const getPriorityColor = (priority: string) => {
 }
 
 export default function JobMonitorPage() {
+  const { user, hasPermission } = useAuth()
+  const { isConnected } = useWebSocket()
+  const jobUpdates = useJobUpdates()
+
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const filteredJobs = mockJobs.filter((job) => {
-    const matchesSearch = job.name.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    const fetchJobs = async () => {
+      try {
+        const response = await apiClient.getJobs({ limit: 50 })
+        setJobs(response.jobs)
+      } catch (error) {
+        console.error("Failed to fetch jobs:", error)
+        toast.error("Failed to load jobs")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchJobs()
+
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchJobs, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Update jobs with real-time data
+  useEffect(() => {
+    setJobs(prevJobs =>
+      prevJobs.map(job => {
+        const update = jobUpdates[job.id]
+        if (update) {
+          return { ...job, ...update }
+        }
+        return job
+      })
+    )
+  }, [jobUpdates])
+
+  const filteredJobs = (jobs.length > 0 ? jobs : mockJobs).filter((job) => {
+    const matchesSearch = (job.name || job.id).toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "all" || job.status === statusFilter
     return matchesSearch && matchesStatus
   })
