@@ -62,6 +62,56 @@ async function runMigrations() {
       ["initial_schema"]
     )
 
+    // Run SharePoint fields migration
+    try {
+      const sharepointMigrationPath = join(__dirname, "migrations", "add_sharepoint_fields.sql")
+      const sharepointMigration = readFileSync(sharepointMigrationPath, "utf-8")
+
+      // Check if this migration has already been run
+      const migrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_sharepoint_fields"]
+      )
+
+      if (migrationCheck.rows.length === 0) {
+        await pool.query(sharepointMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_sharepoint_fields"]
+        )
+        logger.info("SharePoint fields migration completed")
+      } else {
+        logger.info("SharePoint fields migration already applied")
+      }
+    } catch (error) {
+      logger.warn("SharePoint migration failed (may already be applied):", error)
+    }
+
+    // Run Confluence fields migration
+    try {
+      const confluenceMigrationPath = join(__dirname, "migrations", "add_confluence_fields.sql")
+      const confluenceMigration = readFileSync(confluenceMigrationPath, "utf-8")
+
+      // Check if this migration has already been run
+      const confluenceMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_confluence_fields"]
+      )
+
+      if (confluenceMigrationCheck.rows.length === 0) {
+        await pool.query(confluenceMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_confluence_fields"]
+        )
+        logger.info("Confluence fields migration completed")
+      } else {
+        logger.info("Confluence fields migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Confluence migration failed (may already be applied):", error)
+    }
+
     logger.info("Database migrations completed successfully")
   } catch (error) {
     logger.error("Migration failed:", error)

@@ -23,6 +23,7 @@ import securityRoutes from "./routes/security"
 import integrationRoutes from "./routes/integrations"
 import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
+import sharepointRoutes from "./routes/sharepointRoutes"
 import templateRoutes from "./routes/templates"
 
 dotenv.config()
@@ -67,9 +68,10 @@ app.use("/api/ai", aiRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
 app.use("/api/security", securityRoutes)
-app.use("/api/integrations", integrationRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
+app.use("/api/integrations", integrationRoutes)
+app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
 
 // WebSocket connection handling

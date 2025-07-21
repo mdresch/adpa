@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -39,7 +40,11 @@ interface ConfluenceSpace {
   id: string
   key: string
   name: string
-  description?: string
+  description?: {
+    plain?: string
+    view?: string
+    _expandable?: any
+  } | string
   type: string
   status: string
   _links?: {
@@ -76,12 +81,16 @@ export default function ConfluenceIntegrationPage() {
   const [integration, setIntegration] = useState<any>(null)
   const [spaces, setSpaces] = useState<ConfluenceSpace[]>([])
   const [searchResults, setSearchResults] = useState<ConfluencePage[]>([])
+  const [documents, setDocuments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [testing, setTesting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSpace, setSelectedSpace] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<any>(null)
+  const [exporting, setExporting] = useState(false)
 
   // Configuration state
   const [config, setConfig] = useState({
@@ -93,24 +102,33 @@ export default function ConfluenceIntegrationPage() {
 
   useEffect(() => {
     fetchIntegration()
+    fetchDocuments()
   }, [])
 
   const fetchIntegration = async () => {
     try {
       setLoading(true)
       // Get Confluence integration
-      const integrations = await apiClient.getIntegrations()
+      console.log("=== FETCH INTEGRATION DEBUG ===")
+      const response = await apiClient.getIntegrations()
+      console.log("Raw API response:", response)
+
+      const integrations = response.integrations || response // Handle both formats
+      console.log("Integrations array:", integrations)
+
       const confluenceIntegration = integrations.find(i => i.type === "confluence")
-      
+      console.log("Found Confluence integration:", confluenceIntegration)
+
       if (confluenceIntegration) {
         setIntegration(confluenceIntegration)
+        console.log("Set integration state to:", confluenceIntegration)
         setConfig({
           baseUrl: confluenceIntegration.configuration.base_url || "",
-          username: confluenceIntegration.configuration.username || "",
-          apiToken: confluenceIntegration.configuration.api_token || "",
+          username: "", // Credentials are encrypted and not returned
+          apiToken: "", // Credentials are encrypted and not returned
           targetSpaceKey: confluenceIntegration.configuration.target_space_key || "",
         })
-        
+
         if (confluenceIntegration.is_active) {
           await fetchSpaces(confluenceIntegration.id)
         }
@@ -125,43 +143,56 @@ export default function ConfluenceIntegrationPage() {
 
   const fetchSpaces = async (integrationId: string) => {
     try {
-      const response = await fetch(`/api/integrations/confluence/${integrationId}/spaces`)
-      const data = await response.json()
-      
-      if (data.success) {
-        setSpaces(data.spaces)
+      const response = await apiClient.request(`/integrations/confluence/${integrationId}/spaces`)
+
+      if (response.success) {
+        setSpaces(response.spaces)
       }
     } catch (error) {
       console.error("Failed to fetch spaces:", error)
+      toast.error("Failed to fetch Confluence spaces")
+    }
+  }
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await apiClient.request("/documents")
+      const docs = response.documents || response || []
+      setDocuments(docs)
+    } catch (error) {
+      console.error("Failed to fetch documents:", error)
     }
   }
 
   const testConnection = async () => {
     try {
       setTesting(true)
-      
-      const response = await fetch("/api/integrations/confluence/test", {
+
+      console.log("Testing connection with config:", {
+        baseUrl: config.baseUrl,
+        username: config.username,
+        apiToken: config.apiToken ? "***HIDDEN***" : "EMPTY",
+      })
+
+      const response = await apiClient.request("/integrations/confluence/test", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           baseUrl: config.baseUrl,
-          username: config.username,
-          apiToken: config.apiToken,
+          credentials: {
+            username: config.username,
+            api_token: config.apiToken,
+          }
         }),
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.success) {
         toast.success("Connection successful!")
       } else {
-        toast.error(data.error || "Connection failed")
+        toast.error(response.error || "Connection failed")
       }
     } catch (error) {
       console.error("Connection test failed:", error)
-      toast.error("Connection test failed")
+      toast.error(error.message || "Connection test failed")
     } finally {
       setTesting(false)
     }
@@ -169,27 +200,52 @@ export default function ConfluenceIntegrationPage() {
 
   const saveConfiguration = async () => {
     try {
+      // FORCE DEBUG: Always log this
+      alert("Save Configuration Started - Check Console")
+      console.log("=== SAVE CONFIGURATION DEBUG ===")
+      console.log("Config values:", config)
+
       const configData = {
         name: "Confluence",
-        type: "confluence",
         configuration: {
           base_url: config.baseUrl,
+          target_space_key: config.targetSpaceKey,
+          auto_publish: true,
+          create_projects_for_spaces: true,
+          sync_on_update: false,
+        },
+        credentials: {
           username: config.username,
           api_token: config.apiToken,
-          target_space_key: config.targetSpaceKey,
         },
         is_active: true,
       }
 
-      if (integration) {
-        await apiClient.updateIntegration(integration.id, configData)
+      // Get the current integration ID dynamically
+      console.log("Fetching latest integrations to get correct ID...")
+      const response = await apiClient.getIntegrations()
+      const integrations = response.integrations || response
+      console.log("Found integrations:", integrations)
+
+      const currentIntegration = integrations.find(i => i.type === "confluence")
+      console.log("Current Confluence integration:", currentIntegration)
+
+      if (currentIntegration) {
+        console.log("Using integration ID:", currentIntegration.id)
+        await apiClient.updateIntegration(currentIntegration.id, configData)
+        setIntegration(currentIntegration)
         toast.success("Configuration updated successfully")
       } else {
-        const newIntegration = await apiClient.createIntegration(configData)
+        console.log("Creating new integration")
+        const newIntegration = await apiClient.createIntegration({
+          ...configData,
+          type: "confluence" // Include type for creation
+        })
         setIntegration(newIntegration)
         toast.success("Integration created successfully")
       }
 
+      // Refresh the integration data
       await fetchIntegration()
     } catch (error) {
       console.error("Failed to save configuration:", error)
@@ -202,22 +258,20 @@ export default function ConfluenceIntegrationPage() {
 
     try {
       setSyncing(true)
-      
-      const response = await fetch(`/api/integrations/confluence/${integration.id}/sync`, {
+
+      const response = await apiClient.request(`/integrations/confluence/${integration.id}/sync`, {
         method: "POST",
       })
 
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success(`Successfully synced ${data.syncedDocuments} documents`)
+      if (response.success) {
+        toast.success(`Successfully synced ${response.syncedDocuments} documents`)
         await fetchIntegration()
       } else {
-        toast.error(data.error || "Sync failed")
+        toast.error(response.error || "Sync failed")
       }
     } catch (error) {
       console.error("Sync failed:", error)
-      toast.error("Sync failed")
+      toast.error(error.message || "Sync failed")
     } finally {
       setSyncing(false)
     }
@@ -227,19 +281,18 @@ export default function ConfluenceIntegrationPage() {
     if (!integration || !searchQuery) return
 
     try {
-      const response = await fetch(
-        `/api/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace ? `&spaceKey=${selectedSpace}` : ""}`
+      const response = await apiClient.request(
+        `/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace && selectedSpace !== "all" ? `&spaceKey=${selectedSpace}` : ""}`
       )
-      const data = await response.json()
 
-      if (data.success) {
-        setSearchResults(data.results)
+      if (response.success) {
+        setSearchResults(response.results)
       } else {
-        toast.error(data.error || "Search failed")
+        toast.error(response.error || "Search failed")
       }
     } catch (error) {
       console.error("Search failed:", error)
-      toast.error("Search failed")
+      toast.error(error.message || "Search failed")
     }
   }
 
@@ -247,25 +300,92 @@ export default function ConfluenceIntegrationPage() {
     if (!integration) return
 
     try {
-      const response = await fetch(`/api/integrations/confluence/${integration.id}/import`, {
+      const response = await apiClient.request(`/integrations/confluence/${integration.id}/import`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ pageId }),
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.success) {
         toast.success("Page imported successfully")
       } else {
-        toast.error(data.error || "Import failed")
+        toast.error(response.error || "Import failed")
       }
     } catch (error) {
       console.error("Import failed:", error)
-      toast.error("Import failed")
+      toast.error(error.message || "Import failed")
     }
+  }
+
+  const exportToConfluence = async () => {
+    if (!integration) return
+
+    if (documents.length === 0) {
+      toast.info("No documents available to export. Create some documents first.")
+      return
+    }
+
+    setShowExportDialog(true)
+  }
+
+  const handleExportConfirm = async () => {
+    if (!selectedDocument || !integration) return
+
+    console.log("=== EXPORT DEBUG ===")
+    console.log("Integration object:", integration)
+    console.log("Integration ID:", integration.id)
+    console.log("Selected document:", selectedDocument)
+
+    setExporting(true)
+    try {
+      const exportUrl = `/integrations/confluence/${integration.id}/export`
+      console.log("Export URL:", exportUrl)
+
+      const response = await apiClient.request(exportUrl, {
+        method: "POST",
+        body: JSON.stringify({ documentId: selectedDocument.id }),
+      })
+
+      if (response.success) {
+        toast.success(`Document exported successfully! View at: ${response.confluenceUrl}`)
+        setShowExportDialog(false)
+        setSelectedDocument(null)
+      } else {
+        toast.error(response.error || "Export failed")
+      }
+    } catch (error) {
+      console.error("Failed to export to Confluence:", error)
+      toast.error("Failed to export to Confluence")
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const viewInConfluence = (webUrl: string) => {
+    // Open Confluence space in new tab
+    // Ensure the URL includes /wiki for Confluence Cloud spaces
+    let fullUrl
+    if (webUrl.startsWith('http')) {
+      fullUrl = webUrl
+    } else {
+      // For relative URLs, construct the full Confluence URL with /wiki
+      const baseUrl = config.baseUrl || 'https://cba-adpa.atlassian.net'
+      fullUrl = `${baseUrl}/wiki${webUrl}`
+    }
+    window.open(fullUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const viewPage = (webUrl: string) => {
+    // Open Confluence page in new tab
+    // Ensure the URL includes /wiki for Confluence Cloud pages
+    let fullUrl
+    if (webUrl.startsWith('http')) {
+      fullUrl = webUrl
+    } else {
+      // For relative URLs, construct the full Confluence URL with /wiki
+      const baseUrl = config.baseUrl || 'https://cba-adpa.atlassian.net'
+      fullUrl = `${baseUrl}/wiki${webUrl}`
+    }
+    window.open(fullUrl, '_blank', 'noopener,noreferrer')
   }
 
   const formatDate = (dateString: string) => {
@@ -437,10 +557,11 @@ export default function ConfluenceIntegrationPage() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             disabled={!integration?.is_active}
                             className="w-full"
+                            onClick={exportToConfluence}
                           >
                             <ArrowUpFromLine className="h-4 w-4 mr-2" />
                             Export to Confluence
@@ -547,7 +668,9 @@ export default function ConfluenceIntegrationPage() {
                                       <Badge variant="outline">{space.key}</Badge>
                                     </div>
                                     <p className="text-sm text-muted-foreground line-clamp-2">
-                                      {space.description || "No description"}
+                                      {typeof space.description === 'string'
+                                        ? space.description
+                                        : space.description?.plain || space.description?.view || "No description"}
                                     </p>
                                     <div className="flex items-center gap-2">
                                       <Badge variant="secondary" className="text-xs">
@@ -558,7 +681,12 @@ export default function ConfluenceIntegrationPage() {
                                       </Badge>
                                     </div>
                                     {space._links?.webui && (
-                                      <Button variant="outline" size="sm" className="w-full">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => viewInConfluence(space._links.webui)}
+                                      >
                                         <ExternalLink className="h-3 w-3 mr-2" />
                                         View in Confluence
                                       </Button>
@@ -608,7 +736,7 @@ export default function ConfluenceIntegrationPage() {
                               <SelectValue placeholder="All spaces" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">All spaces</SelectItem>
+                              <SelectItem value="all">All spaces</SelectItem>
                               {spaces.map((space) => (
                                 <SelectItem key={space.key} value={space.key}>
                                   {space.name}
@@ -640,7 +768,11 @@ export default function ConfluenceIntegrationPage() {
                                     </div>
                                     <div className="flex gap-2">
                                       {page._links?.webui && (
-                                        <Button variant="outline" size="sm">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => viewPage(page._links.webui)}
+                                        >
                                           <ExternalLink className="h-3 w-3 mr-2" />
                                           View
                                         </Button>
@@ -668,6 +800,102 @@ export default function ConfluenceIntegrationPage() {
           </main>
         </div>
       </div>
+
+      {/* Export to Confluence Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-[600px] glass border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Export to Confluence
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-300">
+              Select a document to export to your Confluence space. The document will be converted to Confluence format and published.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div>
+              <Label className="text-sm font-semibold mb-3 block">
+                Available Documents ({documents.length})
+              </Label>
+              <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-2">
+                {documents.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No documents available</p>
+                    <p className="text-sm">Create some documents first to export them.</p>
+                  </div>
+                ) : (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md ${
+                        selectedDocument?.id === doc.id
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                      }`}
+                      onClick={() => setSelectedDocument(doc)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">{doc.name}</h4>
+                          {doc.project_name && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Project: {doc.project_name}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            {doc.framework && (
+                              <Badge variant="secondary" className="text-xs">
+                                {doc.framework}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-xs">
+                              {doc.status || 'draft'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(doc.updated_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowExportDialog(false)
+                setSelectedDocument(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleExportConfirm}
+              disabled={!selectedDocument || exporting}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+            >
+              {exporting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <ArrowUpFromLine className="h-4 w-4 mr-2" />
+                  Export to Confluence
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   )
 }

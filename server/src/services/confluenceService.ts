@@ -70,8 +70,13 @@ export class ConfluenceService {
 
   constructor(config: ConfluenceConfig) {
     this.config = config
+    // Ensure the base URL includes /wiki for Confluence Cloud instances
+    const baseUrl = config.baseUrl.includes('/wiki')
+      ? `${config.baseUrl}/rest/api`
+      : `${config.baseUrl}/wiki/rest/api`
+
     this.client = axios.create({
-      baseURL: `${config.baseUrl}/rest/api`,
+      baseURL: baseUrl,
       auth: {
         username: config.username,
         password: config.apiToken,
