@@ -194,12 +194,29 @@ export default function ConfluenceIntegrationPage() {
         is_active: true,
       }
 
-      // FORCE: Use the known correct integration ID directly
-      const CORRECT_INTEGRATION_ID = "4d9d43b1-d9ca-4883-9d02-527c283c6d47"
+      // Get the current integration ID dynamically
+      console.log("Fetching latest integrations to get correct ID...")
+      const response = await apiClient.getIntegrations()
+      const integrations = response.integrations || response
+      console.log("Found integrations:", integrations)
 
-      console.log("Using FORCED integration ID:", CORRECT_INTEGRATION_ID)
-      await apiClient.updateIntegration(CORRECT_INTEGRATION_ID, configData)
-      toast.success("Configuration updated successfully")
+      const currentIntegration = integrations.find(i => i.type === "confluence")
+      console.log("Current Confluence integration:", currentIntegration)
+
+      if (currentIntegration) {
+        console.log("Using integration ID:", currentIntegration.id)
+        await apiClient.updateIntegration(currentIntegration.id, configData)
+        setIntegration(currentIntegration)
+        toast.success("Configuration updated successfully")
+      } else {
+        console.log("Creating new integration")
+        const newIntegration = await apiClient.createIntegration({
+          ...configData,
+          type: "confluence" // Include type for creation
+        })
+        setIntegration(newIntegration)
+        toast.success("Integration created successfully")
+      }
 
       // Refresh the integration data
       await fetchIntegration()
