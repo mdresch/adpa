@@ -90,6 +90,84 @@ app.get('/api/integrations', (req, res) => {
   ])
 })
 
+// Mock SharePoint sites endpoint
+app.get('/api/integrations/sharepoint/:id/sites', (req, res) => {
+  console.log(`Mock sites endpoint hit for integration ${req.params.id}`)
+  res.json({
+    success: true,
+    sites: [
+      {
+        id: 'site-1',
+        name: 'Requirements Gathering Agent',
+        webUrl: 'https://cbadmin.sharepoint.com/sites/RequirementsGatheringAgent'
+      },
+      {
+        id: 'site-2',
+        name: 'My Portfolio Menno',
+        webUrl: 'https://cbadmin.sharepoint.com/sites/MyPortfolioMenno'
+      }
+    ]
+  })
+})
+
+// Mock SharePoint drives endpoint
+app.get('/api/integrations/sharepoint/:id/sites/:siteId/drives', (req, res) => {
+  console.log(`Mock drives endpoint hit for site ${req.params.siteId}`)
+  res.json({
+    success: true,
+    drives: [
+      {
+        id: 'drive-1',
+        name: 'Documents',
+        webUrl: 'https://cbadmin.sharepoint.com/sites/test/Shared%20Documents'
+      }
+    ]
+  })
+})
+
+// Mock SharePoint files endpoint
+app.get('/api/integrations/sharepoint/:id/drives/:driveId/files', (req, res) => {
+  console.log(`Mock files endpoint hit for drive ${req.params.driveId}`)
+  res.json({
+    success: true,
+    files: [
+      {
+        id: 'file-1',
+        name: 'Sample Document.docx',
+        webUrl: 'https://cbadmin.sharepoint.com/sites/test/Shared%20Documents/Sample%20Document.docx',
+        size: 12345,
+        lastModified: new Date().toISOString()
+      }
+    ]
+  })
+})
+
+// Mock SharePoint sync endpoint
+app.post('/api/integrations/sharepoint/:id/sync', (req, res) => {
+  console.log(`Mock sync endpoint hit for integration ${req.params.id}`)
+  res.json({
+    success: true,
+    message: 'Sync started successfully',
+    jobId: 'sync-job-123'
+  })
+})
+
+// Mock SharePoint search endpoint
+app.get('/api/integrations/sharepoint/:id/search', (req, res) => {
+  console.log(`Mock search endpoint hit for integration ${req.params.id}, query: ${req.query.query}`)
+  res.json({
+    success: true,
+    results: [
+      {
+        id: 'result-1',
+        title: 'Sample Search Result',
+        webUrl: 'https://cbadmin.sharepoint.com/sites/test/result1',
+        snippet: 'This is a sample search result snippet...'
+      }
+    ]
+  })
+})
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'Test server running' })
