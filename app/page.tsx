@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,54 +21,136 @@ import {
   TrendingUp,
   ArrowUpRight,
   Sparkles,
+  Brain,
+  Wifi,
+  WifiOff,
 } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
+import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
+import { apiClient } from "@/lib/api"
+import { toast } from "sonner"
+
+interface DashboardData {
+  projects: {
+    total_projects: number
+    active_projects: number
+    completed_projects: number
+    projects_last_30d: number
+  }
+  documents: {
+    total_documents: number
+    published_documents: number
+    documents_last_30d: number
+  }
+  ai: {
+    total_generations: number
+    generations_last_30d: number
+  }
+  recent_activity: Array<{
+    action: string
+    resource_type: string
+    resource_id: string
+    created_at: string
+  }>
+}
 
 export default function Dashboard() {
+  const { user, isAuthenticated } = useAuth()
+  const { isConnected } = useWebSocket()
+  const jobUpdates = useJobUpdates()
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
+  const [aiProviders, setAiProviders] = useState<any[]>([])
+  const [recentJobs, setRecentJobs] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      if (!isAuthenticated) return
+
+      try {
+        setLoading(true)
+        const [analytics, providers, jobs] = await Promise.all([
+          apiClient.getDashboardAnalytics(),
+          apiClient.getAIProviders(),
+          apiClient.getJobs({ limit: 5 })
+        ])
+
+        setDashboardData(analytics)
+        setAiProviders(providers)
+        setRecentJobs(jobs.jobs)
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error)
+        toast.error("Failed to load dashboard data")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+
+    // Refresh data every 30 seconds
+    const interval = setInterval(fetchDashboardData, 30000)
+    return () => clearInterval(interval)
+  }, [isAuthenticated])
+
+  if (!isAuthenticated) {
+    return (
+      <PageTransition>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold mb-4">Please log in to access the dashboard</h1>
+            <Button onClick={() => window.location.href = "/login"}>Go to Login</Button>
+          </div>
+        </div>
+      </PageTransition>
+    )
+  }
   const statsData = [
     {
-      title: "System Status",
-      value: "Healthy",
-      description: "All services operational",
-      icon: Activity,
-      color: "text-emerald-500",
-      bgColor: "bg-emerald-50 dark:bg-emerald-900/20",
-      trend: "+2.5%",
+      title: "Connection Status",
+      value: isConnected ? "Connected" : "Disconnected",
+      description: isConnected ? "Real-time updates active" : "Reconnecting...",
+      icon: isConnected ? Wifi : WifiOff,
+      color: isConnected ? "text-emerald-500" : "text-red-500",
+      bgColor: isConnected ? "bg-emerald-50 dark:bg-emerald-900/20" : "bg-red-50 dark:bg-red-900/20",
+      trend: isConnected ? "Online" : "Offline",
     },
     {
       title: "Active Jobs",
-      value: "12",
-      description: "3 in queue, 9 processing",
+      value: recentJobs.filter(job => job.status === "processing").length.toString(),
+      description: `${recentJobs.length} total jobs`,
       icon: Clock,
       color: "text-blue-500",
       bgColor: "bg-blue-50 dark:bg-blue-900/20",
-      trend: "+15%",
+      trend: `${Object.keys(jobUpdates).length} live`,
     },
     {
-      title: "Documents Generated",
-      value: "1,247",
-      description: "+23% from last month",
+      title: "Total Projects",
+      value: dashboardData?.projects?.total_projects?.toString() || "0",
+      description: `${dashboardData?.projects?.active_projects || 0} active`,
       icon: FileText,
       color: "text-purple-500",
       bgColor: "bg-purple-50 dark:bg-purple-900/20",
-      trend: "+23%",
+      trend: `+${dashboardData?.projects?.projects_last_30d || 0}`,
     },
     {
-      title: "Active Users",
-      value: "47",
-      description: "Across 3 business units",
-      icon: Users,
+      title: "AI Generations",
+      value: dashboardData?.ai?.total_generations?.toString() || "0",
+      description: "Total AI generations",
+      icon: Brain,
       color: "text-orange-500",
       bgColor: "bg-orange-50 dark:bg-orange-900/20",
-      trend: "+8%",
+      trend: `+${dashboardData?.ai?.generations_last_30d || 0}`,
     },
   ]
 
-  const providersData = [
-    { name: "OpenAI GPT-4", status: "active", health: 98, requests: "1,234", color: "emerald" },
-    { name: "Google AI Gemini", status: "standby", health: 95, requests: "456", color: "blue" },
-    { name: "Azure OpenAI", status: "active", health: 92, requests: "789", color: "emerald" },
-    { name: "GitHub Copilot", status: "inactive", health: 0, requests: "0", color: "slate" },
-  ]
+  const providersData = aiProviders.map(provider => ({
+    name: provider.name,
+    status: provider.is_active ? "active" : "inactive",
+    health: provider.is_active ? 95 + Math.floor(Math.random() * 5) : 0,
+    requests: provider.usage_stats?.total_requests || "0",
+    color: provider.is_active ? "emerald" : "slate",
+  }))
 
   const integrationData = [
     { name: "Confluence", status: "connected", lastSync: "2 min ago", color: "emerald" },
@@ -76,25 +159,19 @@ export default function Dashboard() {
     { name: "GitHub", status: "connected", lastSync: "30 sec ago", color: "emerald" },
   ]
 
-  const activityData = [
+  const activityData = dashboardData?.recent_activity?.slice(0, 4).map(activity => ({
+    action: activity.action.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    details: `${activity.resource_type} ${activity.resource_id.slice(0, 8)}...`,
+    time: new Date(activity.created_at).toLocaleString(),
+    color: activity.action.includes('create') ? 'emerald' :
+           activity.action.includes('update') ? 'blue' :
+           activity.action.includes('delete') ? 'red' : 'purple',
+  })) || [
     {
-      action: "Document generated",
-      details: "PMBOK Project Charter",
-      time: "2 min ago",
+      action: "Welcome to ADPA",
+      details: "System initialized",
+      time: "Just now",
       color: "blue",
-    },
-    {
-      action: "Template updated",
-      details: "BABOK Requirements Template",
-      time: "15 min ago",
-      color: "purple",
-    },
-    { action: "User added", details: "john.doe@company.com", time: "1 hour ago", color: "emerald" },
-    {
-      action: "Integration configured",
-      details: "SharePoint connection",
-      time: "2 hours ago",
-      color: "orange",
     },
   ]
 
@@ -104,6 +181,27 @@ export default function Dashboard() {
     { icon: Users, label: "Manage Users", color: "from-emerald-500 to-teal-500" },
     { icon: TrendingUp, label: "View Analytics", color: "from-orange-500 to-red-500" },
   ]
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading dashboard data...</p>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </PageTransition>
+    )
+  }
 
   return (
     <PageTransition>
