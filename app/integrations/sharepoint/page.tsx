@@ -203,7 +203,7 @@ export default function SharePointIntegrationPage() {
     try {
       setTesting(true)
 
-      const url = "http://localhost:5001/api/integrations/sharepoint/test"
+      const url = "/api/integrations/sharepoint/test"
       const requestData = {
         tenantId: config.tenantId,
         clientId: config.clientId,
@@ -220,17 +220,24 @@ export default function SharePointIntegrationPage() {
 
       // First test if the server is reachable
       try {
-        const healthCheck = await fetch("http://localhost:5001/api/health")
+        const healthCheck = await fetch("/api/health")
         console.log("🏥 Health check:", healthCheck.status, await healthCheck.text())
       } catch (healthError) {
         console.error("❌ Health check failed:", healthError)
       }
 
+      // Get auth token
+      const token = localStorage.getItem('token')
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
       const response = await fetch(url, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(requestData),
       })
 
