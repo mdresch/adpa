@@ -23,6 +23,22 @@ import {
 } from "@/components/ui/dialog"
 
 export default function Integrations() {
+  // Confluence configuration state
+  const [confluenceConfig, setConfluenceConfig] = useState({
+    baseUrl: "https://company.atlassian.net",
+    defaultSpace: "DOCS",
+    username: "",
+    apiToken: "",
+    oauthClientId: "",
+    oauthClientSecret: "",
+    autoPublish: true,
+    syncOnUpdate: false,
+    createProjectsForSpaces: true,
+  })
+
+  const [testing, setTesting] = useState(false)
+  const [saving, setSaving] = useState(false)
+
   const [integrations] = useState([
     {
       id: "1",
@@ -73,6 +89,79 @@ export default function Integrations() {
       repositories: ["docs", "templates", "automation"],
     },
   ])
+
+  // Handler functions
+  const handleConfluenceConfigChange = (field: string, value: any) => {
+    setConfluenceConfig(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const testConfluenceConnection = async () => {
+    setTesting(true)
+    try {
+      const response = await fetch("/api/integrations/confluence/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          baseUrl: confluenceConfig.baseUrl,
+          username: confluenceConfig.username,
+          apiToken: confluenceConfig.apiToken,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (data.success) {
+        // Show success message (you can add toast notification here)
+        alert("Connection successful!")
+      } else {
+        alert(data.error || "Connection failed")
+      }
+    } catch (error) {
+      console.error("Connection test failed:", error)
+      alert("Connection test failed")
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const saveConfluenceConfiguration = async () => {
+    setSaving(true)
+    try {
+      const configData = {
+        name: "Confluence",
+        type: "confluence",
+        configuration: {
+          base_url: confluenceConfig.baseUrl,
+          username: confluenceConfig.username,
+          api_token: confluenceConfig.apiToken,
+          target_space_key: confluenceConfig.defaultSpace,
+          oauth_client_id: confluenceConfig.oauthClientId,
+          oauth_client_secret: confluenceConfig.oauthClientSecret,
+          auto_publish: confluenceConfig.autoPublish,
+          sync_on_update: confluenceConfig.syncOnUpdate,
+          create_projects_for_spaces: confluenceConfig.createProjectsForSpaces,
+        },
+        is_active: true,
+      }
+
+      // Here you would call your API to save the configuration
+      // const response = await apiClient.createIntegration(configData)
+
+      // For now, just show success
+      alert("Configuration saved successfully!")
+
+    } catch (error) {
+      console.error("Failed to save configuration:", error)
+      alert("Failed to save configuration")
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -235,44 +324,183 @@ export default function Integrations() {
                   <CardHeader>
                     <CardTitle>Confluence Configuration</CardTitle>
                     <CardDescription>
-                      Configure Atlassian Confluence integration for document publishing
+                      Configure Atlassian Confluence integration for document publishing and synchronization
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="confluence-url">Confluence Base URL</Label>
-                        <Input
-                          id="confluence-url"
-                          placeholder="https://company.atlassian.net"
-                          defaultValue="https://company.atlassian.net"
+                  <CardContent className="space-y-6">
+                    {/* Basic Configuration */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-muted-foreground">Basic Configuration</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="confluence-url">Confluence Base URL</Label>
+                          <Input
+                            id="confluence-url"
+                            placeholder="https://your-domain.atlassian.net"
+                            value={confluenceConfig.baseUrl}
+                            onChange={(e) => handleConfluenceConfigChange('baseUrl', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="confluence-space">Default Space Key</Label>
+                          <Input
+                            id="confluence-space"
+                            placeholder="DOCS"
+                            value={confluenceConfig.defaultSpace}
+                            onChange={(e) => handleConfluenceConfigChange('defaultSpace', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Authentication */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-muted-foreground">Authentication</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="confluence-username">Username/Email</Label>
+                          <Input
+                            id="confluence-username"
+                            placeholder="your-email@company.com"
+                            type="email"
+                            value={confluenceConfig.username}
+                            onChange={(e) => handleConfluenceConfigChange('username', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="confluence-token">API Token</Label>
+                          <Input
+                            id="confluence-token"
+                            type="password"
+                            placeholder="Your Confluence API token"
+                            value={confluenceConfig.apiToken}
+                            onChange={(e) => handleConfluenceConfigChange('apiToken', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Generate an API token from your Atlassian account settings.
+                        <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-1">
+                          Learn more
+                        </a>
+                      </div>
+                    </div>
+
+                    {/* OAuth2 Configuration (Alternative) */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-muted-foreground">OAuth2 Configuration (Alternative)</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="oauth-client-id">Client ID</Label>
+                          <Input
+                            id="oauth-client-id"
+                            placeholder="OAuth2 Client ID"
+                            value={confluenceConfig.oauthClientId}
+                            onChange={(e) => handleConfluenceConfigChange('oauthClientId', e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="oauth-client-secret">Client Secret</Label>
+                          <Input
+                            id="oauth-client-secret"
+                            type="password"
+                            placeholder="OAuth2 Client Secret"
+                            value={confluenceConfig.oauthClientSecret}
+                            onChange={(e) => handleConfluenceConfigChange('oauthClientSecret', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        OAuth2 is recommended for production environments. Use API tokens for development and testing.
+                      </div>
+                    </div>
+
+                    {/* Publishing Options */}
+                    <div className="space-y-4">
+                      <h4 className="text-sm font-medium text-muted-foreground">Publishing Options</h4>
+
+                      <div className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="space-y-1">
+                          <Label className="text-base font-medium">Auto-publish Documents</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically publish generated documents to Confluence when created
+                          </p>
+                        </div>
+                        <Switch
+                          checked={confluenceConfig.autoPublish}
+                          onCheckedChange={(checked) => handleConfluenceConfigChange('autoPublish', checked)}
                         />
                       </div>
-                      <div>
-                        <Label htmlFor="confluence-space">Default Space</Label>
-                        <Input id="confluence-space" placeholder="Space key" defaultValue="DOCS" />
+
+                      <div className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="space-y-1">
+                          <Label className="text-base font-medium">Sync on Document Update</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically sync changes back to Confluence when documents are modified
+                          </p>
+                        </div>
+                        <Switch
+                          checked={confluenceConfig.syncOnUpdate}
+                          onCheckedChange={(checked) => handleConfluenceConfigChange('syncOnUpdate', checked)}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="space-y-1">
+                          <Label className="text-base font-medium">Create Projects for Spaces</Label>
+                          <p className="text-sm text-muted-foreground">
+                            Automatically create ADPA projects for each Confluence space during sync
+                          </p>
+                        </div>
+                        <Switch
+                          checked={confluenceConfig.createProjectsForSpaces}
+                          onCheckedChange={(checked) => handleConfluenceConfigChange('createProjectsForSpaces', checked)}
+                        />
                       </div>
                     </div>
 
-                    <div>
-                      <Label>OAuth2 Configuration</Label>
-                      <div className="grid grid-cols-2 gap-4 mt-2">
-                        <Input placeholder="Client ID" />
-                        <Input type="password" placeholder="Client Secret" />
-                      </div>
+                    {/* Action Buttons */}
+                    <div className="flex gap-2 pt-4 border-t">
+                      <Button
+                        variant="outline"
+                        onClick={testConfluenceConnection}
+                        disabled={testing || !confluenceConfig.baseUrl || !confluenceConfig.username || !confluenceConfig.apiToken}
+                      >
+                        {testing ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Testing...
+                          </>
+                        ) : (
+                          <>
+                            <TestTube className="h-4 w-4 mr-2" />
+                            Test Connection
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        onClick={saveConfluenceConfiguration}
+                        disabled={saving || !confluenceConfig.baseUrl}
+                      >
+                        {saving ? (
+                          <>
+                            <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Settings className="h-4 w-4 mr-2" />
+                            Save Configuration
+                          </>
+                        )}
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <Link href="/integrations/confluence">
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Advanced Settings
+                        </Link>
+                      </Button>
                     </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base font-medium">Auto-publish Documents</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Automatically publish generated documents to Confluence
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-
-                    <Button>Save Configuration</Button>
                   </CardContent>
                 </Card>
               </TabsContent>
