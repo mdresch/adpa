@@ -1,0 +1,226 @@
+"use client"
+
+import React, { createContext, useContext, useEffect, useState, ReactNode } from "react"
+import { useRouter } from "next/navigation"
+import { apiClient, User } from "@/lib/api"
+import { toast } from "sonner"
+
+interface AuthContextType {
+  user: User | null
+  loading: boolean
+  login: (email: string, password: string) => Promise<void>
+  register: (userData: { email: string; password: string; name: string; role?: string }) => Promise<void>
+  logout: () => Promise<void>
+  refreshUser: () => Promise<void>
+  isAuthenticated: boolean
+  hasPermission: (permission: string) => boolean
+  hasRole: (roles: string | string[]) => boolean
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error("useAuth must be used within an AuthProvider")
+  }
+  return context
+}
+
+interface AuthProviderProps {
+  children: ReactNode
+}
+
+export function AuthProvider({ children }: AuthProviderProps) {
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
+  const router = useRouter()
+
+  // Check if user is authenticated
+  const isAuthenticated = !!user
+
+  // Check if user has specific permission
+  const hasPermission = (permission: string): boolean => {
+    if (!user || !user.permissions) return false
+    return user.permissions[permission] === true
+  }
+
+  // Check if user has specific role(s)
+  const hasRole = (roles: string | string[]): boolean => {
+    if (!user) return false
+    const roleArray = Array.isArray(roles) ? roles : [roles]
+    return roleArray.includes(user.role)
+  }
+
+  // Initialize auth state
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        const token = localStorage.getItem("auth_token")
+        if (token) {
+          apiClient.setToken(token)
+          const currentUser = await apiClient.getCurrentUser()
+          setUser(currentUser)
+        }
+      } catch (error) {
+        console.error("Auth initialization failed:", error)
+        // Clear invalid token
+        localStorage.removeItem("auth_token")
+        apiClient.clearToken()
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    initAuth()
+  }, [])
+
+  // Login function
+  const login = async (email: string, password: string) => {
+    try {
+      setLoading(true)
+      const { user: loggedInUser, token } = await apiClient.login(email, password)
+      setUser(loggedInUser)
+      
+      // Connect WebSocket after successful login
+      apiClient.connectWebSocket()
+      
+      toast.success("Login successful!")
+      router.push("/dashboard")
+    } catch (error) {
+      console.error("Login failed:", error)
+      toast.error(error instanceof Error ? error.message : "Login failed")
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Register function
+  const register = async (userData: { email: string; password: string; name: string; role?: string }) => {
+    try {
+      setLoading(true)
+      const { user: newUser, token } = await apiClient.register(userData)
+      setUser(newUser)
+      
+      // Connect WebSocket after successful registration
+      apiClient.connectWebSocket()
+      
+      toast.success("Registration successful!")
+      router.push("/dashboard")
+    } catch (error) {
+      console.error("Registration failed:", error)
+      toast.error(error instanceof Error ? error.message : "Registration failed")
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Logout function
+  const logout = async () => {
+    try {
+      await apiClient.logout()
+      setUser(null)
+      toast.success("Logged out successfully")
+      router.push("/auth/login")
+    } catch (error) {
+      console.error("Logout failed:", error)
+      // Force logout even if API call fails
+      setUser(null)
+      apiClient.clearToken()
+      router.push("/auth/login")
+    }
+  }
+
+  // Refresh user data
+  const refreshUser = async () => {
+    try {
+      if (isAuthenticated) {
+        const currentUser = await apiClient.getCurrentUser()
+        setUser(currentUser)
+      }
+    } catch (error) {
+      console.error("Failed to refresh user:", error)
+      // If refresh fails, user might be logged out
+      if (error instanceof Error && error.message.includes("401")) {
+        await logout()
+      }
+    }
+  }
+
+  const value: AuthContextType = {
+    user,
+    loading,
+    login,
+    register,
+    logout,
+    refreshUser,
+    isAuthenticated,
+    hasPermission,
+    hasRole,
+  }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+// Higher-order component for protected routes
+export function withAuth<P extends object>(Component: React.ComponentType<P>) {
+  return function AuthenticatedComponent(props: P) {
+    const { isAuthenticated, loading } = useAuth()
+    const router = useRouter()
+
+    useEffect(() => {
+      if (!loading && !isAuthenticated) {
+        router.push("/auth/login")
+      }
+    }, [isAuthenticated, loading, router])
+
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        </div>
+      )
+    }
+
+    if (!isAuthenticated) {
+      return null
+    }
+
+    return <Component {...props} />
+  }
+}
+
+// Hook for role-based access control
+export function useRoleGuard(requiredRoles: string | string[]) {
+  const { hasRole, user } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (user && !hasRole(requiredRoles)) {
+      toast.error("Access denied: Insufficient permissions")
+      router.push("/dashboard")
+    }
+  }, [user, hasRole, requiredRoles, router])
+
+  return hasRole(requiredRoles)
+}
+
+// Hook for permission-based access control
+export function usePermissionGuard(requiredPermissions: string | string[]) {
+  const { hasPermission, user } = useAuth()
+  const router = useRouter()
+
+  const permissions = Array.isArray(requiredPermissions) ? requiredPermissions : [requiredPermissions]
+  const hasAllPermissions = permissions.every(permission => hasPermission(permission))
+
+  useEffect(() => {
+    if (user && !hasAllPermissions) {
+      toast.error("Access denied: Insufficient permissions")
+      router.push("/dashboard")
+    }
+  }, [user, hasAllPermissions, router])
+
+  return hasAllPermissions
+}
