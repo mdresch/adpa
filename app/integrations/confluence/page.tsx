@@ -106,11 +106,11 @@ export default function ConfluenceIntegrationPage() {
         setIntegration(confluenceIntegration)
         setConfig({
           baseUrl: confluenceIntegration.configuration.base_url || "",
-          username: confluenceIntegration.configuration.username || "",
-          apiToken: confluenceIntegration.configuration.api_token || "",
+          username: "", // Credentials are encrypted and not returned
+          apiToken: "", // Credentials are encrypted and not returned
           targetSpaceKey: confluenceIntegration.configuration.target_space_key || "",
         })
-        
+
         if (confluenceIntegration.is_active) {
           await fetchSpaces(confluenceIntegration.id)
         }
@@ -139,7 +139,7 @@ export default function ConfluenceIntegrationPage() {
   const testConnection = async () => {
     try {
       setTesting(true)
-      
+
       const response = await fetch("/api/integrations/confluence/test", {
         method: "POST",
         headers: {
@@ -147,8 +147,10 @@ export default function ConfluenceIntegrationPage() {
         },
         body: JSON.stringify({
           baseUrl: config.baseUrl,
-          username: config.username,
-          apiToken: config.apiToken,
+          credentials: {
+            username: config.username,
+            api_token: config.apiToken,
+          }
         }),
       })
 
@@ -174,9 +176,14 @@ export default function ConfluenceIntegrationPage() {
         type: "confluence",
         configuration: {
           base_url: config.baseUrl,
+          target_space_key: config.targetSpaceKey,
+          auto_publish: true,
+          create_projects_for_spaces: true,
+          sync_on_update: false,
+        },
+        credentials: {
           username: config.username,
           api_token: config.apiToken,
-          target_space_key: config.targetSpaceKey,
         },
         is_active: true,
       }

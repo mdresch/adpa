@@ -117,8 +117,8 @@ export default function Integrations() {
           ...prev,
           baseUrl: config.base_url || prev.baseUrl,
           defaultSpace: config.target_space_key || prev.defaultSpace,
-          username: config.username || "",
-          apiToken: config.api_token || "",
+          username: "", // Credentials are encrypted and not returned
+          apiToken: "", // Credentials are encrypted and not returned
           oauthClientId: config.oauth_client_id || "",
           oauthClientSecret: config.oauth_client_secret || "",
           autoPublish: config.auto_publish !== undefined ? config.auto_publish : prev.autoPublish,
@@ -197,14 +197,16 @@ export default function Integrations() {
         type: "confluence",
         configuration: {
           base_url: confluenceConfig.baseUrl,
-          username: confluenceConfig.username,
-          api_token: confluenceConfig.apiToken,
           target_space_key: confluenceConfig.defaultSpace,
           oauth_client_id: confluenceConfig.oauthClientId,
           oauth_client_secret: confluenceConfig.oauthClientSecret,
           auto_publish: confluenceConfig.autoPublish,
           sync_on_update: confluenceConfig.syncOnUpdate,
           create_projects_for_spaces: confluenceConfig.createProjectsForSpaces,
+        },
+        credentials: {
+          username: confluenceConfig.username,
+          api_token: confluenceConfig.apiToken,
         },
         is_active: true,
       }
