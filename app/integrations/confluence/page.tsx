@@ -80,6 +80,7 @@ export default function ConfluenceIntegrationPage() {
   const [integration, setIntegration] = useState<any>(null)
   const [spaces, setSpaces] = useState<ConfluenceSpace[]>([])
   const [searchResults, setSearchResults] = useState<ConfluencePage[]>([])
+  const [documents, setDocuments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [testing, setTesting] = useState(false)
@@ -97,6 +98,7 @@ export default function ConfluenceIntegrationPage() {
 
   useEffect(() => {
     fetchIntegration()
+    fetchDocuments()
   }, [])
 
   const fetchIntegration = async () => {
@@ -138,6 +140,16 @@ export default function ConfluenceIntegrationPage() {
     } catch (error) {
       console.error("Failed to fetch spaces:", error)
       toast.error("Failed to fetch Confluence spaces")
+    }
+  }
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await apiClient.request("/documents")
+      const docs = response.documents || response || []
+      setDocuments(docs)
+    } catch (error) {
+      console.error("Failed to fetch documents:", error)
     }
   }
 
@@ -297,13 +309,37 @@ export default function ConfluenceIntegrationPage() {
     if (!integration) return
 
     try {
-      // For now, we'll show a simple prompt for document ID
-      // In a full implementation, this would be a proper document selection dialog
-      const documentId = prompt("Enter the ADPA document ID to export to Confluence:")
+      // Fetch available documents
+      const documentsResponse = await apiClient.request("/documents")
+      const documents = documentsResponse.documents || documentsResponse || []
 
-      if (!documentId) {
+      if (documents.length === 0) {
+        toast.info("No documents available to export. Create some documents first.")
+        return
+      }
+
+      // Create a simple selection dialog
+      const documentOptions = documents
+        .slice(0, 10) // Limit to first 10 for simplicity
+        .map((doc, index) => `${index + 1}. ${doc.name} (ID: ${doc.id})`)
+        .join('\n')
+
+      const selection = prompt(
+        `Select a document to export to Confluence:\n\n${documentOptions}\n\nEnter the number (1-${Math.min(documents.length, 10)}) or document ID:`
+      )
+
+      if (!selection) {
         toast.info("Export cancelled")
         return
+      }
+
+      // Determine if selection is a number (index) or document ID
+      let documentId
+      const selectionNum = parseInt(selection)
+      if (!isNaN(selectionNum) && selectionNum >= 1 && selectionNum <= Math.min(documents.length, 10)) {
+        documentId = documents[selectionNum - 1].id
+      } else {
+        documentId = selection.trim()
       }
 
       const response = await apiClient.request(`/integrations/confluence/${integration.id}/export`, {
