@@ -3,14 +3,14 @@
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { toast } from "sonner"
-import { 
-  Github, 
-  GitBranch, 
-  GitPullRequest, 
-  FileText, 
-  Settings, 
-  Sync, 
-  CheckCircle, 
+import {
+  Github,
+  GitBranch,
+  GitPullRequest,
+  FileText,
+  Settings,
+  RefreshCw,
+  CheckCircle,
   XCircle,
   Clock,
   ExternalLink,
@@ -413,7 +413,7 @@ export default function GitHubIntegrationPage() {
                             </>
                           ) : (
                             <>
-                              <Sync className="h-4 w-4 mr-2" />
+                              <RefreshCw className="h-4 w-4 mr-2" />
                               Sync Templates
                             </>
                           )}
