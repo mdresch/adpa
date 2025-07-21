@@ -12,6 +12,7 @@
     "seed": "tsx src/database/seed.ts"
   },
   "dependencies": {
+    "@azure/msal-node": "^3.6.3",
     "@google/generative-ai": "^0.2.1",
     "axios": "^1.10.0",
     "bcryptjs": "^2.4.3",
