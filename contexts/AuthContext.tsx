@@ -59,8 +59,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const token = localStorage.getItem("auth_token")
         if (token) {
           apiClient.setToken(token)
-          const currentUser = await apiClient.getCurrentUser()
-          setUser(currentUser)
+          try {
+            const currentUser = await apiClient.getCurrentUser()
+            setUser(currentUser)
+          } catch (userError) {
+            console.error("Failed to get current user:", userError)
+            // Clear invalid token
+            localStorage.removeItem("auth_token")
+            apiClient.clearToken()
+          }
         }
       } catch (error) {
         console.error("Auth initialization failed:", error)
