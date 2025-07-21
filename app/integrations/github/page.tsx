@@ -188,9 +188,8 @@ export default function GitHubIntegrationPage() {
     try {
       setSaving(true)
 
-      const configData = {
+      const baseConfig = {
         name: "GitHub Integration",
-        type: "github",
         configuration: {
           owner: config.owner,
           repo: config.repo,
@@ -207,22 +206,42 @@ export default function GitHubIntegrationPage() {
 
       let data
       if (integration) {
-        // Update existing integration
-        data = await apiClient.updateIntegration(integration.id, configData)
+        // Update existing integration (type field not allowed in PUT)
+        data = await apiClient.updateIntegration(integration.id, baseConfig)
       } else {
-        // Create new integration
-        data = await apiClient.createIntegration(configData)
+        // Create new integration (type field required in POST)
+        const createConfig = {
+          ...baseConfig,
+          type: "github",
+        }
+        data = await apiClient.createIntegration(createConfig)
       }
 
-      if (data.success || data.id) {
+      if (data.success || data.id || data.message) {
         toast.success("GitHub integration configured successfully")
         await fetchIntegration()
       } else {
-        toast.error(data.error || "Configuration failed")
+        const errorMessage = data.error || data.message || "Configuration failed"
+        toast.error(errorMessage)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Configuration failed:", error)
-      toast.error("Configuration failed")
+
+      // Handle different types of errors
+      let errorMessage = "Configuration failed"
+      if (error.response?.data?.error) {
+        errorMessage = error.response.data.error
+      } else if (error.response?.data?.details) {
+        // Handle validation errors
+        const details = error.response.data.details
+        if (Array.isArray(details) && details.length > 0) {
+          errorMessage = `Validation error: ${details[0].message}`
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+
+      toast.error(errorMessage)
     } finally {
       setSaving(false)
     }
