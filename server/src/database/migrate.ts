@@ -11,23 +11,39 @@ async function runMigrations() {
     const schemaPath = join(__dirname, "schema.sql")
     const schema = readFileSync(schemaPath, "utf-8")
 
-    // Split by semicolon and execute each statement
-    const statements = schema
-      .split(";")
-      .map(stmt => stmt.trim())
-      .filter(stmt => stmt.length > 0 && !stmt.startsWith("--"))
+    // Execute the entire schema as one statement to handle functions properly
+    try {
+      await pool.query(schema)
+      logger.info("Schema executed successfully")
+    } catch (error) {
+      // If there's an error, try to execute statement by statement for better error handling
+      if (error instanceof Error && !error.message.includes("already exists")) {
+        logger.warn("Full schema execution failed, trying statement by statement...")
 
-    for (const statement of statements) {
-      try {
-        await pool.query(statement)
-        logger.info(`Executed: ${statement.substring(0, 50)}...`)
-      } catch (error) {
-        // Ignore "already exists" errors
-        if (error instanceof Error && error.message.includes("already exists")) {
-          logger.info(`Skipped (already exists): ${statement.substring(0, 50)}...`)
-        } else {
-          throw error
+        // Split by semicolon but be careful with functions
+        const statements = schema
+          .split(/;\s*(?=(?:[^']*'[^']*')*[^']*$)/) // Split on semicolons not inside quotes
+          .map(stmt => stmt.trim())
+          .filter(stmt => stmt.length > 0 && !stmt.startsWith("--"))
+
+        for (const statement of statements) {
+          try {
+            if (statement.trim()) {
+              await pool.query(statement)
+              logger.info(`Executed: ${statement.substring(0, 50)}...`)
+            }
+          } catch (stmtError) {
+            // Ignore "already exists" errors
+            if (stmtError instanceof Error && stmtError.message.includes("already exists")) {
+              logger.info(`Skipped (already exists): ${statement.substring(0, 50)}...`)
+            } else {
+              logger.error(`Failed to execute statement: ${statement.substring(0, 100)}...`)
+              throw stmtError
+            }
+          }
         }
+      } else {
+        logger.info("Schema already exists, skipping...")
       }
     }
 
