@@ -71,6 +71,8 @@ app.use("/api/security", securityRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations", integrationRoutes)
+app.use("/api/integrations/confluence", confluenceRoutes)
+app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
 
