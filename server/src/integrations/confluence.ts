@@ -97,7 +97,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
     } catch (error) {
       logger.error("Confluence document sync failed:", error)
-      throw new Error(`Sync failed: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error)
+      throw new Error(`Sync failed: ${errorMessage}`)
     }
   }
 
@@ -152,7 +153,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
     } catch (error) {
       logger.error(`Failed to upload document ${doc.id} to Confluence:`, error)
-      throw new Error(`Upload failed: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error)
+      throw new Error(`Upload failed: ${errorMessage}`)
     }
   }
 
@@ -174,7 +176,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
       return permissions
     } catch (error) {
       logger.error("Failed to get Confluence permissions:", error)
-      throw new Error(`Failed to get permissions: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error)
+      throw new Error(`Failed to get permissions: ${errorMessage}`)
     }
   }
 
@@ -187,7 +190,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
       return searchResponse.results
     } catch (error) {
       logger.error("Confluence search failed:", error)
-      throw new Error(`Search failed: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error)
+      throw new Error(`Search failed: ${errorMessage}`)
     }
   }
 
@@ -200,7 +204,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
       return spacesResponse.results
     } catch (error) {
       logger.error("Failed to get Confluence spaces:", error)
-      throw new Error(`Failed to get spaces: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error)
+      throw new Error(`Failed to get spaces: ${errorMessage}`)
     }
   }
 
@@ -222,7 +227,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
       throw new Error("Failed to convert Confluence page to document")
     } catch (error) {
       logger.error(`Failed to import Confluence page ${pageId}:`, error)
-      throw new Error(`Import failed: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error ? (error as any).message : String(error)
+      throw new Error(`Import failed: ${errorMessage}`)
     }
   }
 
@@ -414,7 +420,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
       if (result.rows.length > 0) {
         const config = result.rows[0].configuration
-        return config.target_space_key || null
+        // Amend here: read from credentials
+        return config.credentials?.target_space_key || null
       }
 
       return null
@@ -436,7 +443,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
       if (result.rows.length > 0) {
         const config = result.rows[0].configuration
-        return config.base_url || "https://your-domain.atlassian.net"
+        // Amend here: read from credentials
+        return config.credentials?.base_url || "https://your-domain.atlassian.net"
       }
 
       return "https://your-domain.atlassian.net"
