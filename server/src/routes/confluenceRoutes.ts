@@ -16,18 +16,18 @@ router.use(authenticateToken)
  */
 router.post("/test", async (req: Request, res: Response) => {
   try {
-    const { baseUrl, username, apiToken } = req.body
+    const { baseUrl, credentials } = req.body
 
-    if (!baseUrl || !username || !apiToken) {
+    if (!baseUrl || !credentials || !credentials.username || !credentials.api_token) {
       return res.status(400).json({
-        error: "Missing required fields: baseUrl, username, apiToken"
+        error: "Missing required fields: baseUrl, credentials.username, credentials.api_token"
       })
     }
 
     const config: ConfluenceConfig = {
       baseUrl,
-      username,
-      apiToken,
+      username: credentials.username,
+      apiToken: credentials.api_token,
     }
 
     const confluenceIntegration = new ConfluenceIntegration(config, "test")
@@ -310,7 +310,7 @@ async function getIntegrationConfig(integrationId: string): Promise<{
 } | null> {
   try {
     const result = await pool.query(
-      `SELECT configuration FROM integrations WHERE id = $1 AND type = 'confluence' AND is_active = true`,
+      `SELECT configuration, credentials_encrypted FROM integrations WHERE id = $1 AND type = 'confluence' AND is_active = true`,
       [integrationId]
     )
 
@@ -319,12 +319,24 @@ async function getIntegrationConfig(integrationId: string): Promise<{
     }
 
     const config = result.rows[0].configuration
+    const encryptedCredentials = result.rows[0].credentials_encrypted
+
+    // Decrypt credentials (simple base64 for now, should use proper encryption)
+    let credentials = {}
+    if (encryptedCredentials) {
+      try {
+        credentials = JSON.parse(Buffer.from(encryptedCredentials, "base64").toString())
+      } catch (error) {
+        logger.error("Failed to decrypt credentials:", error)
+        return null
+      }
+    }
 
     return {
       config: {
         baseUrl: config.base_url,
-        username: config.username,
-        apiToken: config.api_token,
+        username: credentials.username,
+        apiToken: credentials.api_token,
         cloudId: config.cloud_id,
       }
     }
