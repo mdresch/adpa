@@ -343,18 +343,9 @@ export default function Integrations() {
         clientSecret: sharepointConfig.clientSecret ? "***" : "empty"
       })
 
-      // Get auth token for test connection
-      const token = localStorage.getItem('token')
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      }
-      if (token) {
-        headers["Authorization"] = `Bearer ${token}`
-      }
-
-      const response = await fetch("/api/integrations/sharepoint/test", {
+      // Use API client to make the request (it handles the correct backend URL)
+      const response = await apiClient.request("/integrations/sharepoint/test", {
         method: "POST",
-        headers,
         body: JSON.stringify({
           tenantId: sharepointConfig.tenantId,
           clientId: sharepointConfig.clientId,
@@ -362,26 +353,15 @@ export default function Integrations() {
         }),
       })
 
-      console.log("Response status:", response.status)
-      console.log("Response headers:", response.headers)
-      console.log("Response URL:", response.url)
+      // API client returns parsed JSON directly
+      console.log("Response data:", response)
 
-      if (!response.ok) {
-        const text = await response.text()
-        console.log("Error response text:", text)
-        console.log("Full response:", response)
-        throw new Error(`HTTP ${response.status}: ${text}`)
-      }
-
-      const data = await response.json()
-      console.log("Response data:", data)
-
-      if (data.success) {
-        toast.success(`SharePoint connection successful! Found ${data.sitesFound || 0} sites ✅`)
+      if (response.success) {
+        toast.success(`SharePoint connection successful! Found ${response.sitesFound || 0} sites ✅`)
       } else {
-        const errorMessage = data.error || data.message || "Connection failed"
+        const errorMessage = response.error || response.message || "Connection failed"
         toast.error(`SharePoint connection failed: ${errorMessage}`)
-        console.error("SharePoint connection test failed:", data)
+        console.error("SharePoint connection test failed:", response)
       }
     } catch (error: any) {
       console.error("SharePoint connection test failed:", error)
