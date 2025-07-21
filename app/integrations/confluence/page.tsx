@@ -125,14 +125,14 @@ export default function ConfluenceIntegrationPage() {
 
   const fetchSpaces = async (integrationId: string) => {
     try {
-      const response = await fetch(`/api/integrations/confluence/${integrationId}/spaces`)
-      const data = await response.json()
-      
-      if (data.success) {
-        setSpaces(data.spaces)
+      const response = await apiClient.makeRequest(`/integrations/confluence/${integrationId}/spaces`)
+
+      if (response.success) {
+        setSpaces(response.spaces)
       }
     } catch (error) {
       console.error("Failed to fetch spaces:", error)
+      toast.error("Failed to fetch Confluence spaces")
     }
   }
 
@@ -140,11 +140,8 @@ export default function ConfluenceIntegrationPage() {
     try {
       setTesting(true)
 
-      const response = await fetch("/api/integrations/confluence/test", {
+      const response = await apiClient.makeRequest("/integrations/confluence/test", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({
           baseUrl: config.baseUrl,
           credentials: {
@@ -154,16 +151,14 @@ export default function ConfluenceIntegrationPage() {
         }),
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.success) {
         toast.success("Connection successful!")
       } else {
-        toast.error(data.error || "Connection failed")
+        toast.error(response.error || "Connection failed")
       }
     } catch (error) {
       console.error("Connection test failed:", error)
-      toast.error("Connection test failed")
+      toast.error(error.message || "Connection test failed")
     } finally {
       setTesting(false)
     }
@@ -209,22 +204,20 @@ export default function ConfluenceIntegrationPage() {
 
     try {
       setSyncing(true)
-      
-      const response = await fetch(`/api/integrations/confluence/${integration.id}/sync`, {
+
+      const response = await apiClient.makeRequest(`/integrations/confluence/${integration.id}/sync`, {
         method: "POST",
       })
 
-      const data = await response.json()
-
-      if (data.success) {
-        toast.success(`Successfully synced ${data.syncedDocuments} documents`)
+      if (response.success) {
+        toast.success(`Successfully synced ${response.syncedDocuments} documents`)
         await fetchIntegration()
       } else {
-        toast.error(data.error || "Sync failed")
+        toast.error(response.error || "Sync failed")
       }
     } catch (error) {
       console.error("Sync failed:", error)
-      toast.error("Sync failed")
+      toast.error(error.message || "Sync failed")
     } finally {
       setSyncing(false)
     }
@@ -234,19 +227,18 @@ export default function ConfluenceIntegrationPage() {
     if (!integration || !searchQuery) return
 
     try {
-      const response = await fetch(
-        `/api/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace ? `&spaceKey=${selectedSpace}` : ""}`
+      const response = await apiClient.makeRequest(
+        `/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace ? `&spaceKey=${selectedSpace}` : ""}`
       )
-      const data = await response.json()
 
-      if (data.success) {
-        setSearchResults(data.results)
+      if (response.success) {
+        setSearchResults(response.results)
       } else {
-        toast.error(data.error || "Search failed")
+        toast.error(response.error || "Search failed")
       }
     } catch (error) {
       console.error("Search failed:", error)
-      toast.error("Search failed")
+      toast.error(error.message || "Search failed")
     }
   }
 
@@ -254,24 +246,19 @@ export default function ConfluenceIntegrationPage() {
     if (!integration) return
 
     try {
-      const response = await fetch(`/api/integrations/confluence/${integration.id}/import`, {
+      const response = await apiClient.makeRequest(`/integrations/confluence/${integration.id}/import`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
         body: JSON.stringify({ pageId }),
       })
 
-      const data = await response.json()
-
-      if (data.success) {
+      if (response.success) {
         toast.success("Page imported successfully")
       } else {
-        toast.error(data.error || "Import failed")
+        toast.error(response.error || "Import failed")
       }
     } catch (error) {
       console.error("Import failed:", error)
-      toast.error("Import failed")
+      toast.error(error.message || "Import failed")
     }
   }
 
