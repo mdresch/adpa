@@ -141,6 +141,12 @@ export default function ConfluenceIntegrationPage() {
     try {
       setTesting(true)
 
+      console.log("Testing connection with config:", {
+        baseUrl: config.baseUrl,
+        username: config.username,
+        apiToken: config.apiToken ? "***HIDDEN***" : "EMPTY",
+      })
+
       const response = await apiClient.request("/integrations/confluence/test", {
         method: "POST",
         body: JSON.stringify({
