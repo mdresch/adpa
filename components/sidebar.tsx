@@ -19,14 +19,18 @@ import {
   ChevronLeft,
   ChevronRight,
   FolderOpen,
+  Search,
+  Layers,
 } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderOpen },
+  { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap },
   { name: "Integrations", href: "/integrations", icon: LinkIcon },
   { name: "Templates", href: "/templates", icon: FileText },
+  { name: "Template Builder", href: "/templates/builder", icon: Layers },
   { name: "Users & Roles", href: "/users", icon: Users },
   { name: "Job Monitor", href: "/jobs", icon: Activity },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
