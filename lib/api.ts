@@ -1,9 +1,98 @@
-// API client for ADPA Frontend
+import { io, Socket } from "socket.io-client"
+
+// API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:5000"
+
+// Types
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: string
+  permissions: Record<string, boolean>
+  avatar_url?: string
+  is_active: boolean
+  last_login?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Project {
+  id: string
+  name: string
+  description?: string
+  framework: string
+  status: string
+  priority: string
+  owner_id: string
+  team_members: string[]
+  start_date?: string
+  end_date?: string
+  budget?: number
+  created_at: string
+  updated_at: string
+}
+
+export interface Document {
+  id: string
+  project_id: string
+  name: string
+  content: any
+  template_id?: string
+  version: number
+  status: string
+  created_by: string
+  updated_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Template {
+  id: string
+  name: string
+  description?: string
+  framework: string
+  category?: string
+  content: any
+  variables: any[]
+  is_public: boolean
+  usage_count: number
+  created_by: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Job {
+  id: string
+  type: string
+  status: string
+  progress: number
+  data: any
+  result?: any
+  error_message?: string
+  created_by: string
+  started_at?: string
+  completed_at?: string
+  created_at: string
+}
+
+export interface ApiResponse<T> {
+  data?: T
+  message?: string
+  error?: string
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
 
 class ApiClient {
   private baseURL: string
   private token: string | null = null
+  private socket: Socket | null = null
 
   constructor(baseURL: string) {
     this.baseURL = baseURL
@@ -25,9 +114,16 @@ class ApiClient {
     if (typeof window !== "undefined") {
       localStorage.removeItem("auth_token")
     }
+    if (this.socket) {
+      this.socket.disconnect()
+      this.socket = null
+    }
   }
 
-  private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<ApiResponse<T>> {
     const url = `${this.baseURL}${endpoint}`
     const headers: HeadersInit = {
       "Content-Type": "application/json",
@@ -38,65 +134,137 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`
     }
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-    })
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+      })
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({ message: "Network error" }))
-      throw new Error(error.message || `HTTP ${response.status}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || `HTTP error! status: ${response.status}`)
+      }
+
+      return data
+    } catch (error) {
+      console.error(`API request failed: ${endpoint}`, error)
+      throw error
     }
-
-    return response.json()
   }
 
-  // Auth endpoints
-  async login(email: string, password: string) {
-    return this.request<{ token: string; user: any }>("/auth/login", {
+  // WebSocket connection
+  connectWebSocket(): Socket {
+    if (!this.socket) {
+      this.socket = io(WS_URL, {
+        auth: {
+          token: this.token,
+        },
+      })
+
+      this.socket.on("connect", () => {
+        console.log("WebSocket connected")
+      })
+
+      this.socket.on("disconnect", () => {
+        console.log("WebSocket disconnected")
+      })
+    }
+
+    return this.socket
+  }
+
+  getSocket(): Socket | null {
+    return this.socket
+  }
+
+  // Authentication API
+  async login(email: string, password: string): Promise<{ user: User; token: string }> {
+    const response = await this.request<{ user: User; token: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     })
+
+    if (response.data) {
+      this.setToken(response.data.token)
+    }
+
+    return response.data!
   }
 
-  async register(userData: { name: string; email: string; password: string }) {
-    return this.request<{ token: string; user: any }>("/auth/register", {
+  async register(userData: {
+    email: string
+    password: string
+    name: string
+    role?: string
+  }): Promise<{ user: User; token: string }> {
+    const response = await this.request<{ user: User; token: string }>("/auth/register", {
       method: "POST",
       body: JSON.stringify(userData),
     })
+
+    if (response.data) {
+      this.setToken(response.data.token)
+    }
+
+    return response.data!
   }
 
-  async getCurrentUser() {
-    return this.request<any>("/auth/me")
+  async getCurrentUser(): Promise<User> {
+    const response = await this.request<{ user: User }>("/auth/me")
+    return response.data!.user
   }
 
-  // Projects endpoints
-  async getProjects() {
-    return this.request<any[]>("/projects")
+  async logout(): Promise<void> {
+    this.clearToken()
   }
 
-  async getProject(id: string) {
-    return this.request<any>(`/projects/${id}`)
+  // Projects API
+  async getProjects(params?: {
+    page?: number
+    limit?: number
+    framework?: string
+    status?: string
+    search?: string
+  }): Promise<{ projects: Project[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ projects: Project[]; pagination: any }>(
+      `/projects?${queryParams}`
+    )
+    return response.data!
   }
 
-  async createProject(projectData: any) {
-    return this.request<any>("/projects", {
+  async getProject(id: string): Promise<Project> {
+    const response = await this.request<{ project: Project }>(`/projects/${id}`)
+    return response.data!.project
+  }
+
+  async createProject(projectData: Partial<Project>): Promise<Project> {
+    const response = await this.request<{ project: Project }>("/projects", {
       method: "POST",
       body: JSON.stringify(projectData),
     })
+    return response.data!.project
   }
 
-  async updateProject(id: string, projectData: any) {
-    return this.request<any>(`/projects/${id}`, {
+  async updateProject(id: string, projectData: Partial<Project>): Promise<Project> {
+    const response = await this.request<{ project: Project }>(`/projects/${id}`, {
       method: "PUT",
       body: JSON.stringify(projectData),
     })
+    return response.data!.project
   }
 
-  async deleteProject(id: string) {
-    return this.request<void>(`/projects/${id}`, {
-      method: "DELETE",
-    })
+  async deleteProject(id: string): Promise<void> {
+    await this.request(`/projects/${id}`, { method: "DELETE" })
   }
 
   // Documents endpoints
@@ -207,6 +375,178 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(integrationData),
     })
+  }
+  // Documents API
+  async getProjectDocuments(
+    projectId: string,
+    params?: { page?: number; limit?: number; status?: string; search?: string }
+  ): Promise<{ documents: Document[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ documents: Document[]; pagination: any }>(
+      `/documents/project/${projectId}?${queryParams}`
+    )
+    return response.data!
+  }
+
+  async getDocument(id: string): Promise<Document> {
+    const response = await this.request<{ document: Document }>(`/documents/${id}`)
+    return response.data!.document
+  }
+
+  async createDocument(projectId: string, documentData: Partial<Document>): Promise<Document> {
+    const response = await this.request<{ document: Document }>(`/documents/project/${projectId}`, {
+      method: "POST",
+      body: JSON.stringify(documentData),
+    })
+    return response.data!.document
+  }
+
+  async updateDocument(id: string, documentData: Partial<Document>): Promise<Document> {
+    const response = await this.request<{ document: Document }>(`/documents/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(documentData),
+    })
+    return response.data!.document
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await this.request(`/documents/${id}`, { method: "DELETE" })
+  }
+
+  // Templates API
+  async getTemplates(params?: {
+    page?: number
+    limit?: number
+    framework?: string
+    category?: string
+    search?: string
+    is_public?: boolean
+  }): Promise<{ templates: Template[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ templates: Template[]; pagination: any }>(
+      `/templates?${queryParams}`
+    )
+    return response.data!
+  }
+
+  async getTemplate(id: string): Promise<Template> {
+    const response = await this.request<{ template: Template }>(`/templates/${id}`)
+    return response.data!.template
+  }
+
+  async createTemplate(templateData: Partial<Template>): Promise<Template> {
+    const response = await this.request<{ template: Template }>("/templates", {
+      method: "POST",
+      body: JSON.stringify(templateData),
+    })
+    return response.data!.template
+  }
+
+  async updateTemplate(id: string, templateData: Partial<Template>): Promise<Template> {
+    const response = await this.request<{ template: Template }>(`/templates/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(templateData),
+    })
+    return response.data!.template
+  }
+
+  async deleteTemplate(id: string): Promise<void> {
+    await this.request(`/templates/${id}`, { method: "DELETE" })
+  }
+
+  async cloneTemplate(id: string, data: { name: string; description?: string; is_public?: boolean }): Promise<Template> {
+    const response = await this.request<{ template: Template }>(`/templates/${id}/clone`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response.data!.template
+  }
+
+  // AI API
+  async getAIProviders(): Promise<any[]> {
+    const response = await this.request<{ providers: any[] }>("/ai/providers")
+    return response.data!.providers
+  }
+
+  async generateContent(data: {
+    prompt: string
+    provider: string
+    model?: string
+    temperature?: number
+    max_tokens?: number
+    template_id?: string
+    variables?: Record<string, any>
+  }): Promise<any> {
+    const response = await this.request("/ai/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response.data
+  }
+
+  // Jobs API
+  async getJobs(params?: {
+    page?: number
+    limit?: number
+    status?: string
+    type?: string
+  }): Promise<{ jobs: Job[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ jobs: Job[]; pagination: any }>(
+      `/jobs?${queryParams}`
+    )
+    return response.data!
+  }
+
+  async getJob(id: string): Promise<Job> {
+    const response = await this.request<{ job: Job }>(`/jobs/${id}`)
+    return response.data!.job
+  }
+
+  async cancelJob(id: string): Promise<void> {
+    await this.request(`/jobs/${id}/cancel`, { method: "POST" })
+  }
+
+  async retryJob(id: string): Promise<{ newJobId: string }> {
+    const response = await this.request<{ newJobId: string }>(`/jobs/${id}/retry`, {
+      method: "POST",
+    })
+    return response.data!
+  }
+
+  // Analytics API
+  async getDashboardAnalytics(): Promise<any> {
+    const response = await this.request("/analytics/dashboard")
+    return response.data
+  }
+
+  async getSystemAnalytics(period: string = "30d"): Promise<any> {
+    const response = await this.request(`/analytics/system?period=${period}`)
+    return response.data
   }
 }
 
