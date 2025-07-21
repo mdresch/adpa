@@ -123,21 +123,21 @@ async function findOrCreateAdpaProject(): Promise<string> {
     // Create ADPA project
     const newProject = await pool.query(
       `INSERT INTO projects (
-        id, name, description, status, owner_id, created_by,
+        id, name, description, framework, status, owner_id, created_by,
         team_members, settings, metadata, created_at, updated_at
       ) VALUES (
-        gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW()
+        gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()
       ) RETURNING id`,
       [
         "ADPA - Advanced Document Processing Automation",
         "Advanced Document Processing & Automation Framework - A comprehensive platform for automating business analysis, project management, and data governance documentation using AI-powered tools and industry-standard frameworks (BABOK v3, PMBOK 7, DMBOK 2.0).",
+        "PMBOK", // framework field
         "active",
         userId,
         userId,
         JSON.stringify([{ userId, role: "Project Manager", permissions: ["read", "write", "admin"] }]),
-        JSON.stringify({ 
-          framework: "PMBOK", 
-          methodology: "Agile", 
+        JSON.stringify({
+          methodology: "Agile",
           phase: "Execution",
           priority: "High",
           budget: 500000,
