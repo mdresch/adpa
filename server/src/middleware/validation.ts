@@ -78,7 +78,7 @@ export const schemas = {
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(10),
   }),
-  
+
   // Project schemas
   createProject: Joi.object({
     name: Joi.string().min(2).max(255).required(),
@@ -105,9 +105,9 @@ export const schemas = {
   
   // User schemas
   createUser: Joi.object({
-    email: schemas.email,
-    password: schemas.password,
-    name: schemas.name,
+    email: Joi.string().email().required(),
+    password: Joi.string().min(8).pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)")).required(),
+    name: Joi.string().min(2).max(100).required(),
     role: Joi.string().valid("admin", "manager", "user", "viewer").default("user"),
   }),
   
