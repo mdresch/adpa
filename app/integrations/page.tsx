@@ -46,57 +46,19 @@ export default function Integrations() {
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
   const [existingIntegration, setExistingIntegration] = useState<any>(null)
+  const [integrations, setIntegrations] = useState<any[]>([])
+  const [realIntegrations, setRealIntegrations] = useState<any[]>([])
 
-  const [integrations] = useState([
-    {
-      id: "1",
-      name: "Atlassian Confluence",
-      type: "confluence",
-      status: "connected",
-      enabled: true,
-      baseUrl: "https://company.atlassian.net",
-      lastSync: "2 minutes ago",
-      documentsPublished: 156,
-      authType: "OAuth2",
-      spaces: ["Engineering", "Product", "Documentation"],
-    },
-    {
-      id: "2",
-      name: "Microsoft SharePoint",
-      type: "sharepoint",
-      status: "connected",
-      enabled: true,
-      baseUrl: "https://company.sharepoint.com",
-      lastSync: "5 minutes ago",
-      documentsPublished: 89,
-      authType: "Azure AD",
-      sites: ["Projects", "Templates", "Archive"],
-    },
-    {
-      id: "3",
-      name: "Adobe Document Services",
-      type: "adobe",
-      status: "warning",
-      enabled: true,
-      baseUrl: "https://pdf-services.adobe.io",
-      lastSync: "1 hour ago",
-      documentsPublished: 234,
-      authType: "OAuth2",
-      services: ["PDF Services", "Document Generation"],
-    },
-    {
-      id: "4",
-      name: "GitHub Repository",
-      type: "github",
-      status: "connected",
-      enabled: true,
-      baseUrl: "https://api.github.com",
-      lastSync: "30 seconds ago",
-      documentsPublished: 67,
-      authType: "Personal Access Token",
-      repositories: ["docs", "templates", "automation"],
-    },
-  ])
+  // SharePoint configuration state
+  const [sharepointConfig, setSharepointConfig] = useState({
+    tenantId: "",
+    clientId: "",
+    clientSecret: "",
+    defaultSiteId: "",
+    syncEnabled: true,
+    autoSync: false,
+    syncInterval: 60,
+  })
 
   // Load existing integrations on component mount
   useEffect(() => {
@@ -106,12 +68,84 @@ export default function Integrations() {
   const loadExistingIntegrations = async () => {
     try {
       setLoading(true)
-      const integrations = await apiClient.getIntegrations()
-      const confluenceIntegration = integrations.find((i: any) => i.type === "confluence")
+      const backendIntegrations = await apiClient.getIntegrations()
+      setRealIntegrations(backendIntegrations)
+
+      // Process integrations for display
+      const processedIntegrations = backendIntegrations.map((integration: any) => {
+        const baseIntegration = {
+          id: integration.id,
+          name: integration.name,
+          type: integration.type,
+          status: integration.is_active ? "connected" : "disconnected",
+          enabled: integration.is_active,
+          lastSync: integration.last_sync ? formatRelativeTime(integration.last_sync) : "Never",
+          documentsPublished: 0, // TODO: Get from backend
+        }
+
+        switch (integration.type) {
+          case "confluence":
+            return {
+              ...baseIntegration,
+              baseUrl: integration.configuration?.base_url || "",
+              authType: "API Token",
+              spaces: integration.configuration?.spaces || [],
+            }
+          case "sharepoint":
+            return {
+              ...baseIntegration,
+              baseUrl: integration.configuration?.tenant_id ? `https://${integration.configuration.tenant_id}.sharepoint.com` : "",
+              authType: "Azure AD",
+              sites: integration.configuration?.sites || [],
+            }
+          default:
+            return baseIntegration
+        }
+      })
+
+      // Add default integrations if they don't exist
+      const defaultIntegrations = [
+        {
+          id: "confluence-default",
+          name: "Atlassian Confluence",
+          type: "confluence",
+          status: "not_configured",
+          enabled: false,
+          baseUrl: "",
+          lastSync: "Never",
+          documentsPublished: 0,
+          authType: "API Token",
+          spaces: [],
+        },
+        {
+          id: "sharepoint-default",
+          name: "Microsoft SharePoint",
+          type: "sharepoint",
+          status: "not_configured",
+          enabled: false,
+          baseUrl: "",
+          lastSync: "Never",
+          documentsPublished: 0,
+          authType: "Azure AD",
+          sites: [],
+        },
+      ]
+
+      const finalIntegrations = [...processedIntegrations]
+      defaultIntegrations.forEach(defaultInt => {
+        if (!processedIntegrations.find(i => i.type === defaultInt.type)) {
+          finalIntegrations.push(defaultInt)
+        }
+      })
+
+      setIntegrations(finalIntegrations)
+
+      // Load specific configurations
+      const confluenceIntegration = backendIntegrations.find((i: any) => i.type === "confluence")
+      const sharepointIntegration = backendIntegrations.find((i: any) => i.type === "sharepoint")
 
       if (confluenceIntegration) {
         setExistingIntegration(confluenceIntegration)
-        // Load existing configuration
         const config = confluenceIntegration.configuration || {}
         setConfluenceConfig(prev => ({
           ...prev,
@@ -126,12 +160,40 @@ export default function Integrations() {
           createProjectsForSpaces: config.create_projects_for_spaces !== undefined ? config.create_projects_for_spaces : prev.createProjectsForSpaces,
         }))
       }
+
+      if (sharepointIntegration) {
+        const config = sharepointIntegration.configuration || {}
+        setSharepointConfig(prev => ({
+          ...prev,
+          tenantId: config.tenant_id || "",
+          clientId: config.client_id || "",
+          clientSecret: config.client_secret || "",
+          defaultSiteId: config.default_site_id || "",
+          syncEnabled: config.sync_enabled !== undefined ? config.sync_enabled : prev.syncEnabled,
+          autoSync: config.auto_sync !== undefined ? config.auto_sync : prev.autoSync,
+          syncInterval: config.sync_interval || prev.syncInterval,
+        }))
+      }
     } catch (error) {
       console.error("Failed to load integrations:", error)
       toast.error("Failed to load existing integrations")
     } finally {
       setLoading(false)
     }
+  }
+
+  const formatRelativeTime = (dateString: string) => {
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
+
+    if (diffMins < 1) return "Just now"
+    if (diffMins < 60) return `${diffMins} minute${diffMins > 1 ? 's' : ''} ago`
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`
   }
 
   // Handler functions
@@ -229,6 +291,166 @@ export default function Integrations() {
       toast.error(`Save failed: ${errorMessage}`)
     } finally {
       setSaving(false)
+    }
+  }
+
+  // SharePoint handlers
+  const handleSharepointConfigChange = (field: string, value: any) => {
+    setSharepointConfig(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const testSharepointConnection = async () => {
+    setTesting(true)
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error("Please login first")
+        return
+      }
+
+      const response = await fetch("/api/integrations/sharepoint/test", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          tenantId: sharepointConfig.tenantId,
+          clientId: sharepointConfig.clientId,
+          clientSecret: sharepointConfig.clientSecret,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success) {
+        toast.success("SharePoint connection successful! ✅")
+      } else {
+        const errorMessage = data.error || data.message || "Connection failed"
+        toast.error(`SharePoint connection failed: ${errorMessage}`)
+        console.error("SharePoint connection test failed:", data)
+      }
+    } catch (error) {
+      console.error("SharePoint connection test failed:", error)
+      toast.error("SharePoint connection test failed - please check your network connection")
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const saveSharepointConfiguration = async () => {
+    setSaving(true)
+    try {
+      const configData = {
+        name: "SharePoint",
+        type: "sharepoint",
+        configuration: {
+          tenant_id: sharepointConfig.tenantId,
+          client_id: sharepointConfig.clientId,
+          client_secret: sharepointConfig.clientSecret,
+          default_site_id: sharepointConfig.defaultSiteId,
+          sync_enabled: sharepointConfig.syncEnabled,
+          auto_sync: sharepointConfig.autoSync,
+          sync_interval: sharepointConfig.syncInterval,
+        },
+        is_active: true,
+      }
+
+      const existingSharepointIntegration = realIntegrations.find(i => i.type === "sharepoint")
+
+      if (existingSharepointIntegration) {
+        await apiClient.updateIntegration(existingSharepointIntegration.id, configData)
+        toast.success("SharePoint configuration updated successfully! ✅")
+      } else {
+        await apiClient.createIntegration(configData)
+        toast.success("SharePoint configuration saved successfully! ✅")
+      }
+
+      await loadExistingIntegrations()
+
+    } catch (error) {
+      console.error("Failed to save SharePoint configuration:", error)
+      const errorMessage = error.message || "Failed to save configuration"
+      toast.error(`Save failed: ${errorMessage}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Overview tab handlers
+  const handleTestIntegration = async (integration: any) => {
+    if (integration.type === "confluence") {
+      await testConfluenceConnection()
+    } else if (integration.type === "sharepoint") {
+      await testSharepointConnection()
+    } else {
+      toast.info(`Testing for ${integration.name} not yet implemented`)
+    }
+  }
+
+  const handleSyncIntegration = async (integration: any) => {
+    try {
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error("Please login first")
+        return
+      }
+
+      if (integration.type === "confluence") {
+        const response = await fetch(`/api/integrations/confluence/${integration.id}/sync`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+          },
+        })
+        const data = await response.json()
+        if (data.success) {
+          toast.success(`Confluence sync completed: ${data.syncedDocuments} documents`)
+        } else {
+          toast.error(`Confluence sync failed: ${data.error}`)
+        }
+      } else if (integration.type === "sharepoint") {
+        const response = await fetch(`/api/integrations/sharepoint/${integration.id}/sync`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        })
+        const data = await response.json()
+        if (data.success) {
+          toast.success(`SharePoint sync completed: ${data.syncedFiles} files`)
+        } else {
+          toast.error(`SharePoint sync failed: ${data.error}`)
+        }
+      } else {
+        toast.info(`Sync for ${integration.name} not yet implemented`)
+      }
+
+      await loadExistingIntegrations()
+    } catch (error) {
+      console.error("Sync failed:", error)
+      toast.error("Sync failed - please check your connection")
+    }
+  }
+
+  const handleToggleIntegration = async (integration: any, enabled: boolean) => {
+    try {
+      const realIntegration = realIntegrations.find(i => i.id === integration.id)
+      if (realIntegration) {
+        await apiClient.updateIntegration(integration.id, {
+          ...realIntegration,
+          is_active: enabled
+        })
+        toast.success(`${integration.name} ${enabled ? 'enabled' : 'disabled'}`)
+        await loadExistingIntegrations()
+      }
+    } catch (error) {
+      console.error("Failed to toggle integration:", error)
+      toast.error("Failed to update integration status")
     }
   }
 
@@ -330,15 +552,34 @@ export default function Integrations() {
                             </div>
                           </div>
                           <div className="flex items-center space-x-2">
-                            <Switch checked={integration.enabled} />
-                            <Button variant="ghost" size="sm">
+                            <Switch
+                              checked={integration.enabled}
+                              onCheckedChange={(checked) => handleToggleIntegration(integration, checked)}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleTestIntegration(integration)}
+                              disabled={!integration.enabled || integration.status === "not_configured"}
+                            >
                               <TestTube className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSyncIntegration(integration)}
+                              disabled={!integration.enabled || integration.status !== "connected"}
+                            >
                               <RefreshCw className="h-4 w-4" />
                             </Button>
                             {integration.type === "confluence" ? (
                               <Link href="/integrations/confluence">
+                                <Button variant="ghost" size="sm">
+                                  <Settings className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            ) : integration.type === "sharepoint" ? (
+                              <Link href="/integrations/sharepoint">
                                 <Button variant="ghost" size="sm">
                                   <Settings className="h-4 w-4" />
                                 </Button>
@@ -587,44 +828,244 @@ export default function Integrations() {
                 <Card>
                   <CardHeader>
                     <CardTitle>SharePoint Configuration</CardTitle>
-                    <CardDescription>Configure Microsoft SharePoint integration for document storage</CardDescription>
+                    <CardDescription>Configure Microsoft SharePoint integration for document storage and synchronization</CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                        <span>Loading configuration...</span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Azure AD Configuration */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Azure AD Configuration</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="sharepoint-tenant-id">Tenant ID</Label>
+                              <Input
+                                id="sharepoint-tenant-id"
+                                placeholder="e.g. 12345678-1234-1234-1234-123456789012"
+                                value={sharepointConfig.tenantId}
+                                onChange={(e) => handleSharepointConfigChange('tenantId', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="sharepoint-client-id">Client ID</Label>
+                              <Input
+                                id="sharepoint-client-id"
+                                placeholder="e.g. 12345678-1234-1234-1234-123456789012"
+                                value={sharepointConfig.clientId}
+                                onChange={(e) => handleSharepointConfigChange('clientId', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="sharepoint-client-secret">Client Secret</Label>
+                            <Input
+                              id="sharepoint-client-secret"
+                              type="password"
+                              placeholder="Your SharePoint app client secret"
+                              value={sharepointConfig.clientSecret}
+                              onChange={(e) => handleSharepointConfigChange('clientSecret', e.target.value)}
+                            />
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Register an application in Azure Portal and configure Microsoft Graph API permissions.
+                            <a href="#azure-setup" className="text-blue-500 hover:underline ml-1">
+                              See setup instructions below
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Optional Configuration */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Optional Configuration</h4>
+                          <div className="space-y-2">
+                            <Label htmlFor="sharepoint-default-site">Default Site ID (optional)</Label>
+                            <Input
+                              id="sharepoint-default-site"
+                              placeholder="Default SharePoint site ID for operations"
+                              value={sharepointConfig.defaultSiteId}
+                              onChange={(e) => handleSharepointConfigChange('defaultSiteId', e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Sync Options */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Sync Options</h4>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Enable Synchronization</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Allow documents to be synchronized between ADPA and SharePoint
+                              </p>
+                            </div>
+                            <Switch
+                              checked={sharepointConfig.syncEnabled}
+                              onCheckedChange={(checked) => handleSharepointConfigChange('syncEnabled', checked)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Auto Sync</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically sync documents at regular intervals
+                              </p>
+                            </div>
+                            <Switch
+                              checked={sharepointConfig.autoSync}
+                              onCheckedChange={(checked) => handleSharepointConfigChange('autoSync', checked)}
+                            />
+                          </div>
+
+                          {sharepointConfig.autoSync && (
+                            <div className="space-y-2">
+                              <Label htmlFor="sharepoint-sync-interval">Sync Interval (minutes)</Label>
+                              <Input
+                                id="sharepoint-sync-interval"
+                                type="number"
+                                min="5"
+                                max="1440"
+                                placeholder="60"
+                                value={sharepointConfig.syncInterval}
+                                onChange={(e) => handleSharepointConfigChange('syncInterval', parseInt(e.target.value) || 60)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            onClick={testSharepointConnection}
+                            disabled={testing || !sharepointConfig.tenantId || !sharepointConfig.clientId || !sharepointConfig.clientSecret}
+                          >
+                            {testing ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Testing...
+                              </>
+                            ) : (
+                              <>
+                                <TestTube className="h-4 w-4 mr-2" />
+                                Test Connection
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={saveSharepointConfiguration}
+                            disabled={saving || !sharepointConfig.tenantId || !sharepointConfig.clientId}
+                          >
+                            {saving ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Settings className="h-4 w-4 mr-2" />
+                                Save Configuration
+                              </>
+                            )}
+                          </Button>
+                          <Button variant="outline" asChild>
+                            <Link href="/integrations/sharepoint">
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Advanced Settings
+                            </Link>
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Azure Setup Instructions */}
+                <Card id="azure-setup">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Cloud className="h-5 w-5" />
+                      Azure App Registration Setup
+                    </CardTitle>
+                    <CardDescription>
+                      Step-by-step instructions to set up SharePoint integration
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="sharepoint-url">SharePoint Site URL</Label>
-                        <Input
-                          id="sharepoint-url"
-                          placeholder="https://company.sharepoint.com/sites/docs"
-                          defaultValue="https://company.sharepoint.com/sites/docs"
-                        />
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                        <div>
+                          <h5 className="font-medium">Register Application in Azure Portal</h5>
+                          <p className="text-sm text-muted-foreground">
+                            Go to <a href="https://portal.azure.com" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Azure Portal</a> → App Registrations → New registration
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="sharepoint-library">Document Library</Label>
-                        <Input id="sharepoint-library" placeholder="Documents" defaultValue="Generated Documents" />
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                        <div>
+                          <h5 className="font-medium">Configure API Permissions</h5>
+                          <p className="text-sm text-muted-foreground">Add Microsoft Graph API permissions:</p>
+                          <ul className="text-sm text-muted-foreground mt-1 ml-4 list-disc">
+                            <li>Sites.Read.All (Application)</li>
+                            <li>Sites.ReadWrite.All (Application)</li>
+                            <li>Files.Read.All (Application)</li>
+                            <li>Files.ReadWrite.All (Application)</li>
+                            <li>User.Read.All (Application)</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                        <div>
+                          <h5 className="font-medium">Create Client Secret</h5>
+                          <p className="text-sm text-muted-foreground">
+                            Go to Certificates & secrets → New client secret → Copy the secret value
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">4</div>
+                        <div>
+                          <h5 className="font-medium">Grant Admin Consent</h5>
+                          <p className="text-sm text-muted-foreground">
+                            In API permissions, click "Grant admin consent for [organization]"
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-sm font-bold">5</div>
+                        <div>
+                          <h5 className="font-medium">Copy Required Values</h5>
+                          <p className="text-sm text-muted-foreground">
+                            From the app overview page, copy:
+                          </p>
+                          <ul className="text-sm text-muted-foreground mt-1 ml-4 list-disc">
+                            <li>Application (client) ID</li>
+                            <li>Directory (tenant) ID</li>
+                            <li>Client secret (from step 3)</li>
+                          </ul>
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <Label>Azure AD Configuration</Label>
-                      <div className="grid grid-cols-3 gap-4 mt-2">
-                        <Input placeholder="Tenant ID" />
-                        <Input placeholder="Client ID" />
-                        <Input type="password" placeholder="Client Secret" />
-                      </div>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <h6 className="font-medium text-blue-900 mb-2">Testing Your Setup</h6>
+                      <p className="text-sm text-blue-800">
+                        After completing the setup, enter your Tenant ID, Client ID, and Client Secret above, then click "Test Connection" to verify the integration works correctly.
+                      </p>
                     </div>
-
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <Label className="text-base font-medium">Preserve Metadata</Label>
-                        <p className="text-sm text-muted-foreground">
-                          Include document metadata when uploading to SharePoint
-                        </p>
-                      </div>
-                      <Switch defaultChecked />
-                    </div>
-
-                    <Button>Save Configuration</Button>
                   </CardContent>
                 </Card>
               </TabsContent>
