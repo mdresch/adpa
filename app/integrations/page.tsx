@@ -10,7 +10,8 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw } from "lucide-react"
+import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Cloud } from "lucide-react"
+import Link from "next/link"
 import {
   Dialog,
   DialogContent,
@@ -178,9 +179,17 @@ export default function Integrations() {
                             <Button variant="ghost" size="sm">
                               <RefreshCw className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="sm">
-                              <Settings className="h-4 w-4" />
-                            </Button>
+                            {integration.type === "confluence" ? (
+                              <Link href="/integrations/confluence">
+                                <Button variant="ghost" size="sm">
+                                  <Settings className="h-4 w-4" />
+                                </Button>
+                              </Link>
+                            ) : (
+                              <Button variant="ghost" size="sm">
+                                <Settings className="h-4 w-4" />
+                              </Button>
+                            )}
                           </div>
                         </div>
                       </CardHeader>
