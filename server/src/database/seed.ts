@@ -84,6 +84,55 @@ async function seedDatabase() {
       })
     ])
 
+    // Create test user with fixed UUID (for testing integrations)
+    const testUserId = "672e6d7b-0655-48eb-b33c-9eb8bcc6f9b8"
+    const testPassword = await bcrypt.hash("password123", 12)
+
+    await pool.query(`
+      INSERT INTO users (id, email, password_hash, name, role, permissions)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        name = EXCLUDED.name,
+        role = EXCLUDED.role,
+        permissions = EXCLUDED.permissions
+    `, [
+      testUserId,
+      "test@example.com",
+      testPassword,
+      "Test User",
+      "admin",
+      JSON.stringify({
+        "jobs.admin": true,
+        "jobs.stats": true,
+        "ai.generate": true,
+        "ai.configure": true,
+        "users.create": true,
+        "users.delete": true,
+        "users.update": true,
+        "security.view": true,
+        "security.audit": true,
+        "projects.create": true,
+        "projects.delete": true,
+        "projects.update": true,
+        "security.manage": true,
+        "analytics.system": true,
+        "documents.create": true,
+        "documents.delete": true,
+        "documents.update": true,
+        "templates.create": true,
+        "templates.delete": true,
+        "templates.update": true,
+        "integrations.read": true,
+        "integrations.sync": true,
+        "integrations.test": true,
+        "integrations.create": true,
+        "integrations.delete": true,
+        "integrations.manage": true,
+        "integrations.update": true
+      })
+    ])
+
     // Create sample AI providers
     const openaiId = "f1e2d3c4-b5a6-4978-8c9d-e0f1a2b3c4d5"
 
@@ -350,6 +399,7 @@ async function seedDatabase() {
     logger.info("Demo accounts created:")
     logger.info("  Admin: admin@adpa.com / admin123")
     logger.info("  User:  demo@adpa.com / demo123")
+    logger.info("  Test:  test@example.com / password123")
 
   } catch (error) {
     logger.error("Seeding failed:", error)

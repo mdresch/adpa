@@ -30,8 +30,10 @@ CREATE TABLE projects (
     end_date DATE,
     budget DECIMAL(12,2),
     owner_id UUID REFERENCES users(id),
+    created_by UUID REFERENCES users(id),
     team_members JSONB DEFAULT '[]',
     settings JSONB DEFAULT '{}',
+    metadata JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -48,6 +50,8 @@ CREATE TABLE documents (
     file_path VARCHAR(500),
     file_size BIGINT,
     mime_type VARCHAR(100),
+    framework VARCHAR(50),
+    metadata JSONB DEFAULT '{}',
     created_by UUID REFERENCES users(id),
     updated_by UUID REFERENCES users(id),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
