@@ -120,7 +120,7 @@ class ApiClient {
     }
   }
 
-  private async request<T>(
+  public async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
@@ -457,10 +457,7 @@ class ApiClient {
     return this.request<any>("/security/metrics")
   }
 
-  // Integrations endpoints
-  async getIntegrations() {
-    return this.request<any[]>("/integrations")
-  }
+  // Integrations endpoints (duplicate removed - using the one at line 337)
 
   async createIntegration(integrationData: any) {
     return this.request<any>("/integrations", {
@@ -647,6 +644,11 @@ class ApiClient {
   async getSystemAnalytics(period: string = "30d"): Promise<any> {
     const response = await this.request(`/analytics/system?period=${period}`)
     return response.data
+  }
+
+  // Generic request method for custom API calls
+  async makeRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, options)
   }
 }
 

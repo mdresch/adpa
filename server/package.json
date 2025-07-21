@@ -9,7 +9,9 @@
     "start": "node dist/server.js",
     "test": "jest",
     "migrate": "tsx src/database/migrate.ts",
-    "seed": "tsx src/database/seed.ts"
+    "seed": "tsx src/database/seed.ts",
+    "seed-adpa": "tsx src/database/seed-adpa-documents.ts",
+    "seed-all": "tsx src/database/seed-all.ts"
   },
   "dependencies": {
     "@azure/msal-node": "^3.6.3",
