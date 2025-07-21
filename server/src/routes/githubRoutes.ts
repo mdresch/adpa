@@ -1,6 +1,5 @@
 import express from "express"
-import { authenticateToken } from "../middleware/auth"
-import { requirePermission } from "../middleware/permissions"
+import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate } from "../middleware/validation"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
