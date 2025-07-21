@@ -26,9 +26,9 @@ import {
   Clock,
   ExternalLink,
   Settings,
-  Sync,
-  Import,
-  Export,
+  RotateCcw,
+  ArrowDownToLine,
+  ArrowUpFromLine,
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
@@ -398,7 +398,7 @@ export default function ConfluenceIntegrationPage() {
                       <AnimatedCard>
                         <CardHeader>
                           <CardTitle className="flex items-center gap-2">
-                            <Sync className="h-5 w-5" />
+                            <RotateCcw className="h-5 w-5" />
                             Sync Documents
                           </CardTitle>
                           <CardDescription>
@@ -442,7 +442,7 @@ export default function ConfluenceIntegrationPage() {
                             disabled={!integration?.is_active}
                             className="w-full"
                           >
-                            <Export className="h-4 w-4 mr-2" />
+                            <ArrowUpFromLine className="h-4 w-4 mr-2" />
                             Export to Confluence
                           </Button>
                         </CardContent>
@@ -649,7 +649,7 @@ export default function ConfluenceIntegrationPage() {
                                         size="sm" 
                                         onClick={() => importPage(page.id)}
                                       >
-                                        <Import className="h-3 w-3 mr-2" />
+                                        <ArrowDownToLine className="h-3 w-3 mr-2" />
                                         Import
                                       </Button>
                                     </div>
