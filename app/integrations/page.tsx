@@ -400,6 +400,11 @@ export default function Integrations() {
           auto_sync: sharepointConfig.autoSync,
           sync_interval: sharepointConfig.syncInterval,
         },
+        credentials: {
+          tenant_id: sharepointConfig.tenantId,
+          client_id: sharepointConfig.clientId,
+          client_secret: sharepointConfig.clientSecret,
+        },
         is_active: true,
       }
 
