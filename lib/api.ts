@@ -333,6 +333,32 @@ class ApiClient {
     return response
   }
 
+  // Integrations API
+  async getIntegrations(): Promise<any[]> {
+    const response = await this.request<{ integrations: any[] }>("/integrations")
+    return response.integrations || response
+  }
+
+  async createIntegration(integrationData: any): Promise<any> {
+    const response = await this.request<{ integration: any }>("/integrations", {
+      method: "POST",
+      body: JSON.stringify(integrationData),
+    })
+    return response.integration || response
+  }
+
+  async updateIntegration(id: string, integrationData: any): Promise<any> {
+    const response = await this.request<{ integration: any }>(`/integrations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(integrationData),
+    })
+    return response.integration || response
+  }
+
+  async deleteIntegration(id: string): Promise<void> {
+    await this.request(`/integrations/${id}`, { method: "DELETE" })
+  }
+
   // Documents endpoints
   async getDocuments(projectId?: string) {
     const query = projectId ? `?projectId=${projectId}` : ""
