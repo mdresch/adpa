@@ -152,6 +152,19 @@ CREATE TABLE analytics_events (
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Integration Sync Metadata table
+CREATE TABLE integration_sync_metadata (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
+    adpa_document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    external_id VARCHAR(255) NOT NULL,
+    external_type VARCHAR(50) NOT NULL,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(integration_id, adpa_document_id)
+);
+
 -- Indexes for performance
 CREATE INDEX idx_projects_owner ON projects(owner_id);
 CREATE INDEX idx_projects_status ON projects(status);
@@ -165,6 +178,9 @@ CREATE INDEX idx_audit_logs_user ON audit_logs(user_id);
 CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at);
 CREATE INDEX idx_analytics_events_type ON analytics_events(event_type);
 CREATE INDEX idx_analytics_events_timestamp ON analytics_events(timestamp);
+CREATE INDEX idx_integration_sync_metadata_integration_id ON integration_sync_metadata(integration_id);
+CREATE INDEX idx_integration_sync_metadata_external_id ON integration_sync_metadata(external_id);
+CREATE INDEX idx_integration_sync_metadata_adpa_document_id ON integration_sync_metadata(adpa_document_id);
 
 -- Update triggers
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -181,3 +197,4 @@ CREATE TRIGGER update_documents_updated_at BEFORE UPDATE ON documents FOR EACH R
 CREATE TRIGGER update_templates_updated_at BEFORE UPDATE ON templates FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_ai_providers_updated_at BEFORE UPDATE ON ai_providers FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TRIGGER update_integrations_updated_at BEFORE UPDATE ON integrations FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+CREATE TRIGGER update_integration_sync_metadata_updated_at BEFORE UPDATE ON integration_sync_metadata FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
