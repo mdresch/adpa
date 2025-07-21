@@ -640,6 +640,11 @@ class ApiClient {
     const response = await this.request(`/analytics/system?period=${period}`)
     return response.data
   }
+
+  // Generic request method for custom API calls
+  async makeRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, options)
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)
