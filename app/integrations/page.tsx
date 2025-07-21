@@ -47,56 +47,8 @@ export default function Integrations() {
   const [loading, setLoading] = useState(true)
   const [existingIntegration, setExistingIntegration] = useState<any>(null)
 
-  const [integrations] = useState([
-    {
-      id: "1",
-      name: "Atlassian Confluence",
-      type: "confluence",
-      status: "connected",
-      enabled: true,
-      baseUrl: "https://company.atlassian.net",
-      lastSync: "2 minutes ago",
-      documentsPublished: 156,
-      authType: "OAuth2",
-      spaces: ["Engineering", "Product", "Documentation"],
-    },
-    {
-      id: "2",
-      name: "Microsoft SharePoint",
-      type: "sharepoint",
-      status: "connected",
-      enabled: true,
-      baseUrl: "https://company.sharepoint.com",
-      lastSync: "5 minutes ago",
-      documentsPublished: 89,
-      authType: "Azure AD",
-      sites: ["Projects", "Templates", "Archive"],
-    },
-    {
-      id: "3",
-      name: "Adobe Document Services",
-      type: "adobe",
-      status: "warning",
-      enabled: true,
-      baseUrl: "https://pdf-services.adobe.io",
-      lastSync: "1 hour ago",
-      documentsPublished: 234,
-      authType: "OAuth2",
-      services: ["PDF Services", "Document Generation"],
-    },
-    {
-      id: "4",
-      name: "GitHub Repository",
-      type: "github",
-      status: "connected",
-      enabled: true,
-      baseUrl: "https://api.github.com",
-      lastSync: "30 seconds ago",
-      documentsPublished: 67,
-      authType: "Personal Access Token",
-      repositories: ["docs", "templates", "automation"],
-    },
-  ])
+  const [integrations, setIntegrations] = useState<any[]>([])
+  const [allIntegrations, setAllIntegrations] = useState<any[]>([])
 
   // Load existing integrations on component mount
   useEffect(() => {
@@ -106,9 +58,28 @@ export default function Integrations() {
   const loadExistingIntegrations = async () => {
     try {
       setLoading(true)
-      const integrations = await apiClient.getIntegrations()
-      const confluenceIntegration = integrations.find((i: any) => i.type === "confluence")
+      const response = await apiClient.getIntegrations()
+      const fetchedIntegrations = response.integrations || response // Handle both formats
+      setAllIntegrations(fetchedIntegrations)
 
+      // Transform integrations for display
+      const displayIntegrations = fetchedIntegrations.map((integration: any) => ({
+        id: integration.id,
+        name: integration.name,
+        type: integration.type,
+        status: integration.is_active ? "connected" : "disconnected",
+        enabled: integration.is_active,
+        baseUrl: integration.configuration?.base_url || "",
+        lastSync: integration.last_sync ? new Date(integration.last_sync).toLocaleString() : "Never",
+        documentsPublished: integration.sync_metadata?.document_count || 0,
+        authType: integration.type === "confluence" ? "API Token" : "OAuth2",
+        created_at: integration.created_at,
+        updated_at: integration.updated_at,
+      }))
+
+      setIntegrations(displayIntegrations)
+
+      const confluenceIntegration = fetchedIntegrations.find((i: any) => i.type === "confluence")
       if (confluenceIntegration) {
         setExistingIntegration(confluenceIntegration)
         // Load existing configuration
