@@ -592,6 +592,60 @@ class ApiClient {
     return response.data
   }
 
+  // GitHub Integration API
+  async getGitHubRepository(integrationId: string): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/repository`)
+  }
+
+  async getGitHubPullRequests(integrationId: string, state: string = "open"): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/pull-requests?state=${state}`)
+  }
+
+  async getGitHubIssues(integrationId: string, state: string = "open"): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/issues?state=${state}`)
+  }
+
+  async testGitHubConnection(integrationId: string): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/test`, {
+      method: "POST"
+    })
+  }
+
+  async syncGitHubTemplates(integrationId: string, options?: {
+    syncType?: string,
+    targetBranch?: string,
+    createPullRequests?: boolean
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/sync`, {
+      method: "POST",
+      body: JSON.stringify(options || { syncType: "templates" }),
+    })
+  }
+
+  async createGitHubPullRequest(integrationId: string, data: {
+    title: string,
+    description: string,
+    sourceBranch: string,
+    targetBranch?: string
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/pull-request`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async createGitHubIssue(integrationId: string, data: {
+    title: string,
+    description: string,
+    labels?: string[],
+    assignees?: string[]
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/issue`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
   // Jobs API
   async getJobs(params?: {
     page?: number
