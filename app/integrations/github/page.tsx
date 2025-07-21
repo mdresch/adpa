@@ -29,10 +29,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 
-import { Sidebar } from "@/components/layout/Sidebar"
-import { Header } from "@/components/layout/Header"
-import { PageTransition } from "@/components/ui/page-transition"
-import { AnimatedLayout } from "@/components/ui/animated-layout"
+import { Sidebar } from "@/components/sidebar"
+import { Header } from "@/components/header"
+import { PageTransition } from "@/components/page-transition"
+import { AnimatedLayout } from "@/components/animated-layout"
 import { apiClient } from "@/lib/api"
 
 interface GitHubIntegration {
