@@ -399,6 +399,27 @@ export default function Integrations() {
         return
       }
 
+      // Decode token to check user info (for debugging)
+      try {
+        const tokenPayload = JSON.parse(atob(token.split('.')[1]))
+        console.log("Token payload:", {
+          userId: tokenPayload.userId,
+          exp: new Date(tokenPayload.exp * 1000),
+          isExpired: Date.now() >= tokenPayload.exp * 1000
+        })
+
+        if (Date.now() >= tokenPayload.exp * 1000) {
+          toast.error("Session expired. Please log in again.")
+          setSaving(false)
+          return
+        }
+      } catch (e) {
+        console.error("Invalid token format:", e)
+        toast.error("Invalid session. Please log in again.")
+        setSaving(false)
+        return
+      }
+
       // Ensure API client has the token
       if (!(apiClient as any).token) {
         console.log("Setting token in API client...")
