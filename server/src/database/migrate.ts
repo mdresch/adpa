@@ -87,6 +87,31 @@ async function runMigrations() {
       logger.warn("SharePoint migration failed (may already be applied):", error)
     }
 
+    // Run Confluence fields migration
+    try {
+      const confluenceMigrationPath = join(__dirname, "migrations", "add_confluence_fields.sql")
+      const confluenceMigration = readFileSync(confluenceMigrationPath, "utf-8")
+
+      // Check if this migration has already been run
+      const confluenceMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_confluence_fields"]
+      )
+
+      if (confluenceMigrationCheck.rows.length === 0) {
+        await pool.query(confluenceMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_confluence_fields"]
+        )
+        logger.info("Confluence fields migration completed")
+      } else {
+        logger.info("Confluence fields migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Confluence migration failed (may already be applied):", error)
+    }
+
     logger.info("Database migrations completed successfully")
   } catch (error) {
     logger.error("Migration failed:", error)
