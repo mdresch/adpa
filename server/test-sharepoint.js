@@ -29,13 +29,21 @@ app.post('/api/integrations/sharepoint/test', async (req, res) => {
     console.log('SharePoint test endpoint hit!')
     console.log('Request headers:', req.headers)
     console.log('Request body:', req.body)
-    
+
+    // Check for authorization header (but don't require it for testing)
+    const authHeader = req.headers.authorization
+    if (authHeader) {
+      console.log('Authorization header present:', authHeader.substring(0, 20) + '...')
+    } else {
+      console.log('No authorization header (this is fine for testing)')
+    }
+
     const { tenantId, clientId, clientSecret } = req.body
 
     if (!tenantId || !clientId || !clientSecret) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required fields: tenantId, clientId, clientSecret' 
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: tenantId, clientId, clientSecret'
       })
     }
 
