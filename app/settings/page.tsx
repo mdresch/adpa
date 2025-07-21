@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,20 +10,84 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Separator } from "@/components/ui/separator"
-import { Save, RefreshCw, Shield, Database, Bell, Globe, Server } from "lucide-react"
+import { PageTransition } from "@/components/page-transition"
+import { AnimatedLayout } from "@/components/animated-layout"
+import { Save, RefreshCw, Shield, Database, Bell, Globe, Server, AlertCircle } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
+import { useWebSocket } from "@/contexts/WebSocketContext"
+import { apiClient } from "@/lib/api"
+import { toast } from "sonner"
 
 export default function Settings() {
+  const { user, hasRole } = useAuth()
+  const { isConnected } = useWebSocket()
+
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const saveSettings = async () => {
+    try {
+      setSaving(true)
+      // Replace with actual API call
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      toast.success("Settings saved successfully!")
+    } catch (error) {
+      console.error("Failed to save settings:", error)
+      toast.error("Failed to save settings")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!hasRole(["admin"])) {
+    return (
+      <PageTransition>
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-6">
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                  <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+                  <p className="text-muted-foreground">You need administrator privileges to access system settings.</p>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </PageTransition>
+    )
+  }
+
   return (
-    <div className="flex h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-6">
-            <div>
-              <h1 className="text-3xl font-bold">System Settings</h1>
-              <p className="text-muted-foreground">Configure global system settings and preferences</p>
-            </div>
+    <PageTransition>
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6">
+            <AnimatedLayout>
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-3xl font-bold">System Settings</h1>
+                    <p className="text-muted-foreground">Configure global system settings and preferences</p>
+                  </div>
+                  <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-2">
+                      <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
+                      <span className="text-sm text-muted-foreground">
+                        {isConnected ? 'Connected' : 'Offline'}
+                      </span>
+                    </div>
+                    <Button onClick={saveSettings} disabled={saving}>
+                      <Save className="h-4 w-4 mr-2" />
+                      {saving ? 'Saving...' : 'Save Changes'}
+                    </Button>
+                  </div>
+                </div>
 
             <Tabs defaultValue="general" className="space-y-4">
               <TabsList className="grid w-full grid-cols-6">
