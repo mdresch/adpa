@@ -259,7 +259,7 @@ export default function ConfluenceIntegrationPage() {
 
     try {
       const response = await apiClient.request(
-        `/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace ? `&spaceKey=${selectedSpace}` : ""}`
+        `/integrations/confluence/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSpace && selectedSpace !== "all" ? `&spaceKey=${selectedSpace}` : ""}`
       )
 
       if (response.success) {
@@ -635,7 +635,7 @@ export default function ConfluenceIntegrationPage() {
                               <SelectValue placeholder="All spaces" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="">All spaces</SelectItem>
+                              <SelectItem value="all">All spaces</SelectItem>
                               {spaces.map((space) => (
                                 <SelectItem key={space.key} value={space.key}>
                                   {space.name}
