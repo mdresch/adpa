@@ -153,9 +153,7 @@ export default function GitHubIntegrationPage() {
 
   const fetchRepositoryInfo = async (integrationId: string) => {
     try {
-      const response = await fetch(`/api/integrations/github/${integrationId}/repository`)
-      const data = await response.json()
-      
+      const data = await apiClient.getGitHubRepository(integrationId)
       if (data.success) {
         setRepository(data.repository)
       }
@@ -166,9 +164,7 @@ export default function GitHubIntegrationPage() {
 
   const fetchPullRequests = async (integrationId: string) => {
     try {
-      const response = await fetch(`/api/integrations/github/${integrationId}/pull-requests`)
-      const data = await response.json()
-      
+      const data = await apiClient.getGitHubPullRequests(integrationId)
       if (data.success) {
         setPullRequests(data.pullRequests)
       }
@@ -179,9 +175,7 @@ export default function GitHubIntegrationPage() {
 
   const fetchIssues = async (integrationId: string) => {
     try {
-      const response = await fetch(`/api/integrations/github/${integrationId}/issues`)
-      const data = await response.json()
-      
+      const data = await apiClient.getGitHubIssues(integrationId)
       if (data.success) {
         setIssues(data.issues)
       }
@@ -211,30 +205,16 @@ export default function GitHubIntegrationPage() {
         is_active: true,
       }
 
-      let response
+      let data
       if (integration) {
         // Update existing integration
-        response = await fetch(`/api/integrations/${integration.id}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(configData),
-        })
+        data = await apiClient.updateIntegration(integration.id, configData)
       } else {
         // Create new integration
-        response = await fetch("/api/integrations", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(configData),
-        })
+        data = await apiClient.createIntegration(configData)
       }
 
-      const data = await response.json()
-
-      if (data.success || response.ok) {
+      if (data.success || data.id) {
         toast.success("GitHub integration configured successfully")
         await fetchIntegration()
       } else {
@@ -255,11 +235,7 @@ export default function GitHubIntegrationPage() {
     }
 
     try {
-      const response = await fetch(`/api/integrations/github/${integration.id}/test`, {
-        method: "POST",
-      })
-
-      const data = await response.json()
+      const data = await apiClient.testGitHubConnection(integration.id)
 
       if (data.success) {
         toast.success("Connection test successful")
@@ -277,15 +253,7 @@ export default function GitHubIntegrationPage() {
 
     try {
       setSyncing(true)
-      const response = await fetch(`/api/integrations/github/${integration.id}/sync`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ syncType: "templates" }),
-      })
-
-      const data = await response.json()
+      const data = await apiClient.syncGitHubTemplates(integration.id, { syncType: "templates" })
 
       if (data.success) {
         toast.success(`Synced ${data.count || 0} templates successfully`)
