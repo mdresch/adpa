@@ -343,7 +343,7 @@ export default function Integrations() {
         clientSecret: sharepointConfig.clientSecret ? "***" : "empty"
       })
 
-      const response = await fetch("http://localhost:5000/api/integrations/sharepoint/test", {
+      const response = await fetch("http://localhost:5001/api/integrations/sharepoint/test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

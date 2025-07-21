@@ -203,7 +203,7 @@ export default function SharePointIntegrationPage() {
     try {
       setTesting(true)
 
-      const url = "http://localhost:5000/api/integrations/sharepoint/test"
+      const url = "http://localhost:5001/api/integrations/sharepoint/test"
       const requestData = {
         tenantId: config.tenantId,
         clientId: config.clientId,
@@ -220,7 +220,7 @@ export default function SharePointIntegrationPage() {
 
       // First test if the server is reachable
       try {
-        const healthCheck = await fetch("http://localhost:5000/api/health")
+        const healthCheck = await fetch("http://localhost:5001/api/health")
         console.log("🏥 Health check:", healthCheck.status, await healthCheck.text())
       } catch (healthError) {
         console.error("❌ Health check failed:", healthError)
