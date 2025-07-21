@@ -343,11 +343,18 @@ export default function Integrations() {
         clientSecret: sharepointConfig.clientSecret ? "***" : "empty"
       })
 
-      const response = await fetch("http://localhost:5001/api/integrations/sharepoint/test", {
+      // Get auth token for test connection
+      const token = localStorage.getItem('token')
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
+      const response = await fetch("/api/integrations/sharepoint/test", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify({
           tenantId: sharepointConfig.tenantId,
           clientId: sharepointConfig.clientId,
