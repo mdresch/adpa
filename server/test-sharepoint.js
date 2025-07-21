@@ -14,10 +14,20 @@ app.use(cors({
 }))
 app.use(express.json())
 
+// Handle CORS preflight requests
+app.options('/api/integrations/sharepoint/test', (req, res) => {
+  console.log('CORS preflight request received')
+  res.header('Access-Control-Allow-Origin', 'http://localhost:3000')
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  res.sendStatus(200)
+})
+
 // Test SharePoint connection endpoint
 app.post('/api/integrations/sharepoint/test', async (req, res) => {
   try {
     console.log('SharePoint test endpoint hit!')
+    console.log('Request headers:', req.headers)
     console.log('Request body:', req.body)
     
     const { tenantId, clientId, clientSecret } = req.body
