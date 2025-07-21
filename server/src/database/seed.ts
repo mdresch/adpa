@@ -7,14 +7,18 @@ async function seedDatabase() {
   try {
     logger.info("Starting database seeding...")
 
-    // Create admin user
-    const adminId = uuidv4()
+    // Create admin user with fixed UUID
+    const adminId = "3a82e0e8-c54d-4f99-b1d7-e651ce101341"
     const adminPassword = await bcrypt.hash("admin123", 12)
-    
+
     await pool.query(`
       INSERT INTO users (id, email, password_hash, name, role, permissions)
       VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (email) DO NOTHING
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        name = EXCLUDED.name,
+        role = EXCLUDED.role,
+        permissions = EXCLUDED.permissions
     `, [
       adminId,
       "admin@adpa.com",
@@ -50,14 +54,18 @@ async function seedDatabase() {
       })
     ])
 
-    // Create demo user
-    const userId = uuidv4()
+    // Create demo user with fixed UUID
+    const userId = "b1f3d2c4-e5a6-4b7c-8d9e-f0a1b2c3d4e5"
     const userPassword = await bcrypt.hash("demo123", 12)
-    
+
     await pool.query(`
       INSERT INTO users (id, email, password_hash, name, role, permissions)
       VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT (email) DO NOTHING
+      ON CONFLICT (email) DO UPDATE SET
+        password_hash = EXCLUDED.password_hash,
+        name = EXCLUDED.name,
+        role = EXCLUDED.role,
+        permissions = EXCLUDED.permissions
     `, [
       userId,
       "demo@adpa.com",
@@ -76,45 +84,56 @@ async function seedDatabase() {
     ])
 
     // Create sample AI providers
-    const openaiId = uuidv4()
-    await pool.query(`
-      INSERT INTO ai_providers (id, name, provider_type, api_key_encrypted, configuration, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT DO NOTHING
-    `, [
-      openaiId,
-      "OpenAI GPT",
-      "openai",
-      Buffer.from("your-openai-api-key").toString("base64"),
-      JSON.stringify({
-        organization: "",
-        baseURL: "https://api.openai.com/v1",
-      }),
-      false // Disabled by default until real API key is provided
-    ])
+    const openaiId = "f1e2d3c4-b5a6-4978-8c9d-e0f1a2b3c4d5"
 
-    const googleId = uuidv4()
-    await pool.query(`
-      INSERT INTO ai_providers (id, name, provider_type, api_key_encrypted, configuration, is_active)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      ON CONFLICT DO NOTHING
-    `, [
-      googleId,
-      "Google Gemini",
-      "google",
-      Buffer.from("your-google-api-key").toString("base64"),
-      JSON.stringify({}),
-      false // Disabled by default until real API key is provided
-    ])
+    // Check if OpenAI provider exists
+    const openaiExists = await pool.query("SELECT id FROM ai_providers WHERE name = $1", ["OpenAI GPT"])
+    if (openaiExists.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO ai_providers (id, name, provider_type, api_key_encrypted, configuration, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [
+        openaiId,
+        "OpenAI GPT",
+        "openai",
+        Buffer.from("your-openai-api-key").toString("base64"),
+        JSON.stringify({
+          organization: "",
+          baseURL: "https://api.openai.com/v1",
+        }),
+        false // Disabled by default until real API key is provided
+      ])
+    }
+
+    const googleId = "a2b3c4d5-e6f7-4890-9abc-def123456789"
+
+    // Check if Google provider exists
+    const googleExists = await pool.query("SELECT id FROM ai_providers WHERE name = $1", ["Google Gemini"])
+    if (googleExists.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO ai_providers (id, name, provider_type, api_key_encrypted, configuration, is_active)
+        VALUES ($1, $2, $3, $4, $5, $6)
+      `, [
+        googleId,
+        "Google Gemini",
+        "google",
+        Buffer.from("your-google-api-key").toString("base64"),
+        JSON.stringify({}),
+        false // Disabled by default until real API key is provided
+      ])
+    }
 
     // Create sample templates
-    const togafTemplateId = uuidv4()
-    await pool.query(`
-      INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT DO NOTHING
-    `, [
-      togafTemplateId,
+    const togafTemplateId = "c1d2e3f4-a5b6-4789-8cde-f012345678ab"
+
+    // Check if TOGAF template exists
+    const togafExists = await pool.query("SELECT id FROM templates WHERE name = $1", ["TOGAF Business Architecture Document"])
+    if (togafExists.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [
+        togafTemplateId,
       "TOGAF Business Architecture Document",
       "Standard template for TOGAF business architecture documentation",
       "TOGAF",
@@ -194,14 +213,18 @@ async function seedDatabase() {
       true,
       adminId
     ])
+    }
 
-    const sabsaTemplateId = uuidv4()
-    await pool.query(`
-      INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT DO NOTHING
-    `, [
-      sabsaTemplateId,
+    const sabsaTemplateId = "d2e3f4a5-b6c7-4890-9def-012345678abc"
+
+    // Check if SABSA template exists
+    const sabsaExists = await pool.query("SELECT id FROM templates WHERE name = $1", ["SABSA Security Architecture Framework"])
+    if (sabsaExists.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [
+        sabsaTemplateId,
       "SABSA Security Architecture Framework",
       "Template for SABSA security architecture documentation",
       "SABSA",
@@ -259,15 +282,19 @@ async function seedDatabase() {
       true,
       adminId
     ])
+    }
 
     // Create sample project
-    const projectId = uuidv4()
-    await pool.query(`
-      INSERT INTO projects (id, name, description, framework, status, priority, owner_id, team_members)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT DO NOTHING
-    `, [
-      projectId,
+    const projectId = "e3f4a5b6-c7d8-4901-adef-123456789bcd"
+
+    // Check if project exists
+    const projectExists = await pool.query("SELECT id FROM projects WHERE name = $1", ["Digital Transformation Initiative"])
+    if (projectExists.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO projects (id, name, description, framework, status, priority, owner_id, team_members)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        projectId,
       "Digital Transformation Initiative",
       "Enterprise-wide digital transformation project using TOGAF framework",
       "TOGAF",
@@ -276,16 +303,32 @@ async function seedDatabase() {
       adminId,
       JSON.stringify([userId])
     ])
+    }
 
     // Create sample document
-    const documentId = uuidv4()
-    await pool.query(`
-      INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT DO NOTHING
-    `, [
-      documentId,
-      projectId,
+    const documentId = "f4a5b6c7-d8e9-4012-bcde-23456789abcd"
+
+    // Get the actual project ID (in case it already existed)
+    const actualProject = await pool.query("SELECT id FROM projects WHERE name = $1", ["Digital Transformation Initiative"])
+    if (actualProject.rows.length === 0) {
+      logger.warn("Project not found, skipping document creation")
+      return
+    }
+    const actualProjectId = actualProject.rows[0].id
+
+    // Get the actual template ID (in case it already existed)
+    const actualTemplate = await pool.query("SELECT id FROM templates WHERE name = $1", ["TOGAF Business Architecture Document"])
+    const actualTemplateId = actualTemplate.rows.length > 0 ? actualTemplate.rows[0].id : null
+
+    // Check if document exists
+    const documentExists = await pool.query("SELECT id FROM documents WHERE project_id = $1 AND name = $2", [actualProjectId, "Business Architecture Overview"])
+    if (documentExists.rows.length === 0) {
+      await pool.query(`
+        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        documentId,
+        actualProjectId,
       "Business Architecture Overview",
       JSON.stringify({
         executive_summary: "This document outlines the business architecture for our digital transformation initiative.",
@@ -295,11 +338,12 @@ async function seedDatabase() {
         gap_analysis: "Key gaps include system integration, process automation, and data analytics capabilities.",
         roadmap: "Phase 1: Assessment (Q1), Phase 2: Design (Q2), Phase 3: Implementation (Q3-Q4)"
       }),
-      togafTemplateId,
+      actualTemplateId,
       "draft",
       adminId,
       adminId
     ])
+    }
 
     logger.info("Database seeding completed successfully")
     logger.info("Demo accounts created:")
