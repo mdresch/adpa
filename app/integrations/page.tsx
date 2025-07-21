@@ -12,6 +12,10 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Cloud } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/contexts/AuthContext"
+import { apiClient } from "@/lib/api"
+import { toast } from "sonner"
+import { useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -23,9 +27,11 @@ import {
 } from "@/components/ui/dialog"
 
 export default function Integrations() {
+  const { user } = useAuth()
+
   // Confluence configuration state
   const [confluenceConfig, setConfluenceConfig] = useState({
-    baseUrl: "https://company.atlassian.net",
+    baseUrl: "https://cba-adpa.atlassian.net",
     defaultSpace: "DOCS",
     username: "",
     apiToken: "",
@@ -38,6 +44,8 @@ export default function Integrations() {
 
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [existingIntegration, setExistingIntegration] = useState<any>(null)
 
   const [integrations] = useState([
     {
@@ -90,6 +98,42 @@ export default function Integrations() {
     },
   ])
 
+  // Load existing integrations on component mount
+  useEffect(() => {
+    loadExistingIntegrations()
+  }, [])
+
+  const loadExistingIntegrations = async () => {
+    try {
+      setLoading(true)
+      const integrations = await apiClient.getIntegrations()
+      const confluenceIntegration = integrations.find((i: any) => i.type === "confluence")
+
+      if (confluenceIntegration) {
+        setExistingIntegration(confluenceIntegration)
+        // Load existing configuration
+        const config = confluenceIntegration.configuration || {}
+        setConfluenceConfig(prev => ({
+          ...prev,
+          baseUrl: config.base_url || prev.baseUrl,
+          defaultSpace: config.target_space_key || prev.defaultSpace,
+          username: config.username || "",
+          apiToken: config.api_token || "",
+          oauthClientId: config.oauth_client_id || "",
+          oauthClientSecret: config.oauth_client_secret || "",
+          autoPublish: config.auto_publish !== undefined ? config.auto_publish : prev.autoPublish,
+          syncOnUpdate: config.sync_on_update !== undefined ? config.sync_on_update : prev.syncOnUpdate,
+          createProjectsForSpaces: config.create_projects_for_spaces !== undefined ? config.create_projects_for_spaces : prev.createProjectsForSpaces,
+        }))
+      }
+    } catch (error) {
+      console.error("Failed to load integrations:", error)
+      toast.error("Failed to load existing integrations")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Handler functions
   const handleConfluenceConfigChange = (field: string, value: any) => {
     setConfluenceConfig(prev => ({
@@ -101,10 +145,25 @@ export default function Integrations() {
   const testConfluenceConnection = async () => {
     setTesting(true)
     try {
+      // Get auth token
+      const token = localStorage.getItem('token')
+      if (!token) {
+        toast.error("Please login first")
+        return
+      }
+
+      console.log("Testing connection with:", {
+        baseUrl: confluenceConfig.baseUrl,
+        username: confluenceConfig.username,
+        apiTokenLength: confluenceConfig.apiToken.length,
+        apiTokenStart: confluenceConfig.apiToken.substring(0, 10) + "...",
+      })
+
       const response = await fetch("/api/integrations/confluence/test", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
         },
         body: JSON.stringify({
           baseUrl: confluenceConfig.baseUrl,
@@ -115,15 +174,16 @@ export default function Integrations() {
 
       const data = await response.json()
 
-      if (data.success) {
-        // Show success message (you can add toast notification here)
-        alert("Connection successful!")
+      if (response.ok && data.success) {
+        toast.success("Connection successful! ✅")
       } else {
-        alert(data.error || "Connection failed")
+        const errorMessage = data.error || data.message || "Connection failed"
+        toast.error(`Connection failed: ${errorMessage}`)
+        console.error("Connection test failed:", data)
       }
     } catch (error) {
       console.error("Connection test failed:", error)
-      alert("Connection test failed")
+      toast.error("Connection test failed - please check your network connection")
     } finally {
       setTesting(false)
     }
@@ -149,15 +209,24 @@ export default function Integrations() {
         is_active: true,
       }
 
-      // Here you would call your API to save the configuration
-      // const response = await apiClient.createIntegration(configData)
+      let response
+      if (existingIntegration) {
+        // Update existing integration
+        response = await apiClient.updateIntegration(existingIntegration.id, configData)
+        toast.success("Configuration updated successfully! ✅")
+      } else {
+        // Create new integration
+        response = await apiClient.createIntegration(configData)
+        toast.success("Configuration saved successfully! ✅")
+      }
 
-      // For now, just show success
-      alert("Configuration saved successfully!")
+      // Reload integrations to get the latest data
+      await loadExistingIntegrations()
 
     } catch (error) {
       console.error("Failed to save configuration:", error)
-      alert("Failed to save configuration")
+      const errorMessage = error.message || "Failed to save configuration"
+      toast.error(`Save failed: ${errorMessage}`)
     } finally {
       setSaving(false)
     }
@@ -328,6 +397,13 @@ export default function Integrations() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-6">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                        <span>Loading configuration...</span>
+                      </div>
+                    ) : (
+                      <>
                     {/* Basic Configuration */}
                     <div className="space-y-4">
                       <h4 className="text-sm font-medium text-muted-foreground">Basic Configuration</h4>
@@ -501,6 +577,8 @@ export default function Integrations() {
                         </Link>
                       </Button>
                     </div>
+                    </>
+                    )}
                   </CardContent>
                 </Card>
               </TabsContent>
