@@ -92,21 +92,34 @@ app.use(errorHandler)
 // Start server
 async function startServer() {
   try {
-    // Connect to database
-    await connectDatabase()
-    logger.info("Database connected successfully")
+    // Try to connect to database, but don't fail if it's not available
+    try {
+      await connectDatabase()
+      logger.info("Database connected successfully")
+    } catch (dbError) {
+      logger.warn("Database connection failed, starting server without database:", dbError.message)
+    }
 
-    // Connect to Redis
-    await connectRedis()
-    logger.info("Redis connected successfully")
+    // Try to connect to Redis, but don't fail if it's not available
+    try {
+      await connectRedis()
+      logger.info("Redis connected successfully")
+    } catch (redisError) {
+      logger.warn("Redis connection failed, starting server without Redis:", redisError.message)
+    }
 
-    // Initialize job queues and AI services
-    await initializeQueues()
-    logger.info("Job queues initialized successfully")
+    // Try to initialize job queues, but don't fail if it's not available
+    try {
+      await initializeQueues()
+      logger.info("Job queues initialized successfully")
+    } catch (queueError) {
+      logger.warn("Job queue initialization failed:", queueError.message)
+    }
 
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`)
       logger.info(`Environment: ${process.env.NODE_ENV || "development"}`)
+      logger.info("SharePoint test endpoint available at /api/integrations/sharepoint/test")
     })
   } catch (error) {
     logger.error("Failed to start server:", error)
