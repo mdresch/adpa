@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -87,6 +88,9 @@ export default function ConfluenceIntegrationPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSpace, setSelectedSpace] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  const [showExportDialog, setShowExportDialog] = useState(false)
+  const [selectedDocument, setSelectedDocument] = useState<any>(null)
+  const [exporting, setExporting] = useState(false)
 
   // Configuration state
   const [config, setConfig] = useState({
@@ -308,53 +312,36 @@ export default function ConfluenceIntegrationPage() {
   const exportToConfluence = async () => {
     if (!integration) return
 
+    if (documents.length === 0) {
+      toast.info("No documents available to export. Create some documents first.")
+      return
+    }
+
+    setShowExportDialog(true)
+  }
+
+  const handleExportConfirm = async () => {
+    if (!selectedDocument || !integration) return
+
+    setExporting(true)
     try {
-      // Fetch available documents
-      const documentsResponse = await apiClient.request("/documents")
-      const documents = documentsResponse.documents || documentsResponse || []
-
-      if (documents.length === 0) {
-        toast.info("No documents available to export. Create some documents first.")
-        return
-      }
-
-      // Create a simple selection dialog
-      const documentOptions = documents
-        .slice(0, 10) // Limit to first 10 for simplicity
-        .map((doc, index) => `${index + 1}. ${doc.name} (ID: ${doc.id})`)
-        .join('\n')
-
-      const selection = prompt(
-        `Select a document to export to Confluence:\n\n${documentOptions}\n\nEnter the number (1-${Math.min(documents.length, 10)}) or document ID:`
-      )
-
-      if (!selection) {
-        toast.info("Export cancelled")
-        return
-      }
-
-      // Determine if selection is a number (index) or document ID
-      let documentId
-      const selectionNum = parseInt(selection)
-      if (!isNaN(selectionNum) && selectionNum >= 1 && selectionNum <= Math.min(documents.length, 10)) {
-        documentId = documents[selectionNum - 1].id
-      } else {
-        documentId = selection.trim()
-      }
-
       const response = await apiClient.request(`/integrations/confluence/${integration.id}/export`, {
         method: "POST",
-        body: JSON.stringify({ documentId }),
+        body: JSON.stringify({ documentId: selectedDocument.id }),
       })
 
       if (response.success) {
         toast.success(`Document exported successfully! View at: ${response.confluenceUrl}`)
+        setShowExportDialog(false)
+        setSelectedDocument(null)
       } else {
         toast.error(response.error || "Export failed")
       }
     } catch (error) {
       console.error("Failed to export to Confluence:", error)
       toast.error("Failed to export to Confluence")
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -798,6 +785,102 @@ export default function ConfluenceIntegrationPage() {
           </main>
         </div>
       </div>
+
+      {/* Export to Confluence Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="sm:max-w-[600px] glass border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Export to Confluence
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-300">
+              Select a document to export to your Confluence space. The document will be converted to Confluence format and published.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-4">
+            <div>
+              <Label className="text-sm font-semibold mb-3 block">
+                Available Documents ({documents.length})
+              </Label>
+              <div className="max-h-64 overflow-y-auto space-y-2 border rounded-lg p-2">
+                {documents.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p>No documents available</p>
+                    <p className="text-sm">Create some documents first to export them.</p>
+                  </div>
+                ) : (
+                  documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      className={`p-3 rounded-lg border cursor-pointer transition-all duration-200 hover:shadow-md ${
+                        selectedDocument?.id === doc.id
+                          ? 'border-blue-500 bg-blue-50 dark:bg-blue-950/20'
+                          : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
+                      }`}
+                      onClick={() => setSelectedDocument(doc)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="font-medium text-sm">{doc.name}</h4>
+                          {doc.project_name && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Project: {doc.project_name}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            {doc.framework && (
+                              <Badge variant="secondary" className="text-xs">
+                                {doc.framework}
+                              </Badge>
+                            )}
+                            <Badge variant="outline" className="text-xs">
+                              {doc.status || 'draft'}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(doc.updated_at).toLocaleDateString()}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowExportDialog(false)
+                setSelectedDocument(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleExportConfirm}
+              disabled={!selectedDocument || exporting}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+            >
+              {exporting ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Exporting...
+                </>
+              ) : (
+                <>
+                  <ArrowUpFromLine className="h-4 w-4 mr-2" />
+                  Export to Confluence
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   )
 }
