@@ -156,7 +156,7 @@ export default function SharePointIntegrationPage() {
 
   const fetchSites = async (integrationId: string) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/integrations/sharepoint/${integrationId}/sites`)
+      const response = await fetch(`http://localhost:5001/api/integrations/sharepoint/${integrationId}/sites`)
       const data = await response.json()
       
       if (data.success) {
@@ -171,7 +171,7 @@ export default function SharePointIntegrationPage() {
     if (!integration) return
 
     try {
-      const response = await fetch(`http://localhost:5000/api/integrations/sharepoint/${integration.id}/sites/${siteId}/drives`)
+      const response = await fetch(`http://localhost:5001/api/integrations/sharepoint/${integration.id}/sites/${siteId}/drives`)
       const data = await response.json()
       
       if (data.success) {
@@ -187,7 +187,7 @@ export default function SharePointIntegrationPage() {
 
     try {
       const response = await fetch(
-        `http://localhost:5000/api/integrations/sharepoint/${integration.id}/drives/${driveId}/files?folderId=${folderId}`
+        `http://localhost:5001/api/integrations/sharepoint/${integration.id}/drives/${driveId}/files?folderId=${folderId}`
       )
       const data = await response.json()
       
