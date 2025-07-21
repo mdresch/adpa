@@ -47,19 +47,19 @@ Enterprise Architecture Documentation Platform API Server built with Node.js, Ex
 ### Installation
 
 1. **Clone and install dependencies**
-```bash
+\`\`\`bash
 cd server
 npm install
-```
+\`\`\`
 
 2. **Environment Setup**
-```bash
+\`\`\`bash
 cp .env.example .env
 # Edit .env with your configuration
-```
+\`\`\`
 
 3. **Database Setup**
-```bash
+\`\`\`bash
 # Create database
 createdb adpa_db
 
@@ -68,12 +68,12 @@ npm run migrate
 
 # Seed with demo data
 npm run seed
-```
+\`\`\`
 
 4. **Start Development Server**
-```bash
+\`\`\`bash
 npm run dev
-```
+\`\`\`
 
 The server will start on `http://localhost:5000`
 
@@ -86,9 +86,9 @@ After seeding, you can use these accounts:
 
 ### Authentication
 All protected endpoints require a Bearer token in the Authorization header:
-```
+\`\`\`
 Authorization: Bearer <jwt_token>
-```
+\`\`\`
 
 ### Core Endpoints
 
@@ -203,7 +203,7 @@ The database includes these main tables:
 - `npm test` - Run tests
 
 ### Project Structure
-```
+\`\`\`
 src/
 ├── database/           # Database connection and migrations
 ├── middleware/         # Express middleware
@@ -211,7 +211,7 @@ src/
 ├── services/          # Business logic services
 ├── utils/             # Utility functions
 └── server.ts          # Main server file
-```
+\`\`\`
 
 ### Adding New Features
 
@@ -224,13 +224,13 @@ src/
 ## Production Deployment
 
 ### Docker
-```bash
+\`\`\`bash
 # Build image
 docker build -t adpa-backend .
 
 # Run container
 docker run -p 5000:5000 --env-file .env adpa-backend
-```
+\`\`\`
 
 ### Environment Setup
 1. Set `NODE_ENV=production`
