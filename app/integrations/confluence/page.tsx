@@ -294,10 +294,28 @@ export default function ConfluenceIntegrationPage() {
   }
 
   const exportToConfluence = async () => {
+    if (!integration) return
+
     try {
-      // This would typically open a dialog to select documents to export
-      // For now, we'll show a placeholder message
-      toast.info("Export to Confluence feature coming soon! This will allow you to export ADPA documents to your Confluence spaces.")
+      // For now, we'll show a simple prompt for document ID
+      // In a full implementation, this would be a proper document selection dialog
+      const documentId = prompt("Enter the ADPA document ID to export to Confluence:")
+
+      if (!documentId) {
+        toast.info("Export cancelled")
+        return
+      }
+
+      const response = await apiClient.request(`/integrations/confluence/${integration.id}/export`, {
+        method: "POST",
+        body: JSON.stringify({ documentId }),
+      })
+
+      if (response.success) {
+        toast.success(`Document exported successfully! View at: ${response.confluenceUrl}`)
+      } else {
+        toast.error(response.error || "Export failed")
+      }
     } catch (error) {
       console.error("Failed to export to Confluence:", error)
       toast.error("Failed to export to Confluence")

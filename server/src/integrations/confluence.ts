@@ -333,7 +333,7 @@ export class ConfluenceIntegration implements IntegrationProvider {
         `,
         [
           docData.title,
-          docData.content,
+          JSON.stringify({ markdown: docData.content }), // Store content as JSON with markdown field
           docData.project_id,
           docData.framework,
           docData.status,
