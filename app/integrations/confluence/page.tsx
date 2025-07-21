@@ -293,6 +293,29 @@ export default function ConfluenceIntegrationPage() {
     }
   }
 
+  const exportToConfluence = async () => {
+    try {
+      // This would typically open a dialog to select documents to export
+      // For now, we'll show a placeholder message
+      toast.info("Export to Confluence feature coming soon! This will allow you to export ADPA documents to your Confluence spaces.")
+    } catch (error) {
+      console.error("Failed to export to Confluence:", error)
+      toast.error("Failed to export to Confluence")
+    }
+  }
+
+  const viewInConfluence = (webUrl: string) => {
+    // Open Confluence page in new tab
+    const fullUrl = webUrl.startsWith('http') ? webUrl : `${config.baseUrl}${webUrl}`
+    window.open(fullUrl, '_blank', 'noopener,noreferrer')
+  }
+
+  const viewPage = (webUrl: string) => {
+    // Open Confluence page in new tab
+    const fullUrl = webUrl.startsWith('http') ? webUrl : `${config.baseUrl}${webUrl}`
+    window.open(fullUrl, '_blank', 'noopener,noreferrer')
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -462,10 +485,11 @@ export default function ConfluenceIntegrationPage() {
                           </CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <Button 
-                            variant="outline" 
+                          <Button
+                            variant="outline"
                             disabled={!integration?.is_active}
                             className="w-full"
+                            onClick={exportToConfluence}
                           >
                             <ArrowUpFromLine className="h-4 w-4 mr-2" />
                             Export to Confluence
@@ -585,7 +609,12 @@ export default function ConfluenceIntegrationPage() {
                                       </Badge>
                                     </div>
                                     {space._links?.webui && (
-                                      <Button variant="outline" size="sm" className="w-full">
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="w-full"
+                                        onClick={() => viewInConfluence(space._links.webui)}
+                                      >
                                         <ExternalLink className="h-3 w-3 mr-2" />
                                         View in Confluence
                                       </Button>
@@ -667,7 +696,11 @@ export default function ConfluenceIntegrationPage() {
                                     </div>
                                     <div className="flex gap-2">
                                       {page._links?.webui && (
-                                        <Button variant="outline" size="sm">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={() => viewPage(page._links.webui)}
+                                        >
                                           <ExternalLink className="h-3 w-3 mr-2" />
                                           View
                                         </Button>
