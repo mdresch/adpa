@@ -7,12 +7,9 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
-
-    "test:kv": "npx ts-node test-vercel-kv.ts"
-
+    "test:kv": "npx ts-node test-vercel-kv.ts",
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "test:db": "tsx scripts/test-db-connection.ts"
-
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -45,11 +42,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
-
     "@vercel/kv": "latest",
-
-    "@vercel/kv": "^3.0.0",
-
     "bcryptjs": "latest",
     "bull": "latest",
     "class-variance-authority": "^0.7.1",
