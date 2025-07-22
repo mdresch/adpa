@@ -38,6 +38,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@vercel/postgres": "latest",
     "bcryptjs": "latest",
     "bull": "latest",
     "class-variance-authority": "^0.7.1",
@@ -57,6 +58,7 @@
     "lucide-react": "^0.454.0",
     "next": "14.2.30",
     "next-themes": "^0.2.1",
+    "pg": "^8.11.3",
     "react": "^18",
     "react-day-picker": "^8.10.0",
     "react-dom": "^18",
@@ -74,6 +76,7 @@
   },
   "devDependencies": {
     "@types/node": "^22",
+    "@types/pg": "^8.10.9",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
