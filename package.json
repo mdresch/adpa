@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "test": "jest"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -38,6 +39,8 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@vercel/kv": "latest",
+    "@vercel/postgres": "latest",
     "bcryptjs": "latest",
     "bull": "latest",
     "class-variance-authority": "^0.7.1",
@@ -57,6 +60,7 @@
     "lucide-react": "^0.454.0",
     "next": "14.2.30",
     "next-themes": "^0.2.1",
+    "pg": "latest",
     "react": "^18",
     "react-day-picker": "^8.10.0",
     "react-dom": "^18",
@@ -73,14 +77,20 @@
     "vaul": "^0.9.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/jest": "^29.5.12",
     "@types/node": "^22",
+    "@types/pg": "^8.11.0",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0",
     "postcss": "^8.5",
     "tailwindcss": "^3.3.0",
+    "ts-jest": "^29.1.2",
     "typescript": "^5"
   }
 }
