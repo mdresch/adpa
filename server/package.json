@@ -16,6 +16,8 @@
   "dependencies": {
     "@azure/msal-node": "^3.6.3",
     "@google/generative-ai": "^0.2.1",
+    "@vercel/kv": "latest",
+    "@vercel/postgres": "latest",
     "axios": "^1.10.0",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.2",
