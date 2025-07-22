@@ -11,11 +11,15 @@
     "migrate": "tsx src/database/migrate.ts",
     "seed": "tsx src/database/seed.ts",
     "seed-adpa": "tsx src/database/seed-adpa-documents.ts",
-    "seed-all": "tsx src/database/seed-all.ts"
+    "seed-all": "tsx src/database/seed-all.ts",
+    "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
+    "seed:vercel": "tsx scripts/seed-vercel.ts"
   },
   "dependencies": {
     "@azure/msal-node": "^3.6.3",
     "@google/generative-ai": "^0.2.1",
+    "@vercel/kv": "^3.0.0",
+    "@vercel/postgres": "^0.10.0",
     "axios": "^1.10.0",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.2",

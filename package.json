@@ -6,7 +6,9 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
+    "seed:vercel": "tsx scripts/seed-vercel.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -38,6 +40,8 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@vercel/kv": "^3.0.0",
+    "@vercel/postgres": "^0.10.0",
     "bcryptjs": "latest",
     "bull": "latest",
     "class-variance-authority": "^0.7.1",
@@ -63,9 +67,9 @@
     "react-hook-form": "latest",
     "react-resizable-panels": "latest",
     "recharts": "latest",
-    "socket.io-client": "latest",
     "redis": "latest",
     "socket.io": "latest",
+    "socket.io-client": "latest",
     "sonner": "latest",
     "supertest": "latest",
     "tailwind-merge": "^2.5.5",
@@ -81,6 +85,7 @@
     "eslint-config-next": "14.0.4",
     "postcss": "^8.5",
     "tailwindcss": "^3.3.0",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }
