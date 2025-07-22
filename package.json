@@ -6,7 +6,8 @@
     "build": "next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "test:auth": "node test-auth.js"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -38,6 +39,8 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@vercel/kv": "latest",
+    "@vercel/postgres": "latest",
     "bcryptjs": "latest",
     "bull": "latest",
     "class-variance-authority": "^0.7.1",
