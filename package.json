@@ -10,7 +10,10 @@
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
     "test:kv": "npx ts-node test-vercel-kv.ts",
-    "test:db": "tsx scripts/test-db-connection.ts"
+    "test:db": "tsx scripts/test-db-connection.ts",
+    "test:db-unit": "jest __tests__/lib/db.test.ts",
+    "test:db-integration": "jest __tests__/integration/db-integration.test.ts",
+    "demo:db": "tsx scripts/demo-db-usage.ts"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",
@@ -43,6 +46,7 @@
     "@radix-ui/react-toggle": "latest",
     "@radix-ui/react-toggle-group": "latest",
     "@radix-ui/react-tooltip": "latest",
+    "@types/pg": "^8.15.4",
     "@vercel/kv": "^3.0.0",
     "@vercel/postgres": "^0.10.0",
     "bcryptjs": "latest",
@@ -64,6 +68,7 @@
     "lucide-react": "^0.454.0",
     "next": "14.2.30",
     "next-themes": "^0.2.1",
+    "pg": "^8.16.3",
     "react": "^18",
     "react-day-picker": "^8.10.0",
     "react-dom": "^18",
@@ -81,14 +86,18 @@
     "vaul": "^0.9.0"
   },
   "devDependencies": {
+    "@jest/globals": "^30.0.5",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
     "autoprefixer": "^10.0.1",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
+    "jest": "^30.0.5",
     "postcss": "^8.5",
     "tailwindcss": "^3.3.0",
+    "ts-jest": "^29.4.0",
     "tsx": "^4.20.3",
     "typescript": "^5"
   }
