@@ -21,7 +21,7 @@
     "@neondatabase/serverless": "^1.0.1",
     "@vercel/kv": "^3.0.0",
     "@vercel/postgres": "^0.10.0",
-    "axios": "^1.10.0",
+    "axios": "^1.11.0",
     "bcryptjs": "^2.4.3",
     "bull": "^4.12.2",
     "cors": "^2.8.5",
