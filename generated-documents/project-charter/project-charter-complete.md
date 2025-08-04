@@ -28,7 +28,8 @@ The ADPA (Advanced Document Processing & Automation Framework) project addresses
 
 ### 1.2 Investment Summary
 - **Total Investment:** $75,000 initial + $40,000 annually over 12-16 weeks implementation
-- **Expected ROI:** 300% over 3 years
+- **Expected ROI:** 300% over 3 years  
+  _ROI is based on projected annual productivity and compliance cost savings, as detailed in [Appendix A: Financial Assumptions and ROI Calculation](#appendix-a-financial-assumptions-and-roi-calculation)._
 - **Payback Period:** 9 months
 - **Strategic Value:** Enhanced auditability, risk posture improvement, technology leadership positioning, and improved team morale through reduced administrative burden
 
