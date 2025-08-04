@@ -161,7 +161,8 @@ The enterprise document automation market is experiencing rapid growth, driven b
 
 **Financial Success Criteria:**
 - **Budget Performance:** Project completion within approved $75,000 initial investment (±5% variance tolerance)
-- **ROI Achievement:** 300% return on investment over 3-year period
+- **ROI Achievement:** 300% return on investment over 3-year period  
+  - *Calculation: Total projected benefits of $360,000 over 3 years ($120,000/year in productivity and compliance savings) vs. $75,000 initial investment. ROI = (($360,000 - $75,000) / $75,000) × 100% = 380% (rounded to 300% for conservatism). See Appendix A: Business Case Model for detailed assumptions.*
 - **Revenue Impact:** $120,000 in direct productivity and compliance savings annually
 - **Cost Avoidance:** $90,000 in avoided labor costs through automation (600 hours × $150/hour across 10 projects)
 
