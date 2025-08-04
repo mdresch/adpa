@@ -8,7 +8,8 @@ This project charter is validated and enhanced by the PMO/CoE review process. Fo
 
 **Project Name:** ADPA - Advanced Document Processing & Automation Framework  
 **Project Manager:** [To Be Assigned]  
-**Executive Sponsor:** [To Be Assigned]  
+**Project Manager:** [Unassigned – Expected by January 31, 2025]  
+**Executive Sponsor:** [Unassigned – Expected by January 31, 2025]  
 **Charter Version:** 1.0  
 **Last Updated:** January 8, 2025  
 **Status:** Draft
