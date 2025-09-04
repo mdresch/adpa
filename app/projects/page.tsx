@@ -236,10 +236,15 @@ export default function Projects() {
                             />
                           </div>
                           <div>
-                            <Label htmlFor="framework" className="text-sm font-semibold">
+                            <Label htmlFor="framework" id="framework-label" className="text-sm font-semibold">
                               Framework
                             </Label>
-                            <select className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors">
+                            <select
+                              id="framework"
+                              aria-labelledby="framework-label"
+                              title="Framework"
+                              className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                            >
                               <option value="">Select framework</option>
                               <option value="BABOK v3">BABOK v3</option>
                               <option value="PMBOK 7">PMBOK 7</option>
