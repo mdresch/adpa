@@ -19,9 +19,9 @@ TOGAF is one of the most widely adopted enterprise architecture frameworks, prov
 ## Framework Comparison
 
 | Framework | Focus Area | Primary Use Case | Complexity |
-|-----------|------------|------------------|------------|
-| TOGAF | Enterprise Architecture | IT-Business Alignment | High |
-
+| Framework | Focus Area | Primary Use Case | Complexity | Version |
+|-----------|------------|------------------|------------|---------|
+| TOGAF | Enterprise Architecture | IT-Business Alignment | High | 9.2 |
 ## Getting Started
 
 1. **For Beginners**: Start with the TOGAF Foundation concepts in `togaf-framework-guide.md`
