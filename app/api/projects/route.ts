@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
+import { requireAuth } from '@/lib/auth-middleware';
 
-export async function GET(request: NextRequest) {
+export const GET = requireAuth(async (request: NextRequest, user) => {
   try {
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
@@ -11,16 +12,18 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const offset = (page - 1) * limit;
 
-    // Build the query
+    // Build the query - filter by user access
     let query = `
       SELECT p.*, COUNT(d.id) as document_count
       FROM projects p
       LEFT JOIN documents d ON p.id = d.project_id
-      WHERE 1=1
+      WHERE (p.owner_id = $1 OR p.created_by = $1 OR $1 = ANY(
+        SELECT jsonb_array_elements_text(p.team_members)
+      ))
     `;
     
-    const params: any[] = [];
-    let paramCount = 0;
+    const params: any[] = [user.id];
+    let paramCount = 1;
 
     if (status) {
       paramCount++;
@@ -54,9 +57,11 @@ export async function GET(request: NextRequest) {
     const result = await sql.query(query, params);
 
     // Get total count for pagination
-    let countQuery = "SELECT COUNT(*) FROM projects WHERE 1=1";
-    const countParams: any[] = [];
-    let countParamCount = 0;
+    let countQuery = `SELECT COUNT(*) FROM projects WHERE (owner_id = $1 OR created_by = $1 OR $1 = ANY(
+      SELECT jsonb_array_elements_text(team_members)
+    ))`;
+    const countParams: any[] = [user.id];
+    let countParamCount = 1;
 
     if (status) {
       countParamCount++;
@@ -95,9 +100,9 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = requireAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
     const {
@@ -111,18 +116,14 @@ export async function POST(request: NextRequest) {
       team_members = [],
     } = body;
 
-    // In a real implementation, you'd get the user ID from authentication
-    // For now, we'll use a placeholder
-    const owner_id = 'placeholder-user-id';
-
     const result = await sql`
       INSERT INTO projects (
         id, name, description, framework, priority, start_date, end_date, 
-        budget, owner_id, team_members, created_at, updated_at
+        budget, owner_id, created_by, team_members, created_at, updated_at
       )
       VALUES (
         gen_random_uuid(), ${name}, ${description}, ${framework}, ${priority}, 
-        ${start_date}, ${end_date}, ${budget}, ${owner_id}, ${JSON.stringify(team_members)},
+        ${start_date}, ${end_date}, ${budget}, ${user.id}, ${user.id}, ${JSON.stringify(team_members)},
         NOW(), NOW()
       )
       RETURNING *
@@ -139,4 +140,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

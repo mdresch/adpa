@@ -1,22 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
+import { requireAuth } from '@/lib/auth-middleware';
 
-export async function GET(
+export const GET = requireAuth(async (
   request: NextRequest,
+  user,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     const { id } = params;
 
+    // Check if user has access to this project
     const result = await sql`
       SELECT p.*
       FROM projects p
-      WHERE p.id = ${id}
+      WHERE p.id = ${id} 
+      AND (p.owner_id = ${user.id} OR p.created_by = ${user.id} OR ${user.id} = ANY(
+        SELECT jsonb_array_elements_text(p.team_members)
+      ))
     `;
 
     if (result.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Project not found' },
+        { error: 'Project not found or access denied' },
         { status: 404 }
       );
     }
@@ -42,12 +48,13 @@ export async function GET(
       { status: 500 }
     );
   }
-}
+});
 
-export async function PUT(
+export const PUT = requireAuth(async (
   request: NextRequest,
+  user,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     const { id } = params;
     const body = await request.json();
@@ -63,6 +70,19 @@ export async function PUT(
       team_members 
     } = body;
 
+    // Check if user has permission to update this project (owner or admin)
+    const checkResult = await sql`
+      SELECT id FROM projects 
+      WHERE id = ${id} AND (owner_id = ${user.id} OR created_by = ${user.id})
+    `;
+
+    if (checkResult.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'Project not found or insufficient permissions' },
+        { status: 403 }
+      );
+    }
+
     const result = await sql`
       UPDATE projects 
       SET name = ${name}, description = ${description}, framework = ${framework}, 
@@ -72,13 +92,6 @@ export async function PUT(
       WHERE id = ${id}
       RETURNING *
     `;
-
-    if (result.rows.length === 0) {
-      return NextResponse.json(
-        { error: 'Project not found' },
-        { status: 404 }
-      );
-    }
 
     return NextResponse.json({
       message: 'Project updated successfully',
@@ -91,25 +104,27 @@ export async function PUT(
       { status: 500 }
     );
   }
-}
+});
 
-export async function DELETE(
+export const DELETE = requireAuth(async (
   request: NextRequest,
+  user,
   { params }: { params: { id: string } }
-) {
+) => {
   try {
     const { id } = params;
 
+    // Check if user has permission to delete this project (owner only)
     const result = await sql`
       DELETE FROM projects 
-      WHERE id = ${id} 
+      WHERE id = ${id} AND (owner_id = ${user.id} OR created_by = ${user.id})
       RETURNING name
     `;
 
     if (result.rows.length === 0) {
       return NextResponse.json(
-        { error: 'Project not found' },
-        { status: 404 }
+        { error: 'Project not found or insufficient permissions' },
+        { status: 403 }
       );
     }
 
@@ -123,4 +138,4 @@ export async function DELETE(
       { status: 500 }
     );
   }
-}
+});
