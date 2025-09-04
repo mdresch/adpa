@@ -125,13 +125,13 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`
-    const headers: HeadersInit = {
+    const headers: Record<string, string> = {
       "Content-Type": "application/json",
-      ...options.headers,
+      ...(options.headers as Record<string, string>),
     }
 
     if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`
+      headers['authorization'] = `Bearer ${this.token}`
     }
 
     try {
@@ -277,35 +277,9 @@ class ApiClient {
   }
 
   // Templates API
-  async getTemplates(params?: {
-    page?: number
-    limit?: number
-    framework?: string
-    category?: string
-    search?: string
-  }): Promise<{ templates: any[]; pagination: any }> {
-    const queryParams = new URLSearchParams()
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          queryParams.append(key, value.toString())
-        }
-      })
-    }
+  // Duplicate getTemplates method removed
 
-    const response = await this.request<{ templates: any[]; pagination: any }>(
-      `/templates?${queryParams}`
-    )
-    return response
-  }
-
-  async createTemplate(templateData: any): Promise<any> {
-    const response = await this.request<{ template: any }>("/templates", {
-      method: "POST",
-      body: JSON.stringify(templateData),
-    })
-    return response.template
-  }
+  // Duplicate createTemplate method removed
 
   // Search API
   async search(query: string, filters?: any): Promise<any[]> {
@@ -317,10 +291,7 @@ class ApiClient {
   }
 
   // Analytics API
-  async getSystemAnalytics(period: string): Promise<any> {
-    const response = await this.request<any>(`/analytics/system?period=${period}`)
-    return response
-  }
+  // Removed duplicate getSystemAnalytics method
 
   // System Settings API
   async getSystemSettings(): Promise<any> {
@@ -368,29 +339,13 @@ class ApiClient {
     return this.request<any[]>(`/documents${query}`)
   }
 
-  async getDocument(id: string) {
-    return this.request<any>(`/documents/${id}`)
-  }
+  // Removed duplicate getDocument method
 
-  async createDocument(documentData: any) {
-    return this.request<any>("/documents", {
-      method: "POST",
-      body: JSON.stringify(documentData),
-    })
-  }
+  // Duplicate createDocument method removed
 
-  async updateDocument(id: string, documentData: any) {
-    return this.request<any>(`/documents/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(documentData),
-    })
-  }
+  // Removed duplicate updateDocument method
 
-  async deleteDocument(id: string) {
-    return this.request<void>(`/documents/${id}`, {
-      method: "DELETE",
-    })
-  }
+  // Removed duplicate deleteDocument method
 
   // Users endpoints
   async getUsers() {
@@ -409,20 +364,11 @@ class ApiClient {
   }
 
   // Templates endpoints
-  async getTemplates() {
-    return this.request<any[]>("/templates")
-  }
+  // Duplicate getTemplates() method removed
 
-  async getTemplate(id: string) {
-    return this.request<any>(`/templates/${id}`)
-  }
+  // Removed duplicate getTemplate method
 
-  async createTemplate(templateData: any) {
-    return this.request<any>("/templates", {
-      method: "POST",
-      body: JSON.stringify(templateData),
-    })
-  }
+  // Duplicate createTemplate method removed
 
   // AI endpoints
   async generateDocument(prompt: string, templateId?: string) {
@@ -432,10 +378,6 @@ class ApiClient {
     })
   }
 
-  async getAIProviders() {
-    return this.request<any[]>("/ai/providers")
-  }
-
   // Analytics endpoints
   async getAnalytics(timeRange?: string) {
     const query = timeRange ? `?timeRange=${timeRange}` : ""
@@ -443,13 +385,7 @@ class ApiClient {
   }
 
   // Jobs endpoints
-  async getJobs() {
-    return this.request<any[]>("/jobs")
-  }
-
-  async getJob(id: string) {
-    return this.request<any>(`/jobs/${id}`)
-  }
+  // Removed duplicate getJobs() and getJob() methods
 
   // Security endpoints
   async getSecurityEvents() {
@@ -462,19 +398,9 @@ class ApiClient {
 
   // Integrations endpoints (duplicate removed - using the one at line 337)
 
-  async createIntegration(integrationData: any) {
-    return this.request<any>("/integrations", {
-      method: "POST",
-      body: JSON.stringify(integrationData),
-    })
-  }
+  // Duplicate createIntegration method removed
 
-  async updateIntegration(id: string, integrationData: any) {
-    return this.request<any>(`/integrations/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(integrationData),
-    })
-  }
+  // Duplicate updateIntegration method removed
 
   // Documents API
   async getProjectDocuments(
@@ -493,12 +419,12 @@ class ApiClient {
     const response = await this.request<{ documents: Document[]; pagination: any }>(
       `/documents/project/${projectId}?${queryParams}`
     )
-    return response.data!
+    return response
   }
 
   async getDocument(id: string): Promise<Document> {
     const response = await this.request<{ document: Document }>(`/documents/${id}`)
-    return response.data!.document
+    return response.document
   }
 
   async createDocument(projectId: string, documentData: Partial<Document>): Promise<Document> {
@@ -506,7 +432,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(documentData),
     })
-    return response.data!.document
+    return response.document
   }
 
   async updateDocument(id: string, documentData: Partial<Document>): Promise<Document> {
@@ -514,7 +440,7 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(documentData),
     })
-    return response.data!.document
+    return response.document
   }
 
   async deleteDocument(id: string): Promise<void> {
@@ -542,12 +468,12 @@ class ApiClient {
     const response = await this.request<{ templates: Template[]; pagination: any }>(
       `/templates?${queryParams}`
     )
-    return response.data!
+    return response
   }
 
   async getTemplate(id: string): Promise<Template> {
     const response = await this.request<{ template: Template }>(`/templates/${id}`)
-    return response.data!.template
+    return response.template
   }
 
   async createTemplate(templateData: Partial<Template>): Promise<Template> {
@@ -555,7 +481,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(templateData),
     })
-    return response.data!.template
+    return response.template
   }
 
   async updateTemplate(id: string, templateData: Partial<Template>): Promise<Template> {
@@ -563,7 +489,7 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(templateData),
     })
-    return response.data!.template
+    return response.template
   }
 
   async deleteTemplate(id: string): Promise<void> {
@@ -575,13 +501,13 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(data),
     })
-    return response.data!.template
+    return response.template
   }
 
   // AI API
   async getAIProviders(): Promise<any[]> {
     const response = await this.request<{ providers: any[] }>("/ai/providers")
-    return response.data!.providers
+    return response.providers
   }
 
   async generateContent(data: {
@@ -597,7 +523,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(data),
     })
-    return response.data
+    return response
   }
 
   // GitHub Integration API
@@ -673,12 +599,12 @@ class ApiClient {
     const response = await this.request<{ jobs: Job[]; pagination: any }>(
       `/jobs?${queryParams}`
     )
-    return response.data!
+    return response
   }
 
   async getJob(id: string): Promise<Job> {
     const response = await this.request<{ job: Job }>(`/jobs/${id}`)
-    return response.data!.job
+    return response.job
   }
 
   async cancelJob(id: string): Promise<void> {
@@ -689,18 +615,18 @@ class ApiClient {
     const response = await this.request<{ newJobId: string }>(`/jobs/${id}/retry`, {
       method: "POST",
     })
-    return response.data!
+    return response
   }
 
   // Analytics API
   async getDashboardAnalytics(): Promise<any> {
     const response = await this.request("/analytics/dashboard")
-    return response.data
+    return response
   }
 
   async getSystemAnalytics(period: string = "30d"): Promise<any> {
     const response = await this.request(`/analytics/system?period=${period}`)
-    return response.data
+    return response
   }
 
   // Generic request method for custom API calls

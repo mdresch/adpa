@@ -6,12 +6,21 @@ import { validateQuery } from "../middleware/validation"
 import { logger } from "../utils/logger"
 import { cache } from "../utils/redis"
 
+interface AuthRequest extends express.Request {
+  user?: {
+    id: string
+    email: string
+    role: string
+    permissions: any
+  }
+}
+
 const router = express.Router()
 
 // Get dashboard analytics
 router.get("/dashboard", 
   authenticateToken,
-  async (req, res) => {
+  async (req: AuthRequest, res: express.Response) => {
     try {
       const userId = req.user?.id
 
@@ -30,18 +39,18 @@ router.get("/dashboard",
           COUNT(*) FILTER (WHERE status = 'completed') as completed_projects,
           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') as projects_last_30d
         FROM projects 
-        WHERE owner_id = $1 OR $1 = ANY(team_members::uuid[])
+        WHERE owner_id = $1 OR team_members ? $1::text
       `, [userId])
 
       // Get user's document statistics
       const documentStats = await pool.query(`
         SELECT 
           COUNT(*) as total_documents,
-          COUNT(*) FILTER (WHERE status = 'published') as published_documents,
-          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') as documents_last_30d
+          COUNT(*) FILTER (WHERE d.status = 'published') as published_documents,
+          COUNT(*) FILTER (WHERE d.created_at >= NOW() - INTERVAL '30 days') as documents_last_30d
         FROM documents d
         JOIN projects p ON d.project_id = p.id
-        WHERE p.owner_id = $1 OR $1 = ANY(p.team_members::uuid[])
+        WHERE p.owner_id = $1 OR p.team_members ? $1::text
       `, [userId])
 
       // Get user's AI usage statistics
@@ -92,7 +101,7 @@ router.get("/system",
   validateQuery(Joi.object({
     period: Joi.string().valid("7d", "30d", "90d", "1y").default("30d"),
   })),
-  async (req, res) => {
+  async (req: AuthRequest, res: express.Response) => {
     try {
       const { period = "30d" } = req.query
 
@@ -208,7 +217,7 @@ router.get("/system",
 // Track custom event
 router.post("/events", 
   authenticateToken,
-  async (req, res) => {
+  async (req: AuthRequest, res: express.Response) => {
     try {
       const { event_type, properties = {} } = req.body
 
@@ -237,7 +246,7 @@ router.get("/activity/:userId",
     limit: Joi.number().integer().min(1).max(100).default(20),
     action: Joi.string().optional(),
   })),
-  async (req, res) => {
+  async (req: AuthRequest, res: express.Response) => {
     try {
       const { userId } = req.params
       const { page = 1, limit = 20, action } = req.query
@@ -262,29 +271,29 @@ router.get("/activity/:userId",
         WHERE user_id = $1
       `
 
-      const params = [userId]
+      const params: (string | number)[] = [userId]
       let paramCount = 1
 
       if (action) {
         paramCount++
         query += ` AND action = $${paramCount}`
-        params.push(action)
+        params.push(action as string)
       }
 
       query += ` ORDER BY created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
-      params.push(limit, offset)
+      params.push(Number(limit), offset)
 
       const result = await pool.query(query, params)
 
       // Get total count
       let countQuery = "SELECT COUNT(*) FROM audit_logs WHERE user_id = $1"
-      const countParams = [userId]
+      const countParams: (string | number)[] = [userId]
       let countParamCount = 1
 
       if (action) {
         countParamCount++
         countQuery += ` AND action = $${countParamCount}`
-        countParams.push(action)
+        countParams.push(action as string)
       }
 
       const countResult = await pool.query(countQuery, countParams)
@@ -310,7 +319,7 @@ router.get("/activity/:userId",
 router.get("/performance", 
   authenticateToken,
   requirePermission("analytics.system"),
-  async (req, res) => {
+  async (req: AuthRequest, res: express.Response) => {
     try {
       const cacheKey = "analytics:performance"
       const cached = await cache.get(cacheKey)
