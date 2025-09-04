@@ -1,10 +1,11 @@
 # DoDAF Framework Guide
 ## Department of Defense Architecture Framework
 
+### ⚠️ Security Notice
+
+This document contains general guidance about DoDAF. When implementing DoDAF in practice, ensure compliance with relevant security classifications, information handling procedures, and need-to-know principles. Some architecture details may be sensitive or classified - always follow your organization's security policies.
+
 ### 🧱 What is DoDAF?
-
-**DoDAF** (Department of Defense Architecture Framework) is a structured approach used by the **U.S. Department of Defense** to develop and manage enterprise architectures. It provides a standardized way to describe, visualize, and analyze systems and operations across military and defense organizations. DoDAF is designed to support **decision-making**, **system integration**, and **interoperability** across complex defense environments.
-
 ### 🎯 Purpose and Objectives
 
 DoDAF serves as a comprehensive architecture framework that enables defense organizations to:
