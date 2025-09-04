@@ -39,16 +39,22 @@ import {
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
+interface DocumentParams {
+  id: string
+  docId: string
+}
+
 export default function DocumentEditor() {
   const params = useParams()
-  const { id: projectId, docId } = params
+  const projectId = params?.id as string
+  const docId = params?.docId as string
   const editorRef = useRef<HTMLDivElement>(null)
   const [isEditing, setIsEditing] = useState(true)
   const [documentTitle, setDocumentTitle] = useState("Project Charter")
   const [lastSaved, setLastSaved] = useState("2 minutes ago")
 
   // Mock document data
-  const document = {
+  const documentData = {
     id: docId,
     name: "Project Charter",
     type: "Project Management",
@@ -167,21 +173,29 @@ export default function DocumentEditor() {
   `)
 
   const handleSave = () => {
-    if (editorRef.current) {
-      const content = editorRef.current.innerHTML
-      setDocumentContent(content)
-      setLastSaved("Just now")
-      // Here you would typically save to your backend
-      console.log("Saving document:", content)
-    }
+    if (!editorRef.current) return
+
+    const content = editorRef.current.innerHTML
+    setDocumentContent(content)
+    setLastSaved("Just now")
+    // Here you would typically save to your backend
+    console.log("Saving document:", content)
   }
 
   const formatText = (command: string, value?: string) => {
-    document.execCommand(command, false, value)
-    editorRef.current?.focus()
+    if (!editorRef.current) return
+
+    try {
+      document.execCommand(command, false, value)
+      editorRef.current.focus()
+    } catch (error) {
+      console.warn('execCommand not supported:', command)
+    }
   }
 
   const insertTable = () => {
+    if (!editorRef.current) return
+
     const table = `
       <table border="1" style="width: 100%; border-collapse: collapse; margin: 10px 0;">
         <tr>
@@ -196,7 +210,12 @@ export default function DocumentEditor() {
         </tr>
       </table>
     `
-    document.execCommand("insertHTML", false, table)
+
+    try {
+      document.execCommand("insertHTML", false, table)
+    } catch (error) {
+      console.warn('insertHTML not supported')
+    }
   }
 
   return (
@@ -206,7 +225,7 @@ export default function DocumentEditor() {
         <Header />
         <main className="flex-1 flex flex-col overflow-hidden">
           {/* Document Header */}
-          <div className="border-b bg-background p-4">
+          <div className="border-b bg-background p-4 visible-scrollbar">
             <div className="flex items-center justify-between mb-4">
               <Breadcrumb>
                 <BreadcrumbList>
@@ -215,11 +234,11 @@ export default function DocumentEditor() {
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbLink href={`/projects/${projectId}`}>{document.projectName}</BreadcrumbLink>
+                    <BreadcrumbLink href={`/projects/${projectId}`}>{documentData.projectName}</BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbPage>{document.name}</BreadcrumbPage>
+                    <BreadcrumbPage>{documentData.name}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
@@ -252,13 +271,13 @@ export default function DocumentEditor() {
                   className="text-lg font-semibold border-none p-0 h-auto bg-transparent"
                 />
                 <div className="flex items-center space-x-2">
-                  <Badge variant="secondary">{document.status}</Badge>
-                  <Badge variant="outline">v{document.version}</Badge>
-                  <Badge variant="outline">{document.template}</Badge>
+                  <Badge variant="secondary">{documentData.status}</Badge>
+                  <Badge variant="outline">v{documentData.version}</Badge>
+                  <Badge variant="outline">{documentData.template}</Badge>
                 </div>
               </div>
               <div className="text-sm text-muted-foreground">
-                Last saved: {lastSaved} • {document.author}
+                Last saved: {lastSaved} • {documentData.author}
               </div>
             </div>
           </div>
@@ -380,7 +399,12 @@ export default function DocumentEditor() {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => formatText("createLink", prompt("Enter URL:") || "")}
+                            onClick={() => {
+                              const url = prompt("Enter URL:")
+                              if (url) {
+                                formatText("createLink", url)
+                              }
+                            }}
                           >
                             <LinkIcon className="h-4 w-4" />
                           </Button>
@@ -399,7 +423,12 @@ export default function DocumentEditor() {
 
                     <Separator orientation="vertical" className="h-6" />
 
+                    <label htmlFor="formatBlockSelect" className="sr-only">
+                      Text format
+                    </label>
                     <select
+                      id="formatBlockSelect"
+                      aria-label="Text format"
                       className="text-sm border rounded px-2 py-1"
                       onChange={(e) => formatText("formatBlock", e.target.value)}
                     >
@@ -414,29 +443,26 @@ export default function DocumentEditor() {
               </div>
 
               {/* Editor */}
-              <div className="flex-1 overflow-auto">
-                <div
-                  ref={editorRef}
-                  contentEditable={isEditing}
-                  dangerouslySetInnerHTML={{ __html: documentContent }}
-                  className="h-full p-8 max-w-4xl mx-auto prose prose-lg focus:outline-none"
-                  style={{
-                    minHeight: "100%",
-                    lineHeight: "1.6",
-                    fontFamily: "system-ui, -apple-system, sans-serif",
-                  }}
-                  onInput={(e) => {
-                    const target = e.target as HTMLDivElement
-                    setDocumentContent(target.innerHTML)
-                  }}
-                />
+              <div className="flex-1 overflow-hidden">
+                <div className="h-full overflow-y-auto overflow-x-hidden visible-scrollbar scroll-smooth">
+                  <div
+                    ref={editorRef}
+                    contentEditable={isEditing}
+                    dangerouslySetInnerHTML={{ __html: documentContent }}
+                    className="min-h-full p-8 max-w-4xl mx-auto prose prose-lg focus:outline-none document-editor editor-content"
+                    onInput={(e) => {
+                      const target = e.target as HTMLDivElement
+                      setDocumentContent(target.innerHTML)
+                    }}
+                  />
+                </div>
               </div>
             </TabsContent>
 
             <TabsContent value="preview" className="flex-1 m-0">
-              <div className="h-full overflow-auto">
+              <div className="h-full overflow-y-auto overflow-x-hidden visible-scrollbar scroll-smooth">
                 <div
-                  className="p-8 max-w-4xl mx-auto prose prose-lg"
+                  className="min-h-full p-8 max-w-4xl mx-auto prose prose-lg document-editor"
                   dangerouslySetInnerHTML={{ __html: documentContent }}
                 />
               </div>
