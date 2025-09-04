@@ -9,6 +9,10 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Enable experimental features for better serverless performance
+  experimental: {
+    serverComponentsExternalPackages: ['@vercel/postgres'],
+  },
 }
 
 export default nextConfig
