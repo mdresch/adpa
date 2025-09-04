@@ -243,9 +243,14 @@ Use this prompt to explore TOGAF in greater depth:
 - [ ] Establish architecture governance structure
 - [ ] Define architecture principles and standards
 - [ ] Set up architecture repository and tools
-
-#### Phase 1: Foundation
-- [ ] Complete TOGAF training for architecture team
+#### Phase 0: Preparation
+- [ ] Assess organizational readiness for enterprise architecture
+- [ ] Identify key stakeholders and sponsors
+- [ ] Establish architecture governance structure
+- [ ] Define architecture principles and standards
+- [ ] Set up architecture repository and tools
+- [ ] Conduct initial risk assessment and develop mitigation strategies
+- [ ] Document security and compliance requirements
 - [ ] Customize TOGAF methodology for organization
 - [ ] Develop architecture charter and mandate
 - [ ] Create stakeholder map and communication plan
