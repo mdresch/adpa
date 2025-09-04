@@ -156,7 +156,7 @@ export default function SharePointIntegrationPage() {
 
   const fetchSites = async (integrationId: string) => {
     try {
-      const response = await fetch(`/api/integrations/sharepoint/${integrationId}/sites`)
+      const response = await fetch(`http://localhost:5001/api/integrations/sharepoint/${integrationId}/sites`)
       const data = await response.json()
       
       if (data.success) {
@@ -171,7 +171,7 @@ export default function SharePointIntegrationPage() {
     if (!integration) return
 
     try {
-      const response = await fetch(`/api/integrations/sharepoint/${integration.id}/sites/${siteId}/drives`)
+      const response = await fetch(`http://localhost:5001/api/integrations/sharepoint/${integration.id}/sites/${siteId}/drives`)
       const data = await response.json()
       
       if (data.success) {
@@ -187,7 +187,7 @@ export default function SharePointIntegrationPage() {
 
     try {
       const response = await fetch(
-        `/api/integrations/sharepoint/${integration.id}/drives/${driveId}/files?folderId=${folderId}`
+        `http://localhost:5001/api/integrations/sharepoint/${integration.id}/drives/${driveId}/files?folderId=${folderId}`
       )
       const data = await response.json()
       
@@ -202,18 +202,49 @@ export default function SharePointIntegrationPage() {
   const testConnection = async () => {
     try {
       setTesting(true)
-      
-      const response = await fetch("/api/integrations/sharepoint/test", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tenantId: config.tenantId,
-          clientId: config.clientId,
-          clientSecret: config.clientSecret,
-        }),
+
+      const url = "/api/integrations/sharepoint/test"
+      const requestData = {
+        tenantId: config.tenantId,
+        clientId: config.clientId,
+        clientSecret: config.clientSecret,
+      }
+
+      console.log("🚀 Testing SharePoint connection...")
+      console.log("📍 URL:", url)
+      console.log("📦 Request data:", {
+        tenantId: config.tenantId ? "***" : "empty",
+        clientId: config.clientId ? "***" : "empty",
+        clientSecret: config.clientSecret ? "***" : "empty"
       })
+
+      // First test if the server is reachable
+      try {
+        const healthCheck = await fetch("/api/health")
+        console.log("🏥 Health check:", healthCheck.status, await healthCheck.text())
+      } catch (healthError) {
+        console.error("❌ Health check failed:", healthError)
+      }
+
+      // Get auth token
+      const token = localStorage.getItem('token')
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      }
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`
+      }
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestData),
+      })
+
+      console.log("📡 Response received:")
+      console.log("   Status:", response.status)
+      console.log("   Status Text:", response.statusText)
+      console.log("   URL:", response.url)
 
       const data = await response.json()
 
@@ -269,7 +300,7 @@ export default function SharePointIntegrationPage() {
     try {
       setSyncing(true)
       
-      const response = await fetch(`/api/integrations/sharepoint/${integration.id}/sync`, {
+      const response = await fetch(`http://localhost:5000/api/integrations/sharepoint/${integration.id}/sync`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -301,7 +332,7 @@ export default function SharePointIntegrationPage() {
 
     try {
       const response = await fetch(
-        `/api/integrations/sharepoint/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSite ? `&siteId=${selectedSite}` : ""}`
+        `http://localhost:5000/api/integrations/sharepoint/${integration.id}/search?query=${encodeURIComponent(searchQuery)}${selectedSite ? `&siteId=${selectedSite}` : ""}`
       )
       const data = await response.json()
 
