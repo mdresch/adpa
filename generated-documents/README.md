@@ -9,6 +9,10 @@
 This directory contains comprehensive PMBOK (Project Management Body of Knowledge) documentation organized by category:
 
 
+### Enterprise Architecture
+
+- [TOGAF Framework Guide](enterprise-architecture/togaf-framework-guide.md) - Comprehensive guide to The Open Group Architecture Framework (TOGAF) including ADM methodology, key components, and implementation guidance.
+
 ### Basic Docs
 
 - [PersonasAssessMotivations](basic-docs/personas-assess-motivations.md) - Assessment of user personas and their motivations for project engagement.
@@ -165,6 +169,7 @@ Each document is AI-generated based on your project's README.md context and foll
 
 ## Categories Explained
 
+- **Enterprise Architecture**: Enterprise architecture frameworks and methodologies including TOGAF
 - **Basic Docs**: Fundamental project analysis including user stories, personas, and requirements
 - **Implementation Guides**: Development guides, coding standards, and deployment procedures
 - **Management Plans**: Detailed PMBOK management plans for scope, risk, cost, quality, etc.
