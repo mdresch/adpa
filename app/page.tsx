@@ -189,7 +189,7 @@ export default function Dashboard() {
           <Sidebar />
           <div className="flex-1 flex flex-col overflow-hidden">
             <Header />
-            <main className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <main className="flex-1 overflow-y-auto p-6 visible-scrollbar">
               <div className="flex items-center justify-center h-96">
                 <div className="text-center">
                   <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>

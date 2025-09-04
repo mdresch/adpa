@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAuth } from "@/hooks/use-auth"
-import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/contexts/AuthContext"
+import { toast } from "sonner"
 
 export function LoginForm() {
   const [email, setEmail] = useState("")
@@ -17,7 +17,6 @@ export function LoginForm() {
   const [isLoading, setIsLoading] = useState(false)
 
   const { login } = useAuth()
-  const { toast } = useToast()
   const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -26,17 +25,9 @@ export function LoginForm() {
 
     try {
       await login(email, password)
-      toast({
-        title: "Success",
-        description: "Logged in successfully",
-      })
       router.push("/")
     } catch (error) {
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Login failed",
-        variant: "destructive",
-      })
+      toast.error(error instanceof Error ? error.message : "Login failed")
     } finally {
       setIsLoading(false)
     }
@@ -76,7 +67,11 @@ export function LoginForm() {
             {isLoading ? "Signing in..." : "Sign In"}
           </Button>
         </form>
+        <div className="mt-4 text-center text-sm text-muted-foreground">
+          Demo accounts: admin@adpa.com / admin123
+        </div>
       </CardContent>
     </Card>
   )
 }
+

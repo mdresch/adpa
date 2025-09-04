@@ -1,3 +1,6 @@
+import dotenv from "dotenv"
+dotenv.config()
+
 import { readFileSync } from "fs"
 import { join } from "path"
 import { pool } from "./connection"
