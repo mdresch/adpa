@@ -28,6 +28,16 @@ class AuthService {
   }
 
   private async initializeAuth() {
+    if (typeof window === 'undefined') {
+      // On server side, skip localStorage access
+      this.setState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      })
+      return
+    }
+
     try {
       const token = localStorage.getItem("auth_token")
       if (token) {
