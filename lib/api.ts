@@ -334,9 +334,10 @@ class ApiClient {
   }
 
   // Documents endpoints
-  async getDocuments(projectId?: string) {
+  async getDocuments(projectId?: string): Promise<{ documents: Document[]; pagination?: any }> {
     const query = projectId ? `?projectId=${projectId}` : ""
-    return this.request<any[]>(`/documents${query}`)
+    const response = await this.request<{ documents: Document[]; pagination?: any }>(`/documents${query}`)
+    return response
   }
 
   // Removed duplicate getDocument method
@@ -428,9 +429,9 @@ class ApiClient {
   }
 
   async createDocument(projectId: string, documentData: Partial<Document>): Promise<Document> {
-    const response = await this.request<{ document: Document }>(`/documents/project/${projectId}`, {
+    const response = await this.request<{ document: Document }>("/documents", {
       method: "POST",
-      body: JSON.stringify(documentData),
+      body: JSON.stringify({ ...documentData, project_id: projectId }),
     })
     return response.document
   }
