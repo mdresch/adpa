@@ -47,6 +47,7 @@ async function seedDatabase() {
         "integrations.create": true,
         "integrations.update": true,
         "integrations.delete": true,
+        "integrations.view": true,
         "integrations.manage": true,
         "integrations.test": true,
         "integrations.sync": true,
