@@ -388,6 +388,34 @@ class ApiClient {
   // Removed duplicate getJobs() and getJob() methods
 
   // Security endpoints
+<<<<<<< HEAD
+=======
+  async getSecurityEvents() {
+    return this.request<any[]>("/security/events")
+  }
+
+  async getSecurityMetrics() {
+    return this.request<any>("/security/metrics")
+  }
+
+  // Integrations endpoints (duplicate removed - using the one at line 337)
+
+  async createIntegration(integrationData: any) {
+    return this.request<any>("/integrations", {
+      method: "POST",
+      body: JSON.stringify(integrationData),
+    })
+  }
+
+  async updateIntegration(id: string, integrationData: any) {
+    return this.request<any>(`/integrations/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(integrationData),
+    })
+  }
+
+  // Documents API
+>>>>>>> 00748915af6e83e4838b0067c88788e72aff8973
   async getProjectDocuments(
     projectId: string,
     params?: { page?: number; limit?: number; status?: string; search?: string }

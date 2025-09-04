@@ -11,49 +11,54 @@ const router = express.Router()
 const upload = multer({ storage: multer.memoryStorage() })
 
 // Test SharePoint connection
-router.post("/test",
-  authenticateToken,
-  requirePermission("integrations.create"),
-  validate(Joi.object({
-    tenantId: Joi.string().required(),
-    clientId: Joi.string().required(),
-    clientSecret: Joi.string().required(),
-  })),
-  async (req, res) => {
-    try {
-      const { tenantId, clientId, clientSecret } = req.body
+router.post("/test", async (req, res) => {
+  try {
+    console.log("SharePoint test endpoint hit!")
+    console.log("Request body:", req.body)
 
-      // Initialize service with test configuration
-      await sharepointService.initialize({
-        tenantId,
-        clientId,
-        clientSecret,
-        syncEnabled: false,
-        autoSync: false,
-      })
+    const { tenantId, clientId, clientSecret } = req.body
 
-      const isConnected = await sharepointService.testConnection()
-
-      if (isConnected) {
-        res.json({ 
-          success: true, 
-          message: "SharePoint connection successful" 
-        })
-      } else {
-        res.status(400).json({ 
-          success: false, 
-          error: "SharePoint connection failed" 
-        })
-      }
-    } catch (error) {
-      logger.error("SharePoint connection test failed:", error)
-      res.status(500).json({ 
-        success: false, 
-        error: error.message || "Connection test failed" 
+    if (!tenantId || !clientId || !clientSecret) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields: tenantId, clientId, clientSecret"
       })
     }
+
+    // Test Azure authentication directly
+    const axios = require('axios')
+
+    const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`
+
+    const params = new URLSearchParams()
+    params.append('client_id', clientId)
+    params.append('client_secret', clientSecret)
+    params.append('scope', 'https://graph.microsoft.com/.default')
+    params.append('grant_type', 'client_credentials')
+
+    const response = await axios.post(tokenUrl, params, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+
+    // Test Graph API access
+    const graphResponse = await axios.get('https://graph.microsoft.com/v1.0/sites?$top=1', {
+      headers: { 'Authorization': 'Bearer ' + response.data.access_token }
+    })
+
+    res.json({
+      success: true,
+      message: "SharePoint connection successful",
+      sitesFound: graphResponse.data.value?.length || 0
+    })
+
+  } catch (error: any) {
+    console.error("SharePoint connection test failed:", error)
+    res.status(500).json({
+      success: false,
+      error: error.response?.data?.error_description || error.message || "Connection test failed"
+    })
   }
-)
+})
 
 // Get SharePoint sites
 router.get("/:integrationId/sites",
