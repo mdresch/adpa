@@ -1,6 +1,5 @@
 import type React from "react"
 import type { Metadata } from "next"
-import { Inter } from "next/font/google"
 import { Suspense } from "react"
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -9,8 +8,6 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { RouteProgress } from "@/components/route-progress"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { WebSocketProvider } from "@/contexts/WebSocketContext"
-
-const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "ADPA Admin Portal",
@@ -25,7 +22,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <AuthProvider>
             <WebSocketProvider>
