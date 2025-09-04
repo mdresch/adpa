@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { sql } from '@vercel/postgres';
+import { requireAuth } from '@/lib/auth-middleware';
 
-export async function GET(request: NextRequest) {
+export const GET = requireAuth(async (request: NextRequest, user) => {
   try {
     const { searchParams } = new URL(request.url);
     const projectId = searchParams.get('projectId');
@@ -11,15 +12,18 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const offset = (page - 1) * limit;
 
-    // Build the query
+    // Build the query - only show documents from projects user has access to
     let query = `
       SELECT d.*
       FROM documents d
-      WHERE 1=1
+      INNER JOIN projects p ON d.project_id = p.id
+      WHERE (p.owner_id = $1 OR p.created_by = $1 OR $1 = ANY(
+        SELECT jsonb_array_elements_text(p.team_members)
+      ))
     `;
     
-    const params: any[] = [];
-    let paramCount = 0;
+    const params: any[] = [user.id];
+    let paramCount = 1;
 
     if (projectId) {
       paramCount++;
@@ -53,25 +57,29 @@ export async function GET(request: NextRequest) {
     const result = await sql.query(query, params);
 
     // Get total count for pagination
-    let countQuery = "SELECT COUNT(*) FROM documents WHERE 1=1";
-    const countParams: any[] = [];
-    let countParamCount = 0;
+    let countQuery = `SELECT COUNT(*) FROM documents d 
+      INNER JOIN projects p ON d.project_id = p.id
+      WHERE (p.owner_id = $1 OR p.created_by = $1 OR $1 = ANY(
+        SELECT jsonb_array_elements_text(p.team_members)
+      ))`;
+    const countParams: any[] = [user.id];
+    let countParamCount = 1;
 
     if (projectId) {
       countParamCount++;
-      countQuery += ` AND project_id = $${countParamCount}`;
+      countQuery += ` AND d.project_id = $${countParamCount}`;
       countParams.push(projectId);
     }
 
     if (status) {
       countParamCount++;
-      countQuery += ` AND status = $${countParamCount}`;
+      countQuery += ` AND d.status = $${countParamCount}`;
       countParams.push(status);
     }
 
     if (search) {
       countParamCount++;
-      countQuery += ` AND name ILIKE $${countParamCount}`;
+      countQuery += ` AND d.name ILIKE $${countParamCount}`;
       countParams.push(`%${search}%`);
     }
 
@@ -94,9 +102,9 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
 
-export async function POST(request: NextRequest) {
+export const POST = requireAuth(async (request: NextRequest, user) => {
   try {
     const body = await request.json();
     const {
@@ -107,8 +115,21 @@ export async function POST(request: NextRequest) {
       status = 'draft',
     } = body;
 
-    // In a real implementation, you'd get the user ID from authentication
-    const created_by = 'placeholder-user-id';
+    // Check if user has access to the project
+    const projectCheck = await sql`
+      SELECT id FROM projects 
+      WHERE id = ${project_id} 
+      AND (owner_id = ${user.id} OR created_by = ${user.id} OR ${user.id} = ANY(
+        SELECT jsonb_array_elements_text(team_members)
+      ))
+    `;
+
+    if (projectCheck.rows.length === 0) {
+      return NextResponse.json(
+        { error: 'Project not found or access denied' },
+        { status: 403 }
+      );
+    }
 
     const result = await sql`
       INSERT INTO documents (
@@ -117,7 +138,7 @@ export async function POST(request: NextRequest) {
       )
       VALUES (
         gen_random_uuid(), ${project_id}, ${name}, ${JSON.stringify(content)}, 
-        ${template_id}, 1, ${status}, ${created_by}, ${created_by}, NOW(), NOW()
+        ${template_id}, 1, ${status}, ${user.id}, ${user.id}, NOW(), NOW()
       )
       RETURNING *
     `;
@@ -133,4 +154,4 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});
