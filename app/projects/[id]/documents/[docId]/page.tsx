@@ -1,7 +1,10 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useParams } from "next/navigation"
+import { apiClient } from "@/lib/api"
+import { useAuth } from "@/contexts/AuthContext"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -48,25 +51,46 @@ export default function DocumentEditor() {
   const params = useParams()
   const projectId = params?.id as string
   const docId = params?.docId as string
+  const { isAuthenticated } = useAuth()
   const editorRef = useRef<HTMLDivElement>(null)
+  
   const [isEditing, setIsEditing] = useState(true)
-  const [documentTitle, setDocumentTitle] = useState("Project Charter")
-  const [lastSaved, setLastSaved] = useState("2 minutes ago")
+  const [documentTitle, setDocumentTitle] = useState("")
+  const [lastSaved, setLastSaved] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [documentData, setDocumentData] = useState<any>(null)
 
-  // Mock document data
-  const documentData = {
-    id: docId,
-    name: "Project Charter",
-    type: "Project Management",
-    template: "PMBOK Project Charter",
-    status: "in-progress",
-    version: "2.1",
-    author: "Sarah Johnson",
-    lastModified: "2024-01-20",
-    projectName: "Customer Portal Redesign",
-  }
+  const [documentContent, setDocumentContent] = useState("")
 
-  const [documentContent, setDocumentContent] = useState(`
+  // Fetch document data
+  const fetchDocument = async () => {
+    try {
+      setLoading(true)
+      const document = await apiClient.getDocument(docId)
+      setDocumentData(document)
+      setDocumentTitle(document.name)
+      setDocumentContent(document.content ? JSON.stringify(document.content) : "")
+      setLastSaved(new Date(document.updated_at).toLocaleString())
+    } catch (error) {
+      console.error("Failed to fetch document:", error)
+      toast.error("Failed to load document")
+      
+      // Fallback to mock data
+      const mockData = {
+        id: docId,
+        name: "Project Charter",
+        type: "Project Management",
+        template: "PMBOK Project Charter",
+        status: "in-progress",
+        version: "2.1",
+        author: "Sarah Johnson",
+        lastModified: "2024-01-20",
+        projectName: "Customer Portal Redesign",
+      }
+      setDocumentData(mockData)
+      setDocumentTitle(mockData.name)
+      setDocumentContent(`
     <h1>Project Charter: Customer Portal Redesign</h1>
     
     <h2>1. Project Overview</h2>
@@ -218,6 +242,32 @@ export default function DocumentEditor() {
     }
   }
 
+  // Save document
+  const saveDocument = async () => {
+    try {
+      setSaving(true)
+      await apiClient.updateDocument(docId, {
+        name: documentTitle,
+        content: { html: documentContent },
+        status: documentData?.status || 'draft'
+      })
+      setLastSaved(new Date().toLocaleString())
+      toast.success("Document saved successfully")
+    } catch (error) {
+      console.error("Failed to save document:", error)
+      toast.error("Failed to save document")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Load document on mount
+  useEffect(() => {
+    if (isAuthenticated && docId) {
+      fetchDocument()
+    }
+  }, [docId, isAuthenticated])
+
   return (
     <div className="flex h-screen bg-background">
       <Sidebar />
@@ -256,9 +306,9 @@ export default function DocumentEditor() {
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
-                <Button onClick={handleSave}>
+                <Button onClick={saveDocument} disabled={saving}>
                   <Save className="h-4 w-4 mr-2" />
-                  Save
+                  {saving ? "Saving..." : "Save"}
                 </Button>
               </div>
             </div>
