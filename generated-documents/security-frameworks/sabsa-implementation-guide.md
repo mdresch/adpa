@@ -264,22 +264,57 @@ Network Segmentation:
 
 1. **Detection and Analysis**
    - Monitor security alerts
-   - Analyze potential incidents
-   - Determine incident severity
-   - Document initial findings
-
-2. **Containment and Eradication**
-   - Isolate affected systems
-   - Preserve evidence
-   - Remove threat vectors
-   - Apply security patches
-
-3. **Recovery and Post-Incident**
-   - Restore normal operations
-   - Monitor for recurrence
-   - Conduct lessons learned
-   - Update procedures
-
+{
+  "tenant": "adpa-production",
+  "applications": [
+    {
+      "name": "ADPA Web Application",
+      "type": "spa",
+      "callbacks": [""],
+      "logout_urls": [""],
+      "web_origins": [""],
+      "grant_types": ["authorization_code", "refresh_token"],
+      "jwt_configuration": {
+        "alg": "RS256",
+        "lifetime_in_seconds": 3600
+      }
+    }
+  ],
+  "rules": [
+    {
+      "name": "Add User Roles",
+      "script": "function(user, context, callback) { /* role assignment logic */ }"
+    },
+    {
+      "name": "Enforce MFA",
+      "script": "function(user, context, callback) { if (context.multifactor.enabled) { callback(null, user, context); } else { context.multifactor = { provider: 'any', allowRememberBrowser: false }; callback(null, user, context); } }"
+    }
+  ],
+  "connections": [
+    {
+      "name": "Username-Password-Authentication",
+      "strategy": "auth0",
+      "options": {
+        "password_policy": "excellent",
+        "password_history": 24,
+        "password_no_personal_info": true,
+        "password_dictionary": true,
+        "password_complexity_options": {
+          "min_length": 12,
+          "require_numbers": true,
+          "require_symbols": true,
+          "require_uppercase": true,
+          "require_lowercase": true
+        },
+        "brute_force_protection": true,
+        "mfa": {
+          "active": true,
+          "return_enroll_settings": true
+        }
+      }
+    }
+  ]
+}
 **Security Monitoring Checklist**:
 
 - [ ] Authentication failures and anomalies
