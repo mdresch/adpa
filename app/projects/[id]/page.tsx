@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -11,6 +11,9 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
+import { apiClient, Project } from "@/lib/api"
+import { useAuth } from "@/contexts/AuthContext"
+import { toast } from "sonner"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -36,6 +39,7 @@ import {
   AlertCircle,
   MoreHorizontal,
   Eye,
+  Loader2,
 } from "lucide-react"
 import {
   Dialog,
@@ -49,91 +53,99 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 
+interface Document {
+  id: string
+  name: string
+  content?: any
+  template_id?: string
+  status: string
+  version: number
+  created_by: string
+  updated_by: string
+  created_at: string
+  updated_at: string
+}
+
 export default function ProjectDetail() {
   const params = useParams()
-  const projectId = params.id
+  const projectId = params.id as string
+  const { isAuthenticated } = useAuth()
 
-  // Mock project data - in real app, fetch based on projectId
-  const project = {
-    id: projectId,
-    name: "Customer Portal Redesign",
-    description: "Complete redesign of the customer-facing portal with improved UX and new features",
-    status: "active",
-    progress: 65,
-    startDate: "2024-01-15",
-    endDate: "2024-06-30",
-    manager: "Sarah Johnson",
-    team: ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Chen"],
-    framework: "PMBOK 7",
-    budget: "$250,000",
-    phase: "Development",
-    lastActivity: "2 hours ago",
+  const [project, setProject] = useState<Project | null>(null)
+  const [documents, setDocuments] = useState<Document[]>([])
+  const [loading, setLoading] = useState(true)
+  const [documentsLoading, setDocumentsLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+
+  // Fetch project data
+  const fetchProject = async () => {
+    try {
+      setLoading(true)
+      const projectData = await apiClient.getProject(projectId)
+      setProject(projectData)
+      
+      // Also fetch documents for this project
+      const documentsData = await apiClient.getDocuments(projectId)
+      setDocuments(Array.isArray(documentsData) ? documentsData : documentsData.documents || [])
+    } catch (error) {
+      console.error("Failed to fetch project:", error)
+      toast.error("Failed to load project")
+      
+      // Fallback to mock data
+      setProject({
+        id: projectId,
+        name: "Customer Portal Redesign",
+        description: "Complete redesign of the customer-facing portal with improved UX and new features",
+        status: "active",
+        framework: "PMBOK 7",
+        priority: "high",
+        owner_id: "user1",
+        team_members: ["John Doe", "Jane Smith", "Mike Wilson", "Lisa Chen"],
+        start_date: "2024-01-15",
+        end_date: "2024-06-30",
+        created_at: "2024-01-01T00:00:00Z",
+        updated_at: "2024-01-20T00:00:00Z",
+      })
+      
+      setDocuments([
+        {
+          id: "1",
+          name: "Project Charter",
+          template_id: "charter-template",
+          status: "completed",
+          version: 2,
+          created_by: "user1",
+          updated_by: "user1",
+          created_at: "2024-01-20T00:00:00Z",
+          updated_at: "2024-01-20T00:00:00Z",
+        },
+        {
+          id: "2",
+          name: "Stakeholder Analysis",
+          template_id: "stakeholder-template",
+          status: "in-progress",
+          version: 1,
+          created_by: "user2",
+          updated_by: "user2",
+          created_at: "2024-01-18T00:00:00Z",
+          updated_at: "2024-01-18T00:00:00Z",
+        },
+      ])
+    } finally {
+      setLoading(false)
+      setDocumentsLoading(false)
+    }
   }
 
-  const [documents] = useState([
-    {
-      id: "1",
-      name: "Project Charter",
-      type: "Project Management",
-      template: "PMBOK Project Charter",
-      status: "completed",
-      lastModified: "2024-01-20",
-      author: "Sarah Johnson",
-      version: "2.1",
-      size: "245 KB",
-    },
-    {
-      id: "2",
-      name: "Stakeholder Analysis",
-      type: "Stakeholder Management",
-      template: "Stakeholder Analysis Matrix",
-      status: "in-progress",
-      lastModified: "2024-01-18",
-      author: "John Doe",
-      version: "1.3",
-      size: "189 KB",
-    },
-    {
-      id: "3",
-      name: "Risk Management Plan",
-      type: "Risk Management",
-      template: "Risk Management Plan",
-      status: "completed",
-      lastModified: "2024-01-15",
-      author: "Jane Smith",
-      version: "1.0",
-      size: "312 KB",
-    },
-    {
-      id: "4",
-      name: "Requirements Specification",
-      type: "Requirements",
-      template: "BABOK Requirements Analysis",
-      status: "draft",
-      lastModified: "2024-01-22",
-      author: "Mike Wilson",
-      version: "0.8",
-      size: "567 KB",
-    },
-    {
-      id: "5",
-      name: "Communication Plan",
-      type: "Communication",
-      template: "Communication Management Plan",
-      status: "in-progress",
-      lastModified: "2024-01-19",
-      author: "Lisa Chen",
-      version: "1.2",
-      size: "123 KB",
-    },
-  ])
-
-  const [searchTerm, setSearchTerm] = useState("")
+  useEffect(() => {
+    if (isAuthenticated && projectId) {
+      fetchProject()
+    }
+  }, [projectId, isAuthenticated])
 
   const filteredDocuments = documents.filter(
     (doc) =>
-      doc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      doc.type.toLowerCase().includes(searchTerm.toLowerCase()),
+      doc.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
   const getStatusIcon = (status: string) => {
@@ -161,6 +173,72 @@ export default function ProjectDetail() {
         return "secondary"
     }
   }
+
+  // Calculate progress based on project timeline
+  const getProjectProgress = () => {
+    if (!project?.start_date || !project?.end_date) return 0
+    
+    const startDate = new Date(project.start_date)
+    const endDate = new Date(project.end_date)
+    const now = new Date()
+    
+    if (now < startDate) return 0
+    if (now > endDate) return 100
+    
+    const totalDays = endDate.getTime() - startDate.getTime()
+    const elapsedDays = now.getTime() - startDate.getTime()
+    return Math.round((elapsedDays / totalDays) * 100)
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">Authentication Required</h2>
+          <p className="text-muted-foreground">Please log in to access this project.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="flex items-center space-x-2">
+              <Loader2 className="h-6 w-6 animate-spin" />
+              <span>Loading project...</span>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  if (!project) {
+    return (
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 flex items-center justify-center">
+            <div className="text-center">
+              <h2 className="text-xl font-semibold mb-2">Project Not Found</h2>
+              <p className="text-muted-foreground mb-4">The project you're looking for doesn't exist.</p>
+              <Button asChild>
+                <Link href="/projects">Back to Projects</Link>
+              </Button>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  const progress = getProjectProgress()
 
   return (
     <div className="flex h-screen bg-background">
@@ -195,7 +273,7 @@ export default function ProjectDetail() {
                 <div className="flex items-center space-x-4">
                   <Badge variant="default">{project.status}</Badge>
                   <Badge variant="outline">{project.framework}</Badge>
-                  <Badge variant="secondary">{project.phase}</Badge>
+                  <Badge variant="secondary">{project.priority}</Badge>
                 </div>
               </div>
               <div className="flex space-x-2">
@@ -285,75 +363,101 @@ export default function ProjectDetail() {
                   </Button>
                 </div>
 
-                {/* Documents List */}
-                <div className="space-y-2">
-                  {filteredDocuments.map((doc) => (
-                    <Card key={doc.id} className="hover:shadow-sm transition-shadow">
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            {getStatusIcon(doc.status)}
-                            <div className="flex-1">
-                              <div className="flex items-center space-x-2">
-                                <Link
-                                  href={`/projects/${projectId}/documents/${doc.id}`}
-                                  className="font-semibold hover:text-primary transition-colors"
-                                >
-                                  {doc.name}
-                                </Link>
-                                <Badge variant={getStatusColor(doc.status)} className="text-xs">
-                                  {doc.status}
-                                </Badge>
-                              </div>
-                              <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
-                                <span>Template: {doc.template}</span>
-                                <span>•</span>
-                                <span>v{doc.version}</span>
-                                <span>•</span>
-                                <span>{doc.size}</span>
-                                <span>•</span>
-                                <span>Modified {doc.lastModified}</span>
-                                <span>•</span>
-                                <span>by {doc.author}</span>
+                {/* Loading state for documents */}
+                {documentsLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <span className="ml-2">Loading documents...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredDocuments.map((doc) => (
+                      <Card key={doc.id} className="hover:shadow-sm transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-4">
+                              {getStatusIcon(doc.status)}
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2">
+                                  <Link
+                                    href={`/projects/${projectId}/documents/${doc.id}`}
+                                    className="font-semibold hover:text-primary transition-colors"
+                                  >
+                                    {doc.name}
+                                  </Link>
+                                  <Badge variant={getStatusColor(doc.status)} className="text-xs">
+                                    {doc.status}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center space-x-4 text-sm text-muted-foreground mt-1">
+                                  <span>v{doc.version}</span>
+                                  <span>•</span>
+                                  <span>Modified {new Date(doc.updated_at).toLocaleDateString()}</span>
+                                  <span>•</span>
+                                  <span>by {doc.updated_by}</span>
+                                </div>
                               </div>
                             </div>
+                            <div className="flex items-center space-x-2">
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/projects/${projectId}/documents/${doc.id}`}>
+                                  <Eye className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button variant="ghost" size="sm">
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem>
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem>
+                                    <Download className="h-4 w-4 mr-2" />
+                                    Download
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem className="text-destructive">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Button variant="ghost" size="sm" asChild>
-                              <Link href={`/projects/${projectId}/documents/${doc.id}`}>
-                                <Eye className="h-4 w-4" />
-                              </Link>
-                            </Button>
-                            <Button variant="ghost" size="sm">
-                              <Download className="h-4 w-4" />
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem>
-                                  <Edit className="h-4 w-4 mr-2" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Download className="h-4 w-4 mr-2" />
-                                  Download
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-destructive">
-                                  <Trash2 className="h-4 w-4 mr-2" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                    
+                    {filteredDocuments.length === 0 && (
+                      <div className="text-center py-8">
+                        <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No documents found</h3>
+                        <p className="text-muted-foreground mb-4">
+                          {searchTerm 
+                            ? "Try adjusting your search criteria" 
+                            : "Start by generating your first document for this project"
+                          }
+                        </p>
+                        {!searchTerm && (
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button>
+                                <Plus className="h-4 w-4 mr-2" />
+                                Generate First Document
+                              </Button>
+                            </DialogTrigger>
+                          </Dialog>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
@@ -364,8 +468,8 @@ export default function ProjectDetail() {
                       <Activity className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{project.progress}%</div>
-                      <Progress value={project.progress} className="mt-2" />
+                      <div className="text-2xl font-bold">{progress}%</div>
+                      <Progress value={progress} className="mt-2" />
                     </CardContent>
                   </Card>
 
@@ -375,7 +479,7 @@ export default function ProjectDetail() {
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{project.budget}</div>
+                      <div className="text-2xl font-bold">{project.budget || 'Not set'}</div>
                       <p className="text-xs text-muted-foreground">Total allocated</p>
                     </CardContent>
                   </Card>
@@ -386,8 +490,8 @@ export default function ProjectDetail() {
                       <Users className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{project.team.length + 1}</div>
-                      <p className="text-xs text-muted-foreground">Including PM</p>
+                      <div className="text-2xl font-bold">{project.team_members?.length || 0}</div>
+                      <p className="text-xs text-muted-foreground">Team members</p>
                     </CardContent>
                   </Card>
 
@@ -412,19 +516,7 @@ export default function ProjectDetail() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between p-3 border rounded-lg">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
-                            <Users className="h-5 w-5 text-primary" />
-                          </div>
-                          <div>
-                            <p className="font-medium">{project.manager}</p>
-                            <p className="text-sm text-muted-foreground">Project Manager</p>
-                          </div>
-                        </div>
-                        <Badge>Lead</Badge>
-                      </div>
-                      {project.team.map((member, index) => (
+                      {project.team_members?.map((member, index) => (
                         <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
                           <div className="flex items-center space-x-3">
                             <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
@@ -443,6 +535,14 @@ export default function ProjectDetail() {
                           <Badge variant="outline">Member</Badge>
                         </div>
                       ))}
+                      
+                      {(!project.team_members || project.team_members.length === 0) && (
+                        <div className="text-center py-8">
+                          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                          <h3 className="text-lg font-semibold mb-2">No team members</h3>
+                          <p className="text-muted-foreground">Add team members to get started</p>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -456,31 +556,37 @@ export default function ProjectDetail() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      <div className="flex items-center space-x-4">
-                        <Calendar className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="font-medium">Project Start</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(project.startDate).toLocaleDateString()}
-                          </p>
+                      {project.start_date && (
+                        <div className="flex items-center space-x-4">
+                          <Calendar className="h-5 w-5 text-primary" />
+                          <div>
+                            <p className="font-medium">Project Start</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(project.start_date).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
+                      
                       <div className="flex items-center space-x-4">
                         <Calendar className="h-5 w-5 text-primary" />
                         <div>
-                          <p className="font-medium">Current Phase: {project.phase}</p>
+                          <p className="font-medium">Current Phase: {project.status}</p>
                           <p className="text-sm text-muted-foreground">In progress</p>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <Calendar className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">Project End</p>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(project.endDate).toLocaleDateString()}
-                          </p>
+                      
+                      {project.end_date && (
+                        <div className="flex items-center space-x-4">
+                          <Calendar className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">Project End</p>
+                            <p className="text-sm text-muted-foreground">
+                              {new Date(project.end_date).toLocaleDateString()}
+                            </p>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
