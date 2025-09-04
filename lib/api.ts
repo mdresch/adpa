@@ -388,8 +388,6 @@ class ApiClient {
   // Removed duplicate getJobs() and getJob() methods
 
   // Security endpoints
-<<<<<<< HEAD
-=======
   async getSecurityEvents() {
     return this.request<any[]>("/security/events")
   }
@@ -400,22 +398,11 @@ class ApiClient {
 
   // Integrations endpoints (duplicate removed - using the one at line 337)
 
-  async createIntegration(integrationData: any) {
-    return this.request<any>("/integrations", {
-      method: "POST",
-      body: JSON.stringify(integrationData),
-    })
-  }
+  // Duplicate createIntegration method removed
 
-  async updateIntegration(id: string, integrationData: any) {
-    return this.request<any>(`/integrations/${id}`, {
-      method: "PUT",
-      body: JSON.stringify(integrationData),
-    })
-  }
+  // Duplicate updateIntegration method removed
 
   // Documents API
->>>>>>> 00748915af6e83e4838b0067c88788e72aff8973
   async getProjectDocuments(
     projectId: string,
     params?: { page?: number; limit?: number; status?: string; search?: string }
