@@ -2,7 +2,7 @@ const http = require('http');
 
 const postData = JSON.stringify({
   email: 'admin@adpa.com',
-  password: 'admin123',
+  password: 'password',
   name: 'System Administrator',
   role: 'admin'
 });

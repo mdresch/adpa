@@ -1,7 +1,9 @@
+import dotenv from "dotenv"
+dotenv.config()
+
 import express from "express"
 import cors from "cors"
 import helmet from "helmet"
-import dotenv from "dotenv"
 import { createServer } from "http"
 import { Server as SocketIOServer } from "socket.io"
 
@@ -25,8 +27,6 @@ import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
 import templateRoutes from "./routes/templates"
-
-dotenv.config()
 
 const app = express()
 const server = createServer(app)
@@ -60,7 +60,17 @@ app.get("/health", (req, res) => {
 })
 
 // API Routes
+console.log("🔧 Registering API routes...")
+
+// Debug middleware for auth routes (must be before route registration)
+app.use("/api/auth", (req, res, next) => {
+  console.log(`🔍 Auth route called: ${req.method} ${req.path}`)
+  next()
+})
+
 app.use("/api/auth", authRoutes)
+console.log("✅ Auth routes registered")
+
 app.use("/api/projects", projectRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/users", userRoutes)
@@ -75,6 +85,7 @@ app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
+console.log("✅ All API routes registered")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
@@ -101,7 +112,10 @@ async function startServer() {
       await connectDatabase()
       logger.info("Database connected successfully")
     } catch (dbError) {
-      logger.warn("Database connection failed, starting server without database:", dbError.message)
+      logger.warn(
+        "Database connection failed, starting server without database:",
+        typeof dbError === "object" && dbError !== null && "message" in dbError ? (dbError as { message?: string }).message : dbError
+      )
     }
 
     // Try to connect to Redis, but don't fail if it's not available
@@ -109,7 +123,12 @@ async function startServer() {
       await connectRedis()
       logger.info("Redis connected successfully")
     } catch (redisError) {
-      logger.warn("Redis connection failed, starting server without Redis:", redisError.message)
+      logger.warn(
+        "Redis connection failed, starting server without Redis:",
+        typeof redisError === "object" && redisError !== null && "message" in redisError
+          ? (redisError as { message?: string }).message
+          : redisError
+      )
     }
 
     // Try to initialize job queues, but don't fail if it's not available
@@ -117,7 +136,12 @@ async function startServer() {
       await initializeQueues()
       logger.info("Job queues initialized successfully")
     } catch (queueError) {
-      logger.warn("Job queue initialization failed:", queueError.message)
+      logger.warn(
+        "Job queue initialization failed:",
+        typeof queueError === "object" && queueError !== null && "message" in queueError
+          ? (queueError as { message?: string }).message
+          : queueError
+      )
     }
 
     server.listen(PORT, () => {
