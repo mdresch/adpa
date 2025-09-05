@@ -9,6 +9,8 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Enable standalone output for Docker containerization
+  output: 'standalone',
   // Enable experimental features for better serverless performance
   experimental: {
     serverComponentsExternalPackages: ['@vercel/postgres'],

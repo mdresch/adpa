@@ -1,12 +1,42 @@
 const { Pool } = require('pg');
+// Only load .env if not running in Docker
+if (!process.env.POSTGRES_URL) {
+  require('dotenv').config();
+}
 
 // Database configuration
-const pool = new Pool({
-  user: process.env.DB_USER || 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  database: process.env.DB_NAME || 'adpa',
-  password: process.env.DB_PASSWORD || 'postgres',
-  port: process.env.DB_PORT || 5432,
+let poolConfig;
+
+if (process.env.POSTGRES_URL) {
+  // Use POSTGRES_URL if available (Docker environment)
+  const url = new URL(process.env.POSTGRES_URL);
+  poolConfig = {
+    user: url.username,
+    host: url.hostname,
+    database: url.pathname.substring(1), // Remove leading slash
+    password: url.password,
+    port: url.port,
+  };
+} else {
+  // Fallback to individual environment variables
+  poolConfig = {
+    user: process.env.DB_USER || 'postgres',
+    host: process.env.DB_HOST || 'postgres',
+    database: process.env.DB_NAME || 'adpa_db',
+    password: process.env.DB_PASSWORD || 'password',
+    port: process.env.DB_PORT || 5432,
+  };
+}
+
+const pool = new Pool(poolConfig);
+
+// Debug output
+console.log('🔍 Database config:', {
+  user: poolConfig.user,
+  host: poolConfig.host,
+  database: poolConfig.database,
+  port: poolConfig.port,
+  hasPassword: !!poolConfig.password
 });
 
 async function checkAndFixAdminPermissions() {

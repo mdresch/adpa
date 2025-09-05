@@ -73,10 +73,17 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
 
 2. **Start the development environment**
    ```bash
-   docker-compose up -d
+   # Using the startup script (Windows)
+   .\start-dev.bat
+   
+   # Or using PowerShell
+   .\start-dev.ps1
+   
+   # Or manually
+   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
    ```
 
-3. **Install dependencies**
+3. **Install dependencies** (optional - for local development)
    ```bash
    # Frontend
    npm install
@@ -93,23 +100,21 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
    cp server/.env.example server/.env
    ```
 
-5. **Initialize the database**
-   ```bash
-   cd server
-   npm run migrate
-   npm run seed-all
-   cd ..
-   ```
+5. **Access the application**
+   - Frontend: http://localhost:3000
+   - Backend API: http://localhost:5000
+   - Database: localhost:5432
+   - Redis: localhost:6379
 
-6. **Start the development servers**
-   ```bash
-   # Terminal 1 - Frontend
-   npm run dev
-   
-   # Terminal 2 - Backend
-   cd server
-   npm run dev
-   ```
+### Docker Development Features
+
+- **Hot Reloading**: Automatic code reloading during development
+- **Volume Mounting**: Source code changes reflect immediately
+- **Debug Support**: Backend debugging on port 9229
+- **Isolated Services**: Each service runs in its own container
+- **Easy Scaling**: Simple service scaling with docker-compose
+
+For detailed Docker development instructions, see [DOCKER_DEVELOPMENT_GUIDE.md](DOCKER_DEVELOPMENT_GUIDE.md).
 
 ### Manual Installation
 

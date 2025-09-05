@@ -8,7 +8,7 @@ import { io } from "../server"
 // Create job queues
 export const aiQueue = new Bull("ai-processing", {
   redis: {
-    host: process.env.REDIS_HOST || "localhost",
+    host: process.env.REDIS_HOST || "redis",
     port: Number.parseInt(process.env.REDIS_PORT || "6379"),
     password: process.env.REDIS_PASSWORD,
     db: Number.parseInt(process.env.REDIS_DB || "0"),
@@ -26,7 +26,7 @@ export const aiQueue = new Bull("ai-processing", {
 
 export const documentQueue = new Bull("document-processing", {
   redis: {
-    host: process.env.REDIS_HOST || "localhost",
+    host: process.env.REDIS_HOST || "redis",
     port: Number.parseInt(process.env.REDIS_PORT || "6379"),
     password: process.env.REDIS_PASSWORD,
     db: Number.parseInt(process.env.REDIS_DB || "0"),
