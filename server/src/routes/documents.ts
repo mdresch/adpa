@@ -94,7 +94,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
 
     // Check if user has access to project
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR $2 = ANY(team_members::uuid[]))",
+      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
       [projectId, req.user?.id]
     )
 
@@ -200,7 +200,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
 
     // Check if user has access to the project
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR $2 = ANY(team_members::uuid[]))",
+      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
       [document.project_id, req.user?.id]
     )
 
@@ -231,7 +231,7 @@ router.post("/project/:projectId",
 
       // Check if user has access to project
       const projectCheck = await pool.query(
-        "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR $2 = ANY(team_members::uuid[]))",
+        "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
         [projectId, req.user?.id]
       )
 
@@ -292,7 +292,11 @@ router.put("/:id",
       const doc = docCheck.rows[0]
       const teamMembers = doc.team_members || []
 
-      if (doc.owner_id !== req.user?.id && !teamMembers.includes(req.user?.id)) {
+      // Check if user is owner or in team_members array
+      const isOwner = doc.owner_id === req.user?.id
+      const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
+
+      if (!isOwner && !isInTeam) {
         return res.status(403).json({ error: "Access denied" })
       }
 
@@ -357,7 +361,11 @@ router.delete("/:id",
       const doc = docCheck.rows[0]
       const teamMembers = doc.team_members || []
 
-      if (doc.owner_id !== req.user?.id && !teamMembers.includes(req.user?.id)) {
+      // Check if user is owner or in team_members array
+      const isOwner = doc.owner_id === req.user?.id
+      const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
+
+      if (!isOwner && !isInTeam) {
         return res.status(403).json({ error: "Access denied" })
       }
 

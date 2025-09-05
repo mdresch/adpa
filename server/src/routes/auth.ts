@@ -5,7 +5,24 @@ import { pool } from "../database/connection"
 import { logger } from "../utils/logger"
 import { authenticateToken } from "../middleware/auth"
 
+// Extend Express Request type to include 'user'
+declare global {
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        role: string;
+        permissions: any;
+        [key: string]: any;
+      };
+    }
+  }
+}
+
 const router = express.Router()
+
+console.log("🔧 Auth routes module loaded")
 
 // Register
 router.post("/register", async (req, res) => {
@@ -30,6 +47,11 @@ router.post("/register", async (req, res) => {
       [email, passwordHash, name, role],
     )
 
+    if (!result.rows || result.rows.length === 0) {
+      logger.error("User creation failed: No user returned from DB")
+      return res.status(500).json({ error: "User creation failed" })
+    }
+
     const user = result.rows[0]
 
     // Generate JWT
@@ -39,7 +61,7 @@ router.post("/register", async (req, res) => {
 
     logger.info(`User registered: ${email}`)
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "User created successfully",
       user: {
         id: user.id,
@@ -51,12 +73,13 @@ router.post("/register", async (req, res) => {
     })
   } catch (error) {
     logger.error("Registration error:", error)
-    res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Login
 router.post("/login", async (req, res) => {
+  logger.info(`🔍 Login attempt for: ${req.body.email}`)
   try {
     const { email, password } = req.body
 
@@ -66,21 +89,31 @@ router.post("/login", async (req, res) => {
       [email],
     )
 
+    logger.info(`🔍 User query result: ${result.rows.length} rows`)
+
     if (result.rows.length === 0) {
+      logger.warn(`❌ User not found: ${email}`)
       return res.status(401).json({ error: "Invalid credentials" })
     }
 
     const user = result.rows[0]
+    logger.info(`✅ User found: ${user.email}, Active: ${user.is_active}`)
 
     if (!user.is_active) {
+      logger.warn("❌ User account deactivated")
       return res.status(401).json({ error: "Account deactivated" })
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
+    logger.info(`🔐 Password verification result: ${isValidPassword}`)
+
     if (!isValidPassword) {
+      logger.warn(`❌ Invalid password for user: ${email}`)
       return res.status(401).json({ error: "Invalid credentials" })
     }
+
+    logger.info(`✅ Login successful for: ${email}`)
 
     // Generate JWT
     const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET || "your-secret-key", {
@@ -92,7 +125,7 @@ router.post("/login", async (req, res) => {
 
     logger.info(`User logged in: ${email}`)
 
-    res.json({
+    return res.json({
       message: "Login successful",
       user: {
         id: user.id,
@@ -104,8 +137,9 @@ router.post("/login", async (req, res) => {
       token,
     })
   } catch (error) {
+    console.error("❌ Login error:", error)
     logger.error("Login error:", error)
-    res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error" })
   }
 })
 
@@ -114,17 +148,17 @@ router.get("/me", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
       "SELECT id, email, name, role, permissions, avatar_url, created_at FROM users WHERE id = $1",
-      [req.user?.id],
+      [req.user?.id?.toString()],
     )
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found" })
     }
 
-    res.json({ user: result.rows[0] })
+    return res.json({ user: result.rows[0] })
   } catch (error) {
     logger.error("Get user error:", error)
-    res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error" })
   }
 })
 

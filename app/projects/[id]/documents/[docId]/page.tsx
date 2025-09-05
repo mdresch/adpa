@@ -79,122 +79,109 @@ export default function DocumentEditor() {
       // Fallback to mock data
       const mockData = {
         id: docId,
-        name: "Project Charter",
-        type: "Project Management",
-        template: "PMBOK Project Charter",
-        status: "in-progress",
-        version: "2.1",
+        name: "Business Architecture Overview",
+        type: "Business Architecture",
+        template: "Business Architecture Template",
+        status: "draft",
+        version: "1.0",
         author: "Sarah Johnson",
         lastModified: "2024-01-20",
-        projectName: "Customer Portal Redesign",
+        projectName: "Program Genesis",
       }
       setDocumentData(mockData)
       setDocumentTitle(mockData.name)
       setDocumentContent(`
-    <h1>Project Charter: Customer Portal Redesign</h1>
+    <h1>Business Architecture Overview</h1>
     
-    <h2>1. Project Overview</h2>
-    <p>This project aims to completely redesign the customer-facing portal to improve user experience, enhance functionality, and modernize the technology stack. The new portal will provide customers with better self-service capabilities and streamlined access to their account information.</p>
+    <h2>1. Executive Summary</h2>
+    <p>This document provides a comprehensive overview of the business architecture for Program Genesis, outlining the key business capabilities, processes, and organizational structure that will support the program's objectives.</p>
     
-    <h2>2. Project Objectives</h2>
+    <h2>2. Business Context</h2>
+    <p>Program Genesis represents a strategic initiative to transform our core business operations through digital innovation and process optimization. This business architecture framework will serve as the foundation for all program activities.</p>
+    
+    <h2>3. Key Business Capabilities</h2>
+    <h3>Core Capabilities:</h3>
     <ul>
-      <li>Improve customer satisfaction scores by 25%</li>
-      <li>Reduce customer service calls by 30%</li>
-      <li>Implement modern, responsive design</li>
-      <li>Enhance security and compliance features</li>
-      <li>Integrate with existing backend systems</li>
+      <li>Customer Relationship Management</li>
+      <li>Product Development and Innovation</li>
+      <li>Supply Chain Management</li>
+      <li>Financial Management and Reporting</li>
+      <li>Human Capital Management</li>
     </ul>
     
-    <h2>3. Project Scope</h2>
-    <h3>In Scope:</h3>
+    <h3>Supporting Capabilities:</h3>
     <ul>
-      <li>Complete UI/UX redesign</li>
-      <li>Frontend development using React/Next.js</li>
-      <li>API integration and optimization</li>
-      <li>Mobile responsiveness</li>
-      <li>User authentication and authorization</li>
-      <li>Testing and quality assurance</li>
+      <li>IT Infrastructure and Services</li>
+      <li>Data Management and Analytics</li>
+      <li>Compliance and Risk Management</li>
+      <li>Quality Assurance and Control</li>
     </ul>
     
-    <h3>Out of Scope:</h3>
-    <ul>
-      <li>Backend system modifications</li>
-      <li>Database schema changes</li>
-      <li>Third-party integrations beyond existing APIs</li>
-    </ul>
-    
-    <h2>4. Key Stakeholders</h2>
+    <h2>4. Organizational Structure</h2>
     <table border="1" style="width: 100%; border-collapse: collapse;">
       <tr>
-        <th style="padding: 8px; background-color: #f5f5f5;">Name</th>
-        <th style="padding: 8px; background-color: #f5f5f5;">Role</th>
-        <th style="padding: 8px; background-color: #f5f5f5;">Responsibility</th>
+        <th style="padding: 8px; background-color: #f5f5f5;">Department</th>
+        <th style="padding: 8px; background-color: #f5f5f5;">Key Responsibilities</th>
+        <th style="padding: 8px; background-color: #f5f5f5;">Headcount</th>
       </tr>
       <tr>
-        <td style="padding: 8px;">Sarah Johnson</td>
-        <td style="padding: 8px;">Project Manager</td>
-        <td style="padding: 8px;">Overall project coordination and delivery</td>
+        <td style="padding: 8px;">Business Operations</td>
+        <td style="padding: 8px;">Core business process management</td>
+        <td style="padding: 8px;">45</td>
       </tr>
       <tr>
-        <td style="padding: 8px;">John Doe</td>
-        <td style="padding: 8px;">Lead Developer</td>
-        <td style="padding: 8px;">Technical implementation and architecture</td>
+        <td style="padding: 8px;">IT & Digital</td>
+        <td style="padding: 8px;">Technology infrastructure and digital transformation</td>
+        <td style="padding: 8px;">32</td>
       </tr>
       <tr>
-        <td style="padding: 8px;">Jane Smith</td>
-        <td style="padding: 8px;">UX Designer</td>
-        <td style="padding: 8px;">User experience design and research</td>
+        <td style="padding: 8px;">Finance & Procurement</td>
+        <td style="padding: 8px;">Financial management and vendor relationships</td>
+        <td style="padding: 8px;">18</td>
       </tr>
     </table>
     
-    <h2>5. Timeline and Milestones</h2>
-    <p><strong>Project Duration:</strong> January 15, 2024 - June 30, 2024</p>
+    <h2>5. Business Processes</h2>
+    <h3>Primary Processes:</h3>
+    <ol>
+      <li>Customer Onboarding and Management</li>
+      <li>Order Processing and Fulfillment</li>
+      <li>Product Development Lifecycle</li>
+      <li>Financial Planning and Budgeting</li>
+      <li>Performance Monitoring and Reporting</li>
+    </ol>
     
-    <h3>Key Milestones:</h3>
+    <h2>6. Technology Landscape</h2>
+    <p>The business architecture will leverage modern technology solutions including cloud infrastructure, enterprise resource planning systems, customer relationship management platforms, and advanced analytics capabilities.</p>
+    
+    <h2>7. Key Performance Indicators</h2>
     <ul>
-      <li><strong>Phase 1 - Discovery & Planning:</strong> January 15 - February 15, 2024</li>
-      <li><strong>Phase 2 - Design & Prototyping:</strong> February 16 - March 31, 2024</li>
-      <li><strong>Phase 3 - Development:</strong> April 1 - May 31, 2024</li>
-      <li><strong>Phase 4 - Testing & Deployment:</strong> June 1 - June 30, 2024</li>
+      <li>Customer Satisfaction Score: Target 85%</li>
+      <li>Process Efficiency: 30% improvement</li>
+      <li>Cost Reduction: 25% in operational expenses</li>
+      <li>Time-to-Market: 40% reduction for new products</li>
     </ul>
     
-    <h2>6. Budget and Resources</h2>
-    <p><strong>Total Budget:</strong> $250,000</p>
-    <p><strong>Team Size:</strong> 5 members</p>
-    <p><strong>Technology Stack:</strong> React, Next.js, TypeScript, Tailwind CSS</p>
-    
-    <h2>7. Success Criteria</h2>
+    <h2>8. Risk Considerations</h2>
+    <h3>Business Risks:</h3>
     <ul>
-      <li>Customer satisfaction score improvement of 25%</li>
-      <li>Page load time under 2 seconds</li>
-      <li>Mobile responsiveness across all devices</li>
-      <li>Zero critical security vulnerabilities</li>
-      <li>Successful deployment with 99.9% uptime</li>
+      <li>Market competition and disruption</li>
+      <li>Regulatory compliance requirements</li>
+      <li>Technology adoption challenges</li>
+      <li>Change management and organizational resistance</li>
     </ul>
     
-    <h2>8. Risks and Assumptions</h2>
-    <h3>Key Risks:</h3>
-    <ul>
-      <li>API integration complexity may cause delays</li>
-      <li>User acceptance testing may reveal additional requirements</li>
-      <li>Third-party service dependencies</li>
-    </ul>
+    <h2>9. Implementation Roadmap</h2>
+    <p>The business architecture implementation will follow a phased approach over 24 months, with quarterly milestones and regular stakeholder reviews to ensure alignment with business objectives.</p>
     
-    <h3>Assumptions:</h3>
-    <ul>
-      <li>Existing APIs will remain stable during development</li>
-      <li>Stakeholders will be available for timely feedback</li>
-      <li>No major technology changes during project timeline</li>
-    </ul>
-    
-    <h2>9. Approval</h2>
-    <p>This project charter has been reviewed and approved by:</p>
-    <ul>
-      <li><strong>Project Sponsor:</strong> [Name] - [Date]</li>
-      <li><strong>Project Manager:</strong> Sarah Johnson - January 15, 2024</li>
-      <li><strong>Technical Lead:</strong> John Doe - January 15, 2024</li>
-    </ul>
+    <h2>10. Governance and Oversight</h2>
+    <p>A dedicated business architecture governance board will oversee the implementation, consisting of executive sponsors, business leaders, and technical architects to ensure strategic alignment and successful execution.</p>
   `)
+
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleSave = () => {
     if (!editorRef.current) return
@@ -284,11 +271,11 @@ export default function DocumentEditor() {
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbLink href={`/projects/${projectId}`}>{documentData.projectName}</BreadcrumbLink>
+                    <BreadcrumbLink href={`/projects/${projectId}`}>{documentData?.projectName || "Project"}</BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbPage>{documentData.name}</BreadcrumbPage>
+                    <BreadcrumbPage>{documentData?.name || "Document"}</BreadcrumbPage>
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
@@ -321,13 +308,13 @@ export default function DocumentEditor() {
                   className="text-lg font-semibold border-none p-0 h-auto bg-transparent"
                 />
                 <div className="flex items-center space-x-2">
-                  <Badge variant="secondary">{documentData.status}</Badge>
-                  <Badge variant="outline">v{documentData.version}</Badge>
-                  <Badge variant="outline">{documentData.template}</Badge>
+                  <Badge variant="secondary">{documentData?.status || "Loading..."}</Badge>
+                  <Badge variant="outline">v{documentData?.version || "1.0"}</Badge>
+                  <Badge variant="outline">{documentData?.template || "Template"}</Badge>
                 </div>
               </div>
               <div className="text-sm text-muted-foreground">
-                Last saved: {lastSaved} • {documentData.author}
+                Last saved: {lastSaved} • {documentData?.author || "Unknown"}
               </div>
             </div>
           </div>

@@ -1,0 +1,26 @@
+# Development Dockerfile for ADPA Backend
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies first (for better caching)
+COPY package*.json ./
+RUN npm ci
+
+# Copy source code
+COPY . .
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S adpa -u 1001
+
+# Change ownership of the app directory
+RUN chown -R adpa:nodejs /app
+USER adpa
+
+# Expose ports
+EXPOSE 5000 9229
+
+# Default command for development
+CMD ["npm", "run", "dev"]

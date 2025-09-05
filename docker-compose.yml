@@ -1,6 +1,5 @@
-version: '3.8'
-
 services:
+  # Database
   postgres:
     image: postgres:15-alpine
     container_name: adpa-postgres
@@ -18,7 +17,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - adpa-network
 
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: adpa-redis
@@ -31,6 +33,53 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - adpa-network
+
+  # ADPA Backend API
+  adpa-backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: adpa-backend
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - POSTGRES_URL=postgres://postgres:password@postgres:5432/adpa_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-development-jwt-secret-key-here-make-it-long-and-secure
+      - FRONTEND_URL=http://localhost:3000
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./server/uploads:/app/uploads
+      - ./server/logs:/app/logs
+    networks:
+      - adpa-network
+    restart: unless-stopped
+
+  # ADPA Frontend
+  adpa-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: adpa-frontend
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:5000/api
+      - NEXT_PUBLIC_WS_URL=http://localhost:5000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - adpa-backend
+    networks:
+      - adpa-network
+    restart: unless-stopped
 
   # Optional: Redis Commander for Redis management
   redis-commander:
@@ -42,6 +91,8 @@ services:
       - "8081:8081"
     depends_on:
       - redis
+    networks:
+      - adpa-network
 
   # Optional: pgAdmin for PostgreSQL management
   pgadmin:
@@ -57,8 +108,14 @@ services:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    networks:
+      - adpa-network
 
 volumes:
   postgres_data:
   redis_data:
   pgadmin_data:
+
+networks:
+  adpa-network:
+    driver: bridge

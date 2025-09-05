@@ -4,19 +4,13 @@ dotenv.config()
 import { Pool } from "pg"
 import { logger } from "../utils/logger"
 
-const databaseUrl = process.env.DATABASE_URL
-if (!databaseUrl) {
-  throw new Error("DATABASE_URL is not set")
-}
-
-// For Neon database, use explicit configuration to avoid URL parsing issues
+// Use environment variables for database connection
 const pool = new Pool({
-  host: "ep-royal-morning-a9j6aaq0-pooler.gwc.azure.neon.tech",
-  port: 5432,
-  database: "adpa_db",
-  user: "neondb_owner",
-  password: "npg_6H1YnZiDleEV",
-  ssl: { rejectUnauthorized: false },
+  host: process.env.DB_HOST || "postgres",
+  port: Number(process.env.DB_PORT) || 5432,
+  database: process.env.DB_NAME || "adpa_db",
+  user: process.env.DB_USER || "postgres",
+  password: process.env.DB_PASSWORD || "password",
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,

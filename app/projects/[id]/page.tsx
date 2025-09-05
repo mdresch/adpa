@@ -55,6 +55,7 @@ import { Label } from "@/components/ui/label"
 
 interface Document {
   id: string
+  project_id: string
   name: string
   content?: any
   template_id?: string
@@ -76,6 +77,11 @@ export default function ProjectDetail() {
   const [loading, setLoading] = useState(true)
   const [documentsLoading, setDocumentsLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [creatingDocument, setCreatingDocument] = useState(false)
+  const [selectedTemplate, setSelectedTemplate] = useState("")
+  const [documentName, setDocumentName] = useState("")
+  const [documentDescription, setDocumentDescription] = useState("")
 
   // Fetch project data
   const fetchProject = async () => {
@@ -85,8 +91,7 @@ export default function ProjectDetail() {
       setProject(projectData)
       
       // Also fetch documents for this project
-      const documentsData = await apiClient.getDocuments(projectId)
-      setDocuments(Array.isArray(documentsData) ? documentsData : documentsData.documents || [])
+      await fetchDocuments()
     } catch (error) {
       console.error("Failed to fetch project:", error)
       toast.error("Failed to load project")
@@ -107,33 +112,119 @@ export default function ProjectDetail() {
         updated_at: "2024-01-20T00:00:00Z",
       })
       
-      setDocuments([
-        {
-          id: "1",
-          name: "Project Charter",
-          template_id: "charter-template",
-          status: "completed",
-          version: 2,
-          created_by: "user1",
-          updated_by: "user1",
-          created_at: "2024-01-20T00:00:00Z",
-          updated_at: "2024-01-20T00:00:00Z",
-        },
-        {
-          id: "2",
-          name: "Stakeholder Analysis",
-          template_id: "stakeholder-template",
-          status: "in-progress",
-          version: 1,
-          created_by: "user2",
-          updated_by: "user2",
-          created_at: "2024-01-18T00:00:00Z",
-          updated_at: "2024-01-18T00:00:00Z",
-        },
-      ])
+      setDocuments([])
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Fetch documents separately
+  const fetchDocuments = async () => {
+    try {
+      setDocumentsLoading(true)
+      const documentsData = await apiClient.getProjectDocuments(projectId)
+      setDocuments(documentsData.documents || [])
+    } catch (error) {
+      console.error("Failed to fetch documents:", error)
+      // Don't show error toast for documents, just use empty array
+      setDocuments([])
+    } finally {
       setDocumentsLoading(false)
+    }
+  }
+
+  // Returns template content based on selected template
+  function getTemplateContent(templateId: string) {
+    switch (templateId) {
+      case "project-charter":
+        return { title: "Project Charter", sections: ["Purpose", "Objectives", "Stakeholders"] }
+      case "scope-statement":
+        return { title: "Scope Statement", sections: ["Scope", "Deliverables", "Exclusions"] }
+      case "wbs":
+        return { title: "Work Breakdown Structure", sections: ["Tasks", "Milestones"] }
+      case "risk-plan":
+        return { title: "Risk Management Plan", sections: ["Risks", "Mitigation", "Owners"] }
+      case "comm-plan":
+        return { title: "Communication Plan", sections: ["Audience", "Channels", "Frequency"] }
+      case "requirements-analysis":
+        return { title: "Requirements Analysis", sections: ["Business Requirements", "Functional Requirements"] }
+      case "stakeholder-analysis":
+        return { title: "Stakeholder Analysis", sections: ["Stakeholders", "Interests", "Influence"] }
+      case "business-case":
+        return { title: "Business Case", sections: ["Problem", "Solution", "Benefits"] }
+      case "solution-assessment":
+        return { title: "Solution Assessment", sections: ["Options", "Evaluation", "Recommendation"] }
+      case "data-governance":
+        return { title: "Data Governance Framework", sections: ["Policies", "Roles", "Processes"] }
+      case "data-quality":
+        return { title: "Data Quality Assessment", sections: ["Criteria", "Findings", "Recommendations"] }
+      case "data-architecture":
+        return { title: "Data Architecture", sections: ["Models", "Standards", "Tools"] }
+      default:
+        return { title: "Untitled Document", sections: [] }
+    }
+  }
+
+  // Create new document
+  const handleCreateDocument = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!documentName.trim()) {
+      toast.error("Document name is required")
+      return
+    }
+
+    if (!selectedTemplate) {
+      toast.error("Please select a template")
+      return
+    }
+
+    try {
+      setCreatingDocument(true)
+      
+      // Get template content (for now, we'll use a basic structure)
+      const templateContent = getTemplateContent(selectedTemplate)
+      
+      const documentData = {
+        name: documentName,
+        content: templateContent,
+        template_id: selectedTemplate,
+        status: 'draft' as const,
+      }
+      
+      await apiClient.createDocument(projectId, documentData)
+      
+      toast.success("Document created successfully!")
+      
+      // Reset form
+      setDocumentName("")
+      setDocumentDescription("")
+      setSelectedTemplate("")
+      setCreateDialogOpen(false)
+      
+      // Refresh documents list
+      await fetchDocuments()
+    } catch (error) {
+      console.error("Failed to create document:", error)
+      toast.error("Failed to create document")
+    } finally {
+      setCreatingDocument(false)
+    }
+  }
+
+  // Delete document
+  const handleDeleteDocument = async (documentId: string) => {
+    if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+      return
+    }
+    
+    try {
+      await apiClient.deleteDocument(documentId)
+      toast.success("Document deleted successfully!")
+      await fetchDocuments()
+    } catch (error) {
+      console.error("Failed to delete document:", error)
+      toast.error("Failed to delete document")
     }
   }
 
@@ -281,7 +372,7 @@ export default function ProjectDetail() {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Project
                 </Button>
-                <Dialog>
+                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="h-4 w-4 mr-2" />
@@ -289,49 +380,74 @@ export default function ProjectDetail() {
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="sm:max-w-[500px]">
-                    <DialogHeader>
-                      <DialogTitle>Generate New Document</DialogTitle>
-                      <DialogDescription>
-                        Create a new document from available templates for this project.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                      <div>
-                        <Label htmlFor="template">Select Template</Label>
-                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1">
-                          <option value="">Choose a template</option>
-                          <optgroup label="PMBOK 7 Templates">
-                            <option value="project-charter">Project Charter</option>
-                            <option value="scope-statement">Project Scope Statement</option>
-                            <option value="wbs">Work Breakdown Structure</option>
-                            <option value="risk-plan">Risk Management Plan</option>
-                            <option value="comm-plan">Communication Plan</option>
-                          </optgroup>
-                          <optgroup label="BABOK v3 Templates">
-                            <option value="requirements-analysis">Requirements Analysis</option>
-                            <option value="stakeholder-analysis">Stakeholder Analysis</option>
-                            <option value="business-case">Business Case</option>
-                            <option value="solution-assessment">Solution Assessment</option>
-                          </optgroup>
-                          <optgroup label="DMBOK 2.0 Templates">
-                            <option value="data-governance">Data Governance Framework</option>
-                            <option value="data-quality">Data Quality Assessment</option>
-                            <option value="data-architecture">Data Architecture</option>
-                          </optgroup>
-                        </select>
+                    <form onSubmit={handleCreateDocument}>
+                      <DialogHeader>
+                        <DialogTitle>Generate New Document</DialogTitle>
+                        <DialogDescription>
+                          Create a new document from available templates for this project.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div>
+                          <Label htmlFor="template">Select Template</Label>
+                          <select
+                            id="template"
+                            aria-label="Select Template"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                            value={selectedTemplate}
+                            onChange={(e) => setSelectedTemplate(e.target.value)}
+                            required
+                          >
+                            <option value="">Choose a template</option>
+                            <optgroup label="PMBOK 7 Templates">
+                              <option value="project-charter">Project Charter</option>
+                              <option value="scope-statement">Project Scope Statement</option>
+                              <option value="wbs">Work Breakdown Structure</option>
+                              <option value="risk-plan">Risk Management Plan</option>
+                              <option value="comm-plan">Communication Plan</option>
+                            </optgroup>
+                            <optgroup label="BABOK v3 Templates">
+                              <option value="requirements-analysis">Requirements Analysis</option>
+                              <option value="stakeholder-analysis">Stakeholder Analysis</option>
+                              <option value="business-case">Business Case</option>
+                              <option value="solution-assessment">Solution Assessment</option>
+                            </optgroup>
+                            <optgroup label="DMBOK 2.0 Templates">
+                              <option value="data-governance">Data Governance Framework</option>
+                              <option value="data-quality">Data Quality Assessment</option>
+                              <option value="data-architecture">Data Architecture</option>
+                            </optgroup>
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="doc-name">Document Name</Label>
+                          <Input 
+                            id="doc-name" 
+                            placeholder="Enter document name" 
+                            className="mt-1"
+                            value={documentName}
+                            onChange={(e) => setDocumentName(e.target.value)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="doc-description">Description (Optional)</Label>
+                          <Input 
+                            id="doc-description" 
+                            placeholder="Brief description of the document" 
+                            className="mt-1"
+                            value={documentDescription}
+                            onChange={(e) => setDocumentDescription(e.target.value)}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <Label htmlFor="doc-name">Document Name</Label>
-                        <Input id="doc-name" placeholder="Enter document name" className="mt-1" />
-                      </div>
-                      <div>
-                        <Label htmlFor="doc-description">Description (Optional)</Label>
-                        <Input id="doc-description" placeholder="Brief description of the document" className="mt-1" />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit">Generate Document</Button>
-                    </DialogFooter>
+                      <DialogFooter>
+                        <Button type="submit" disabled={creatingDocument}>
+                          {creatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          {creatingDocument ? "Creating..." : "Generate Document"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
                   </DialogContent>
                 </Dialog>
               </div>
@@ -422,7 +538,10 @@ export default function ProjectDetail() {
                                     <Download className="h-4 w-4 mr-2" />
                                     Download
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem className="text-destructive">
+                                  <DropdownMenuItem 
+                                    className="text-destructive"
+                                    onClick={() => handleDeleteDocument(doc.id)}
+                                  >
                                     <Trash2 className="h-4 w-4 mr-2" />
                                     Delete
                                   </DropdownMenuItem>
@@ -445,7 +564,7 @@ export default function ProjectDetail() {
                           }
                         </p>
                         {!searchTerm && (
-                          <Dialog>
+                          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                             <DialogTrigger asChild>
                               <Button>
                                 <Plus className="h-4 w-4 mr-2" />
