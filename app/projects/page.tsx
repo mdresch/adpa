@@ -12,7 +12,7 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
 import { motion } from "framer-motion"
-import { apiClient, Project } from "@/lib/api"
+import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import {
@@ -30,6 +30,8 @@ import {
   Sparkles,
   Clock,
   Loader2,
+  FileUp,
+  Wand2,
 } from "lucide-react"
 import {
   Dialog,
@@ -48,6 +50,7 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [updating, setUpdating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [pagination, setPagination] = useState({
@@ -56,6 +59,7 @@ export default function Projects() {
     total: 0,
     pages: 0,
   })
+  const [dialogOpen, setDialogOpen] = useState(false)
   const { isAuthenticated } = useAuth()
 
   // Form state for creating new project
@@ -70,7 +74,32 @@ export default function Projects() {
     manager: "",
   })
 
-  const [dialogOpen, setDialogOpen] = useState(false)
+  // Form state for editing project
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+
+  // Document generation state
+  const [generatingDocument, setGeneratingDocument] = useState(false)
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
+  const [selectedProjectForGeneration, setSelectedProjectForGeneration] = useState<Project | null>(null)
+  const [documentGenerationForm, setDocumentGenerationForm] = useState({
+    name: "",
+    template_id: "",
+    prompt: "",
+  })
+
+  // Document upload state
+  const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [selectedProjectForUpload, setSelectedProjectForUpload] = useState<Project | null>(null)
+  const [documentUploadForm, setDocumentUploadForm] = useState({
+    name: "",
+    file: null as File | null,
+  })
+
+  // Templates state
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
 
   // Fetch projects from API
   const fetchProjects = async () => {
@@ -131,6 +160,7 @@ export default function Projects() {
       const projectData = {
         ...newProject,
         team_members: newProject.manager ? [newProject.manager] : [],
+        budget: newProject.budget ? parseFloat(newProject.budget) : undefined,
       }
       
       await apiClient.createProject(projectData)
@@ -155,10 +185,183 @@ export default function Projects() {
     }
   }
 
-  // Fetch projects on component mount and when filters change
-  useEffect(() => {
-    fetchProjects()
-  }, [pagination.page, statusFilter, searchTerm])
+  // Update project
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!editingProject?.name || !editingProject?.framework) {
+      toast.error("Please fill in required fields")
+      return
+    }
+
+    try {
+      setUpdating(true)
+      const projectData = {
+        ...editingProject,
+        budget: editingProject.budget ? parseFloat(editingProject.budget.toString()) : undefined,
+      }
+      
+      await apiClient.updateProject(editingProject.id, projectData)
+      toast.success("Project updated successfully!")
+      setEditDialogOpen(false)
+      setEditingProject(null)
+      fetchProjects() // Refresh the list
+    } catch (error) {
+      console.error("Failed to update project:", error)
+      toast.error("Failed to update project")
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  // Handle edit project
+  const handleEditProject = (project: Project) => {
+    setEditingProject(project)
+    setEditDialogOpen(true)
+  }
+
+  // Handle archive project
+  const handleArchiveProject = async (projectId: string) => {
+    try {
+      await apiClient.updateProject(projectId, { status: "archived" })
+      toast.success("Project archived successfully!")
+      fetchProjects()
+    } catch (error) {
+      console.error("Failed to archive project:", error)
+      toast.error("Failed to archive project")
+    }
+  }
+
+  // Handle delete project
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+      return
+    }
+    try {
+      await apiClient.deleteProject(projectId)
+      toast.success("Project deleted successfully!")
+      fetchProjects()
+    } catch (error) {
+      console.error("Failed to delete project:", error)
+      toast.error("Failed to delete project")
+    }
+  }
+
+  // Handle generate document
+  const handleGenerateDocument = (project: Project) => {
+    setSelectedProjectForGeneration(project)
+    setDocumentGenerationForm({
+      name: `${project.name} - Generated Document`,
+      template_id: "",
+      prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
+    })
+    setGenerateDialogOpen(true)
+    fetchTemplates()
+  }
+
+  // Handle upload document
+  const handleUploadDocument = (project: Project) => {
+    setSelectedProjectForUpload(project)
+    setDocumentUploadForm({
+      name: "",
+      file: null,
+    })
+    setUploadDialogOpen(true)
+  }
+
+  // Fetch templates for document generation
+  const fetchTemplates = async () => {
+    try {
+      setLoadingTemplates(true)
+      const response = await apiClient.getTemplates({ framework: selectedProjectForGeneration?.framework })
+      setTemplates(response.templates || [])
+    } catch (error) {
+      console.error("Failed to fetch templates:", error)
+      toast.error("Failed to load templates")
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  // Generate document handler
+  const handleGenerateDocumentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedProjectForGeneration || !documentGenerationForm.name || !documentGenerationForm.prompt) {
+      toast.error("Please fill in required fields")
+      return
+    }
+
+    try {
+      setGeneratingDocument(true)
+      
+      // Generate content using AI
+      const aiResponse = await apiClient.generateContent({
+        prompt: documentGenerationForm.prompt,
+        provider: "openai", // Default provider
+        template_id: documentGenerationForm.template_id || undefined,
+      })
+
+      // Create document with generated content
+      await apiClient.createDocument(selectedProjectForGeneration.id, {
+        name: documentGenerationForm.name,
+        content: aiResponse.result || aiResponse,
+        template_id: documentGenerationForm.template_id || undefined,
+        status: "draft",
+      })
+
+      toast.success("Document generated successfully!")
+      setGenerateDialogOpen(false)
+      setSelectedProjectForGeneration(null)
+      setDocumentGenerationForm({
+        name: "",
+        template_id: "",
+        prompt: "",
+      })
+    } catch (error) {
+      console.error("Failed to generate document:", error)
+      toast.error("Failed to generate document")
+    } finally {
+      setGeneratingDocument(false)
+    }
+  }
+
+  // Upload document handler
+  const handleUploadDocumentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!selectedProjectForUpload || !documentUploadForm.name || !documentUploadForm.file) {
+      toast.error("Please fill in required fields")
+      return
+    }
+
+    try {
+      setUploadingDocument(true)
+      
+      // For now, we'll create a document with the file content
+      // In a real implementation, you'd upload the file to a storage service first
+      const fileContent = await documentUploadForm.file.text()
+      
+      await apiClient.createDocument(selectedProjectForUpload.id, {
+        name: documentUploadForm.name,
+        content: fileContent,
+        status: "draft",
+      })
+
+      toast.success("Document uploaded successfully!")
+      setUploadDialogOpen(false)
+      setSelectedProjectForUpload(null)
+      setDocumentUploadForm({
+        name: "",
+        file: null,
+      })
+    } catch (error) {
+      console.error("Failed to upload document:", error)
+      toast.error("Failed to upload document")
+    } finally {
+      setUploadingDocument(false)
+    }
+  }
 
   const filteredProjects = projects.filter((project) => {
     const matchesSearch =
@@ -209,6 +412,13 @@ export default function Projects() {
     const elapsedDays = now.getTime() - startDate.getTime()
     return Math.round((elapsedDays / totalDays) * 100)
   }
+
+  // Fetch projects on component mount and when filters change
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchProjects()
+    }
+  }, [isAuthenticated, statusFilter, searchTerm, pagination.page])
 
   if (!isAuthenticated) {
     return (
@@ -313,7 +523,12 @@ export default function Projects() {
                               <Label htmlFor="framework" className="text-sm font-semibold">
                                 Framework *
                               </Label>
+                              <Label htmlFor="framework" className="sr-only">
+                                Framework
+                              </Label>
                               <select 
+                                id="framework"
+                                title="Framework"
                                 className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                                 value={newProject.framework}
                                 onChange={(e) => setNewProject({...newProject, framework: e.target.value})}
@@ -404,6 +619,273 @@ export default function Projects() {
                   </Dialog>
                 </motion.div>
               </motion.div>
+
+              {/* Edit Project Dialog */}
+              <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+                <DialogContent className="sm:max-w-[600px] glass border-0 shadow-2xl">
+                  <form onSubmit={handleUpdateProject}>
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                        Edit Project
+                      </DialogTitle>
+                      <DialogDescription className="text-slate-600 dark:text-slate-300">
+                        Update project details and settings.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor="edit-project-name" className="text-sm font-semibold">
+                            Project Name *
+                          </Label>
+                          <Input
+                            id="edit-project-name"
+                            placeholder="Enter project name"
+                            value={editingProject?.name || ""}
+                            onChange={(e) => setEditingProject({...editingProject!, name: e.target.value})}
+                            className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-framework" className="text-sm font-semibold">
+                            Framework *
+                          </Label>
+                          <select 
+                            title="Framework"
+                            className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                            value={editingProject?.framework || ""}
+                            onChange={(e) => setEditingProject({...editingProject!, framework: e.target.value})}
+                            required
+                          >
+                            <option value="">Select framework</option>
+                            <option value="BABOK v3">BABOK v3</option>
+                            <option value="PMBOK 7">PMBOK 7</option>
+                            <option value="DMBOK 2.0">DMBOK 2.0</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-description" className="text-sm font-semibold">
+                          Description
+                        </Label>
+                        <Textarea
+                          id="edit-description"
+                          placeholder="Describe the project objectives and scope"
+                          value={editingProject?.description || ""}
+                          onChange={(e) => setEditingProject({...editingProject!, description: e.target.value})}
+                          className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                        />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div>
+                          <Label htmlFor="edit-start-date" className="text-sm font-semibold">
+                            Start Date
+                          </Label>
+                          <Input
+                            id="edit-start-date"
+                            type="date"
+                            value={editingProject?.start_date || ""}
+                            onChange={(e) => setEditingProject({...editingProject!, start_date: e.target.value})}
+                            className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-end-date" className="text-sm font-semibold">
+                            End Date
+                          </Label>
+                          <Input
+                            id="edit-end-date"
+                            type="date"
+                            value={editingProject?.end_date || ""}
+                            onChange={(e) => setEditingProject({...editingProject!, end_date: e.target.value})}
+                            className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-budget" className="text-sm font-semibold">
+                            Budget
+                          </Label>
+                          <Input
+                            id="edit-budget"
+                            placeholder="$0"
+                            value={editingProject?.budget?.toString() || ""}
+                            onChange={(e) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
+                            className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <Label htmlFor="edit-status" className="text-sm font-semibold">
+                          Status
+                        </Label>
+                        <select 
+                          title="Project Status"
+                          className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                          value={editingProject?.status || ""}
+                          onChange={(e) => setEditingProject({...editingProject!, status: e.target.value})}
+                        >
+                          <option value="active">Active</option>
+                          <option value="planning">Planning</option>
+                          <option value="completed">Completed</option>
+                          <option value="on-hold">On Hold</option>
+                          <option value="archived">Archived</option>
+                        </select>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="submit"
+                        disabled={updating}
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                      >
+                        {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Update Project
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Generate Document Dialog */}
+              <Dialog open={generateDialogOpen} onOpenChange={setGenerateDialogOpen}>
+                <DialogContent className="sm:max-w-[600px] glass border-0 shadow-2xl">
+                  <form onSubmit={handleGenerateDocumentSubmit}>
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                        Generate Document
+                      </DialogTitle>
+                      <DialogDescription className="text-slate-600 dark:text-slate-300">
+                        Generate a new document for {selectedProjectForGeneration?.name} using AI
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4">
+                      <div>
+                        <Label htmlFor="doc-name" className="text-sm font-semibold">
+                          Document Name *
+                        </Label>
+                        <Input
+                          id="doc-name"
+                          placeholder="Enter document name"
+                          value={documentGenerationForm.name}
+                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
+                          className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="template-select" className="text-sm font-semibold">
+                          Template (Optional)
+                        </Label>
+                        <select 
+                          id="template-select"
+                          title="Select a template"
+                          className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                          value={documentGenerationForm.template_id}
+                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, template_id: e.target.value})}
+                        >
+                          <option value="">Select a template</option>
+                          {loadingTemplates ? (
+                            <option disabled>Loading templates...</option>
+                          ) : (
+                            templates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name} ({template.framework})
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                      <div>
+                        <Label htmlFor="generation-prompt" className="text-sm font-semibold">
+                          Generation Prompt *
+                        </Label>
+                        <Textarea
+                          id="generation-prompt"
+                          placeholder="Describe what you want the document to contain..."
+                          value={documentGenerationForm.prompt}
+                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
+                          className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          rows={4}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="submit"
+                        disabled={generatingDocument}
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                      >
+                        {generatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        <Wand2 className="h-4 w-4 mr-2" />
+                        Generate Document
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+
+              {/* Upload Document Dialog */}
+              <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                <DialogContent className="sm:max-w-[600px] glass border-0 shadow-2xl">
+                  <form onSubmit={handleUploadDocumentSubmit}>
+                    <DialogHeader>
+                      <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                        Upload Document
+                      </DialogTitle>
+                      <DialogDescription className="text-slate-600 dark:text-slate-300">
+                        Upload a document to {selectedProjectForUpload?.name}
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-6 py-4">
+                      <div>
+                        <Label htmlFor="upload-doc-name" className="text-sm font-semibold">
+                          Document Name *
+                        </Label>
+                        <Input
+                          id="upload-doc-name"
+                          placeholder="Enter document name"
+                          value={documentUploadForm.name}
+                          onChange={(e) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
+                          className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="file-upload" className="text-sm font-semibold">
+                          File *
+                        </Label>
+                        <Input
+                          id="file-upload"
+                          type="file"
+                          accept=".pdf,.doc,.docx,.txt"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0] || null
+                            setDocumentUploadForm({...documentUploadForm, file})
+                          }}
+                          className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                          required
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Supported formats: PDF, DOC, DOCX, TXT
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button
+                        type="submit"
+                        disabled={uploadingDocument}
+                        className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                      >
+                        {uploadingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        <FileUp className="h-4 w-4 mr-2" />
+                        Upload Document
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
 
               {/* Search and Filter */}
               <motion.div
@@ -603,15 +1085,38 @@ export default function Projects() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="glass border-0 shadow-xl">
-                                    <DropdownMenuItem className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                                    <DropdownMenuItem 
+                                      className="hover:bg-slate-50 dark:hover:bg-slate-800"
+                                      onClick={() => handleEditProject(project)}
+                                    >
                                       <Edit className="h-4 w-4 mr-2" />
                                       Edit Project
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                                    <DropdownMenuItem 
+                                      className="hover:bg-slate-50 dark:hover:bg-slate-800"
+                                      onClick={() => handleGenerateDocument(project)}
+                                    >
+                                      <Wand2 className="h-4 w-4 mr-2" />
+                                      Generate Document
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className="hover:bg-slate-50 dark:hover:bg-slate-800"
+                                      onClick={() => handleUploadDocument(project)}
+                                    >
+                                      <FileUp className="h-4 w-4 mr-2" />
+                                      Upload Document
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem 
+                                      className="hover:bg-slate-50 dark:hover:bg-slate-800"
+                                      onClick={() => handleArchiveProject(project.id)}
+                                    >
                                       <Archive className="h-4 w-4 mr-2" />
                                       Archive
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                    <DropdownMenuItem 
+                                      className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                      onClick={() => handleDeleteProject(project.id)}
+                                    >
                                       <Trash2 className="h-4 w-4 mr-2" />
                                       Delete
                                     </DropdownMenuItem>

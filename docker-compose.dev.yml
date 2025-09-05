@@ -1,0 +1,50 @@
+# Docker Compose Override for Development
+# This file extends the base docker-compose.yml for development purposes
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+
+services:
+  # Override backend for development
+  adpa-backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+      - DEBUG=*
+      - DB_HOST=postgres
+      - DB_USER=postgres
+      - DB_PASSWORD=password
+      - DB_NAME=adpa_db
+      - DB_PORT=5432
+      - POSTGRES_URL=postgres://postgres:password@postgres:5432/adpa_db
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=your-development-jwt-secret-key-here-make-it-long-and-secure
+      - FRONTEND_URL=http://localhost:3000
+    volumes:
+      - ./server/src:/app/src
+      - ./server/package.json:/app/package.json
+      - ./server/tsconfig.json:/app/tsconfig.json
+      - ./server/check-admin-permissions.js:/app/check-admin-permissions.js
+    # Run as root in development to avoid permission issues with mounted volumes
+    user: root
+    command: npm run dev
+    ports:
+      - "5000:5000"
+      - "9229:9229"  # Debug port
+
+  # Override frontend for development
+  adpa-frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    # Run as root in development to avoid permission issues with mounted volumes
+    user: root
+    command: pnpm run dev
+    ports:
+      - "3000:3000"
