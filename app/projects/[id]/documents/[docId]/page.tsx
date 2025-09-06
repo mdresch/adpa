@@ -248,6 +248,44 @@ export default function DocumentEditor() {
     }
   }
 
+  // Version history handler
+  const handleVersionHistory = () => {
+    toast.info("Version history feature coming soon!")
+    // TODO: Implement version history modal/dialog
+  }
+
+  // Share document handler
+  const handleShareDocument = () => {
+    const shareUrl = `${window.location.origin}/projects/${projectId}/documents/${docId}`
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      toast.success("Document link copied to clipboard!")
+    }).catch(() => {
+      toast.error("Failed to copy link")
+    })
+  }
+
+  // Export document handler
+  const handleExportDocument = async () => {
+    try {
+      const content = documentContent || ""
+      const blob = new Blob([content], { type: 'text/html' })
+      const url = URL.createObjectURL(blob)
+      
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${documentTitle || 'document'}.html`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      
+      URL.revokeObjectURL(url)
+      toast.success("Document exported successfully!")
+    } catch (error) {
+      console.error("Failed to export document:", error)
+      toast.error("Failed to export document")
+    }
+  }
+
   // Load document on mount
   useEffect(() => {
     if (isAuthenticated && docId) {
@@ -281,15 +319,15 @@ export default function DocumentEditor() {
               </Breadcrumb>
 
               <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handleVersionHistory}>
                   <History className="h-4 w-4 mr-2" />
                   Version History
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handleShareDocument}>
                   <Share className="h-4 w-4 mr-2" />
                   Share
                 </Button>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={handleExportDocument}>
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>

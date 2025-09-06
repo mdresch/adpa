@@ -322,7 +322,7 @@ async function getIntegrationConfig(integrationId: string): Promise<{
     const encryptedCredentials = result.rows[0].credentials_encrypted
 
     // Decrypt credentials (simple base64 for now, should use proper encryption)
-    let credentials = {}
+    let credentials: any = {}
     if (encryptedCredentials) {
       try {
         credentials = JSON.parse(Buffer.from(encryptedCredentials, "base64").toString())

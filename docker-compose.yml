@@ -11,7 +11,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./server/src/database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -46,6 +45,11 @@ services:
       - NODE_ENV=production
       - PORT=5000
       - POSTGRES_URL=postgres://postgres:password@postgres:5432/adpa_db
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=adpa_db
+      - DB_USER=postgres
+      - DB_PASSWORD=password
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-development-jwt-secret-key-here-make-it-long-and-secure
       - FRONTEND_URL=http://localhost:3000
@@ -56,9 +60,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./server/uploads:/app/uploads
-      - ./server/logs:/app/logs
     networks:
       - adpa-network
     restart: unless-stopped
