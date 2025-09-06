@@ -93,7 +93,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiClient.connectWebSocket()
       
       toast.success("Login successful!")
-      router.push("/dashboard")
+      router.push("/")
     } catch (error) {
       console.error("Login failed:", error)
       toast.error(error instanceof Error ? error.message : "Login failed")
@@ -114,7 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiClient.connectWebSocket()
       
       toast.success("Registration successful!")
-      router.push("/dashboard")
+      router.push("/")
     } catch (error) {
       console.error("Registration failed:", error)
       toast.error(error instanceof Error ? error.message : "Registration failed")
@@ -207,7 +207,7 @@ export function useRoleGuard(requiredRoles: string | string[]) {
   useEffect(() => {
     if (user && !hasRole(requiredRoles)) {
       toast.error("Access denied: Insufficient permissions")
-      router.push("/dashboard")
+      router.push("/")
     }
   }, [user, hasRole, requiredRoles, router])
 
@@ -225,7 +225,7 @@ export function usePermissionGuard(requiredPermissions: string | string[]) {
   useEffect(() => {
     if (user && !hasAllPermissions) {
       toast.error("Access denied: Insufficient permissions")
-      router.push("/dashboard")
+      router.push("/")
     }
   }, [user, hasAllPermissions, router])
 

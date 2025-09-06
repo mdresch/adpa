@@ -82,6 +82,7 @@ export default function ProjectDetail() {
   const [selectedTemplate, setSelectedTemplate] = useState("")
   const [documentName, setDocumentName] = useState("")
   const [documentDescription, setDocumentDescription] = useState("")
+  const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
 
   // Fetch project data
   const fetchProject = async () => {
@@ -228,6 +229,89 @@ export default function ProjectDetail() {
     }
   }
 
+  // Upload document
+  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      // For now, we'll create a document with the file content
+      // In a real implementation, you'd upload the file to storage first
+      const content = await file.text()
+      
+      await apiClient.createDocument(projectId, {
+        name: file.name,
+        content: { text: content },
+        status: "draft"
+      })
+      
+      toast.success("Document uploaded successfully!")
+      await fetchDocuments()
+    } catch (error) {
+      console.error("Failed to upload document:", error)
+      toast.error("Failed to upload document")
+    }
+  }
+
+  // Edit document (redirect to editor)
+  const handleEditDocument = (documentId: string) => {
+    window.location.href = `/projects/${projectId}/documents/${documentId}`
+  }
+
+  // Download document
+  const handleDownloadDocument = async (documentId: string) => {
+    try {
+      const docData = await apiClient.getDocument(documentId)
+      
+      // Create a blob with the document content
+      const content = typeof docData.content === 'string' 
+        ? docData.content 
+        : JSON.stringify(docData.content)
+      
+      const blob = new Blob([content], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      
+      // Create a temporary link and trigger download
+      const link = window.document.createElement('a')
+      link.href = url
+      link.download = `${docData.name}.txt`
+      window.document.body.appendChild(link)
+      link.click()
+      window.document.body.removeChild(link)
+      
+      URL.revokeObjectURL(url)
+      toast.success("Document downloaded successfully!")
+    } catch (error) {
+      console.error("Failed to download document:", error)
+      toast.error("Failed to download document")
+    }
+  }
+
+  // Update project
+  const handleUpdateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!project) return
+
+    try {
+      setCreatingDocument(true)
+      await apiClient.updateProject(projectId, {
+        name: project.name,
+        description: project.description,
+        status: project.status
+      })
+      
+      toast.success("Project updated successfully!")
+      setEditProjectDialogOpen(false)
+      await fetchProject()
+    } catch (error) {
+      console.error("Failed to update project:", error)
+      toast.error("Failed to update project")
+    } finally {
+      setCreatingDocument(false)
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated && projectId) {
       fetchProject()
@@ -368,7 +452,7 @@ export default function ProjectDetail() {
                 </div>
               </div>
               <div className="flex space-x-2">
-                <Button variant="outline">
+                <Button variant="outline" onClick={() => setEditProjectDialogOpen(true)}>
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Project
                 </Button>
@@ -450,6 +534,63 @@ export default function ProjectDetail() {
                     </form>
                   </DialogContent>
                 </Dialog>
+                <Dialog open={editProjectDialogOpen} onOpenChange={setEditProjectDialogOpen}>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <form onSubmit={handleUpdateProject}>
+                      <DialogHeader>
+                        <DialogTitle>Edit Project</DialogTitle>
+                        <DialogDescription>
+                          Update project details and settings.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div>
+                          <Label htmlFor="project-name">Project Name</Label>
+                          <Input 
+                            id="project-name" 
+                            placeholder="Enter project name" 
+                            className="mt-1"
+                            value={project?.name || ""}
+                            onChange={(e) => setProject(prev => prev ? {...prev, name: e.target.value} : null)}
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="project-description">Description</Label>
+                          <Input 
+                            id="project-description" 
+                            placeholder="Enter project description" 
+                            className="mt-1"
+                            value={project?.description || ""}
+                            onChange={(e) => setProject(prev => prev ? {...prev, description: e.target.value} : null)}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="project-status">Status</Label>
+                          <select
+                            id="project-status"
+                            aria-label="Project Status"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                            value={project?.status || ""}
+                            onChange={(e) => setProject(prev => prev ? {...prev, status: e.target.value} : null)}
+                          >
+                            <option value="planning">Planning</option>
+                            <option value="active">Active</option>
+                            <option value="on-hold">On Hold</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="submit" disabled={creatingDocument}>
+                          {creatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          {creatingDocument ? "Updating..." : "Update Project"}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
@@ -473,10 +614,18 @@ export default function ProjectDetail() {
                       className="pl-10"
                     />
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={() => document.getElementById('document-upload')?.click()}>
                     <Plus className="h-4 w-4 mr-2" />
                     Upload Document
                   </Button>
+                  <input
+                    id="document-upload"
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt"
+                    className="hidden"
+                    onChange={handleDocumentUpload}
+                    title="Upload document"
+                  />
                 </div>
 
                 {/* Loading state for documents */}
@@ -530,11 +679,11 @@ export default function ProjectDetail() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleEditDocument(doc.id)}>
                                     <Edit className="h-4 w-4 mr-2" />
                                     Edit
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleDownloadDocument(doc.id)}>
                                     <Download className="h-4 w-4 mr-2" />
                                     Download
                                   </DropdownMenuItem>

@@ -69,15 +69,26 @@ export default function Dashboard() {
 
       try {
         setLoading(true)
-        const [analytics, providers, jobs] = await Promise.all([
+        const [analytics, providers, jobs, projectsData] = await Promise.all([
           apiClient.getDashboardAnalytics(),
           apiClient.getAIProviders(),
-          apiClient.getJobs({ limit: 5 })
+          apiClient.getJobs({ limit: 5 }),
+          apiClient.getProjects({ page: 1, limit: 1 }) // Get total count from projects endpoint
         ])
 
         setDashboardData(analytics)
         setAiProviders(providers)
         setRecentJobs(jobs.jobs)
+        
+        // Update analytics with correct project count from projects endpoint
+        const updatedAnalytics = {
+          ...analytics,
+          projects: {
+            ...analytics.projects,
+            total_projects: projectsData.pagination.total
+          }
+        }
+        setDashboardData(updatedAnalytics)
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error)
         toast.error("Failed to load dashboard data")

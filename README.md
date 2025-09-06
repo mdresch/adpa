@@ -2,6 +2,20 @@
 
 A comprehensive enterprise-grade platform for AI-powered document generation, management, and automation with seamless third-party integrations.
 
+## 🚨 IMPORTANT: Docker Development Environment Required
+
+**⚠️ CRITICAL: This project MUST be run using Docker containers. Never run services locally or modify configurations for local development.**
+
+- ✅ **Use Docker**: `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
+- ❌ **Don't run locally**: Never use `npm run dev` or modify configs for localhost
+- 🔍 **Validate setup**: Run `validate-docker.bat` before committing changes
+
+**Breaking Docker setup will require significant time to fix. Always validate with `validate-docker.bat` before commits.**
+
+📖 **[Complete Docker Guide](DOCKER_README.md)** | 🛠️ **[Validation Script](validate-docker.bat)**
+
+---
+
 ## Description
 
 The ADPA (Advanced Document Processing & Automation) Framework is a sophisticated full-stack application that revolutionizes how organizations create, manage, and integrate business-critical documentation. Built with modern technologies and enterprise-grade architecture, ADPA combines the power of multiple AI providers with robust integrations to deliver standards-compliant documentation that meets PMBOK, BABOK, and DMBOK requirements.
@@ -55,85 +69,63 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
 
 ## Installation
 
-### Prerequisites
+### 🚨 Prerequisites (Docker Required)
 
-- **Node.js** (≥18.x)
-- **npm** or **pnpm** (recommended)
-- **PostgreSQL** (≥13.x)
-- **Redis** (≥6.x)
-- **Docker** and **Docker Compose** (for containerized setup)
+- **Docker** and **Docker Compose** (MANDATORY)
+- **Node.js** (≥18.x) - for local development tools only
+- **Git** - for version control
 
-### Quick Start with Docker
+### ⚡ Quick Start (Docker Only)
 
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd adpa-framework
-   ```
+```bash
+# 1. Clone repository
+git clone <repository-url>
+cd adpa-framework
 
-2. **Start the development environment**
-   ```bash
-   # Using the startup script (Windows)
-   .\start-dev.bat
-   
-   # Or using PowerShell
-   .\start-dev.ps1
-   
-   # Or manually
-   docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-   ```
+# 2. Start Docker environment
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-3. **Install dependencies** (optional - for local development)
-   ```bash
-   # Frontend
-   npm install
-   
-   # Backend
-   cd server
-   npm install
-   cd ..
-   ```
+# 3. Validate Docker setup
+validate-docker.bat
 
-4. **Set up environment variables**
-   ```bash
-   cp .env.local.example .env.local
-   cp server/.env.example server/.env
-   ```
+# 4. Access application
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:5000
+# pgAdmin:  http://localhost:8080 (admin@adpa.com / admin123)
+```
 
-5. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:5000
-   - Database: localhost:5432
-   - Redis: localhost:6379
+### 🐳 Docker Services
 
-### Docker Development Features
+| Service | URL | Purpose |
+|---------|-----|---------|
+| Frontend | http://localhost:3000 | Next.js React Application |
+| Backend | http://localhost:5000 | Express.js API Server |
+| PostgreSQL | localhost:5432 | Database |
+| Redis | localhost:6379 | Cache & Sessions |
+| pgAdmin | http://localhost:8080 | Database Admin |
+| Redis Commander | http://localhost:8081 | Redis Admin |
 
-- **Hot Reloading**: Automatic code reloading during development
-- **Volume Mounting**: Source code changes reflect immediately
-- **Debug Support**: Backend debugging on port 9229
-- **Isolated Services**: Each service runs in its own container
-- **Easy Scaling**: Simple service scaling with docker-compose
+### 🔍 Validation & Troubleshooting
 
-For detailed Docker development instructions, see [DOCKER_DEVELOPMENT_GUIDE.md](DOCKER_DEVELOPMENT_GUIDE.md).
+```bash
+# Validate Docker configuration
+validate-docker.bat
 
-### Manual Installation
+# Check running services
+docker-compose ps
 
-1. **Set up PostgreSQL and Redis**
-   ```bash
-   # PostgreSQL
-   createdb adpa_db
-   
-   # Redis (start service)
-   redis-server
-   ```
+# View logs
+docker-compose logs -f
 
-2. **Follow steps 1, 3-6 from Docker setup**
+# Stop services
+docker-compose down
+```
 
-3. **Access the application**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - PostgreSQL: localhost:5432
-   - Redis: localhost:6379
+📖 **Detailed Docker instructions**: [DOCKER_README.md](DOCKER_README.md)
+
+### ⚠️ Manual Installation (Not Recommended)
+
+Manual installation is **not recommended** and may break Docker compatibility. Use Docker for all development work.
 
 ## Usage
 
