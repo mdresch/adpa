@@ -1,8 +1,8 @@
 import { io, Socket } from "socket.io-client"
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "/api"
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "http://localhost:5000"
+const API_BASE_URL = "http://localhost:5000/api"
+const WS_URL = "http://localhost:5000"
 
 // Types
 export interface User {
@@ -429,9 +429,9 @@ class ApiClient {
   }
 
   async createDocument(projectId: string, documentData: Partial<Document>): Promise<Document> {
-    const response = await this.request<{ document: Document }>("/documents", {
+    const response = await this.request<{ document: Document }>(`/documents/project/${projectId}`, {
       method: "POST",
-      body: JSON.stringify({ ...documentData, project_id: projectId }),
+      body: JSON.stringify(documentData),
     })
     return response.document
   }

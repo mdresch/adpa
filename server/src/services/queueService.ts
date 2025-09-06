@@ -261,7 +261,7 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
     if (progress !== undefined) {
       paramCount++
       updateFields.push(`progress = $${paramCount}`)
-      params.push(progress)
+      params.push(progress.toString())
     }
 
     if (status === "processing" && progress === 10) {

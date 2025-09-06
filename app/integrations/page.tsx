@@ -70,8 +70,8 @@ export default function Integrations() {
     try {
       setLoading(true)
       console.log("Loading integrations from backend...")
-      const response = await apiClient.getIntegrations()
-      const backendIntegrations = response.integrations || response // Handle both formats
+      const response: any = await apiClient.getIntegrations()
+      const backendIntegrations = Array.isArray(response) ? response : response.integrations || [] // Handle both formats
       console.log("Backend integrations:", backendIntegrations)
 
       // Handle case where API returns non-array data
@@ -317,7 +317,9 @@ export default function Integrations() {
 
     } catch (error) {
       console.error("Failed to save configuration:", error)
-      const errorMessage = error.message || "Failed to save configuration"
+      const errorMessage = typeof error === "object" && error !== null && "message" in error
+        ? (error as { message?: string }).message || "Failed to save configuration"
+        : "Failed to save configuration"
       toast.error(`Save failed: ${errorMessage}`)
     } finally {
       setSaving(false)
@@ -356,12 +358,13 @@ export default function Integrations() {
       // API client returns parsed JSON directly
       console.log("Response data:", response)
 
-      if (response.success) {
-        toast.success(`SharePoint connection successful! Found ${response.sitesFound || 0} sites ✅`)
+      const resp = response as { success?: boolean; sitesFound?: number; error?: string; message?: string }
+      if (resp.success) {
+        toast.success(`SharePoint connection successful! Found ${resp.sitesFound || 0} sites ✅`)
       } else {
-        const errorMessage = response.error || response.message || "Connection failed"
+        const errorMessage = resp.error || resp.message || "Connection failed"
         toast.error(`SharePoint connection failed: ${errorMessage}`)
-        console.error("SharePoint connection test failed:", response)
+        console.error("SharePoint connection test failed:", resp)
       }
     } catch (error: any) {
       console.error("SharePoint connection test failed:", error)
@@ -460,7 +463,14 @@ export default function Integrations() {
 
     } catch (error) {
       console.error("Failed to save SharePoint configuration:", error)
-      const errorMessage = error.message || error.toString() || "Failed to save configuration"
+      let errorMessage = "Failed to save configuration"
+      if (typeof error === "object" && error !== null && "message" in error && typeof (error as any).message === "string") {
+        errorMessage = (error as any).message
+      } else if (typeof error === "string") {
+        errorMessage = error
+      } else if (error !== null && error !== undefined) {
+        errorMessage = String(error)
+      }
       toast.error(`Save failed: ${errorMessage}`)
     } finally {
       setSaving(false)
@@ -547,7 +557,10 @@ export default function Integrations() {
       }
     } catch (error) {
       console.error("Failed to toggle integration:", error)
-      toast.error(`Failed to update integration status: ${error.message}`)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error
+        ? (error as { message?: string }).message
+        : String(error)
+      toast.error(`Failed to update integration status: ${errorMessage}`)
     }
   }
 
@@ -580,7 +593,11 @@ export default function Integrations() {
                       <Label htmlFor="integration-type" className="text-right">
                         Type
                       </Label>
-                      <select className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                      <select
+                        id="integration-type"
+                        className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        aria-label="Integration Type"
+                      >
                         <option value="">Select integration type</option>
                         <option value="confluence">Atlassian Confluence</option>
                         <option value="sharepoint">Microsoft SharePoint</option>
@@ -1255,7 +1272,11 @@ export default function Integrations() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="git-provider">Git Provider</Label>
-                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm">
+                        <select
+                          id="git-provider"
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          aria-label="Git Provider"
+                        >
                           <option value="github">GitHub</option>
                           <option value="gitlab">GitLab</option>
                           <option value="azure-devops">Azure DevOps</option>

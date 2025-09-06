@@ -139,7 +139,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     if (status) {
       countParamCount++
       countQuery += ` AND status = $${countParamCount}`
-      countParams.push(status)
+      countParams.push(status as string)
     }
 
     if (search) {
@@ -151,7 +151,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const countResult = await pool.query(countQuery, countParams)
     const total = Number.parseInt(countResult.rows[0].count)
 
-    res.json({
+    return res.json({
       documents: result.rows,
       pagination: {
         page: Number(page),
@@ -162,7 +162,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     })
   } catch (error) {
     logger.error("Get project documents error:", error)
-    res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error" })
   }
 })
 
@@ -211,10 +211,10 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     // Cache the document
     await cache.set(cacheKey, document, 1800) // 30 minutes
 
-    res.json({ document })
+    return res.json({ document })
   } catch (error) {
     logger.error("Get document error:", error)
-    res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ error: "Internal server error" })
   }
 })
 
@@ -252,13 +252,13 @@ router.post("/project/:projectId",
 
       logger.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`)
 
-      res.status(201).json({
+      return res.status(201).json({
         message: "Document created successfully",
         document: result.rows[0],
       })
     } catch (error) {
       logger.error("Create document error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      return res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -323,13 +323,13 @@ router.put("/:id",
 
       logger.info(`Document updated: ${id} by ${req.user?.email}`)
 
-      res.json({
+      return res.json({
         message: "Document updated successfully",
         document: result.rows[0],
       })
     } catch (error) {
       logger.error("Update document error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      return res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -376,10 +376,10 @@ router.delete("/:id",
 
       logger.info(`Document deleted: ${id} by ${req.user?.email}`)
 
-      res.json({ message: "Document deleted successfully" })
+      return res.json({ message: "Document deleted successfully" })
     } catch (error) {
       logger.error("Delete document error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      return res.status(500).json({ error: "Internal server error" })
     }
   }
 )

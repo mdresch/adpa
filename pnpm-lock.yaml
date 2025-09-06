@@ -223,7 +223,7 @@ importers:
         specifier: ^30.0.0
         version: 30.0.0
       '@types/jsonwebtoken':
-        specifier: ^9.0.6
+        specifier: ^9.0.10
         version: 9.0.10
       '@types/node':
         specifier: ^22
@@ -6177,7 +6177,7 @@ snapshots:
   '@types/jsonwebtoken@9.0.10':
     dependencies:
       '@types/ms': 2.1.0
-      '@types/node': 22.0.0
+      '@types/node': 22.18.1
 
   '@types/ms@2.1.0': {}
 

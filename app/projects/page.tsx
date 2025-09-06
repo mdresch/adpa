@@ -105,7 +105,7 @@ export default function Projects() {
   const fetchProjects = async () => {
     try {
       setLoading(true)
-      const params: any = {
+      let params: any = {
         page: pagination.page,
         limit: pagination.limit,
       }
@@ -273,11 +273,16 @@ export default function Projects() {
   const fetchTemplates = async () => {
     try {
       setLoadingTemplates(true)
-      const response = await apiClient.getTemplates({ framework: selectedProjectForGeneration?.framework })
+      const framework = selectedProjectForGeneration?.framework || ""
+      const response = await apiClient.getTemplates({ 
+        framework: framework || undefined,
+        limit: 50 
+      })
       setTemplates(response.templates || [])
     } catch (error) {
       console.error("Failed to fetch templates:", error)
       toast.error("Failed to load templates")
+      setTemplates([])
     } finally {
       setLoadingTemplates(false)
     }
@@ -338,13 +343,30 @@ export default function Projects() {
     try {
       setUploadingDocument(true)
       
-      // For now, we'll create a document with the file content
-      // In a real implementation, you'd upload the file to a storage service first
-      const fileContent = await documentUploadForm.file.text()
+      // For binary files, we'll store them as base64 or use FormData
+      // For now, let's handle text files and create a placeholder for binary files
+      let content: any
+      
+      if (documentUploadForm.file.type === 'text/plain' || 
+          documentUploadForm.file.type === 'application/json' ||
+          documentUploadForm.file.name.endsWith('.txt') ||
+          documentUploadForm.file.name.endsWith('.md')) {
+        // Handle text files
+        content = await documentUploadForm.file.text()
+      } else {
+        // For binary files, create a placeholder
+        content = {
+          fileName: documentUploadForm.file.name,
+          fileSize: documentUploadForm.file.size,
+          fileType: documentUploadForm.file.type,
+          uploadedAt: new Date().toISOString(),
+          note: "Binary file uploaded - content stored separately"
+        }
+      }
       
       await apiClient.createDocument(selectedProjectForUpload.id, {
         name: documentUploadForm.name,
-        content: fileContent,
+        content: content,
         status: "draft",
       })
 
@@ -355,6 +377,9 @@ export default function Projects() {
         name: "",
         file: null,
       })
+      
+      // Refresh projects to update document count
+      fetchProjects()
     } catch (error) {
       console.error("Failed to upload document:", error)
       toast.error("Failed to upload document")
@@ -469,7 +494,7 @@ export default function Projects() {
                         transition={{ delay: 0.3, duration: 0.5 }}
                         className="text-slate-600 dark:text-slate-300 text-lg"
                       >
-                        Manage projects and their associated documentation libraries
+                        Manage projects and their associated documentation libraries ({pagination.total} total)
                       </motion.p>
                     </div>
                   </div>
@@ -520,6 +545,24 @@ export default function Projects() {
                               />
                             </div>
                             <div>
+                              <Label htmlFor="priority" className="text-sm font-semibold">
+                                Priority
+                              </Label>
+                              <select 
+                                id="priority"
+                                title="Priority"
+                                className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                                value={newProject.priority}
+                                onChange={(e) => setNewProject({...newProject, priority: e.target.value})}
+                              >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
                               <Label htmlFor="framework" className="text-sm font-semibold">
                                 Framework *
                               </Label>
@@ -539,6 +582,18 @@ export default function Projects() {
                                 <option value="PMBOK 7">PMBOK 7</option>
                                 <option value="DMBOK 2.0">DMBOK 2.0</option>
                               </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="manager" className="text-sm font-semibold">
+                                Project Manager
+                              </Label>
+                              <Input
+                                id="manager"
+                                placeholder="Enter manager name"
+                                value={newProject.manager}
+                                onChange={(e) => setNewProject({...newProject, manager: e.target.value})}
+                                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                              />
                             </div>
                           </div>
                           <div>
@@ -648,6 +703,24 @@ export default function Projects() {
                           />
                         </div>
                         <div>
+                          <Label htmlFor="edit-priority" className="text-sm font-semibold">
+                            Priority
+                          </Label>
+                          <select 
+                            id="edit-priority"
+                            title="Priority"
+                            className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                            value={editingProject?.priority || "medium"}
+                            onChange={(e) => setEditingProject({...editingProject!, priority: e.target.value})}
+                          >
+                            <option value="low">Low</option>
+                            <option value="medium">Medium</option>
+                            <option value="high">High</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
                           <Label htmlFor="edit-framework" className="text-sm font-semibold">
                             Framework *
                           </Label>
@@ -662,6 +735,23 @@ export default function Projects() {
                             <option value="BABOK v3">BABOK v3</option>
                             <option value="PMBOK 7">PMBOK 7</option>
                             <option value="DMBOK 2.0">DMBOK 2.0</option>
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="edit-status" className="text-sm font-semibold">
+                            Status
+                          </Label>
+                          <select 
+                            title="Project Status"
+                            className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                            value={editingProject?.status || ""}
+                            onChange={(e) => setEditingProject({...editingProject!, status: e.target.value})}
+                          >
+                            <option value="active">Active</option>
+                            <option value="planning">Planning</option>
+                            <option value="completed">Completed</option>
+                            <option value="on-hold">On Hold</option>
+                            <option value="archived">Archived</option>
                           </select>
                         </div>
                       </div>
@@ -859,7 +949,7 @@ export default function Projects() {
                         <Input
                           id="file-upload"
                           type="file"
-                          accept=".pdf,.doc,.docx,.txt"
+                          accept=".pdf,.doc,.docx,.txt,.md"
                           onChange={(e) => {
                             const file = e.target.files?.[0] || null
                             setDocumentUploadForm({...documentUploadForm, file})
@@ -868,7 +958,7 @@ export default function Projects() {
                           required
                         />
                         <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                          Supported formats: PDF, DOC, DOCX, TXT
+                          Supported formats: PDF, DOC, DOCX, TXT, MD
                         </p>
                       </div>
                     </div>
@@ -911,7 +1001,7 @@ export default function Projects() {
                     whileHover={{ scale: 1.02 }}
                     className="flex h-10 rounded-md border border-slate-200 dark:border-slate-700 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm px-3 py-2 text-sm focus:border-blue-500 transition-colors"
                     value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
                   >
                     <option value="all">All Status</option>
                     <option value="active">Active</option>
@@ -1165,6 +1255,41 @@ export default function Projects() {
                       </Dialog>
                     </motion.div>
                   )}
+                </motion.div>
+              )}
+
+              {/* Pagination */}
+              {!loading && filteredProjects.length > 0 && pagination.pages > 1 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.6, duration: 0.4 }}
+                  className="flex items-center justify-between"
+                >
+                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                    Showing {((pagination.page - 1) * pagination.limit) + 1} to {Math.min(pagination.page * pagination.limit, pagination.total)} of {pagination.total} projects
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                      disabled={pagination.page <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-sm text-slate-600 dark:text-slate-300">
+                      Page {pagination.page} of {pagination.pages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                      disabled={pagination.page >= pagination.pages}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </motion.div>
               )}
             </AnimatedLayout>
