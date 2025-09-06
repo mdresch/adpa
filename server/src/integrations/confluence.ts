@@ -121,8 +121,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
       let markdownContent: string
       if (typeof doc.content === 'string') {
         markdownContent = doc.content
-      } else if (doc.content && typeof doc.content === 'object' && doc.content.markdown) {
-        markdownContent = doc.content.markdown
+      } else if (doc.content && typeof doc.content === 'object' && 'markdown' in doc.content) {
+        markdownContent = (doc.content as any).markdown
       } else {
         throw new Error("Document content is not in a supported format")
       }
