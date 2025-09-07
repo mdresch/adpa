@@ -12,6 +12,8 @@ import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
 import { initializeQueues } from "./services/queueService"
+import jwt from "jsonwebtoken"
+import { pool } from "./database/connection"
 
 // Routes
 import authRoutes from "./routes/auth"
@@ -91,9 +93,84 @@ console.log("✅ All API routes registered")
 io.on("connection", (socket) => {
   logger.info(`Client connected: ${socket.id}`)
 
-  socket.on("join-project", (projectId: string) => {
-    socket.join(`project-${projectId}`)
-    logger.info(`Client ${socket.id} joined project ${projectId}`)
+  // Support generic join/leave with room names supplied by client
+  socket.on("join", async (room: string) => {
+    try {
+      // If joining a project room, enforce permission checks
+      const projectMatch = typeof room === 'string' ? room.match(/^project:(.+)$/) : null
+
+      if (projectMatch) {
+        const projectId = projectMatch[1]
+        const token = socket.handshake?.auth?.token
+        if (!token) {
+          socket.emit('join:error', { room, message: 'Authentication required' })
+          return
+        }
+
+        try {
+          const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+          const userId = decoded?.userId
+          if (!userId) {
+            socket.emit('join:error', { room, message: 'Invalid token' })
+            return
+          }
+
+          // Fetch user and project to validate membership
+          const userRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [userId])
+          if (userRes.rows.length === 0) {
+            socket.emit('join:error', { room, message: 'User not found' })
+            return
+          }
+
+          const user = userRes.rows[0]
+
+          const projRes = await pool.query('SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [projectId])
+          if (projRes.rows.length === 0) {
+            socket.emit('join:error', { room, message: 'Project not found' })
+            return
+          }
+
+          const project = projRes.rows[0]
+
+          const isOwner = project.owner_id === userId
+          const isCreator = project.created_by === userId
+          let isTeamMember = false
+          try {
+            const teamMembers = project.team_members || []
+            if (Array.isArray(teamMembers)) {
+              isTeamMember = teamMembers.includes(user.name)
+            }
+          } catch (e) {
+            isTeamMember = false
+          }
+
+          if (isOwner || isCreator || isTeamMember || user.role === 'admin') {
+            socket.join(room)
+            logger.info(`Client ${socket.id} joined room ${room}`)
+            socket.emit('join:ok', { room })
+          } else {
+            socket.emit('join:error', { room, message: 'Access denied' })
+          }
+        } catch (err) {
+          logger.error('Socket auth error:', err)
+          socket.emit('join:error', { room, message: 'Authentication failed' })
+        }
+      } else {
+        // Non-project rooms: allow join without special checks
+        socket.join(room)
+        logger.info(`Client ${socket.id} joined room ${room}`)
+        socket.emit('join:ok', { room })
+      }
+    } catch (err) {
+      logger.error('Error during join handling:', err)
+      socket.emit('join:error', { room, message: 'Internal server error' })
+    }
+  })
+
+  socket.on("leave", (room: string) => {
+    socket.leave(room)
+    logger.info(`Client ${socket.id} left room ${room}`)
+    socket.emit('leave:ok', { room })
   })
 
   socket.on("disconnect", () => {

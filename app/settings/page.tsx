@@ -123,7 +123,7 @@ export default function Settings() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <Label htmlFor="timezone">Default Timezone</Label>
-                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1">
+                        <select id="timezone" className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1" aria-label="Default Timezone">
                           <option value="UTC">UTC</option>
                           <option value="America/New_York">Eastern Time</option>
                           <option value="America/Chicago">Central Time</option>
@@ -133,7 +133,10 @@ export default function Settings() {
                       </div>
                       <div>
                         <Label htmlFor="language">Default Language</Label>
-                        <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1">
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                          aria-label="Default Language"
+                        >
                           <option value="en">English</option>
                           <option value="es">Spanish (Future)</option>
                           <option value="fr">French (Future)</option>
@@ -437,7 +440,11 @@ export default function Settings() {
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <Label htmlFor="backup-frequency">Backup Frequency</Label>
-                            <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1">
+                            <select
+                              id="backup-frequency"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                              aria-label="Backup Frequency"
+                            >
                               <option value="daily">Daily</option>
                               <option value="weekly">Weekly</option>
                               <option value="monthly">Monthly</option>

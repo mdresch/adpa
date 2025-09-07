@@ -72,14 +72,49 @@ aiQueue.process("ai-generate", async (job) => {
     // Update job status to 90%
     await updateJobStatus(jobId, "processing", 90)
 
-    // Save result to database
+  // Attempt to create a document record from the generated content
+  let createdDocumentId: string | null = null
+  let createdDocumentRow: any = null
+    try {
+      // Determine document name and content; prefer user-provided name/description
+      const docNameProvided = job.data?.name && job.data.name.trim() ? job.data.name.trim() : null
+      const docDescProvided = job.data?.description && job.data.description.trim() ? job.data.description.trim() : null
+      const docName = docNameProvided || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
+      const rawContent = result?.content ? result.content : result
+      // Attach description into metadata if provided
+      const docContent = docDescProvided ? { text: typeof rawContent === 'string' ? rawContent : rawContent, description: docDescProvided } : rawContent
+
+      const insertResult = await pool.query(
+        `
+        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $6)
+        RETURNING id
+      `,
+        [job.data.projectId || null, docName, JSON.stringify(docContent), template_id || null, 'draft', userId || null]
+      )
+
+      if (insertResult.rows.length > 0) {
+        createdDocumentId = insertResult.rows[0].id
+        createdDocumentRow = insertResult.rows[0]
+      }
+    } catch (docErr) {
+      logger.error(`Failed to create document for job ${jobId}:`, docErr)
+      // continue — document creation failure shouldn't block marking job as completed with AI result
+    }
+
+    // Save result to database including document id if created
+    const finalResult = {
+      ai: result,
+      documentId: createdDocumentId,
+    }
+
     await pool.query(
       `
       UPDATE jobs 
       SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
       WHERE id = $2
     `,
-      [JSON.stringify(result), jobId]
+      [JSON.stringify(finalResult), jobId]
     )
 
     // Emit real-time update
@@ -87,12 +122,24 @@ aiQueue.process("ai-generate", async (job) => {
       jobId,
       userId,
       status: "completed",
-      result,
+      result: finalResult,
     })
+
+    // If a document was created, emit a document-created event so frontends can refresh
+    try {
+      if (createdDocumentRow) {
+        // Emit only to the project room so clients who joined that room receive the event
+        if (job.data?.projectId) {
+          io.to(`project:${job.data.projectId}`).emit("document:created", { document: createdDocumentRow })
+        }
+      }
+    } catch (emitErr) {
+      logger.error(`Failed to emit document:created for job ${jobId}:`, emitErr)
+    }
 
     logger.info(`AI generation job completed: ${jobId}`)
 
-    return result
+    return finalResult
   } catch (error) {
     logger.error(`AI generation job failed: ${jobId}`, error)
 

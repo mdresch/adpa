@@ -13,6 +13,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { apiClient, Project } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
+import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from "sonner"
 import {
   Breadcrumb,
@@ -22,6 +23,7 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   FolderOpen,
   FileText,
@@ -198,27 +200,84 @@ export default function ProjectDetail() {
 
     try {
       setCreatingDocument(true)
-      
-      // Get template content (for now, we'll use a basic structure)
+
+      // Build a helpful prompt for the AI using template + project context
       const templateContent = getTemplateContent(selectedTemplate)
-      
+      const sections = Array.isArray(templateContent.sections) ? templateContent.sections.join(', ') : ''
+      const projectDesc = project?.description || 'No project description available.'
+
+      const aiPrompt = `Generate a ${templateContent.title} for the project named "${project?.name || 'Unknown Project'}". ` +
+        `Project description: ${projectDesc}. Include the following sections: ${sections}. ` +
+        `Return the document body text only. Keep it professional and concise.`
+
+      // Enqueue AI generation job via jobs API
+      let jobId: string | undefined
+
+      try {
+        const resp = await fetch('/api/jobs/ai-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId,
+            prompt: aiPrompt,
+            templateId: selectedTemplate,
+            name: documentName,
+            description: documentDescription,
+          }),
+        })
+
+        if (resp.ok) {
+          const body = await resp.json()
+          jobId = body.jobId
+          toast.success('Document generation job queued — you can monitor it in Jobs')
+        } else {
+          console.warn('Failed to enqueue job, falling back to direct generation', await resp.text())
+        }
+      } catch (err) {
+        console.warn('Failed to enqueue job, falling back to direct generation', err)
+      }
+
+      // If we enqueued a job, just close dialog and refresh list (document will be created by worker)
+      if (jobId) {
+        setDocumentName("")
+        setDocumentDescription("")
+        setSelectedTemplate("")
+        setCreateDialogOpen(false)
+        await fetchDocuments()
+        setCreatingDocument(false)
+        return
+      }
+
+      // Fallback: synchronous generation via API client (legacy path)
+      let generatedText: string | undefined
+      try {
+        const genResult = await apiClient.generateDocument(aiPrompt, selectedTemplate)
+        if (genResult?.result?.content) generatedText = genResult.result.content
+        else if (genResult?.result?.choices?.[0]?.message?.content) generatedText = genResult.result.choices[0].message.content
+        else if (genResult?.content) generatedText = genResult.content
+        else if (typeof genResult === 'string') generatedText = genResult
+        else generatedText = JSON.stringify(genResult)
+      } catch (aiError) {
+        console.warn('AI generation failed, falling back to template content', aiError)
+      }
+
       const documentData = {
         name: documentName,
-        content: templateContent,
+        content: generatedText ? { text: generatedText } : templateContent,
         template_id: selectedTemplate,
         status: 'draft' as const,
       }
-      
+
       await apiClient.createDocument(projectId, documentData)
-      
+
       toast.success("Document created successfully!")
-      
+
       // Reset form
       setDocumentName("")
       setDocumentDescription("")
       setSelectedTemplate("")
       setCreateDialogOpen(false)
-      
+
       // Refresh documents list
       await fetchDocuments()
     } catch (error) {
@@ -402,6 +461,28 @@ export default function ProjectDetail() {
     }
   }, [projectId, isAuthenticated])
 
+  // Listen for document creation events via WebSocket and refresh documents for this project
+  const { on, off } = useWebSocket()
+  useEffect(() => {
+    const handleDocumentCreated = (data: any) => {
+      try {
+        const doc = data?.document
+        if (doc && String(doc.project_id) === String(projectId)) {
+          toast.success(`New document created: ${doc.name}`)
+          fetchDocuments()
+        }
+      } catch (err) {
+        console.warn('Error handling document:created event', err)
+      }
+    }
+
+    on("document:created", handleDocumentCreated)
+
+    return () => {
+      off("document:created", handleDocumentCreated)
+    }
+  }, [projectId, on, off])
+
   const filteredDocuments = documents.filter(
     (doc) =>
       doc.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -498,6 +579,10 @@ export default function ProjectDetail() {
   }
 
   const progress = getProjectProgress()
+
+  // Determine project manager and other members for Team tab ordering
+  const managerName = (project as any).owner_id || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : undefined)
+  const otherMembers = project.team_members ? project.team_members.filter((m) => m !== managerName) : []
 
   return (
     <div className="flex h-screen bg-background">
@@ -649,6 +734,7 @@ export default function ProjectDetail() {
                             </Label>
                             <select
                               id="edit-priority"
+                              aria-label="Priority"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.priority}
                               onChange={(e) => setEditForm(prev => ({...prev, priority: e.target.value}))}
@@ -667,6 +753,7 @@ export default function ProjectDetail() {
                             </Label>
                             <select
                               id="edit-framework"
+                              aria-label="Framework"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.framework}
                               onChange={(e) => setEditForm(prev => ({...prev, framework: e.target.value}))}
@@ -684,6 +771,7 @@ export default function ProjectDetail() {
                             </Label>
                             <select
                               id="edit-status"
+                              aria-label="Status"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.status}
                               onChange={(e) => setEditForm(prev => ({...prev, status: e.target.value}))}
@@ -1003,32 +1091,42 @@ export default function ProjectDetail() {
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {project.team_members?.map((member, index) => (
-                        <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                      {/* Show manager first if available */}
+                      {managerName && (
+                        <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/5">
                           <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-muted rounded-full flex items-center justify-center">
-                              <span className="text-sm font-medium">
-                                {member
-                                  .split(" ")
-                                  .map((n) => n[0])
-                                  .join("")}
-                              </span>
-                            </div>
+                            <Skeleton className="w-10 h-10 rounded-full" />
                             <div>
-                              <p className="font-medium">{member}</p>
-                              <p className="text-sm text-muted-foreground">Team Member</p>
+                              <p className="font-medium">{managerName}</p>
+                              <p className="text-sm text-muted-foreground">Project Manager</p>
                             </div>
                           </div>
-                          <Badge variant="outline">Member</Badge>
+                          <Badge variant="secondary">Manager</Badge>
                         </div>
-                      ))}
-                      
-                      {(!project.team_members || project.team_members.length === 0) && (
-                        <div className="text-center py-8">
-                          <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                          <h3 className="text-lg font-semibold mb-2">No team members</h3>
-                          <p className="text-muted-foreground">Add team members to get started</p>
-                        </div>
+                      )}
+
+                      {/* Then show other members */}
+                      {otherMembers.length > 0 ? (
+                        otherMembers.map((member, index) => (
+                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <Skeleton className="w-10 h-10 rounded-full" />
+                              <div>
+                                <p className="font-medium">{member}</p>
+                                <p className="text-sm text-muted-foreground">Team Member</p>
+                              </div>
+                            </div>
+                            <Badge variant="outline">Member</Badge>
+                          </div>
+                        ))
+                      ) : (
+                        !managerName && (
+                          <div className="text-center py-8">
+                            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                            <h3 className="text-lg font-semibold mb-2">No team members</h3>
+                            <p className="text-muted-foreground">Add team members to get started</p>
+                          </div>
+                        )
                       )}
                     </div>
                   </CardContent>

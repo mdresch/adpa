@@ -6,6 +6,8 @@ import { apiClient } from "@/lib/api"
 import { useAuth } from "./AuthContext"
 import { toast } from "sonner"
 
+const WS_JOINED_ROOMS_KEY = 'ws_joined_rooms'
+
 interface WebSocketContextType {
   socket: Socket | null
   isConnected: boolean
@@ -14,6 +16,9 @@ interface WebSocketContextType {
   emit: (event: string, data: any) => void
   on: (event: string, callback: (data: any) => void) => void
   off: (event: string, callback?: (data: any) => void) => void
+  // Map of room -> status ('joined' | 'pending' | 'failed') for UI
+  roomStatuses: Record<string, "joined" | "pending" | "failed">
+  getRoomStatus: (room: string) => "joined" | "pending" | "failed" | undefined
 }
 
 const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined)
@@ -33,11 +38,116 @@ interface WebSocketProviderProps {
 export function WebSocketProvider({ children }: WebSocketProviderProps) {
   const [socket, setSocket] = useState<Socket | null>(null)
   const [isConnected, setIsConnected] = useState(false)
-  const { isAuthenticated, user } = useAuth()
+  const [joinedRooms, setJoinedRooms] = useState<Set<string>>(() => {
+    try {
+      if (typeof window === 'undefined') return new Set()
+      const raw = sessionStorage.getItem(WS_JOINED_ROOMS_KEY)
+      if (!raw) return new Set()
+      const arr = JSON.parse(raw) as string[]
+      return new Set(arr)
+    } catch (e) {
+      return new Set()
+    }
+  })
+  // Room statuses (joined | pending | failed) persisted in sessionStorage
+  const [roomStatuses, setRoomStatuses] = useState<Record<string, "joined" | "pending" | "failed">>(() => {
+    try {
+      if (typeof window === 'undefined') return {}
+      const raw = sessionStorage.getItem(WS_JOINED_ROOMS_KEY + ':status')
+      if (!raw) return {}
+      return JSON.parse(raw) as Record<string, "joined" | "pending" | "failed">
+    } catch (e) {
+      return {}
+    }
+  })
+
+  const getRoomStatus = (room: string) => roomStatuses[room]
+
+  // Retry bookkeeping
+  const joinAttemptsRef = React.useRef<Record<string, number>>(
+    typeof window !== 'undefined'
+      ? ((): Record<string, number> => {
+          try {
+            const raw = sessionStorage.getItem(WS_JOINED_ROOMS_KEY + ':attempts')
+            return raw ? JSON.parse(raw) : {}
+          } catch (e) {
+            return {}
+          }
+        })()
+      : {}
+  )
+  const retryTimersRef = React.useRef<Record<string, ReturnType<typeof setTimeout> | null>>({})
+
+  const MAX_JOIN_RETRIES = 5
+  const BASE_RETRY_DELAY_MS = 1000
+
+  const persistAttempts = () => {
+    try {
+      if (typeof window === 'undefined') return
+      sessionStorage.setItem(WS_JOINED_ROOMS_KEY + ':attempts', JSON.stringify(joinAttemptsRef.current))
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const persistStatuses = (nextStatuses?: Record<string, "joined" | "pending" | "failed">) => {
+    try {
+      if (typeof window === 'undefined') return
+      sessionStorage.setItem(WS_JOINED_ROOMS_KEY + ':status', JSON.stringify(nextStatuses ?? roomStatuses))
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  const scheduleJoinRetry = (room: string) => {
+    const attempts = joinAttemptsRef.current[room] || 0
+    if (attempts >= MAX_JOIN_RETRIES) {
+      setRoomStatuses(prev => {
+        const next: Record<string, "joined" | "pending" | "failed"> = { ...prev, [room]: "failed" }
+        persistStatuses(next)
+        return next
+      })
+      return
+    }
+
+    const nextAttempt = attempts + 1
+    joinAttemptsRef.current[room] = nextAttempt
+    persistAttempts()
+
+    const delay = BASE_RETRY_DELAY_MS * Math.pow(2, nextAttempt - 1)
+    if (retryTimersRef.current[room]) {
+      try { clearTimeout(retryTimersRef.current[room] as any) } catch (e) {}
+    }
+    retryTimersRef.current[room] = setTimeout(() => {
+      try {
+        if (socket && socket.connected) {
+          // mark pending
+          setRoomStatuses(prev => {
+            const next: Record<string, "joined" | "pending" | "failed"> = { ...prev, [room]: 'pending' as "pending" }
+            persistStatuses(next)
+            return next
+          })
+          socket.emit('join', room)
+        } else {
+          // will try again on next connect
+        }
+      } catch (e) {
+        // ignore
+      }
+    }, delay)
+  }
+  const { isAuthenticated, user, token } = useAuth()
 
   useEffect(() => {
-    if (isAuthenticated && user) {
-      // Connect WebSocket when user is authenticated
+    // Only connect when we have a token and a user
+    if (token && isAuthenticated && user) {
+      // Ensure previous socket is cleaned up
+      if (socket) {
+        socket.disconnect()
+        setSocket(null)
+      }
+
+      // Connect WebSocket when user is authenticated and token is present
       const socketInstance = apiClient.connectWebSocket()
       setSocket(socketInstance)
 
@@ -45,6 +155,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       socketInstance.on("connect", () => {
         setIsConnected(true)
         console.log("WebSocket connected")
+        // Auto-rejoin rooms persisted in sessionStorage (avoid stale closure on joinedRooms)
+        try {
+          if (typeof window === 'undefined') return
+          const raw = sessionStorage.getItem(WS_JOINED_ROOMS_KEY)
+          if (!raw) return
+          const rooms = JSON.parse(raw) as string[]
+          rooms.forEach(r => {
+            try {
+              socketInstance.emit('join', r)
+            } catch (e) {
+              // ignore per-room error
+            }
+          })
+        } catch (e) {
+          // ignore
+        }
       })
 
       socketInstance.on("disconnect", () => {
@@ -107,7 +233,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
       })
 
       return () => {
-        socketInstance.disconnect()
+        try {
+          socketInstance.disconnect()
+        } catch (e) {
+          // ignore
+        }
         setSocket(null)
         setIsConnected(false)
       }
@@ -119,19 +249,113 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         setIsConnected(false)
       }
     }
-  }, [isAuthenticated, user])
+  // Re-run when token, isAuthenticated, or user change
+  }, [token, isAuthenticated, user])
 
   const joinRoom = (room: string) => {
     if (socket && isConnected) {
+      // Emit join and wait for server acknowledgement events (join:ok / join:error)
       socket.emit("join", room)
-      console.log(`Joined room: ${room}`)
+
+    const handleOk = (data: any) => {
+        if (data?.room === room) {
+          toast.success(`Joined ${room}`)
+          console.log(`Joined room: ${room}`)
+      socket.off("join:ok", handleOk)
+      socket.off("join:error", handleError)
+          // Mark room as joined for auto-rejoin and persist
+          setJoinedRooms(prev => {
+            const next = new Set(prev)
+            next.add(room)
+            try {
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem(WS_JOINED_ROOMS_KEY, JSON.stringify(Array.from(next)))
+              }
+            } catch (e) {
+              // ignore
+            }
+            return next
+          })
+        }
+      }
+
+      const handleError = (err: any) => {
+        if (err?.room === room) {
+          toast.error(`Failed to join ${room}: ${err.message || 'access denied'}`)
+          console.warn(`Join denied for room ${room}:`, err)
+          socket.off("join:ok", handleOk)
+          socket.off("join:error", handleError)
+        }
+      }
+
+      // Register one-time listeners with a safety timeout
+      socket.on("join:ok", handleOk)
+      socket.on("join:error", handleError)
+
+      // Remove listeners after 8s to avoid leaks
+      const timeout = setTimeout(() => {
+        try {
+          socket.off("join:ok", handleOk)
+          socket.off("join:error", handleError)
+        } catch (e) {
+          // ignore
+        }
+      }, 8000)
+
+      // Clear timeout when socket disconnects
+      socket.once("disconnect", () => clearTimeout(timeout))
     }
   }
 
   const leaveRoom = (room: string) => {
     if (socket && isConnected) {
       socket.emit("leave", room)
-      console.log(`Left room: ${room}`)
+
+      const handleOk = (data: any) => {
+        if (data?.room === room) {
+          toast.success(`Left ${room}`)
+          console.log(`Left room: ${room}`)
+          socket.off("leave:ok", handleOk)
+          socket.off("leave:error", handleError)
+          // Remove from joinedRooms and persist
+          setJoinedRooms(prev => {
+            const next = new Set(prev)
+            next.delete(room)
+            try {
+              if (typeof window !== 'undefined') {
+                const arr = Array.from(next)
+                if (arr.length === 0) sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
+                else sessionStorage.setItem(WS_JOINED_ROOMS_KEY, JSON.stringify(arr))
+              }
+            } catch (e) {
+              // ignore
+            }
+            return next
+          })
+        }
+      }
+
+      const handleError = (err: any) => {
+        if (err?.room === room) {
+          toast.error(`Failed to leave ${room}: ${err.message || 'error'}`)
+          socket.off("leave:ok", handleOk)
+          socket.off("leave:error", handleError)
+        }
+      }
+
+      socket.on("leave:ok", handleOk)
+      socket.on("leave:error", handleError)
+
+      const timeout = setTimeout(() => {
+        try {
+          socket.off("leave:ok", handleOk)
+          socket.off("leave:error", handleError)
+        } catch (e) {
+          // ignore
+        }
+      }, 8000)
+
+      socket.once("disconnect", () => clearTimeout(timeout))
     }
   }
 
@@ -165,6 +389,8 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
     emit,
     on,
     off,
+  roomStatuses,
+  getRoomStatus,
   }
 
   return <WebSocketContext.Provider value={value}>{children}</WebSocketContext.Provider>
