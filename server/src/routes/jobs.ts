@@ -1,8 +1,9 @@
 import express from "express"
-import Joi from "joi"
+// Joi already imported above
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
-import { validateParams, validateQuery } from "../middleware/validation"
+import { validateParams, validateQuery, validate, schemas } from "../middleware/validation"
+import Joi from "joi"
 import { logger } from "../utils/logger"
 import { getJobStatus, cancelJob, addJob } from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
@@ -57,13 +58,13 @@ router.get("/",
       if (status) {
         countParamCount++
         countQuery += ` AND status = $${countParamCount}`
-        countParams.push(status)
+        countParams.push(status as string)
       }
 
       if (type) {
         countParamCount++
         countQuery += ` AND type = $${countParamCount}`
-        countParams.push(type)
+        countParams.push(type as string)
       }
 
       const countResult = await pool.query(countQuery, countParams)
@@ -81,6 +82,46 @@ router.get("/",
     } catch (error) {
       logger.error("Get jobs error:", error)
       res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Enqueue an AI generation job
+router.post(
+  "/ai-generate",
+  authenticateToken,
+  async (req, res) => {
+    try {
+      const schema = Joi.object({
+        projectId: Joi.string().required(),
+        prompt: Joi.string().required(),
+        provider: Joi.string().optional(),
+        model: Joi.string().optional(),
+        templateId: Joi.string().optional(),
+        maxTokens: Joi.number().optional(),
+      })
+
+      const { error, value } = schema.validate(req.body)
+      if (error) return res.status(400).json({ error: error.message })
+
+      const jobId = uuidv4()
+      const jobPayload = {
+        jobId,
+        userId: req.user?.id || null,
+        projectId: value.projectId,
+        prompt: value.prompt,
+        provider: value.provider || "openai",
+        model: value.model || null,
+        template_id: value.templateId || null,
+        max_tokens: value.maxTokens || 1024,
+      }
+
+      await addJob("ai-generate", jobPayload)
+
+      res.status(202).json({ jobId })
+    } catch (err) {
+      logger.error("Enqueue AI job error:", err)
+      res.status(500).json({ error: "Failed to enqueue job" })
     }
   }
 )
@@ -350,3 +391,4 @@ router.get("/admin/all",
 )
 
 export default router
+

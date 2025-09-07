@@ -10,6 +10,21 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
+
+// Extend AnimatedGridItem to accept animationDelay prop
+type AnimatedGridItemProps = React.ComponentProps<typeof AnimatedGridItem> & {
+  animationDelay?: number
+}
+
+// Override AnimatedGridItem to support animationDelay
+const AnimatedGridItemWithDelay: React.FC<AnimatedGridItemProps> = ({ animationDelay, ...props }) => (
+  <AnimatedGridItem
+    {...props}
+    className={`${props.className ?? ""}`}
+    // Pass animationDelay as a custom CSS variable for child animations if needed
+    data-animation-delay={animationDelay ? animationDelay : undefined}
+  />
+)
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import {
@@ -33,7 +48,26 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
-import { apiClient, Job } from "@/lib/api"
+import { apiClient } from "@/lib/api"
+
+// Extend Job type to include 'name' property for compatibility with mockJobs and API jobs
+type Job = {
+  id: string
+  name: string
+  type: string
+  status: string
+  progress: number
+  startTime?: string
+  estimatedCompletion?: string
+  completedTime?: string
+  failedTime?: string
+  queuedTime?: string
+  priority: string
+  queue: string
+  worker?: string
+  logs: string[]
+  error?: string
+}
 import { toast } from "sonner"
 
 // Mock data for jobs
@@ -261,7 +295,15 @@ export default function JobMonitorPage() {
     const fetchJobs = async () => {
       try {
         const response = await apiClient.getJobs({ limit: 50 })
-        setJobs(response.jobs)
+        setJobs(
+          response.jobs.map((job: any) => ({
+            ...job,
+            name: job.name ?? "",
+            priority: job.priority ?? "medium",
+            queue: job.queue ?? "",
+            logs: job.logs ?? [],
+          }))
+        )
       } catch (error) {
         console.error("Failed to fetch jobs:", error)
         toast.error("Failed to load jobs")
@@ -468,10 +510,10 @@ export default function JobMonitorPage() {
                       <TabsContent value="jobs" className="space-y-4">
                         <div className="space-y-4">
                           {filteredJobs.map((job, index) => (
-                            <AnimatedGridItem
+                            <AnimatedGridItemWithDelay
                               key={job.id}
                               className="animate-fade-in-up"
-                              style={{ animationDelay: `${index * 100}ms` }}
+                              animationDelay={index * 100}
                             >
                               <Card className="border border-slate-200 dark:border-slate-700 hover-lift">
                                 <CardContent className="p-6">
@@ -553,7 +595,7 @@ export default function JobMonitorPage() {
                                   </div>
                                 </CardContent>
                               </Card>
-                            </AnimatedGridItem>
+                            </AnimatedGridItemWithDelay>
                           ))}
                         </div>
                       </TabsContent>
@@ -561,12 +603,12 @@ export default function JobMonitorPage() {
                       <TabsContent value="queues" className="space-y-4">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                           {mockQueues.map((queue, index) => (
-                            <AnimatedGridItem
+                            <AnimatedGridItemWithDelay
                               key={queue.name}
                               className="animate-fade-in-up"
-                              style={{ animationDelay: `${index * 100}ms` }}
+                              animationDelay={index * 100}
                             >
-                              <Card className="border border-slate-200 dark:border-slate-700 hover-lift">
+                              <Card>
                                 <CardHeader>
                                   <div className="flex items-center justify-between">
                                     <CardTitle className="text-lg capitalize">{queue.name.replace("_", " ")}</CardTitle>
@@ -600,7 +642,7 @@ export default function JobMonitorPage() {
                                   </div>
                                 </CardContent>
                               </Card>
-                            </AnimatedGridItem>
+                            </AnimatedGridItemWithDelay>
                           ))}
                         </div>
                       </TabsContent>
@@ -608,12 +650,12 @@ export default function JobMonitorPage() {
                       <TabsContent value="workers" className="space-y-4">
                         <div className="space-y-4">
                           {mockWorkers.map((worker, index) => (
-                            <AnimatedGridItem
+                            <AnimatedGridItemWithDelay
                               key={worker.id}
                               className="animate-fade-in-up"
-                              style={{ animationDelay: `${index * 100}ms` }}
+                              animationDelay={index * 100}
                             >
-                              <Card className="border border-slate-200 dark:border-slate-700 hover-lift">
+                              <Card>
                                 <CardContent className="p-6">
                                   <div className="flex items-start justify-between">
                                     <div className="flex-1 space-y-4">
@@ -714,7 +756,7 @@ export default function JobMonitorPage() {
                                   </div>
                                 </CardContent>
                               </Card>
-                            </AnimatedGridItem>
+                            </AnimatedGridItemWithDelay>
                           ))}
                         </div>
                       </TabsContent>

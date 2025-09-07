@@ -3,6 +3,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import { openaiConnector, OpenAIRequest } from "../modules/ai/openai"
+import { googleConnector, GoogleRequest } from "../modules/ai/google"
 
 export interface AIProvider {
   name: string
@@ -41,6 +42,9 @@ class AIService {
       // Initialize OpenAI connector first
       await openaiConnector.initializeProviders()
 
+  // Initialize Google connector
+  await googleConnector.initializeProviders()
+
       const result = await pool.query(
         "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
       )
@@ -76,6 +80,7 @@ class AIService {
           break
 
         case "google":
+          // Legacy google provider stored in providers map for direct usage
           this.providers.set(provider.name, new GoogleGenerativeAI(provider.apiKey))
           break
 
@@ -148,7 +153,28 @@ class AIService {
           if (!provider) {
             throw new Error(`Provider ${request.provider} not found or not configured`)
           }
-          return await this.generateGoogle(provider, processedPrompt, request)
+          // Prefer using googleConnector if available for advanced features
+          try {
+            const googleRequest: GoogleRequest = {
+              model: request.model || 'gemini-pro',
+              prompt: processedPrompt,
+              temperature: request.temperature,
+              max_tokens: request.max_tokens,
+            }
+
+            const googleResponse = await googleConnector.generateCompletion(googleRequest, request.provider)
+
+            return {
+              content: googleResponse.content,
+              provider: googleResponse.provider,
+              model: googleResponse.model,
+              usage: googleResponse.usage,
+              metadata: googleResponse.metadata,
+            }
+          } catch (err) {
+            // Fallback to legacy client
+            return await this.generateGoogle(provider, processedPrompt, request)
+          }
 
         default:
           throw new Error(`Unsupported provider type: ${providerType}`)
@@ -214,14 +240,17 @@ class AIService {
       throw new Error("No content generated")
     }
 
+    // Extract usage metadata from the correct location
+    const usageMetadata = (response as any)?.usageMetadata
+
     return {
       content,
       provider: request.provider,
       model: request.model || "gemini-pro",
-      usage: response.usageMetadata ? {
-        prompt_tokens: response.usageMetadata.promptTokenCount || 0,
-        completion_tokens: response.usageMetadata.candidatesTokenCount || 0,
-        total_tokens: response.usageMetadata.totalTokenCount || 0,
+      usage: usageMetadata ? {
+        prompt_tokens: usageMetadata.promptTokenCount || 0,
+        completion_tokens: usageMetadata.candidatesTokenCount || 0,
+        total_tokens: usageMetadata.totalTokenCount || 0,
       } : undefined,
       metadata: {
         provider_type: "google",
