@@ -4,13 +4,17 @@
   "description": "ADPA Framework utility scripts",
   "main": "index.js",
   "scripts": {
-    "test-sharepoint": "node test-sharepoint-integration.js"
+    "test-sharepoint": "node test-sharepoint-integration.js",
+    "select-provider": "node ai-provider-selector.js"
   },
   "dependencies": {
     "axios": "^1.10.0",
-    "readline": "^1.3.0"
+    "readline": "^1.3.0",
+    "inquirer": "^9.2.0",
+    "dotenv": "^16.3.0",
+    "chalk": "^4.1.2"
   },
-  "keywords": ["adpa", "sharepoint", "testing"],
+  "keywords": ["adpa", "sharepoint", "testing", "ai", "cli"],
   "author": "ADPA Framework",
   "license": "MIT"
 }
