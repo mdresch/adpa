@@ -52,6 +52,7 @@ import {
 } from "@/components/ui/dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 
 interface Document {
   id: string
@@ -83,6 +84,21 @@ export default function ProjectDetail() {
   const [documentName, setDocumentName] = useState("")
   const [documentDescription, setDocumentDescription] = useState("")
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
+  const [updating, setUpdating] = useState(false)
+  
+  // Edit form state
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    framework: "",
+    status: "",
+    priority: "",
+    start_date: "",
+    end_date: "",
+    budget: "",
+    manager: "",
+    team_members: [] as string[]
+  })
 
   // Fetch project data
   const fetchProject = async () => {
@@ -287,19 +303,68 @@ export default function ProjectDetail() {
     }
   }
 
+  // Handle opening edit dialog
+  const handleEditProject = () => {
+    if (!project) return
+    
+    // Format dates for input fields (YYYY-MM-DD)
+    const formatDateForInput = (dateString?: string) => {
+      if (!dateString) return ""
+      const date = new Date(dateString)
+      return date.toISOString().split('T')[0]
+    }
+    
+    // Extract manager from team_members (assuming first member is manager)
+    const manager = project.team_members && project.team_members.length > 0 ? project.team_members[0] : ""
+    const teamMembers = project.team_members || []
+    
+    setEditForm({
+      name: project.name || "",
+      description: project.description || "",
+      framework: project.framework || "",
+      status: project.status || "",
+      priority: project.priority || "",
+      start_date: formatDateForInput(project.start_date),
+      end_date: formatDateForInput(project.end_date),
+      budget: project.budget?.toString() || "",
+      manager: manager,
+      team_members: teamMembers
+    })
+    
+    setEditProjectDialogOpen(true)
+  }
+
   // Update project
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!project) return
+    if (!editForm.name || !editForm.framework) {
+      toast.error("Please fill in required fields")
+      return
+    }
 
     try {
-      setCreatingDocument(true)
-      await apiClient.updateProject(projectId, {
-        name: project.name,
-        description: project.description,
-        status: project.status
-      })
+      setUpdating(true)
+      
+      // Prepare team members array (include manager as first member if specified)
+      let teamMembers = [...editForm.team_members]
+      if (editForm.manager && !teamMembers.includes(editForm.manager)) {
+        teamMembers = [editForm.manager, ...teamMembers]
+      }
+      
+      const updateData = {
+        name: editForm.name,
+        description: editForm.description,
+        framework: editForm.framework,
+        status: editForm.status,
+        priority: editForm.priority,
+        start_date: editForm.start_date || undefined,
+        end_date: editForm.end_date || undefined,
+        budget: editForm.budget ? parseFloat(editForm.budget) : undefined,
+        team_members: teamMembers
+      }
+      
+      await apiClient.updateProject(projectId, updateData)
       
       toast.success("Project updated successfully!")
       setEditProjectDialogOpen(false)
@@ -308,8 +373,27 @@ export default function ProjectDetail() {
       console.error("Failed to update project:", error)
       toast.error("Failed to update project")
     } finally {
-      setCreatingDocument(false)
+      setUpdating(false)
     }
+  }
+
+  // Add team member
+  const handleAddTeamMember = () => {
+    const memberName = prompt("Enter team member name:")
+    if (memberName && memberName.trim()) {
+      setEditForm(prev => ({
+        ...prev,
+        team_members: [...prev.team_members, memberName.trim()]
+      }))
+    }
+  }
+
+  // Remove team member
+  const handleRemoveTeamMember = (index: number) => {
+    setEditForm(prev => ({
+      ...prev,
+      team_members: prev.team_members.filter((_, i) => i !== index)
+    }))
   }
 
   useEffect(() => {
@@ -452,7 +536,7 @@ export default function ProjectDetail() {
                 </div>
               </div>
               <div className="flex space-x-2">
-                <Button variant="outline" onClick={() => setEditProjectDialogOpen(true)}>
+                <Button variant="outline" onClick={handleEditProject}>
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Project
                 </Button>
@@ -535,57 +619,192 @@ export default function ProjectDetail() {
                   </DialogContent>
                 </Dialog>
                 <Dialog open={editProjectDialogOpen} onOpenChange={setEditProjectDialogOpen}>
-                  <DialogContent className="sm:max-w-[500px]">
+                  <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleUpdateProject}>
                       <DialogHeader>
                         <DialogTitle>Edit Project</DialogTitle>
                         <DialogDescription>
-                          Update project details and settings.
+                          Update project details, team members, and timeline.
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="grid gap-4 py-4">
+                      <div className="grid gap-6 py-4">
+                        {/* Basic Information */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="edit-project-name" className="text-sm font-semibold">
+                              Project Name *
+                            </Label>
+                            <Input 
+                              id="edit-project-name" 
+                              placeholder="Enter project name" 
+                              className="mt-2"
+                              value={editForm.name}
+                              onChange={(e) => setEditForm(prev => ({...prev, name: e.target.value}))}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-priority" className="text-sm font-semibold">
+                              Priority
+                            </Label>
+                            <select
+                              id="edit-priority"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={editForm.priority}
+                              onChange={(e) => setEditForm(prev => ({...prev, priority: e.target.value}))}
+                            >
+                              <option value="low">Low</option>
+                              <option value="medium">Medium</option>
+                              <option value="high">High</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="edit-framework" className="text-sm font-semibold">
+                              Framework *
+                            </Label>
+                            <select
+                              id="edit-framework"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={editForm.framework}
+                              onChange={(e) => setEditForm(prev => ({...prev, framework: e.target.value}))}
+                              required
+                            >
+                              <option value="">Select framework</option>
+                              <option value="BABOK v3">BABOK v3</option>
+                              <option value="PMBOK 7">PMBOK 7</option>
+                              <option value="DMBOK 2.0">DMBOK 2.0</option>
+                            </select>
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-status" className="text-sm font-semibold">
+                              Status
+                            </Label>
+                            <select
+                              id="edit-status"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={editForm.status}
+                              onChange={(e) => setEditForm(prev => ({...prev, status: e.target.value}))}
+                            >
+                              <option value="planning">Planning</option>
+                              <option value="active">Active</option>
+                              <option value="on-hold">On Hold</option>
+                              <option value="completed">Completed</option>
+                              <option value="archived">Archived</option>
+                            </select>
+                          </div>
+                        </div>
+
                         <div>
-                          <Label htmlFor="project-name">Project Name</Label>
-                          <Input 
-                            id="project-name" 
-                            placeholder="Enter project name" 
-                            className="mt-1"
-                            value={project?.name || ""}
-                            onChange={(e) => setProject(prev => prev ? {...prev, name: e.target.value} : null)}
-                            required
+                          <Label htmlFor="edit-description" className="text-sm font-semibold">
+                            Description
+                          </Label>
+                          <Textarea
+                            id="edit-description"
+                            placeholder="Describe the project objectives and scope"
+                            className="mt-2"
+                            value={editForm.description}
+                            onChange={(e) => setEditForm(prev => ({...prev, description: e.target.value}))}
+                            rows={3}
                           />
                         </div>
+
+                        {/* Timeline and Budget */}
+                        <div className="grid grid-cols-3 gap-4">
+                          <div>
+                            <Label htmlFor="edit-start-date" className="text-sm font-semibold">
+                              Start Date
+                            </Label>
+                            <Input
+                              id="edit-start-date"
+                              type="date"
+                              className="mt-2"
+                              value={editForm.start_date}
+                              onChange={(e) => setEditForm(prev => ({...prev, start_date: e.target.value}))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-end-date" className="text-sm font-semibold">
+                              End Date
+                            </Label>
+                            <Input
+                              id="edit-end-date"
+                              type="date"
+                              className="mt-2"
+                              value={editForm.end_date}
+                              onChange={(e) => setEditForm(prev => ({...prev, end_date: e.target.value}))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="edit-budget" className="text-sm font-semibold">
+                              Budget
+                            </Label>
+                            <Input
+                              id="edit-budget"
+                              type="number"
+                              placeholder="0"
+                              className="mt-2"
+                              value={editForm.budget}
+                              onChange={(e) => setEditForm(prev => ({...prev, budget: e.target.value}))}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Project Manager */}
                         <div>
-                          <Label htmlFor="project-description">Description</Label>
-                          <Input 
-                            id="project-description" 
-                            placeholder="Enter project description" 
-                            className="mt-1"
-                            value={project?.description || ""}
-                            onChange={(e) => setProject(prev => prev ? {...prev, description: e.target.value} : null)}
+                          <Label htmlFor="edit-manager" className="text-sm font-semibold">
+                            Project Manager
+                          </Label>
+                          <Input
+                            id="edit-manager"
+                            placeholder="Enter project manager name"
+                            className="mt-2"
+                            value={editForm.manager}
+                            onChange={(e) => setEditForm(prev => ({...prev, manager: e.target.value}))}
                           />
                         </div>
+
+                        {/* Team Members */}
                         <div>
-                          <Label htmlFor="project-status">Status</Label>
-                          <select
-                            id="project-status"
-                            aria-label="Project Status"
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                            value={project?.status || ""}
-                            onChange={(e) => setProject(prev => prev ? {...prev, status: e.target.value} : null)}
-                          >
-                            <option value="planning">Planning</option>
-                            <option value="active">Active</option>
-                            <option value="on-hold">On Hold</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                          </select>
+                          <div className="flex items-center justify-between mb-2">
+                            <Label className="text-sm font-semibold">Team Members</Label>
+                            <Button type="button" variant="outline" size="sm" onClick={handleAddTeamMember}>
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Member
+                            </Button>
+                          </div>
+                          <div className="space-y-2 max-h-32 overflow-y-auto">
+                            {editForm.team_members.map((member, index) => (
+                              <div key={index} className="flex items-center justify-between p-2 border rounded">
+                                <span className="text-sm">{member}</span>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleRemoveTeamMember(index)}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                            {editForm.team_members.length === 0 && (
+                              <div className="text-center py-4 text-muted-foreground text-sm">
+                                No team members added yet
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button type="submit" disabled={creatingDocument}>
-                          {creatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          {creatingDocument ? "Updating..." : "Update Project"}
+                        <Button type="button" variant="outline" onClick={() => setEditProjectDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={updating}>
+                          {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          {updating ? "Updating..." : "Update Project"}
                         </Button>
                       </DialogFooter>
                     </form>
