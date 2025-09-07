@@ -36,7 +36,6 @@ services:
     environment:
       - NODE_ENV=development
     volumes:
-      - .:/app
       - /app/node_modules
       - /app/.next
     # Run as root in development to avoid permission issues with mounted volumes
