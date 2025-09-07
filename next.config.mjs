@@ -11,10 +11,8 @@ const nextConfig = {
   },
   // Enable standalone output for Docker containerization
   output: 'standalone',
-  // Enable experimental features for better serverless performance
-  experimental: {
-    serverComponentsExternalPackages: ['@vercel/postgres'],
-  },
+  // Enable external packages for server components
+  serverExternalPackages: ['@vercel/postgres'],
 }
 
 export default nextConfig
