@@ -2,6 +2,7 @@ import OpenAI from "openai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
+import { openaiConnector, OpenAIRequest } from "../modules/ai/openai"
 
 export interface AIProvider {
   name: string
@@ -37,11 +38,19 @@ class AIService {
 
   async initializeProviders() {
     try {
+      // Initialize OpenAI connector first
+      await openaiConnector.initializeProviders()
+
       const result = await pool.query(
         "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
       )
 
       for (const provider of result.rows) {
+        // Skip OpenAI providers as they're handled by the OpenAI connector
+        if (provider.provider_type === 'openai') {
+          continue
+        }
+
         await this.addProvider({
           name: provider.name,
           type: provider.provider_type,
@@ -50,7 +59,7 @@ class AIService {
         })
       }
 
-      logger.info(`Initialized ${this.providers.size} AI providers`)
+      logger.info(`Initialized ${this.providers.size} legacy AI providers + OpenAI connector`)
     } catch (error) {
       logger.error("Failed to initialize AI providers:", error)
     }
@@ -93,11 +102,6 @@ class AIService {
   }
 
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
-    const provider = this.providers.get(request.provider)
-    if (!provider) {
-      throw new Error(`Provider ${request.provider} not found or not configured`)
-    }
-
     // Process template if provided
     let processedPrompt = request.prompt
     if (request.template_id && request.variables) {
@@ -121,9 +125,29 @@ class AIService {
       switch (providerType) {
         case "openai":
         case "azure":
-          return await this.generateOpenAI(provider, processedPrompt, request, providerType)
+          // Use the new OpenAI connector with failover and rate limiting
+          const openaiRequest: OpenAIRequest = {
+            model: request.model || "gpt-3.5-turbo",
+            messages: [{ role: "user", content: processedPrompt }],
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
+          }
+          
+          const openaiResponse = await openaiConnector.generateCompletion(openaiRequest, request.provider)
+          
+          return {
+            content: openaiResponse.choices[0]?.message?.content || "",
+            provider: openaiResponse.provider,
+            model: openaiResponse.model,
+            usage: openaiResponse.usage,
+            metadata: openaiResponse.metadata,
+          }
 
         case "google":
+          const provider = this.providers.get(request.provider)
+          if (!provider) {
+            throw new Error(`Provider ${request.provider} not found or not configured`)
+          }
           return await this.generateGoogle(provider, processedPrompt, request)
 
         default:
@@ -255,11 +279,28 @@ class AIService {
         "SELECT name, provider_type, configuration FROM ai_providers WHERE is_active = true"
       )
 
-      return result.rows.map(provider => ({
-        name: provider.name,
-        type: provider.provider_type,
-        models: this.getModelsForProvider(provider.provider_type),
-      }))
+      const providers = []
+
+      for (const provider of result.rows) {
+        if (provider.provider_type === 'openai') {
+          // Get models from OpenAI connector
+          const models = await openaiConnector.getAvailableModels(provider.name)
+          providers.push({
+            name: provider.name,
+            type: provider.provider_type,
+            models: models,
+          })
+        } else {
+          // Use legacy method for other providers
+          providers.push({
+            name: provider.name,
+            type: provider.provider_type,
+            models: this.getModelsForProvider(provider.provider_type),
+          })
+        }
+      }
+
+      return providers
     } catch (error) {
       logger.error("Failed to get available providers:", error)
       return []
@@ -296,6 +337,34 @@ class AIService {
       )
     } catch (error) {
       logger.error(`Failed to update usage stats for ${provider}:`, error)
+    }
+  }
+
+  /**
+   * Get OpenAI provider statistics including rate limits and usage
+   */
+  async getOpenAIProviderStats(providerName?: string) {
+    try {
+      if (providerName) {
+        return openaiConnector.getProviderStats(providerName)
+      } else {
+        return openaiConnector.getAllProviderStats()
+      }
+    } catch (error) {
+      logger.error("Failed to get OpenAI provider stats:", error)
+      return null
+    }
+  }
+
+  /**
+   * Test connection to a specific OpenAI provider
+   */
+  async testOpenAIConnection(providerName: string): Promise<boolean> {
+    try {
+      return await openaiConnector.testConnection(providerName)
+    } catch (error) {
+      logger.error(`Failed to test OpenAI connection for ${providerName}:`, error)
+      return false
     }
   }
 }
