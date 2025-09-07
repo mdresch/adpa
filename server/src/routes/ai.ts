@@ -333,4 +333,190 @@ router.get("/history",
   }
 )
 
+// Get OpenAI provider statistics
+router.get(
+  "/openai/stats/:name?",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { name } = req.params
+      const stats = await aiService.getOpenAIProviderStats(name)
+      
+      if (!stats) {
+        return res.status(404).json({ error: "Provider not found or stats unavailable" })
+      }
+
+      res.json({ stats })
+    } catch (error) {
+      logger.error("Get OpenAI stats error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Test OpenAI provider connection
+router.post(
+  "/openai/test/:name",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { name } = req.params
+      
+      // Verify provider exists
+      const providerCheck = await pool.query(
+        "SELECT name FROM ai_providers WHERE name = $1 AND provider_type = 'openai'",
+        [name]
+      )
+
+      if (providerCheck.rows.length === 0) {
+        return res.status(404).json({ error: "OpenAI provider not found" })
+      }
+
+      const isConnected = await aiService.testOpenAIConnection(name)
+      
+      res.json({ 
+        provider: name,
+        connected: isConnected,
+        tested_at: new Date().toISOString()
+      })
+    } catch (error) {
+      logger.error("Test OpenAI connection error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get OpenAI models for a specific provider
+router.get(
+  "/openai/models/:name",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { name } = req.params
+      
+      // Verify provider exists
+      const providerCheck = await pool.query(
+        "SELECT name FROM ai_providers WHERE name = $1 AND provider_type = 'openai'",
+        [name]
+      )
+
+      if (providerCheck.rows.length === 0) {
+        return res.status(404).json({ error: "OpenAI provider not found" })
+      }
+
+      // Import openaiConnector directly for this specific functionality
+      const { openaiConnector } = await import("../modules/ai/openai")
+      const models = await openaiConnector.getAvailableModels(name)
+      
+      res.json({ 
+        provider: name,
+        models: models,
+        fetched_at: new Date().toISOString()
+      })
+    } catch (error) {
+      logger.error("Get OpenAI models error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Enhanced generate endpoint with failover information
+router.post(
+  "/generate/enhanced",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { prompt, provider, model, temperature, max_tokens, template_id, variables } = req.body
+
+      if (!prompt) {
+        return res.status(400).json({ error: "Prompt is required" })
+      }
+
+      // Check if provider exists and is active
+      const providerCheck = await pool.query(
+        "SELECT id, name, provider_type FROM ai_providers WHERE name = $1 AND is_active = true",
+        [provider]
+      )
+
+      if (providerCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found or inactive" })
+      }
+
+      const providerInfo = providerCheck.rows[0]
+      const startTime = Date.now()
+
+      try {
+        const result = await aiService.generate({
+          prompt,
+          provider,
+          model,
+          temperature,
+          max_tokens,
+          template_id,
+          variables,
+        })
+
+        const duration = Date.now() - startTime
+
+        // Log successful generation
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, created_at)
+           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+          [
+            req.user?.id || null,
+            "ai_generate_enhanced",
+            "ai_provider",
+            providerInfo.id,
+            JSON.stringify({
+              model: result.model,
+              usage: result.usage,
+              duration_ms: duration,
+              provider_type: providerInfo.provider_type,
+              template_id,
+            }),
+          ]
+        )
+
+        res.json({
+          ...result,
+          metadata: {
+            ...result.metadata,
+            duration_ms: duration,
+            requested_provider: provider,
+            actual_provider: result.provider,
+            failover_used: provider !== result.provider,
+          }
+        })
+
+      } catch (generationError) {
+        const duration = Date.now() - startTime
+        
+        // Log failed generation
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, details, created_at)
+           VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)`,
+          [
+            req.user?.id || null,
+            "ai_generate_enhanced_failed",
+            "ai_provider",
+            providerInfo.id,
+            JSON.stringify({
+              error: generationError.message,
+              duration_ms: duration,
+              provider_type: providerInfo.provider_type,
+              template_id,
+            }),
+          ]
+        )
+
+        throw generationError
+      }
+
+    } catch (error) {
+      logger.error("Enhanced AI generation error:", error)
+      res.status(500).json({ 
+        error: "AI generation failed",
+        details: error.message,
+        timestamp: new Date().toISOString()
+      })
+    }
+  }
+)
+
 export default router
