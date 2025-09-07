@@ -35,7 +35,10 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       - NODE_ENV=development
-    volumes: []
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
     # Run as root in development to avoid permission issues with mounted volumes
     user: root
     command: pnpm run dev
