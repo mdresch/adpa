@@ -14,7 +14,8 @@
     "seed-adpa": "tsx src/database/seed-adpa-documents.ts",
     "seed-all": "tsx src/database/seed-all.ts",
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
-    "seed:vercel": "tsx scripts/seed-vercel.ts"
+    "seed:vercel": "tsx scripts/seed-vercel.ts",
+    "migrate:openai-enhanced": "tsx src/database/migrate-openai-enhanced.ts"
   },
   "dependencies": {
     "@azure/msal-node": "^3.6.3",
