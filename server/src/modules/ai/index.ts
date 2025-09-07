@@ -13,6 +13,15 @@ export {
   OpenAIError
 } from './openai'
 
+export {
+  googleConnector,
+  GoogleConfig,
+  GoogleProvider,
+  GoogleRequest,
+  GoogleResponse,
+  GoogleError
+} from './google'
+
 // Re-export types for convenience
 export type {
   OpenAIConfig as AIConfig,
@@ -21,3 +30,11 @@ export type {
   OpenAIResponse as AIResponse,
   OpenAIError as AIError
 } from './openai'
+
+export type {
+  GoogleConfig as GoogleAIConfig,
+  GoogleProvider as GoogleAIProvider,
+  GoogleRequest as GoogleAIRequest,
+  GoogleResponse as GoogleAIResponse,
+  GoogleError as GoogleAIError
+} from './google'
