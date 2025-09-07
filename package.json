@@ -68,7 +68,7 @@
     "helmet": "latest",
     "http": "latest",
     "input-otp": "latest",
-    "inquirer": "^9.2.0",
+    "inquirer": "^12.9.4",
     "joi": "latest",
     "jsonwebtoken": "latest",
     "lucide-react": "^0.454.0",
