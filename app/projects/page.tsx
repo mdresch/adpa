@@ -646,18 +646,6 @@ export default function Projects() {
                               />
                             </div>
                           </div>
-                          <div>
-                            <Label htmlFor="manager" className="text-sm font-semibold">
-                              Project Manager
-                            </Label>
-                            <Input
-                              id="manager"
-                              placeholder="Enter manager name"
-                              value={newProject.manager}
-                              onChange={(e) => setNewProject({...newProject, manager: e.target.value})}
-                              className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
-                            />
-                          </div>
                         </div>
                         <DialogFooter>
                           <Button
@@ -804,23 +792,6 @@ export default function Projects() {
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
-                      </div>
-                      <div>
-                        <Label htmlFor="edit-status" className="text-sm font-semibold">
-                          Status
-                        </Label>
-                        <select 
-                          title="Project Status"
-                          className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
-                          value={editingProject?.status || ""}
-                          onChange={(e) => setEditingProject({...editingProject!, status: e.target.value})}
-                        >
-                          <option value="active">Active</option>
-                          <option value="planning">Planning</option>
-                          <option value="completed">Completed</option>
-                          <option value="on-hold">On Hold</option>
-                          <option value="archived">Archived</option>
-                        </select>
                       </div>
                     </div>
                     <DialogFooter>
