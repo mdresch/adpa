@@ -29,6 +29,7 @@ import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
 import templateRoutes from "./routes/templates"
+import { documentTemplateRoutes } from "./modules/documentTemplates"
 
 const app = express()
 const server = createServer(app)
@@ -87,6 +88,7 @@ app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
+app.use("/api/document-templates", documentTemplateRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling

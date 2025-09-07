@@ -1,0 +1,765 @@
+openapi: 3.0.3
+info:
+  title: Document Templates API
+  description: REST API for managing document templates in the ADPA Framework
+  version: 1.0.0
+  contact:
+    name: ADPA Framework Team
+    email: support@adpa-framework.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:5000/api
+    description: Development server
+  - url: https://api.adpa-framework.com/api
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Document Templates
+    description: Operations for managing document templates
+
+paths:
+  /document-templates:
+    get:
+      summary: Get paginated list of document templates
+      description: Retrieve a paginated list of document templates with optional filtering
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of templates per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+        - name: framework
+          in: query
+          description: Filter by framework
+          required: false
+          schema:
+            type: string
+            enum: [TOGAF, SABSA, COBIT, ITIL, Custom]
+        - name: category
+          in: query
+          description: Filter by category
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+        - name: search
+          in: query
+          description: Search in name and description
+          required: false
+          schema:
+            type: string
+            maxLength: 100
+        - name: is_public
+          in: query
+          description: Filter by public/private status
+          required: false
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of templates with pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Create new document template
+      description: Create a new document template
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: Template created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /document-templates/{id}:
+    get:
+      summary: Get template by ID
+      description: Retrieve a specific template by its ID
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Update document template
+      description: Update an existing document template
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          description: Template updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Delete document template
+      description: Soft delete a document template (can be restored)
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template deleted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Template deleted successfully
+        '400':
+          description: Template is being used and cannot be deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: Template is being used by 5 documents and cannot be deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /document-templates/{id}/clone:
+    post:
+      summary: Clone document template
+      description: Create a copy of an existing template
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID to clone
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloneTemplateRequest'
+      responses:
+        '201':
+          description: Template cloned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateOperationResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /document-templates/{id}/use:
+    post:
+      summary: Record template usage
+      description: Increment the usage counter for a template
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template usage recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateUsageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /document-templates/trash:
+    get:
+      summary: Get deleted templates
+      description: Retrieve a list of soft-deleted templates (trash)
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: Page number
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of templates per page
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 10
+      responses:
+        '200':
+          description: List of deleted templates with pagination
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /document-templates/{id}/restore:
+    post:
+      summary: Restore deleted template
+      description: Restore a soft-deleted template from trash
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template restored successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateOperationResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /document-templates/{id}/permanent:
+    delete:
+      summary: Permanently delete template
+      description: Permanently delete a template (cannot be restored)
+      tags: [Document Templates]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: Template ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Template permanently deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Template permanently deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    DocumentTemplate:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique template identifier
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          description: Template name
+        description:
+          type: string
+          maxLength: 1000
+          description: Template description
+          nullable: true
+        framework:
+          type: string
+          enum: [TOGAF, SABSA, COBIT, ITIL, Custom]
+          description: Framework type
+        category:
+          type: string
+          maxLength: 100
+          description: Template category
+          nullable: true
+        content:
+          type: object
+          description: Template content structure
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+          description: Template variables
+        is_public:
+          type: boolean
+          description: Whether template is publicly accessible
+        created_by:
+          type: string
+          format: uuid
+          description: ID of user who created the template
+        usage_count:
+          type: integer
+          minimum: 0
+          description: Number of times template has been used
+        created_at:
+          type: string
+          format: date-time
+          description: Template creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Template last update timestamp
+        deleted_at:
+          type: string
+          format: date-time
+          description: Template deletion timestamp
+          nullable: true
+        deleted_by:
+          type: string
+          format: uuid
+          description: ID of user who deleted the template
+          nullable: true
+        created_by_name:
+          type: string
+          description: Name of user who created the template
+          nullable: true
+      required:
+        - id
+        - name
+        - framework
+        - content
+        - variables
+        - is_public
+        - created_by
+        - usage_count
+        - created_at
+        - updated_at
+
+    TemplateVariable:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Variable name
+        type:
+          type: string
+          enum: [text, number, date, boolean, select]
+          description: Variable data type
+        required:
+          type: boolean
+          default: false
+          description: Whether variable is required
+        default:
+          description: Default value for the variable
+          nullable: true
+        options:
+          type: array
+          items:
+            type: string
+          description: Available options for select type variables
+          nullable: true
+        description:
+          type: string
+          maxLength: 500
+          description: Variable description
+          nullable: true
+      required:
+        - name
+        - type
+        - required
+
+    CreateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          description: Template name
+        description:
+          type: string
+          maxLength: 1000
+          description: Template description
+          nullable: true
+        framework:
+          type: string
+          enum: [TOGAF, SABSA, COBIT, ITIL, Custom]
+          description: Framework type
+        category:
+          type: string
+          maxLength: 100
+          description: Template category
+          nullable: true
+        content:
+          type: object
+          description: Template content structure
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+          description: Template variables
+          default: []
+        is_public:
+          type: boolean
+          default: false
+          description: Whether template is publicly accessible
+      required:
+        - name
+        - framework
+        - content
+
+    UpdateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          description: Template name
+        description:
+          type: string
+          maxLength: 1000
+          description: Template description
+          nullable: true
+        framework:
+          type: string
+          enum: [TOGAF, SABSA, COBIT, ITIL, Custom]
+          description: Framework type
+        category:
+          type: string
+          maxLength: 100
+          description: Template category
+          nullable: true
+        content:
+          type: object
+          description: Template content structure
+        variables:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemplateVariable'
+          description: Template variables
+        is_public:
+          type: boolean
+          description: Whether template is publicly accessible
+
+    CloneTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 255
+          description: Name for the cloned template
+        description:
+          type: string
+          maxLength: 1000
+          description: Description for the cloned template
+          nullable: true
+        is_public:
+          type: boolean
+          default: false
+          description: Whether cloned template is publicly accessible
+      required:
+        - name
+
+    TemplateListResponse:
+      type: object
+      properties:
+        templates:
+          type: array
+          items:
+            $ref: '#/components/schemas/DocumentTemplate'
+          description: List of templates
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+      required:
+        - templates
+        - pagination
+
+    TemplateResponse:
+      type: object
+      properties:
+        template:
+          $ref: '#/components/schemas/DocumentTemplate'
+      required:
+        - template
+
+    TemplateOperationResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Operation result message
+        template:
+          $ref: '#/components/schemas/DocumentTemplate'
+      required:
+        - message
+        - template
+
+    TemplateUsageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: Operation result message
+        usage_count:
+          type: integer
+          minimum: 0
+          description: Updated usage count
+      required:
+        - message
+        - usage_count
+
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: Current page number
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          description: Number of items per page
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of items
+        pages:
+          type: integer
+          minimum: 0
+          description: Total number of pages
+      required:
+        - page
+        - limit
+        - total
+        - pages
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error message
+        details:
+          type: array
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                description: Field that caused the error
+              message:
+                type: string
+                description: Error message for the field
+          description: Detailed validation errors
+      required:
+        - error
+
+  responses:
+    BadRequest:
+      description: Bad request - validation failed
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Validation failed
+            details:
+              - field: name
+                message: Name is required
+              - field: framework
+                message: Framework must be one of TOGAF, SABSA, COBIT, ITIL, Custom
+
+    Unauthorized:
+      description: Unauthorized - authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Access token required
+
+    Forbidden:
+      description: Forbidden - insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Insufficient permissions
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Template not found
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error: Internal server error
