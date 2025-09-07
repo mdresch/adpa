@@ -519,4 +519,88 @@ router.post(
   }
 )
 
+// Get Google AI provider statistics
+router.get(
+  "/google/stats/:name?",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { name } = req.params
+      const stats = await aiService.getGoogleAIProviderStats(name)
+      
+      if (!stats) {
+        return res.status(404).json({ error: "Provider not found or stats unavailable" })
+      }
+
+      res.json({ stats })
+    } catch (error) {
+      logger.error("Get Google AI stats error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Test Google AI provider connection
+router.post(
+  "/google/test/:name",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { name } = req.params
+      
+      // Verify provider exists
+      const providerCheck = await pool.query(
+        "SELECT name FROM ai_providers WHERE name = $1 AND provider_type = 'google'",
+        [name]
+      )
+      
+      if (providerCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Google AI provider not found" })
+      }
+      
+      const isConnected = await aiService.testGoogleAIConnection(name)
+      
+      res.json({ 
+        connected: isConnected,
+        provider: name,
+        timestamp: new Date().toISOString()
+      })
+    } catch (error) {
+      logger.error("Test Google AI connection error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get available models for Google AI provider
+router.get(
+  "/google/models/:name",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const { name } = req.params
+      
+      // Verify provider exists
+      const providerCheck = await pool.query(
+        "SELECT name FROM ai_providers WHERE name = $1 AND provider_type = 'google'",
+        [name]
+      )
+      
+      if (providerCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Google AI provider not found" })
+      }
+      
+      // Import googleConnector directly for this specific functionality
+      const { googleConnector } = await import("../modules/ai/google")
+      const models = await googleConnector.getAvailableModels(name)
+      
+      res.json({ 
+        provider: name,
+        models: models,
+        fetched_at: new Date().toISOString()
+      })
+    } catch (error) {
+      logger.error("Get Google AI models error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
 export default router
