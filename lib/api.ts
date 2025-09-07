@@ -497,6 +497,29 @@ class ApiClient {
     await this.request(`/templates/${id}`, { method: "DELETE" })
   }
 
+  async getDeletedTemplates(params?: { page?: number; limit?: number }): Promise<{ templates: Template[]; pagination?: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) queryParams.append(key, String(value))
+      })
+    }
+    const qs = queryParams.toString()
+    const response = await this.request<{ templates: Template[]; pagination?: any }>(`/templates/trash${qs ? `?${qs}` : ""}`)
+    return response
+  }
+
+  async restoreTemplate(id: string): Promise<Template> {
+    const response = await this.request<{ template: Template }>(`/templates/${id}/restore`, {
+      method: "POST",
+    })
+    return response.template
+  }
+
+  async hardDeleteTemplate(id: string): Promise<void> {
+    await this.request(`/templates/${id}/hard`, { method: "DELETE" })
+  }
+
   async cloneTemplate(id: string, data: { name: string; description?: string; is_public?: boolean }): Promise<Template> {
     const response = await this.request<{ template: Template }>(`/templates/${id}/clone`, {
       method: "POST",

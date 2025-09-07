@@ -21,6 +21,24 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import googleProviderStubRaw from "./google"
+
+const googleProviderStub = {
+  id: "2",
+  name: "Google AI",
+  type: "google",
+  model: "gemini-pro",
+  status: "active",
+  apiKey: "*********************",
+  endpoint: "https://generativelanguage.googleapis.com",
+  priority: 2,
+  enabled: true,
+  lastUsed: "10 minutes ago",
+  requestCount: 456,
+  errorRate: 0.1,
+  // You can spread googleProviderStubRaw if needed for additional properties
+  ...googleProviderStubRaw,
+}
 
 export default function AIProviders() {
   const [showApiKey, setShowApiKey] = useState<Record<string, boolean>>({})
@@ -39,20 +57,7 @@ export default function AIProviders() {
       requestCount: 1234,
       errorRate: 0.2,
     },
-    {
-      id: "2",
-      name: "Google AI Gemini",
-      type: "google",
-      model: "gemini-1.5-pro",
-      status: "standby",
-      apiKey: "AIza*********************",
-      endpoint: "https://generativelanguage.googleapis.com",
-      priority: 2,
-      enabled: true,
-      lastUsed: "1 hour ago",
-      requestCount: 456,
-      errorRate: 0.1,
-    },
+    googleProviderStub,
     {
       id: "3",
       name: "Azure OpenAI",
@@ -192,7 +197,9 @@ export default function AIProviders() {
                             <Label className="text-sm font-medium">API Key</Label>
                             <div className="flex items-center space-x-2 mt-1">
                               <p className="text-sm text-muted-foreground font-mono">
-                                {showApiKey[provider.id] ? provider.apiKey : provider.apiKey.replace(/./g, "*")}
+                                {showApiKey[provider.id]
+                                  ? provider.apiKey ?? ""
+                                  : (provider.apiKey ?? "").replace(/./g, "*")}
                               </p>
                               <Button variant="ghost" size="sm" onClick={() => toggleApiKeyVisibility(provider.id)}>
                                 {showApiKey[provider.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -242,7 +249,7 @@ export default function AIProviders() {
                       <Label>Failover Priority Order</Label>
                       <div className="space-y-2">
                         {providers
-                          .sort((a, b) => a.priority - b.priority)
+                          .sort((a, b) => (a.priority ?? 0) - (b.priority ?? 0))
                           .map((provider, index) => (
                             <div key={provider.id} className="flex items-center justify-between p-3 border rounded-lg">
                               <div className="flex items-center space-x-3">

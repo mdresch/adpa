@@ -13,6 +13,7 @@ interface AuthContextType {
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   isAuthenticated: boolean
+  token: string | null
   hasPermission: (permission: string) => boolean
   hasRole: (roles: string | string[]) => boolean
 }
@@ -34,6 +35,7 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [token, setToken] = useState<string | null>(null)
   const router = useRouter()
 
   // Check if user is authenticated
@@ -59,6 +61,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const token = localStorage.getItem("auth_token")
         if (token) {
           apiClient.setToken(token)
+          setToken(token)
           try {
             const currentUser = await apiClient.getCurrentUser()
             setUser(currentUser)
@@ -74,6 +77,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Clear invalid token
         localStorage.removeItem("auth_token")
         apiClient.clearToken()
+  setToken(null)
       } finally {
         setLoading(false)
       }
@@ -88,6 +92,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true)
       const { user: loggedInUser, token } = await apiClient.login(email, password)
       setUser(loggedInUser)
+  setToken(token)
       
       // Connect WebSocket after successful login
       apiClient.connectWebSocket()
@@ -109,6 +114,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setLoading(true)
       const { user: newUser, token } = await apiClient.register(userData)
       setUser(newUser)
+  setToken(token)
       
       // Connect WebSocket after successful registration
       apiClient.connectWebSocket()
@@ -129,6 +135,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       await apiClient.logout()
       setUser(null)
+  setToken(null)
       toast.success("Logged out successfully")
       router.push("/auth/login")
     } catch (error) {
@@ -136,6 +143,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       // Force logout even if API call fails
       setUser(null)
       apiClient.clearToken()
+  setToken(null)
       router.push("/auth/login")
     }
   }
@@ -164,6 +172,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     logout,
     refreshUser,
     isAuthenticated,
+  token,
     hasPermission,
     hasRole,
   }

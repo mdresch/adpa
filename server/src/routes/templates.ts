@@ -30,6 +30,7 @@ router.get("/",
         FROM templates t
         LEFT JOIN users u ON t.created_by = u.id
         WHERE (t.is_public = true OR t.created_by = $1)
+          AND t.deleted_at IS NULL
       `
 
       const params: any[] = [req.user?.id]
@@ -65,20 +66,20 @@ router.get("/",
       const result = await pool.query(query, params)
 
       // Get total count
-      let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1)"
+  let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1) AND t.deleted_at IS NULL"
       const countParams = [req.user?.id]
       let countParamCount = 1
 
       if (framework) {
         countParamCount++
         countQuery += ` AND t.framework = $${countParamCount}`
-        countParams.push(framework)
+        countParams.push(framework as string)
       }
 
       if (category) {
         countParamCount++
         countQuery += ` AND t.category = $${countParamCount}`
-        countParams.push(category)
+        countParams.push(category as string)
       }
 
       if (search) {
@@ -90,7 +91,7 @@ router.get("/",
       if (is_public !== undefined) {
         countParamCount++
         countQuery += ` AND t.is_public = $${countParamCount}`
-        countParams.push(is_public)
+        countParams.push(is_public ? "true" : "false")
       }
 
       const countResult = await pool.query(countQuery, countParams)
@@ -132,7 +133,7 @@ router.get("/:id",
         SELECT t.*, u.name as created_by_name
         FROM templates t
         LEFT JOIN users u ON t.created_by = u.id
-        WHERE t.id = $1 AND (t.is_public = true OR t.created_by = $2)
+        WHERE t.id = $1 AND (t.is_public = true OR t.created_by = $2) AND t.deleted_at IS NULL
       `,
         [id, req.user?.id]
       )
@@ -218,7 +219,7 @@ router.put("/:id",
 
       // Check if template exists and user has permission
       const templateCheck = await pool.query(
-        "SELECT created_by FROM templates WHERE id = $1",
+        "SELECT created_by FROM templates WHERE id = $1 AND deleted_at IS NULL",
         [id]
       )
 
@@ -313,14 +314,15 @@ router.delete("/:id",
         })
       }
 
-      await pool.query("DELETE FROM templates WHERE id = $1", [id])
+  // Soft-delete: set deleted_at timestamp and who deleted it so content is preserved for some time
+  await pool.query("UPDATE templates SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $2 WHERE id = $1", [id, req.user?.id])
 
-      // Clear cache
-      await cache.del(`template:${id}`)
+  // Clear cache
+  await cache.del(`template:${id}`)
 
-      logger.info(`Template deleted: ${id} by ${req.user?.email}`)
+  logger.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
 
-      res.json({ message: "Template deleted successfully" })
+  res.json({ message: "Template deleted (soft) successfully" })
     } catch (error) {
       logger.error("Delete template error:", error)
       res.status(500).json({ error: "Internal server error" })
@@ -347,7 +349,7 @@ router.post("/:id/clone",
       const originalResult = await pool.query(
         `
         SELECT * FROM templates 
-        WHERE id = $1 AND (is_public = true OR created_by = $2)
+        WHERE id = $1 AND (is_public = true OR created_by = $2) AND deleted_at IS NULL
       `,
         [id, req.user?.id]
       )
@@ -403,7 +405,7 @@ router.post("/:id/use",
         `
         UPDATE templates 
         SET usage_count = usage_count + 1, updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1 AND (is_public = true OR created_by = $2)
+        WHERE id = $1 AND (is_public = true OR created_by = $2) AND deleted_at IS NULL
         RETURNING usage_count
       `,
         [id, req.user?.id]
@@ -428,3 +430,112 @@ router.post("/:id/use",
 )
 
 export default router
+
+// --- Trash endpoints ---
+// List soft-deleted templates (admin or owner) - optional admin-only in production
+router.get(
+  "/trash",
+  authenticateToken,
+  requirePermission("templates.view"),
+  async (req, res) => {
+    try {
+      const page = Number(req.query.page || 1)
+      const limit = Math.min(Number(req.query.limit || 10), 100)
+      const offset = (page - 1) * limit
+
+      // If user is admin, allow viewing all deleted templates; otherwise restrict to templates deleted by the current user
+      const isAdmin = req.user?.role === "admin"
+
+      let query = `SELECT t.*, u.name as created_by_name FROM templates t LEFT JOIN users u ON t.created_by = u.id WHERE t.deleted_at IS NOT NULL`
+      const params: any[] = []
+
+      if (!isAdmin) {
+        params.push(req.user?.id)
+        query += ` AND t.deleted_by = $${params.length}`
+      }
+
+      // Order by deletion time desc, apply pagination
+      query += ` ORDER BY t.deleted_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
+      params.push(limit, offset)
+
+      const result = await pool.query(query, params)
+
+      // Count total matching
+      let countQuery = `SELECT COUNT(*) FROM templates t WHERE t.deleted_at IS NOT NULL`
+      const countParams: any[] = []
+      if (!isAdmin) {
+        countParams.push(req.user?.id)
+        countQuery += ` AND t.deleted_by = $${countParams.length}`
+      }
+      const countResult = await pool.query(countQuery, countParams)
+      const total = Number.parseInt(countResult.rows[0].count)
+
+      res.json({
+        templates: result.rows,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      })
+    } catch (error) {
+      logger.error("Get trash templates error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Restore soft-deleted template
+router.post("/:id/restore",
+  authenticateToken,
+  requirePermission("templates.update"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+
+      const templateCheck = await pool.query("SELECT created_by FROM templates WHERE id = $1 AND deleted_at IS NOT NULL", [id])
+      if (templateCheck.rows.length === 0) return res.status(404).json({ error: "Template not found or not deleted" })
+
+      const template = templateCheck.rows[0]
+      if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      const result = await pool.query("UPDATE templates SET deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *", [id])
+      await cache.del(`template:${id}`)
+      res.json({ message: "Template restored", template: result.rows[0] })
+    } catch (error) {
+      logger.error("Restore template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Hard delete (permanent)
+router.delete("/:id/hard",
+  authenticateToken,
+  requirePermission("templates.delete"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const templateCheck = await pool.query("SELECT created_by FROM templates WHERE id = $1 AND deleted_at IS NOT NULL", [id])
+      if (templateCheck.rows.length === 0) return res.status(404).json({ error: "Template not found or not deleted" })
+
+      const template = templateCheck.rows[0]
+      if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      // Optionally check documents referencing this template and handle cascade or block
+      await pool.query("DELETE FROM templates WHERE id = $1", [id])
+      await cache.del(`template:${id}`)
+      res.json({ message: "Template permanently deleted" })
+    } catch (error) {
+      logger.error("Hard delete template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)

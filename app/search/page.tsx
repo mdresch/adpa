@@ -36,6 +36,7 @@ import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 import { debounce } from "lodash"
+import { SkeletonLine } from "@/components/ui/skeleton"
 
 interface SearchResult {
   id: string
@@ -413,12 +414,12 @@ export default function SearchPage() {
                           {[1, 2, 3].map((i) => (
                             <Card key={i} className="animate-pulse">
                               <CardContent className="p-6">
-                                <div className="space-y-3">
-                                  <div className="h-4 bg-muted rounded w-3/4"></div>
-                                  <div className="h-3 bg-muted rounded w-1/2"></div>
-                                  <div className="h-3 bg-muted rounded w-full"></div>
-                                  <div className="h-3 bg-muted rounded w-2/3"></div>
-                                </div>
+                                        <div className="space-y-3">
+                                          <SkeletonLine className="w-3/4" />
+                                          <SkeletonLine className="w-1/2" />
+                                          <SkeletonLine className="w-full" />
+                                          <SkeletonLine className="w-2/3" />
+                                        </div>
                               </CardContent>
                             </Card>
                           ))}

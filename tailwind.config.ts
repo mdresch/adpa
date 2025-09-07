@@ -91,6 +91,21 @@ const config: Config = {
   			'accordion-down': 'accordion-down 0.2s ease-out',
   			'accordion-up': 'accordion-up 0.2s ease-out'
   		}
+		,
+		// Add transition properties and additional maxHeight utilities so
+		// we can use `transition-height` / `transition-max-height` and
+		// smoother accordion-style animations.
+		transitionProperty: {
+			'height': 'height',
+			'max-height': 'max-height',
+			'opacity-transform': 'opacity, transform'
+		},
+		maxHeight: {
+			'0': '0',
+			'full': '100%',
+			'screen-75': '75vh',
+			'screen-80': '80vh'
+		}
   	}
   },
   plugins: [require("tailwindcss-animate")],
