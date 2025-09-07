@@ -42,16 +42,16 @@ class AIService {
       // Initialize OpenAI connector first
       await openaiConnector.initializeProviders()
 
-  // Initialize Google connector
-  await googleConnector.initializeProviders()
+      // Initialize Google AI connector
+      await googleConnector.initializeProviders()
 
       const result = await pool.query(
         "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
       )
 
       for (const provider of result.rows) {
-        // Skip OpenAI providers as they're handled by the OpenAI connector
-        if (provider.provider_type === 'openai') {
+        // Skip OpenAI and Google providers as they're handled by their respective connectors
+        if (provider.provider_type === 'openai' || provider.provider_type === 'google') {
           continue
         }
 
@@ -63,7 +63,7 @@ class AIService {
         })
       }
 
-      logger.info(`Initialized ${this.providers.size} legacy AI providers + OpenAI connector`)
+      logger.info(`Initialized ${this.providers.size} legacy AI providers + OpenAI connector + Google AI connector`)
     } catch (error) {
       logger.error("Failed to initialize AI providers:", error)
     }
@@ -149,31 +149,22 @@ class AIService {
           }
 
         case "google":
-          const provider = this.providers.get(request.provider)
-          if (!provider) {
-            throw new Error(`Provider ${request.provider} not found or not configured`)
+          // Use the new Google AI connector with failover and rate limiting
+          const googleRequest: GoogleRequest = {
+            model: request.model || "gemini-pro",
+            messages: [{ role: "user", content: processedPrompt }],
+            temperature: request.temperature,
+            max_tokens: request.max_tokens,
           }
-          // Prefer using googleConnector if available for advanced features
-          try {
-            const googleRequest: GoogleRequest = {
-              model: request.model || 'gemini-pro',
-              prompt: processedPrompt,
-              temperature: request.temperature,
-              max_tokens: request.max_tokens,
-            }
-
-            const googleResponse = await googleConnector.generateCompletion(googleRequest, request.provider)
-
-            return {
-              content: googleResponse.content,
-              provider: googleResponse.provider,
-              model: googleResponse.model,
-              usage: googleResponse.usage,
-              metadata: googleResponse.metadata,
-            }
-          } catch (err) {
-            // Fallback to legacy client
-            return await this.generateGoogle(provider, processedPrompt, request)
+          
+          const googleResponse = await googleConnector.generateCompletion(googleRequest, request.provider)
+          
+          return {
+            content: googleResponse.choices[0]?.message?.content || "",
+            provider: googleResponse.provider,
+            model: googleResponse.model,
+            usage: googleResponse.usage,
+            metadata: googleResponse.metadata,
           }
 
         default:
@@ -319,6 +310,14 @@ class AIService {
             type: provider.provider_type,
             models: models,
           })
+        } else if (provider.provider_type === 'google') {
+          // Get models from Google AI connector
+          const models = await googleConnector.getAvailableModels(provider.name)
+          providers.push({
+            name: provider.name,
+            type: provider.provider_type,
+            models: models,
+          })
         } else {
           // Use legacy method for other providers
           providers.push({
@@ -393,6 +392,34 @@ class AIService {
       return await openaiConnector.testConnection(providerName)
     } catch (error) {
       logger.error(`Failed to test OpenAI connection for ${providerName}:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Get Google AI provider statistics including rate limits and usage
+   */
+  async getGoogleAIProviderStats(providerName?: string) {
+    try {
+      if (providerName) {
+        return googleConnector.getProviderStats(providerName)
+      } else {
+        return googleConnector.getAllProviderStats()
+      }
+    } catch (error) {
+      logger.error("Failed to get Google AI provider stats:", error)
+      return null
+    }
+  }
+
+  /**
+   * Test connection to a specific Google AI provider
+   */
+  async testGoogleAIConnection(providerName: string): Promise<boolean> {
+    try {
+      return await googleConnector.testConnection(providerName)
+    } catch (error) {
+      logger.error(`Failed to test Google AI connection for ${providerName}:`, error)
       return false
     }
   }
