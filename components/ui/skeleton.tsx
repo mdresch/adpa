@@ -58,4 +58,66 @@ export function SkeletonList({ items = 5 }: { items?: number }) {
   )
 }
 
+export function SkeletonStats({ items = 4 }: { items?: number }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {Array.from({ length: items }).map((_, i) => (
+        <div key={i} className="glass border-0 shadow-lg rounded-xl p-6">
+          <div className="flex items-center justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-8 w-16" />
+            </div>
+            <Skeleton className="h-10 w-10 rounded-full" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+export function SkeletonChart({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div className={cn("glass border-0 shadow-lg rounded-xl p-6 space-y-4", className)} {...props}>
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-4 w-48" />
+        </div>
+        <Skeleton className="h-8 w-20 rounded" />
+      </div>
+      <div className="space-y-2">
+        <Skeleton className="h-64 w-full rounded" />
+      </div>
+    </div>
+  )
+}
+
+export function SkeletonTable({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="glass border-0 shadow-lg rounded-xl p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <Skeleton className="h-6 w-32" />
+        <Skeleton className="h-8 w-24 rounded" />
+      </div>
+      <div className="space-y-3">
+        <div className="grid grid-cols-4 gap-4 p-4 border-b border-slate-200 dark:border-slate-700">
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="grid grid-cols-4 gap-4 p-4">
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-full" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default Skeleton
