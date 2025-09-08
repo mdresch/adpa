@@ -4,6 +4,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
+
 async function runOpenAIEnhancedMigration() {
   try {
     logger.info('Starting OpenAI enhanced features migration...')
@@ -64,6 +65,19 @@ async function runOpenAIEnhancedMigration() {
     logger.error('OpenAI enhanced features migration failed:', error)
     throw error
   }
+}
+
+// Run migration if this file is executed directly
+if (require.main === module) {
+  runOpenAIEnhancedMigration()
+    .then(() => {
+      logger.info('Migration script completed')
+      process.exit(0)
+    })
+    .catch((error) => {
+      logger.error('Migration script failed:', error)
+      process.exit(1)
+    })
 }
 
 export { runOpenAIEnhancedMigration }
