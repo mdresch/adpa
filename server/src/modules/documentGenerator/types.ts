@@ -36,6 +36,24 @@ export interface GenerationOptions {
   css_styles?: string
   quality?: number
   compress?: boolean
+  // Adobe PDF Services options
+  use_adobe_pdf?: boolean
+  adobe_quality?: 'low' | 'medium' | 'high'
+  adobe_compress?: boolean
+  adobe_linearize?: boolean
+  adobe_protect?: boolean
+  adobe_password?: string
+  adobe_permissions?: {
+    print?: boolean
+    editContent?: boolean
+    editDocumentAssembly?: boolean
+    editAnnotations?: boolean
+    fillAndSign?: boolean
+    extractForAccessibility?: boolean
+    extract?: boolean
+  }
+  document_language?: string
+  include_tagged_pdf?: boolean
 }
 
 export interface GenerationMetadata {
