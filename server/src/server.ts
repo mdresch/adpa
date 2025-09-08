@@ -31,6 +31,7 @@ import sharepointRoutes from "./routes/sharepointRoutes"
 import templateRoutes from "./routes/templates"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
+import adobePdfRoutes from "./routes/adobe-pdf"
 
 const app = express()
 const server = createServer(app)
@@ -91,6 +92,7 @@ app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
+app.use("/api/adobe-pdf", adobePdfRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
