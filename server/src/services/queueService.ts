@@ -3,6 +3,7 @@ import { redisClient } from "../utils/redis"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import { aiService } from "./aiService"
+import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
 
 // Create job queues
@@ -50,16 +51,37 @@ aiQueue.process("ai-generate", async (job) => {
     // Update job status to processing
     await updateJobStatus(jobId, "processing", 10)
 
-    // Generate content using AI service
-    const result = await aiService.generate({
-      prompt,
-      provider,
-      model,
-      temperature,
-      max_tokens,
-      template_id,
-      variables,
-    })
+    // Generate content using AI service. Use ContextAwareAIService if job provides contextual identifiers
+    const useContext = !!job.data.use_context || !!job.data.projectId || !!job.data.documentIds || !!job.data.template_id
+
+    let result
+    if (useContext) {
+      result = await ContextAwareAIService.generateWithContext({
+        prompt,
+        provider,
+        model,
+        temperature,
+        max_tokens,
+        template_id,
+        variables,
+        user_id: userId,
+        project_id: job.data.projectId,
+        document_ids: job.data.documentIds,
+        include_integrations: job.data.include_integrations,
+        custom_context: job.data.custom_context,
+      })
+    } else {
+      // Fallback to original aiService
+      result = await aiService.generate({
+        prompt,
+        provider,
+        model,
+        temperature,
+        max_tokens,
+        template_id,
+        variables,
+      })
+    }
 
     // Update job status to 50%
     await updateJobStatus(jobId, "processing", 50)

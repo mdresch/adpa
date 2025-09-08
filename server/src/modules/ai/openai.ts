@@ -100,7 +100,7 @@ class OpenAIConnector {
         ORDER BY priority ASC, name ASC
       `)
 
-      for (const row of result.rows) {
+  for (const row of result.rows) {
         const config: OpenAIConfig = {
           apiKey: this.decryptApiKey(row.api_key_encrypted),
           ...row.configuration
@@ -109,7 +109,7 @@ class OpenAIConnector {
         const rateLimits = row.rate_limits || {}
         const usageStats = row.usage_stats || {}
 
-        const provider: OpenAIProvider = {
+  const provider: OpenAIProvider = {
           id: row.id,
           name: row.name,
           config,
@@ -128,7 +128,13 @@ class OpenAIConnector {
           }
         }
 
-        await this.addProvider(provider)
+        try {
+          await this.addProvider(provider)
+        } catch (err) {
+          // Don't fail startup for a single bad/missing provider; log and continue
+          logger.warn(`Skipping OpenAI provider '${provider.name}' during initialization:`, err)
+          continue
+        }
       }
 
       logger.info(`Initialized ${this.providers.size} OpenAI providers`)

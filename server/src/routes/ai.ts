@@ -5,6 +5,7 @@ import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, schemas } from "../middleware/validation"
 import { logger } from "../utils/logger"
 import { aiService } from "../services/aiService"
+import { ContextAwareAIService, generateWithContext } from "../modules/context/integration"
 import { addJob } from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
 
@@ -53,15 +54,36 @@ router.post("/generate",
       }
 
       // For quick requests, process immediately
-      const result = await aiService.generate({
-        prompt,
-        provider,
-        model,
-        temperature,
-        max_tokens,
-        template_id,
-        variables,
-      })
+      // If client requested context-aware generation or provided contextual identifiers, use ContextAwareAIService
+      const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
+
+      let result
+      if (useContext) {
+        result = await ContextAwareAIService.generateWithContext({
+          prompt,
+          provider,
+          model,
+          temperature,
+          max_tokens,
+          template_id,
+          variables,
+          user_id: req.user?.id,
+          project_id: req.body.project_id,
+          document_ids: req.body.document_ids,
+          include_integrations: req.body.include_integrations,
+          custom_context: req.body.custom_context,
+        })
+      } else {
+        result = await aiService.generate({
+          prompt,
+          provider,
+          model,
+          temperature,
+          max_tokens,
+          template_id,
+          variables,
+        })
+      }
 
       // Update usage stats
       if (result.usage) {
@@ -442,7 +464,8 @@ router.post(
       const startTime = Date.now()
 
       try {
-        const result = await aiService.generate({
+        // Use context-aware generation for enhanced endpoint
+        const result = await ContextAwareAIService.generateWithContext({
           prompt,
           provider,
           model,
@@ -450,6 +473,11 @@ router.post(
           max_tokens,
           template_id,
           variables,
+          user_id: req.user?.id,
+          project_id: req.body.project_id,
+          document_ids: req.body.document_ids,
+          include_integrations: req.body.include_integrations,
+          custom_context: req.body.custom_context,
         })
 
         const duration = Date.now() - startTime
