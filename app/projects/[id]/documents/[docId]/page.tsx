@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef, useEffect } from "react"
+import { useState, useRef, useEffect, useCallback } from "react"
 import { useParams } from "next/navigation"
 import { apiClient } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
@@ -62,6 +62,10 @@ export default function DocumentEditor() {
   const [documentData, setDocumentData] = useState<any>(null)
 
   const [documentContent, setDocumentContent] = useState("")
+  const autosaveTimer = useRef<number | null>(null)
+  const isMounted = useRef(false)
+  const [autosaveStatus, setAutosaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const savedTimeoutRef = useRef<number | null>(null)
 
   // Fetch document data
   const fetchDocument = async () => {
@@ -230,23 +234,39 @@ export default function DocumentEditor() {
   }
 
   // Save document
-  const saveDocument = async () => {
+  const saveDocument = useCallback(async (silent = false) => {
     try {
+      // indicate saving state for autosave vs manual save
+      if (silent) setAutosaveStatus('saving')
       setSaving(true)
       await apiClient.updateDocument(docId, {
         name: documentTitle,
         content: { html: documentContent },
         status: documentData?.status || 'draft'
       })
-      setLastSaved(new Date().toLocaleString())
-      toast.success("Document saved successfully")
+      const now = new Date().toLocaleString()
+      setLastSaved(now)
+      if (!silent) {
+        toast.success("Document saved successfully")
+      } else {
+        // show saved indicator briefly for autosave
+        setAutosaveStatus('saved')
+        if (savedTimeoutRef.current) {
+          window.clearTimeout(savedTimeoutRef.current)
+        }
+        savedTimeoutRef.current = window.setTimeout(() => {
+          setAutosaveStatus('idle')
+          savedTimeoutRef.current = null
+        }, 3000)
+      }
     } catch (error) {
       console.error("Failed to save document:", error)
-      toast.error("Failed to save document")
+      if (!silent) toast.error("Failed to save document")
+      else setAutosaveStatus('idle')
     } finally {
       setSaving(false)
     }
-  }
+  }, [docId, documentTitle, documentContent, documentData])
 
   // Version history handler
   const handleVersionHistory = () => {
@@ -292,6 +312,64 @@ export default function DocumentEditor() {
       fetchDocument()
     }
   }, [docId, isAuthenticated])
+
+  // Autosave: debounce saves after user stops typing
+  useEffect(() => {
+    // Skip autosave on initial mount when content is first loaded
+    if (!isMounted.current) {
+      isMounted.current = true
+      return
+    }
+
+    if (autosaveTimer.current) {
+      window.clearTimeout(autosaveTimer.current)
+    }
+
+    // Schedule autosave in 2s
+    autosaveTimer.current = window.setTimeout(() => {
+      saveDocument(true).catch(() => {})
+      autosaveTimer.current = null
+    }, 2000)
+
+    return () => {
+      if (autosaveTimer.current) {
+        window.clearTimeout(autosaveTimer.current)
+        autosaveTimer.current = null
+      }
+    }
+  }, [documentContent, saveDocument])
+
+  // Keyboard shortcuts (Cmd/Ctrl+S to save, Cmd/Ctrl+B/I/U for formatting)
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const meta = e.ctrlKey || e.metaKey
+      if (!meta) return
+
+      const key = e.key.toLowerCase()
+      if (key === 's') {
+        e.preventDefault()
+        saveDocument(false)
+      } else if (key === 'b') {
+        e.preventDefault()
+        formatText('bold')
+      } else if (key === 'i') {
+        e.preventDefault()
+        formatText('italic')
+      } else if (key === 'u') {
+        e.preventDefault()
+        formatText('underline')
+      } else if (key === 'z') {
+        e.preventDefault()
+        formatText('undo')
+      } else if (key === 'y') {
+        e.preventDefault()
+        formatText('redo')
+      }
+    }
+
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [saveDocument])
 
   return (
     <div className="flex h-screen bg-background">
@@ -351,8 +429,20 @@ export default function DocumentEditor() {
                   <Badge variant="outline">{documentData?.template || "Template"}</Badge>
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Last saved: {lastSaved} • {documentData?.author || "Unknown"}
+              <div className="text-sm text-muted-foreground flex items-center space-x-3">
+                <div className="flex items-center space-x-2">
+                  <span>Last saved: {lastSaved}</span>
+                  <span className="text-xs text-muted-foreground">• {documentData?.author || 'Unknown'}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  {/* Autosave indicator */}
+                  {autosaveStatus === 'saving' && (
+                    <div className="text-xs text-amber-500">Saving…</div>
+                  )}
+                  {autosaveStatus === 'saved' && (
+                    <div className="text-xs text-green-500">Saved</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -371,9 +461,9 @@ export default function DocumentEditor() {
               </TabsList>
             </div>
 
-            <TabsContent value="edit" className="flex-1 flex flex-col m-0">
+            <TabsContent value="edit" className="flex-1 flex flex-col m-0 min-h-0">
               {/* Toolbar */}
-              <div className="border-b bg-muted/30 p-2">
+              <div className="border-b bg-muted/30 p-2 sticky top-0 z-20 backdrop-blur-sm/5 shadow-sm">
                 <TooltipProvider>
                   <div className="flex items-center space-x-1">
                     <div className="flex items-center space-x-1 pr-2 border-r">
@@ -518,13 +608,13 @@ export default function DocumentEditor() {
               </div>
 
               {/* Editor */}
-              <div className="flex-1 overflow-hidden">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 <div className="h-full overflow-y-auto overflow-x-hidden visible-scrollbar scroll-smooth">
                   <div
                     ref={editorRef}
                     contentEditable={isEditing}
                     dangerouslySetInnerHTML={{ __html: documentContent }}
-                    className="min-h-full p-8 max-w-4xl mx-auto prose prose-lg focus:outline-none document-editor editor-content"
+                    className="h-full p-8 max-w-4xl mx-auto prose prose-lg focus:outline-none document-editor editor-content"
                     onInput={(e) => {
                       const target = e.target as HTMLDivElement
                       setDocumentContent(target.innerHTML)
@@ -534,7 +624,7 @@ export default function DocumentEditor() {
               </div>
             </TabsContent>
 
-            <TabsContent value="preview" className="flex-1 m-0">
+            <TabsContent value="preview" className="flex-1 m-0 min-h-0">
               <div className="h-full overflow-y-auto overflow-x-hidden visible-scrollbar scroll-smooth">
                 <div
                   className="min-h-full p-8 max-w-4xl mx-auto prose prose-lg document-editor"
