@@ -5,13 +5,13 @@
 
 import { Router } from 'express'
 import { documentGeneratorController } from './controller'
-import { authMiddleware } from '../../middleware/auth'
+import { authenticateToken } from '../../middleware/auth'
 import { validateDocumentGeneration, validateGenerationId, validateTemplateDataValidation } from './validation'
 
 const router = Router()
 
 // Apply authentication middleware to all routes
-router.use(authMiddleware)
+router.use(authenticateToken)
 
 /**
  * @route POST /api/document-generator/generate
