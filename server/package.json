@@ -15,9 +15,12 @@
     "seed-all": "tsx src/database/seed-all.ts",
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
-    "migrate:openai-enhanced": "tsx src/database/migrate-openai-enhanced.ts"
+    "migrate:openai-enhanced": "tsx src/database/migrate-openai-enhanced.ts",
+    "demo:adobe-pdf": "tsx src/demo/adobe-pdf-demo.ts",
+    "test:adobe-pdf": "tsx src/test-adobe-integration.ts"
   },
   "dependencies": {
+    "@adobe/pdfservices-node-sdk": "^4.0.1",
     "@azure/msal-node": "^3.6.3",
     "@google/generative-ai": "^0.2.1",
     "@neondatabase/serverless": "^1.0.1",
