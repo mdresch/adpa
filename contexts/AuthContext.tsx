@@ -10,6 +10,7 @@ interface AuthContextType {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   register: (userData: { email: string; password: string; name: string; role?: string }) => Promise<void>
+  demoLogin: () => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
   isAuthenticated: boolean
@@ -164,11 +165,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
   }
 
+  // Demo login (dev only)
+  const demoLogin = async () => {
+    try {
+      setLoading(true)
+      const { user: loggedInUser, token } = await apiClient.demoLogin()
+      setUser(loggedInUser)
+      setToken(token)
+      apiClient.connectWebSocket()
+      toast.success("Demo login successful")
+      router.push("/")
+    } catch (error) {
+      console.error("Demo login failed:", error)
+      toast.error("Demo login failed")
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const value: AuthContextType = {
     user,
     loading,
     login,
     register,
+    demoLogin,
     logout,
     refreshUser,
     isAuthenticated,
