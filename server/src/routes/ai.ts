@@ -3,7 +3,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, schemas } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { aiService } from "../services/aiService"
 import { ContextAwareAIService, generateWithContext } from "../modules/context/integration"
 import { addJob } from "../services/queueService"
@@ -17,6 +17,7 @@ router.post("/generate",
   requirePermission("ai.generate"),
   validate(schemas.aiGenerate),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { prompt, provider, model, temperature, max_tokens, template_id, variables } = req.body
 
@@ -85,12 +86,12 @@ router.post("/generate",
         })
       }
 
-      // Update usage stats
+  // Update usage stats
       if (result.usage) {
         await aiService.updateUsageStats(provider, result.usage)
       }
 
-      // Log the generation
+  // Log the generation
       await pool.query(
         `
         INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
@@ -109,7 +110,7 @@ router.post("/generate",
         result,
       })
     } catch (error) {
-      logger.error("AI generation error:", error)
+      log.error("AI generation error:", error)
       res.status(500).json({ 
         error: "AI generation failed",
         details: error instanceof Error ? error.message : "Unknown error"
@@ -120,11 +121,12 @@ router.post("/generate",
 
 // Get available AI providers
 router.get("/providers", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const providers = await aiService.getAvailableProviders()
     res.json({ providers })
   } catch (error) {
-    logger.error("Get AI providers error:", error)
+    log.error("Get AI providers error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })
@@ -159,7 +161,8 @@ router.get("/providers/:name",
 
       res.json({ provider })
     } catch (error) {
-      logger.error("Get AI provider error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get AI provider error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -208,14 +211,16 @@ router.post("/providers/:name/configure",
       // Re-initialize providers
       await aiService.initializeProviders()
 
-      logger.info(`AI provider configured: ${name} by ${req.user?.email}`)
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.info(`AI provider configured: ${name} by ${req.user?.email}`)
 
       res.json({
         message: "Provider configured successfully",
         provider: result.rows[0],
       })
     } catch (error) {
-      logger.error("Configure AI provider error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Configure AI provider error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -268,14 +273,16 @@ router.post("/providers",
         configuration,
       })
 
-      logger.info(`AI provider created: ${name} (${provider_type}) by ${req.user?.email}`)
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.info(`AI provider created: ${name} (${provider_type}) by ${req.user?.email}`)
 
       res.status(201).json({
         message: "Provider created successfully",
         provider: result.rows[0],
       })
     } catch (error) {
-      logger.error("Create AI provider error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Create AI provider error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -302,11 +309,13 @@ router.delete("/providers/:name",
       // Re-initialize providers
       await aiService.initializeProviders()
 
-      logger.info(`AI provider deleted: ${name} by ${req.user?.email}`)
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.info(`AI provider deleted: ${name} by ${req.user?.email}`)
 
       res.json({ message: "Provider deleted successfully" })
     } catch (error) {
-      logger.error("Delete AI provider error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Delete AI provider error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -349,7 +358,8 @@ router.get("/history",
         },
       })
     } catch (error) {
-      logger.error("Get AI history error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get AI history error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -369,7 +379,8 @@ router.get(
 
       res.json({ stats })
     } catch (error) {
-      logger.error("Get OpenAI stats error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get OpenAI stats error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -400,7 +411,8 @@ router.post(
         tested_at: new Date().toISOString()
       })
     } catch (error) {
-      logger.error("Test OpenAI connection error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Test OpenAI connection error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -433,7 +445,8 @@ router.get(
         fetched_at: new Date().toISOString()
       })
     } catch (error) {
-      logger.error("Get OpenAI models error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get OpenAI models error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -537,7 +550,8 @@ router.post(
       }
 
     } catch (error) {
-      logger.error("Enhanced AI generation error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Enhanced AI generation error:", error)
       res.status(500).json({ 
         error: "AI generation failed",
         details: error.message,
@@ -561,7 +575,8 @@ router.get(
 
       res.json({ stats })
     } catch (error) {
-      logger.error("Get Google AI stats error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get Google AI stats error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -592,7 +607,8 @@ router.post(
         timestamp: new Date().toISOString()
       })
     } catch (error) {
-      logger.error("Test Google AI connection error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Test Google AI connection error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -625,7 +641,8 @@ router.get(
         fetched_at: new Date().toISOString()
       })
     } catch (error) {
-      logger.error("Get Google AI models error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get Google AI models error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }

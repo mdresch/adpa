@@ -7,7 +7,7 @@ import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
 
 // Create job queues
-export const aiQueue = new Bull("ai-processing", {
+const aiQueueOptions = {
   redis: {
     host: process.env.REDIS_HOST || "redis",
     port: Number.parseInt(process.env.REDIS_PORT || "6379"),
@@ -23,9 +23,13 @@ export const aiQueue = new Bull("ai-processing", {
       delay: 2000,
     },
   },
-})
+}
 
-export const documentQueue = new Bull("document-processing", {
+export const aiQueue = process.env.REDIS_URL
+  ? new Bull("ai-processing", process.env.REDIS_URL, aiQueueOptions)
+  : new Bull("ai-processing", aiQueueOptions)
+
+const documentQueueOptions = {
   redis: {
     host: process.env.REDIS_HOST || "redis",
     port: Number.parseInt(process.env.REDIS_PORT || "6379"),
@@ -41,7 +45,11 @@ export const documentQueue = new Bull("document-processing", {
       delay: 5000,
     },
   },
-})
+}
+
+export const documentQueue = process.env.REDIS_URL
+  ? new Bull("document-processing", process.env.REDIS_URL, documentQueueOptions)
+  : new Bull("document-processing", documentQueueOptions)
 
 // Job processors
 aiQueue.process("ai-generate", async (job) => {

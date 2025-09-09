@@ -1,0 +1,7 @@
+172.19.0.2        redis  redis
+PING redis (172.19.0.2): 56 data bytes
+64 bytes from 172.19.0.2: seq=0 ttl=64 time=0.128 ms
+
+--- redis ping statistics ---
+1 packets transmitted, 1 packets received, 0% packet loss
+round-trip min/avg/max = 0.128/0.128/0.128 ms

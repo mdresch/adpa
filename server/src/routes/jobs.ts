@@ -4,7 +4,7 @@ import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validateParams, validateQuery, validate, schemas } from "../middleware/validation"
 import Joi from "joi"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { getJobStatus, cancelJob, addJob } from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
 
@@ -20,6 +20,7 @@ router.get("/",
     type: Joi.string().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { page = 1, limit = 10, status, type } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -80,7 +81,7 @@ router.get("/",
         },
       })
     } catch (error) {
-      logger.error("Get jobs error:", error)
+      log.error("Get jobs error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -120,7 +121,8 @@ router.post(
 
       res.status(202).json({ jobId })
     } catch (err) {
-      logger.error("Enqueue AI job error:", err)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Enqueue AI job error:", err)
       res.status(500).json({ error: "Failed to enqueue job" })
     }
   }
@@ -157,7 +159,8 @@ router.get("/:id",
 
       res.json({ job })
     } catch (error) {
-      logger.error("Get job error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get job error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -194,13 +197,15 @@ router.post("/:id/cancel",
       const cancelled = await cancelJob(id)
 
       if (cancelled) {
-        logger.info(`Job cancelled: ${id} by ${req.user?.email}`)
+        const log = childLogger({ requestId: (req as any).requestId })
+        log.info(`Job cancelled: ${id} by ${req.user?.email}`)
         res.json({ message: "Job cancelled successfully" })
       } else {
         res.status(500).json({ error: "Failed to cancel job" })
       }
     } catch (error) {
-      logger.error("Cancel job error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Cancel job error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -244,14 +249,16 @@ router.post("/:id/retry",
 
       await addJob(originalJob.type, jobData)
 
-      logger.info(`Job retried: ${id} -> ${newJobId} by ${req.user?.email}`)
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.info(`Job retried: ${id} -> ${newJobId} by ${req.user?.email}`)
 
       res.json({
         message: "Job retried successfully",
         newJobId,
       })
     } catch (error) {
-      logger.error("Retry job error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Retry job error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -293,7 +300,8 @@ router.get("/stats/overview",
         byType: typeStats.rows,
       })
     } catch (error) {
-      logger.error("Get job stats error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get job stats error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -384,7 +392,8 @@ router.get("/admin/all",
         },
       })
     } catch (error) {
-      logger.error("Get all jobs error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get all jobs error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }

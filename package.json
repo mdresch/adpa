@@ -20,6 +20,7 @@
     "test:ai-env": "tsx scripts/test-env-update.ts"
   },
   "dependencies": {
+    "@adobe/pdfservices-node-sdk": "4.0.1",
     "@emotion/is-prop-valid": "latest",
     "@google/generative-ai": "latest",
     "@neondatabase/serverless": "^1.0.1",

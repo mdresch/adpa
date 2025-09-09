@@ -5,7 +5,7 @@
 
 import type { Request, Response } from 'express'
 import { documentTemplateService } from './service'
-import { logger } from '../../utils/logger'
+import { logger, childLogger } from '../../utils/logger'
 import type { AuthenticatedUser } from './types'
 
 interface AuthenticatedRequest extends Request {
@@ -18,6 +18,7 @@ export class DocumentTemplateController {
    * Get paginated list of templates
    */
   async getTemplates(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const query = req.query
       const user = req.user!
@@ -26,7 +27,7 @@ export class DocumentTemplateController {
 
       res.json(result)
     } catch (error) {
-      logger.error('Get templates error:', error)
+      log.error('Get templates error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -36,6 +37,7 @@ export class DocumentTemplateController {
    * Get template by ID
    */
   async getTemplateById(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const user = req.user!
@@ -49,7 +51,7 @@ export class DocumentTemplateController {
 
       res.json({ template })
     } catch (error) {
-      logger.error('Get template error:', error)
+      log.error('Get template error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -59,6 +61,7 @@ export class DocumentTemplateController {
    * Create new template
    */
   async createTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const log = childLogger({ requestId: req.requestId })
     try {
       const data = req.body
       const user = req.user!
@@ -70,8 +73,8 @@ export class DocumentTemplateController {
         template,
       })
     } catch (error) {
-      logger.error('Create template error:', error)
-      res.status(500).json({ error: 'Internal server error' })
+  log.error('Create template error:', error)
+  res.status(500).json({ error: 'Internal server error' })
     }
   }
 
@@ -80,6 +83,7 @@ export class DocumentTemplateController {
    * Update template
    */
   async updateTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const data = req.body
@@ -102,7 +106,7 @@ export class DocumentTemplateController {
         return
       }
 
-      logger.error('Update template error:', error)
+  log.error('Update template error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -112,6 +116,7 @@ export class DocumentTemplateController {
    * Delete template (soft delete)
    */
   async deleteTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const user = req.user!
@@ -135,7 +140,7 @@ export class DocumentTemplateController {
         return
       }
 
-      logger.error('Delete template error:', error)
+  log.error('Delete template error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -145,6 +150,7 @@ export class DocumentTemplateController {
    * Clone template
    */
   async cloneTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const data = req.body
@@ -162,7 +168,7 @@ export class DocumentTemplateController {
         template,
       })
     } catch (error) {
-      logger.error('Clone template error:', error)
+  log.error('Clone template error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -172,6 +178,7 @@ export class DocumentTemplateController {
    * Record template usage
    */
   async recordTemplateUsage(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const user = req.user!
@@ -188,7 +195,7 @@ export class DocumentTemplateController {
         usage_count: usageCount,
       })
     } catch (error) {
-      logger.error('Record template usage error:', error)
+  log.error('Record template usage error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -198,6 +205,7 @@ export class DocumentTemplateController {
    * Get deleted templates
    */
   async getDeletedTemplates(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const page = Number(req.query.page || 1)
       const limit = Math.min(Number(req.query.limit || 10), 100)
@@ -207,7 +215,7 @@ export class DocumentTemplateController {
 
       res.json(result)
     } catch (error) {
-      logger.error('Get deleted templates error:', error)
+  log.error('Get deleted templates error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -217,6 +225,7 @@ export class DocumentTemplateController {
    * Restore deleted template
    */
   async restoreTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const user = req.user!
@@ -238,7 +247,7 @@ export class DocumentTemplateController {
         return
       }
 
-      logger.error('Restore template error:', error)
+  log.error('Restore template error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }
@@ -248,6 +257,7 @@ export class DocumentTemplateController {
    * Permanently delete template
    */
   async permanentlyDeleteTemplate(req: AuthenticatedRequest, res: Response): Promise<void> {
+  const log = childLogger({ requestId: req.requestId })
     try {
       const { id } = req.params
       const user = req.user!
@@ -266,7 +276,7 @@ export class DocumentTemplateController {
         return
       }
 
-      logger.error('Permanently delete template error:', error)
+  log.error('Permanently delete template error:', error)
       res.status(500).json({ error: 'Internal server error' })
     }
   }

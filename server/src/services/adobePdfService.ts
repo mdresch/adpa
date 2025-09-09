@@ -420,4 +420,27 @@ export const createAdobePDFServiceInstance = (): AdobePDFServiceWrapper => {
   return new AdobePDFServiceWrapper(config)
 }
 
-export const adobePdfService = createAdobePDFServiceInstance()
+// Export a lazily-created proxy that constructs the real service on first use.
+let _adobeInstance: AdobePDFServiceWrapper | null = null
+function getAdobeInstance(): AdobePDFServiceWrapper {
+  if (!_adobeInstance) {
+    _adobeInstance = createAdobePDFServiceInstance()
+  }
+  return _adobeInstance
+}
+
+export const adobePdfService: any = new Proxy({}, {
+  get(_, prop: string) {
+    const inst: any = getAdobeInstance()
+    const v = inst[prop]
+    if (typeof v === 'function') {
+      return v.bind(inst)
+    }
+    return v
+  },
+  set(_, prop: string, value) {
+    const inst: any = getAdobeInstance()
+    inst[prop] = value
+    return true
+  }
+})

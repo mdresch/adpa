@@ -20,9 +20,14 @@ services:
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=your-development-jwt-secret-key-here-make-it-long-and-secure
       - FRONTEND_URL=http://localhost:3000
-    volumes: []
+    # Mount the host server source into the container so changes on the host
+    # are visible to the dev watcher (tsx watch). Keep node_modules in the
+    # container to avoid overwriting installed deps.
+    volumes:
+      - ./server:/app
+      - /app/node_modules
     # Run as root in development to avoid permission issues with mounted volumes
-    # user: root
+    user: root
     command: npm run dev
     ports:
       - "5000:5000"
@@ -35,11 +40,26 @@ services:
       dockerfile: Dockerfile.dev
     environment:
       - NODE_ENV=development
+      # Ensure Next dev listens on all interfaces inside the container so the
+      # host can reach it via the forwarded port.
+      - HOST=0.0.0.0
+      # Enable polling so file change events are detected reliably when the
+      # filesystem is mounted from Windows into the container.
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    # Mount the repo root into /app so Next.js dev server sees file changes.
+    # Keep node_modules and .next as container volumes for performance and to
+    # avoid host/guest permission problems. Use cached mode for better perf on Mac/Windows.
     volumes:
+      - ./:/app:cached
       - /app/node_modules
       - /app/.next
     # Run as root in development to avoid permission issues with mounted volumes
     user: root
-    command: pnpm run dev
+    # Start Next in dev mode binding to 0.0.0.0 so the host can access it
+    # through the forwarded port. Invoke Next directly to avoid argument parsing
+    # differences between pnpm/npm and the shell which caused `--hostname` to
+    # be treated as a positional project directory.
+    command: "npm run dev"
     ports:
       - "3000:3000"

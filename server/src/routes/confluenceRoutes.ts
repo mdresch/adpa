@@ -3,7 +3,10 @@ import { ConfluenceIntegration } from "../integrations/confluence"
 import { ConfluenceConfig } from "../services/confluenceService"
 import { authenticateToken } from "../middleware/auth"
 import { pool } from "../database/connection"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
+
+// Static module-level child logger for helper code that runs outside request handlers
+const staticLog = childLogger({ component: "confluenceRoutes" })
 
 const router = Router()
 
@@ -15,6 +18,7 @@ router.use(authenticateToken)
  * POST /api/integrations/confluence/test
  */
 router.post("/test", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { baseUrl, credentials } = req.body
 
@@ -44,7 +48,7 @@ router.post("/test", async (req: Request, res: Response) => {
       })
     }
   } catch (error) {
-    logger.error("Confluence connection test failed:", error)
+    log.error("Confluence connection test failed:", error)
     res.status(500).json({
       error: "Connection test failed",
       details: error.message
@@ -57,6 +61,7 @@ router.post("/test", async (req: Request, res: Response) => {
  * GET /api/integrations/confluence/:integrationId/spaces
  */
 router.get("/:integrationId/spaces", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { integrationId } = req.params
 
@@ -74,7 +79,7 @@ router.get("/:integrationId/spaces", async (req: Request, res: Response) => {
       spaces
     })
   } catch (error) {
-    logger.error("Failed to get Confluence spaces:", error)
+    log.error("Failed to get Confluence spaces:", error)
     res.status(500).json({
       error: "Failed to get spaces",
       details: error.message
@@ -87,6 +92,7 @@ router.get("/:integrationId/spaces", async (req: Request, res: Response) => {
  * GET /api/integrations/confluence/:integrationId/search
  */
 router.get("/:integrationId/search", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { integrationId } = req.params
     const { query, spaceKey } = req.query
@@ -112,7 +118,7 @@ router.get("/:integrationId/search", async (req: Request, res: Response) => {
       results
     })
   } catch (error) {
-    logger.error("Confluence search failed:", error)
+    log.error("Confluence search failed:", error)
     res.status(500).json({
       error: "Search failed",
       details: error.message
@@ -125,6 +131,7 @@ router.get("/:integrationId/search", async (req: Request, res: Response) => {
  * POST /api/integrations/confluence/:integrationId/sync
  */
 router.post("/:integrationId/sync", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { integrationId } = req.params
 
@@ -151,8 +158,7 @@ router.post("/:integrationId/sync", async (req: Request, res: Response) => {
       syncedDocuments: syncedDocuments.length
     })
   } catch (error) {
-    logger.error("Confluence sync failed:", error)
-    
+    log.error("Confluence sync failed:", error)
     // Update integration sync status to failed
     await pool.query(
       `UPDATE integrations SET sync_status = 'failed' WHERE id = $1`,
@@ -171,6 +177,7 @@ router.post("/:integrationId/sync", async (req: Request, res: Response) => {
  * POST /api/integrations/confluence/:integrationId/import
  */
 router.post("/:integrationId/import", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { integrationId } = req.params
     const { pageId, projectId } = req.body
@@ -194,7 +201,7 @@ router.post("/:integrationId/import", async (req: Request, res: Response) => {
       document
     })
   } catch (error) {
-    logger.error("Confluence page import failed:", error)
+    log.error("Confluence page import failed:", error)
     res.status(500).json({
       error: "Import failed",
       details: error.message
@@ -207,6 +214,7 @@ router.post("/:integrationId/import", async (req: Request, res: Response) => {
  * POST /api/integrations/confluence/:integrationId/export
  */
 router.post("/:integrationId/export", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { integrationId } = req.params
     const { documentId } = req.body
@@ -249,7 +257,7 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
       confluenceUrl
     })
   } catch (error) {
-    logger.error("Confluence export failed:", error)
+    log.error("Confluence export failed:", error)
     res.status(500).json({
       error: "Export failed",
       details: error.message
@@ -262,6 +270,7 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
  * GET /api/integrations/confluence/:integrationId/status
  */
 router.get("/:integrationId/status", async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { integrationId } = req.params
 
@@ -294,7 +303,7 @@ router.get("/:integrationId/status", async (req: Request, res: Response) => {
       }
     })
   } catch (error) {
-    logger.error("Failed to get sync status:", error)
+    log.error("Failed to get sync status:", error)
     res.status(500).json({
       error: "Failed to get status",
       details: error.message
@@ -327,7 +336,7 @@ async function getIntegrationConfig(integrationId: string): Promise<{
       try {
         credentials = JSON.parse(Buffer.from(encryptedCredentials, "base64").toString())
       } catch (error) {
-        logger.error("Failed to decrypt credentials:", error)
+        staticLog.error("Failed to decrypt credentials:", error)
         return null
       }
     }
@@ -340,10 +349,10 @@ async function getIntegrationConfig(integrationId: string): Promise<{
         cloudId: config.cloud_id,
       }
     }
-  } catch (error) {
-    logger.error("Failed to get integration configuration:", error)
-    return null
-  }
+    } catch (error) {
+      staticLog.error("Failed to get integration configuration:", error)
+      return null
+    }
 }
 
 export default router

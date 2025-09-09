@@ -1,13 +1,14 @@
 import express from "express"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
 
 const router = express.Router()
 
 // Get all projects
 router.get("/", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { page = 1, limit = 10, status, framework, search } = req.query
     const offset = (Number(page) - 1) * Number(limit)
@@ -90,13 +91,14 @@ router.get("/", authenticateToken, async (req, res) => {
       },
     })
   } catch (error) {
-    logger.error("Get projects error:", error)
+    log.error("Get projects error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Get project by ID
 router.get("/:id", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
 
@@ -133,13 +135,14 @@ router.get("/:id", authenticateToken, async (req, res) => {
 
     res.json({ project })
   } catch (error) {
-    logger.error("Get project error:", error)
+    log.error("Get project error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Create project
 router.post("/", authenticateToken, requirePermission("projects.create"), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const {
       name,
@@ -174,20 +177,21 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
       ],
     )
 
-    logger.info(`Project created: ${name} by ${req.user?.email}`)
+  log.info(`Project created: ${name} by ${req.user?.email}`)
 
     res.status(201).json({
       message: "Project created successfully",
       project: result.rows[0],
     })
   } catch (error) {
-    logger.error("Create project error:", error)
+    log.error("Create project error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Update project
 router.put("/:id", authenticateToken, requirePermission("projects.update"), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
     const { name, description, framework, status, priority, start_date, end_date, budget, team_members } = req.body
@@ -208,20 +212,21 @@ router.put("/:id", authenticateToken, requirePermission("projects.update"), asyn
       return res.status(404).json({ error: "Project not found" })
     }
 
-    logger.info(`Project updated: ${id} by ${req.user?.email}`)
+  log.info(`Project updated: ${id} by ${req.user?.email}`)
 
     res.json({
       message: "Project updated successfully",
       project: result.rows[0],
     })
   } catch (error) {
-    logger.error("Update project error:", error)
+    log.error("Update project error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Delete project
 router.delete("/:id", authenticateToken, requirePermission("projects.delete"), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
 
@@ -231,11 +236,11 @@ router.delete("/:id", authenticateToken, requirePermission("projects.delete"), a
       return res.status(404).json({ error: "Project not found" })
     }
 
-    logger.info(`Project deleted: ${id} by ${req.user?.email}`)
+  log.info(`Project deleted: ${id} by ${req.user?.email}`)
 
     res.json({ message: "Project deleted successfully" })
   } catch (error) {
-    logger.error("Delete project error:", error)
+    log.error("Delete project error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })

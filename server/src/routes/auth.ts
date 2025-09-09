@@ -2,7 +2,10 @@ import express from "express"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
 import { pool } from "../database/connection"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
+
+// Static module-level logger for module-load events
+const staticLog = childLogger({ component: "authRoutes" })
 import { authenticateToken } from "../middleware/auth"
 
 // Extend Express Request type to include 'user'
@@ -22,10 +25,11 @@ declare global {
 
 const router = express.Router()
 
-console.log("🔧 Auth routes module loaded")
+staticLog.info("🔧 Auth routes module loaded")
 
 // Register
 router.post("/register", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { email, password, name, role = "user" } = req.body
 
@@ -48,7 +52,7 @@ router.post("/register", async (req, res) => {
     )
 
     if (!result.rows || result.rows.length === 0) {
-      logger.error("User creation failed: No user returned from DB")
+      log.error("User creation failed: No user returned from DB")
       return res.status(500).json({ error: "User creation failed" })
     }
 
@@ -59,7 +63,7 @@ router.post("/register", async (req, res) => {
       expiresIn: "24h",
     })
 
-    logger.info(`User registered: ${email}`)
+  log.info(`User registered: ${email}`)
 
     return res.status(201).json({
       message: "User created successfully",
@@ -72,14 +76,15 @@ router.post("/register", async (req, res) => {
       token,
     })
   } catch (error) {
-    logger.error("Registration error:", error)
+    log.error("Registration error:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Login
 router.post("/login", async (req, res) => {
-  logger.info(`🔍 Login attempt for: ${req.body.email}`)
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.info(`🔍 Login attempt for: ${req.body.email}`)
   try {
     const { email, password } = req.body
 
@@ -89,31 +94,31 @@ router.post("/login", async (req, res) => {
       [email],
     )
 
-    logger.info(`🔍 User query result: ${result.rows.length} rows`)
+  log.info(`🔍 User query result: ${result.rows.length} rows`)
 
     if (result.rows.length === 0) {
-      logger.warn(`❌ User not found: ${email}`)
+  log.warn(`❌ User not found: ${email}`)
       return res.status(401).json({ error: "Invalid credentials" })
     }
 
     const user = result.rows[0]
-    logger.info(`✅ User found: ${user.email}, Active: ${user.is_active}`)
+  log.info(`✅ User found: ${user.email}, Active: ${user.is_active}`)
 
     if (!user.is_active) {
-      logger.warn("❌ User account deactivated")
+  log.warn("❌ User account deactivated")
       return res.status(401).json({ error: "Account deactivated" })
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
-    logger.info(`🔐 Password verification result: ${isValidPassword}`)
+  log.info(`🔐 Password verification result: ${isValidPassword}`)
 
     if (!isValidPassword) {
-      logger.warn(`❌ Invalid password for user: ${email}`)
+  log.warn(`❌ Invalid password for user: ${email}`)
       return res.status(401).json({ error: "Invalid credentials" })
     }
 
-    logger.info(`✅ Login successful for: ${email}`)
+  log.info(`✅ Login successful for: ${email}`)
 
     // Generate JWT
     const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET || "your-secret-key", {
@@ -123,7 +128,7 @@ router.post("/login", async (req, res) => {
     // Update last login
     await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1", [user.id])
 
-    logger.info(`User logged in: ${email}`)
+  log.info(`User logged in: ${email}`)
 
     return res.json({
       message: "Login successful",
@@ -137,14 +142,14 @@ router.post("/login", async (req, res) => {
       token,
     })
   } catch (error) {
-    console.error("❌ Login error:", error)
-    logger.error("Login error:", error)
+    log.error("Login error:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Get current user
 router.get("/me", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const result = await pool.query(
       "SELECT id, email, name, role, permissions, avatar_url, created_at FROM users WHERE id = $1",
@@ -157,13 +162,14 @@ router.get("/me", authenticateToken, async (req, res) => {
 
     return res.json({ user: result.rows[0] })
   } catch (error) {
-    logger.error("Get user error:", error)
+    log.error("Get user error:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Refresh token
 router.post("/refresh", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const token = jwt.sign(
       { userId: req.user?.id, email: req.user?.email },
@@ -173,7 +179,7 @@ router.post("/refresh", authenticateToken, async (req, res) => {
 
     res.json({ token })
   } catch (error) {
-    logger.error("Token refresh error:", error)
+    log.error("Token refresh error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })

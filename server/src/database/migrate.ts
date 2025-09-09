@@ -115,6 +115,30 @@ async function runMigrations() {
       logger.warn("Confluence migration failed (may already be applied):", error)
     }
 
+    // Run templates soft-delete fields migration
+    try {
+      const templatesMigrationPath = join(__dirname, "migrations", "add_template_soft_delete_fields.sql")
+      const templatesMigration = readFileSync(templatesMigrationPath, "utf-8")
+
+      const templatesMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_template_soft_delete_fields"]
+      )
+
+      if (templatesMigrationCheck.rows.length === 0) {
+        await pool.query(templatesMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_template_soft_delete_fields"]
+        )
+        logger.info("Templates soft-delete migration completed")
+      } else {
+        logger.info("Templates soft-delete migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Templates soft-delete migration failed (may already be applied):", error)
+    }
+
     logger.info("Database migrations completed successfully")
   } catch (error) {
     logger.error("Migration failed:", error)

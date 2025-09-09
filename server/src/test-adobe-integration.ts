@@ -3,7 +3,16 @@
  */
 
 import dotenv from 'dotenv'
-dotenv.config()
+import fs from 'fs'
+import path from 'path'
+
+// Prefer loading environment from server/.env if present (developer put secrets there)
+const serverEnvPath = path.join(process.cwd(), 'server', '.env')
+if (fs.existsSync(serverEnvPath)) {
+  dotenv.config({ path: serverEnvPath })
+} else {
+  dotenv.config()
+}
 
 async function testIntegration() {
   try {
@@ -50,8 +59,11 @@ async function testIntegration() {
   }
 }
 
-if (require.main === module) {
-  testIntegration()
-}
+// ESM-friendly entry: run when the script is executed directly
+// Run test when executed directly
+testIntegration().catch((err) => {
+  console.error('Test runner error:', err)
+  process.exit(1)
+})
 
 export { testIntegration }

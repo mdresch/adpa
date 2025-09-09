@@ -141,8 +141,18 @@ class GoogleConnector {
    */
   async addProvider(provider: GoogleProvider): Promise<void> {
     try {
-      // Validate API key
-      await this.validateApiKey(provider.config.apiKey)
+      // Validate API key. If validation fails, mark provider inactive and continue
+      try {
+        await this.validateApiKey(provider.config.apiKey)
+      } catch (validationError) {
+        logger.error(`Google API key validation failed for provider ${provider.name}:`, validationError)
+        // register provider but mark as inactive so system can continue
+        provider.isActive = false
+        this.providers.set(provider.name, provider)
+        // ensure failover queue reflects that this provider is not available
+        this.updateFailoverQueue()
+        return
+      }
 
       // Create Google AI client
       const client = new GoogleGenerativeAI(provider.config.apiKey)
@@ -547,11 +557,4 @@ class GoogleConnector {
 export const googleConnector = new GoogleConnector()
 
 // Export types and interfaces
-export type {
-  GoogleConfig,
-  GoogleProvider,
-  GoogleRequest,
-  GoogleResponse,
-  GoogleError
-}
 
