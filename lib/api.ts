@@ -200,6 +200,18 @@ class ApiClient {
     }
   }
 
+  async demoLogin(): Promise<{ user: User; token: string }> {
+    const response = await this.request<{ user: User; token: string }>("/auth/demo", {
+      method: "POST",
+    })
+
+    if (response.token) {
+      this.setToken(response.token)
+    }
+
+    return { user: response.user, token: response.token }
+  }
+
   async register(userData: {
     email: string
     password: string
