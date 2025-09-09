@@ -38,7 +38,8 @@ COPY --from=builder --chown=adpa:nodejs /app/tsconfig.json ./
 
 # Create uploads and logs directories
 # Create uploads directory
-RUN mkdir -p uploads logs && chown -R adpa:nodejs uploads logs
+RUN mkdir -p uploads logs temp \
+	&& chown -R adpa:nodejs uploads logs temp
 
 USER adpa
 

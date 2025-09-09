@@ -5,10 +5,10 @@
  * based on relevance, importance, and token constraints.
  */
 
-import { 
-  ContextData, 
-  ContextSection, 
-  ContextPriority, 
+import { ContextPriority } from './types'
+import type {
+  ContextData,
+  ContextSection,
   PriorityConfig,
   ProjectContext,
   DocumentContext,
@@ -382,4 +382,4 @@ export class ContextPrioritizer {
   }
 }
 
-export { ContextPriority, PriorityConfig }
+export { ContextPriority }

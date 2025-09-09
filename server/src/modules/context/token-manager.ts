@@ -4,7 +4,7 @@
  * Manages token counting and limits for different AI providers and models.
  */
 
-import { ProviderTokenLimits, TokenUsage, ContextError } from './types'
+import type { ProviderTokenLimits, TokenUsage, ContextError } from './types'
 import { logger } from '../../utils/logger'
 
 export class TokenManager {
@@ -224,4 +224,4 @@ export class TokenManager {
   }
 }
 
-export { ProviderTokenLimits, TokenUsage }
+export type { ProviderTokenLimits, TokenUsage }

@@ -83,3 +83,6 @@ export const requirePermission = (permission: string) => {
     next()
   }
 }
+
+// Backwards-compatible alias used across the codebase and tests
+export const authMiddleware = authenticateToken

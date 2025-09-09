@@ -19,7 +19,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 
 export default function Templates() {
@@ -60,6 +59,9 @@ export default function Templates() {
       if (!mounted) return
       loadTemplates({ showLoading: false })
   }
+    // attach focus listener so switching back to the tab refreshes templates
+    window.addEventListener("focus", onFocus)
+
     return () => {
       mounted = false
       clearInterval(interval)
@@ -92,20 +94,44 @@ export default function Templates() {
   }
 
   const openEditDialog = (template: any) => {
-    setEditingTemplate(template)
-    setFormName(template.name || "")
-    setFormFramework(template.framework || "")
-    setFormCategory(template.category || "")
-    setFormVersion(template.version || "1.0")
-    setFormDescription(template.description || "")
-    setIsDialogOpen(true)
+  // prefer freshest template data from state by id (in case the passed object is stale)
+  const fresh = templates.find((t) => String(t.id) === String(template?.id)) || template
+  setEditingTemplate(fresh || null)
+  setFormName(fresh?.name || "")
+  setFormFramework(fresh?.framework || "")
+  setFormCategory(fresh?.category || "")
+  setFormVersion(fresh?.version ? String(fresh.version) : "1.0")
+  setFormDescription(fresh?.description || "")
+  setIsDialogOpen(true)
   }
 
   const closeDialog = () => {
     setIsDialogOpen(false)
     setEditingTemplate(null)
   }
+
+  // Ensure form fields reflect the current editingTemplate when it changes
+  useEffect(() => {
+    if (editingTemplate) {
+      setFormName(editingTemplate.name || "")
+      setFormFramework(editingTemplate.framework || "")
+      setFormCategory(editingTemplate.category || "")
+      setFormVersion(editingTemplate.version ? String(editingTemplate.version) : "1.0")
+      setFormDescription(editingTemplate.description || "")
+    } else if (!isDialogOpen) {
+      // clear when dialog closed and no editing template
+      setFormName("")
+      setFormFramework("")
+      setFormCategory("")
+      setFormVersion("")
+      setFormDescription("")
+    }
+  }, [editingTemplate, isDialogOpen])
   const [submitting, setSubmitting] = useState(false)
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
+  const [selectedTemplateForGeneration, setSelectedTemplateForGeneration] = useState<any | null>(null)
+  const [generatePrompt, setGeneratePrompt] = useState("")
+  const [generating, setGenerating] = useState(false)
   const [downloadingIds, setDownloadingIds] = useState<string[]>([])
   const [cloningIds, setCloningIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
@@ -167,6 +193,43 @@ export default function Templates() {
       toast.error(err?.message || 'Failed to clone template')
     } finally {
       setCloningIds((s) => s.filter((x) => x !== id))
+    }
+  }
+
+  const openGenerateDialog = (template: any) => {
+    setSelectedTemplateForGeneration(template)
+    setGeneratePrompt(`Generate a document using the "${template.name || 'template'}" template.`)
+    setGenerateDialogOpen(true)
+  }
+
+  const handleGenerateSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const template = selectedTemplateForGeneration
+    if (!template?.id) return
+    setGenerating(true)
+    try {
+      const response = await apiClient.generateContent({ prompt: generatePrompt, provider: 'openai', template_id: String(template.id) })
+      // response may be string or object
+      const content = typeof response === 'string' ? response : JSON.stringify(response, null, 2)
+      const blob = new Blob([content], { type: 'text/plain' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      const safeName = (template.name || 'generated').replace(/[^a-z0-9\-_.]/gi, '_')
+      a.href = url
+      a.download = `${safeName}-generated.txt`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Generation complete — download started')
+    } catch (err: any) {
+      console.error('Failed to generate from template', err)
+      toast.error(err?.message || 'Failed to generate from template')
+    } finally {
+      setGenerating(false)
+      setGenerateDialogOpen(false)
+      setSelectedTemplateForGeneration(null)
+      setGeneratePrompt("")
     }
   }
 
@@ -304,7 +367,14 @@ export default function Templates() {
       closeDialog()
     } catch (err: any) {
       console.error(err)
-      toast.error(err?.message || "Failed to save template")
+      // If server returned structured validation details, show them to the user
+      const details = err?.response?.data?.details || err?.response?.data?.errors
+      if (Array.isArray(details) && details.length > 0) {
+        const msg = details.map((d: any) => `${d.field || d.path || ''}: ${d.message || d}`).join('\n')
+        toast.error(msg)
+      } else {
+        toast.error(err?.message || "Failed to save template")
+      }
     } finally {
       setSubmitting(false)
     }
@@ -340,13 +410,11 @@ export default function Templates() {
                 <Button variant="outline" onClick={() => loadTemplates({ showLoading: true })}>
                   Refresh
                 </Button>
-                <Dialog open={isDialogOpen} onOpenChange={(open) => { if (!open) closeDialog() }}>
-                  <DialogTrigger asChild>
-                    <Button onClick={openCreateDialog}>
-                      <Plus className="h-4 w-4 mr-2" />
-                      Create Template
-                    </Button>
-                  </DialogTrigger>
+                <Dialog open={isDialogOpen} onOpenChange={(open) => { setIsDialogOpen(Boolean(open)); if (!open) { setEditingTemplate(null); } }}>
+                  <Button onClick={openCreateDialog}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Template
+                  </Button>
                   <DialogContent className="sm:max-w-[600px]">
                     <form onSubmit={handleCreateOrUpdate}>
                       <DialogHeader>
@@ -385,6 +453,11 @@ export default function Templates() {
                               <option value="BABOK v3">BABOK v3</option>
                               <option value="PMBOK 7">PMBOK 7</option>
                               <option value="DMBOK 2.0">DMBOK 2.0</option>
+                              <option value="TOGAF">TOGAF</option>
+                              <option value="SABSA">SABSA</option>
+                              <option value="COBIT">COBIT</option>
+                              <option value="ITIL">ITIL</option>
+                              <option value="Custom">Custom</option>
                             </select>
                             {formErrors.framework && <p className="text-sm text-destructive mt-1">{formErrors.framework}</p>}
                           </div>
@@ -452,6 +525,29 @@ export default function Templates() {
                         <Button variant="destructive" onClick={performHardDelete} disabled={!!hardDeletingId}>Delete Permanently</Button>
                       </div>
                     </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                {/* Generate from Template Dialog */}
+                <Dialog open={generateDialogOpen} onOpenChange={(open) => { if (!open) { setGenerateDialogOpen(false); setSelectedTemplateForGeneration(null); setGeneratePrompt("") } }}>
+                  <DialogContent className="sm:max-w-[600px]">
+                    <form onSubmit={handleGenerateSubmit}>
+                      <DialogHeader>
+                        <DialogTitle>Generate From Template</DialogTitle>
+                        <DialogDescription>Provide a prompt to generate a document using this template.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-4 py-4">
+                        <div>
+                          <label className="text-sm font-medium">Prompt</label>
+                          <textarea aria-label="Generate prompt" placeholder="Provide instructions for the document generation" className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1" value={generatePrompt} onChange={(e) => setGeneratePrompt(e.target.value)} />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" onClick={() => { setGenerateDialogOpen(false); setSelectedTemplateForGeneration(null); setGeneratePrompt("") }} disabled={generating}>Cancel</Button>
+                          <Button type="submit" disabled={generating}>{generating ? 'Generating...' : 'Generate'}</Button>
+                        </div>
+                      </DialogFooter>
+                    </form>
                   </DialogContent>
                 </Dialog>
               </div>
@@ -536,6 +632,10 @@ export default function Templates() {
                               <Edit className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
+                            <Button size="sm" variant="secondary" onClick={() => openGenerateDialog(template)}>
+                              <Plus className="h-4 w-4 mr-1" />
+                              Generate
+                            </Button>
                             <Button variant="outline" size="sm" onClick={() => handleClone(template)} disabled={cloningIds.includes(String(template.id))}>
                               <Copy className="h-4 w-4" />
                             </Button>
@@ -587,10 +687,14 @@ export default function Templates() {
                               </div>
                             </div>
                           </div>
-                          <div className="flex space-x-2">
+                            <div className="flex space-x-2">
                             <Button size="sm" onClick={() => openEditDialog(template)}>
                               <Edit className="h-4 w-4 mr-1" />
                               Edit
+                            </Button>
+                            <Button size="sm" variant="secondary" onClick={() => openGenerateDialog(template)}>
+                              <Plus className="h-4 w-4 mr-1" />
+                              Generate
                             </Button>
                             <Button variant="outline" size="sm" onClick={() => handleClone(template)} disabled={cloningIds.includes(String(template.id))}>
                               <Copy className="h-4 w-4" />

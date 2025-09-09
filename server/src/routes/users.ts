@@ -4,7 +4,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requireRole, requirePermission } from "../middleware/auth"
 import { validate, validateParams, validateQuery, schemas } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
 
@@ -22,6 +22,7 @@ router.get("/",
     is_active: Joi.boolean().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { page = 1, limit = 10, role, search, is_active } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -94,7 +95,7 @@ router.get("/",
         },
       })
     } catch (error) {
-      logger.error("Get users error:", error)
+      log.error("Get users error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -105,6 +106,7 @@ router.get("/:id",
   authenticateToken,
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -140,7 +142,7 @@ router.get("/:id",
 
       res.json({ user })
     } catch (error) {
-      logger.error("Get user error:", error)
+      log.error("Get user error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -152,6 +154,7 @@ router.post("/",
   requireRole(["admin"]),
   validate(schemas.createUser),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { email, password, name, role = "user" } = req.body
 
@@ -176,14 +179,14 @@ router.post("/",
         [id, email, passwordHash, name, role]
       )
 
-      logger.info(`User created: ${email} with role ${role} by ${req.user?.email}`)
+  log.info(`User created: ${email} with role ${role} by ${req.user?.email}`)
 
       res.status(201).json({
         message: "User created successfully",
         user: result.rows[0],
       })
     } catch (error) {
-      logger.error("Create user error:", error)
+      log.error("Create user error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -195,6 +198,7 @@ router.put("/:id",
   validateParams(Joi.object({ id: schemas.uuid })),
   validate(schemas.updateUser),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
       const { email, name, role, is_active, permissions } = req.body
@@ -239,14 +243,14 @@ router.put("/:id",
       // Clear cache
       await cache.del(`user:${id}`)
 
-      logger.info(`User updated: ${id} by ${req.user?.email}`)
+  log.info(`User updated: ${id} by ${req.user?.email}`)
 
       res.json({
         message: "User updated successfully",
         user: result.rows[0],
       })
     } catch (error) {
-      logger.error("Update user error:", error)
+      log.error("Update user error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -258,6 +262,7 @@ router.delete("/:id",
   requireRole(["admin"]),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -275,11 +280,11 @@ router.delete("/:id",
       // Clear cache
       await cache.del(`user:${id}`)
 
-      logger.info(`User deleted: ${id} by ${req.user?.email}`)
+  log.info(`User deleted: ${id} by ${req.user?.email}`)
 
       res.json({ message: "User deleted successfully" })
     } catch (error) {
-      logger.error("Delete user error:", error)
+      log.error("Delete user error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -294,6 +299,7 @@ router.put("/:id/password",
     new_password: schemas.password,
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
       const { current_password, new_password } = req.body
@@ -327,11 +333,11 @@ router.put("/:id/password",
         [newPasswordHash, id]
       )
 
-      logger.info(`Password updated for user: ${id} by ${req.user?.email}`)
+  log.info(`Password updated for user: ${id} by ${req.user?.email}`)
 
       res.json({ message: "Password updated successfully" })
     } catch (error) {
-      logger.error("Update password error:", error)
+      log.error("Update password error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }

@@ -4,7 +4,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, schemas } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
 
@@ -12,6 +12,7 @@ const router = express.Router()
 
 // Get all documents (for export functionality)
 router.get("/", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { page = 1, limit = 50, search } = req.query
     const offset = (Number(page) - 1) * Number(limit)
@@ -65,7 +66,7 @@ router.get("/", authenticateToken, async (req, res) => {
       }
     })
   } catch (error) {
-    logger.error("Failed to get documents:", error)
+    log.error("Failed to get documents:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })
@@ -88,6 +89,7 @@ const upload = multer({
 
 // Get documents for a project
 router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({ projectId: schemas.uuid })), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { projectId } = req.params
     const { page = 1, limit = 10, status, search } = req.query
@@ -161,13 +163,14 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
       },
     })
   } catch (error) {
-    logger.error("Get project documents error:", error)
+    log.error("Get project documents error:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
 })
 
 // Get document by ID
 router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uuid })), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
 
@@ -213,7 +216,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
 
     return res.json({ document })
   } catch (error) {
-    logger.error("Get document error:", error)
+    log.error("Get document error:", error)
     return res.status(500).json({ error: "Internal server error" })
   }
 })
@@ -225,6 +228,7 @@ router.post("/project/:projectId",
   validateParams(Joi.object({ projectId: schemas.uuid })),
   validate(schemas.createDocument),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { projectId } = req.params
       const { name, content, template_id, status = "draft" } = req.body
@@ -250,14 +254,14 @@ router.post("/project/:projectId",
         [id, projectId, name, JSON.stringify(content), template_id, status, req.user?.id]
       )
 
-      logger.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`)
+  log.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`)
 
       return res.status(201).json({
         message: "Document created successfully",
         document: result.rows[0],
       })
     } catch (error) {
-      logger.error("Create document error:", error)
+      log.error("Create document error:", error)
       return res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -270,6 +274,7 @@ router.put("/:id",
   validateParams(Joi.object({ id: schemas.uuid })),
   validate(schemas.updateDocument),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
       const { name, content, status } = req.body
@@ -321,14 +326,14 @@ router.put("/:id",
       // Clear cache
       await cache.del(`document:${id}`)
 
-      logger.info(`Document updated: ${id} by ${req.user?.email}`)
+  log.info(`Document updated: ${id} by ${req.user?.email}`)
 
       return res.json({
         message: "Document updated successfully",
         document: result.rows[0],
       })
     } catch (error) {
-      logger.error("Update document error:", error)
+      log.error("Update document error:", error)
       return res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -340,6 +345,7 @@ router.delete("/:id",
   requirePermission("documents.delete"),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -374,11 +380,11 @@ router.delete("/:id",
       // Clear cache
       await cache.del(`document:${id}`)
 
-      logger.info(`Document deleted: ${id} by ${req.user?.email}`)
+  log.info(`Document deleted: ${id} by ${req.user?.email}`)
 
       return res.json({ message: "Document deleted successfully" })
     } catch (error) {
-      logger.error("Delete document error:", error)
+      log.error("Delete document error:", error)
       return res.status(500).json({ error: "Internal server error" })
     }
   }

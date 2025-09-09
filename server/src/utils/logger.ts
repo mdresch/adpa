@@ -23,3 +23,11 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 export { logger }
+
+/**
+ * Create a child logger that includes request-specific metadata like requestId.
+ * Use this in request handlers to include requestId in all log lines.
+ */
+export function childLogger(meta: Record<string, any>) {
+  return logger.child({ ...meta })
+}

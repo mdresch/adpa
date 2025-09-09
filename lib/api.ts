@@ -138,6 +138,8 @@ class ApiClient {
       const response = await fetch(url, {
         ...options,
         headers,
+        // include credentials so cookie-based sessions work from the browser
+        credentials: (options as any).credentials || "include",
       })
 
       const data = await response.json()
@@ -467,18 +469,18 @@ class ApiClient {
     }
 
     const response = await this.request<{ templates: Template[]; pagination: any }>(
-      `/templates?${queryParams}`
+      `/document-templates?${queryParams}`
     )
     return response
   }
 
   async getTemplate(id: string): Promise<Template> {
-    const response = await this.request<{ template: Template }>(`/templates/${id}`)
+    const response = await this.request<{ template: Template }>(`/document-templates/${id}`)
     return response.template
   }
 
   async createTemplate(templateData: Partial<Template>): Promise<Template> {
-    const response = await this.request<{ template: Template }>("/templates", {
+    const response = await this.request<{ template: Template }>("/document-templates", {
       method: "POST",
       body: JSON.stringify(templateData),
     })
@@ -486,7 +488,7 @@ class ApiClient {
   }
 
   async updateTemplate(id: string, templateData: Partial<Template>): Promise<Template> {
-    const response = await this.request<{ template: Template }>(`/templates/${id}`, {
+    const response = await this.request<{ template: Template }>(`/document-templates/${id}`, {
       method: "PUT",
       body: JSON.stringify(templateData),
     })
@@ -494,7 +496,7 @@ class ApiClient {
   }
 
   async deleteTemplate(id: string): Promise<void> {
-    await this.request(`/templates/${id}`, { method: "DELETE" })
+    await this.request(`/document-templates/${id}`, { method: "DELETE" })
   }
 
   async getDeletedTemplates(params?: { page?: number; limit?: number }): Promise<{ templates: Template[]; pagination?: any }> {
@@ -504,24 +506,24 @@ class ApiClient {
         if (value !== undefined) queryParams.append(key, String(value))
       })
     }
-    const qs = queryParams.toString()
-    const response = await this.request<{ templates: Template[]; pagination?: any }>(`/templates/trash${qs ? `?${qs}` : ""}`)
+  const qs = queryParams.toString()
+  const response = await this.request<{ templates: Template[]; pagination?: any }>(`/document-templates/trash${qs ? `?${qs}` : ""}`)
     return response
   }
 
   async restoreTemplate(id: string): Promise<Template> {
-    const response = await this.request<{ template: Template }>(`/templates/${id}/restore`, {
+  const response = await this.request<{ template: Template }>(`/document-templates/${id}/restore`, {
       method: "POST",
     })
     return response.template
   }
 
   async hardDeleteTemplate(id: string): Promise<void> {
-    await this.request(`/templates/${id}/hard`, { method: "DELETE" })
+  await this.request(`/document-templates/${id}/hard`, { method: "DELETE" })
   }
 
   async cloneTemplate(id: string, data: { name: string; description?: string; is_public?: boolean }): Promise<Template> {
-    const response = await this.request<{ template: Template }>(`/templates/${id}/clone`, {
+  const response = await this.request<{ template: Template }>(`/document-templates/${id}/clone`, {
       method: "POST",
       body: JSON.stringify(data),
     })

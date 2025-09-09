@@ -10,7 +10,7 @@ import path from 'path'
 import fs from 'fs/promises'
 import { adobePdfService } from '../services/adobePdfService'
 import { authMiddleware } from '../middleware/auth'
-import { logger } from '../utils/logger'
+import { logger, childLogger } from '../utils/logger'
 
 const router = Router()
 
@@ -40,6 +40,7 @@ const upload = multer({
  * Get Adobe PDF Services status
  */
 router.get('/status', authMiddleware, async (req: Request, res: Response) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const status = await adobePdfService.getStatus()
     
@@ -48,7 +49,7 @@ router.get('/status', authMiddleware, async (req: Request, res: Response) => {
       data: status
     })
   } catch (error) {
-    logger.error('Adobe PDF status check failed:', error)
+    log.error('Adobe PDF status check failed:', error)
     res.status(500).json({
       success: false,
       error: 'Failed to check Adobe PDF Services status'
@@ -107,7 +108,8 @@ router.post('/generate-from-html',
         })
       }
     } catch (error) {
-      logger.error('Adobe PDF generation from HTML failed:', error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Adobe PDF generation from HTML failed:', error)
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -158,8 +160,9 @@ router.post('/convert-docx',
       try {
         await fs.unlink(req.file.path)
       } catch (cleanupError) {
-        logger.warn('Failed to clean up uploaded file:', cleanupError)
-      }
+          const log = childLogger({ requestId: (req as any).requestId })
+          log.warn('Failed to clean up uploaded file:', cleanupError)
+        }
 
       if (result.success) {
         res.json({
@@ -179,7 +182,8 @@ router.post('/convert-docx',
         })
       }
     } catch (error) {
-      logger.error('Adobe PDF DOCX conversion failed:', error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Adobe PDF DOCX conversion failed:', error)
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -231,7 +235,8 @@ router.post('/export/:format',
       try {
         await fs.unlink(req.file.path)
       } catch (cleanupError) {
-        logger.warn('Failed to clean up uploaded file:', cleanupError)
+        const log = childLogger({ requestId: (req as any).requestId })
+        log.warn('Failed to clean up uploaded file:', cleanupError)
       }
 
       if (result.success) {
@@ -251,7 +256,8 @@ router.post('/export/:format',
         })
       }
     } catch (error) {
-      logger.error('Adobe PDF export failed:', error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Adobe PDF export failed:', error)
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -300,8 +306,9 @@ router.post('/ocr',
       try {
         await fs.unlink(req.file.path)
       } catch (cleanupError) {
-        logger.warn('Failed to clean up uploaded file:', cleanupError)
-      }
+          const log = childLogger({ requestId: (req as any).requestId })
+          log.warn('Failed to clean up uploaded file:', cleanupError)
+        }
 
       if (result.success) {
         res.json({
@@ -319,7 +326,8 @@ router.post('/ocr',
         })
       }
     } catch (error) {
-      logger.error('Adobe PDF OCR failed:', error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Adobe PDF OCR failed:', error)
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -334,6 +342,7 @@ router.post('/ocr',
  */
 router.post('/sample', authMiddleware, async (req: Request, res: Response) => {
   try {
+    const log = childLogger({ requestId: (req as any).requestId })
     const result = await adobePdfService.createSamplePDF()
 
     if (result.success) {
@@ -354,7 +363,8 @@ router.post('/sample', authMiddleware, async (req: Request, res: Response) => {
       })
     }
   } catch (error) {
-    logger.error('Adobe PDF sample generation failed:', error)
+    const log = childLogger({ requestId: (req as any).requestId })
+    log.error('Adobe PDF sample generation failed:', error)
     res.status(500).json({
       success: false,
       error: 'Internal server error'
@@ -448,7 +458,8 @@ router.get('/download/:filename',
       res.send(fileStream)
 
     } catch (error) {
-      logger.error('Adobe PDF file download failed:', error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Adobe PDF file download failed:', error)
       res.status(500).json({
         success: false,
         error: 'Internal server error'
@@ -473,7 +484,8 @@ router.get('/test-connection', authMiddleware, async (req: Request, res: Respons
       }
     })
   } catch (error) {
-    logger.error('Adobe PDF connection test failed:', error)
+    const log = childLogger({ requestId: (req as any).requestId })
+    log.error('Adobe PDF connection test failed:', error)
     res.status(500).json({
       success: false,
       error: 'Connection test failed'

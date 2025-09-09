@@ -3,7 +3,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validateQuery, validateParams } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
 
 const router = express.Router()
@@ -16,8 +16,10 @@ export async function logSecurityEvent(
   userId?: string,
   sourceIp?: string,
   resource?: string,
-  action?: string
+  action?: string,
+  log?: any
 ) {
+  const l = log || logger
   try {
     await pool.query(
       `
@@ -27,7 +29,7 @@ export async function logSecurityEvent(
       [uuidv4(), eventType, severity, sourceIp, userId, resource, action, JSON.stringify(details)]
     )
   } catch (error) {
-    logger.error("Failed to log security event:", error)
+    l.error("Failed to log security event:", error)
   }
 }
 
@@ -44,6 +46,7 @@ router.get("/events",
     user_id: Joi.string().uuid().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { page = 1, limit = 20, severity, event_type, resolved, user_id } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -85,7 +88,7 @@ router.get("/events",
       query += ` ORDER BY se.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
       params.push(limit, offset)
 
-      const result = await pool.query(query, params)
+  const result = await pool.query(query, params)
 
       // Get total count
       let countQuery = "SELECT COUNT(*) FROM security_events se WHERE 1=1"
@@ -116,7 +119,7 @@ router.get("/events",
         countParams.push(user_id)
       }
 
-      const countResult = await pool.query(countQuery, countParams)
+  const countResult = await pool.query(countQuery, countParams)
       const total = Number.parseInt(countResult.rows[0].count)
 
       res.json({
@@ -129,7 +132,7 @@ router.get("/events",
         },
       })
     } catch (error) {
-      logger.error("Get security events error:", error)
+      log.error("Get security events error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -141,6 +144,7 @@ router.get("/events/:id",
   requirePermission("security.view"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -160,7 +164,7 @@ router.get("/events/:id",
 
       res.json({ event: result.rows[0] })
     } catch (error) {
-      logger.error("Get security event error:", error)
+      log.error("Get security event error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -172,6 +176,7 @@ router.put("/events/:id/resolve",
   requirePermission("security.manage"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -184,15 +189,15 @@ router.put("/events/:id/resolve",
         return res.status(404).json({ error: "Security event not found" })
       }
 
-      logger.info(`Security event resolved: ${id} by ${req.user?.email}`)
+  log.info(`Security event resolved: ${id} by ${req.user?.email}`)
 
       res.json({
         message: "Security event marked as resolved",
         event: result.rows[0],
       })
     } catch (error) {
-      logger.error("Resolve security event error:", error)
-      res.status(500).json({ error: "Internal server error" })
+  log.error("Resolve security event error:", error)
+  res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -202,6 +207,7 @@ router.get("/dashboard",
   authenticateToken,
   requirePermission("security.view"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       // Security event statistics
       const eventStats = await pool.query(`
@@ -278,7 +284,7 @@ router.get("/dashboard",
         generated_at: new Date().toISOString(),
       })
     } catch (error) {
-      logger.error("Get security dashboard error:", error)
+      log.error("Get security dashboard error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -288,6 +294,7 @@ router.get("/dashboard",
 router.post("/incidents", 
   authenticateToken,
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { event_type, description, severity = "medium" } = req.body
 
@@ -302,14 +309,15 @@ router.post("/incidents",
         req.user?.id,
         req.ip,
         "manual_report",
-        "incident_report"
+        "incident_report",
+        log
       )
 
-      logger.info(`Security incident reported: ${event_type} by ${req.user?.email}`)
+  log.info(`Security incident reported: ${event_type} by ${req.user?.email}`)
 
       res.json({ message: "Security incident reported successfully" })
     } catch (error) {
-      logger.error("Report security incident error:", error)
+  log.error("Report security incident error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -329,6 +337,7 @@ router.get("/audit",
     end_date: Joi.date().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { page = 1, limit = 20, user_id, action, resource_type, start_date, end_date } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -426,7 +435,7 @@ router.get("/audit",
         },
       })
     } catch (error) {
-      logger.error("Get audit trail error:", error)
+      log.error("Get audit trail error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }

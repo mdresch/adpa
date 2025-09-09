@@ -1,7 +1,7 @@
 import express from "express"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { pool } from "../database/connection"
 import { GitHubIntegration } from "../integrations/github"
 import { GitHubService } from "../services/githubService"
@@ -15,6 +15,7 @@ router.get(
   authenticateToken,
   requirePermission("integrations.view"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
 
@@ -48,7 +49,7 @@ router.get(
         repository
       })
     } catch (error) {
-      logger.error("Failed to get GitHub repository:", error)
+      log.error("Failed to get GitHub repository:", error)
       res.status(500).json({ error: "Failed to get repository information" })
     }
   }
@@ -60,6 +61,7 @@ router.get(
   authenticateToken,
   requirePermission("integrations.view"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
       const state = req.query.state as string || "open"
@@ -94,7 +96,7 @@ router.get(
         pullRequests
       })
     } catch (error) {
-      logger.error("Failed to get GitHub pull requests:", error)
+      log.error("Failed to get GitHub pull requests:", error)
       res.status(500).json({ error: "Failed to get pull requests" })
     }
   }
@@ -106,6 +108,7 @@ router.get(
   authenticateToken,
   requirePermission("integrations.view"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
       const state = req.query.state as string || "open"
@@ -140,7 +143,7 @@ router.get(
         issues
       })
     } catch (error) {
-      logger.error("Failed to get GitHub issues:", error)
+      log.error("Failed to get GitHub issues:", error)
       res.status(500).json({ error: "Failed to get issues" })
     }
   }
@@ -152,6 +155,7 @@ router.post(
   authenticateToken,
   requirePermission("integrations.manage"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
 
@@ -192,7 +196,7 @@ router.post(
         })
       }
     } catch (error) {
-      logger.error("GitHub connection test failed:", error)
+      log.error("GitHub connection test failed:", error)
       res.status(500).json({ error: "Connection test failed" })
     }
   }
@@ -209,6 +213,7 @@ router.post(
     createPullRequests: Joi.boolean()
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
       const { syncType, targetBranch, createPullRequests } = req.body
@@ -256,7 +261,7 @@ router.post(
         }))
       })
     } catch (error) {
-      logger.error("GitHub sync failed:", error)
+      log.error("GitHub sync failed:", error)
 
       // Update sync status to error
       await pool.query(
@@ -281,6 +286,7 @@ router.post(
     targetBranch: Joi.string().default("main")
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
       const { title, description, sourceBranch, targetBranch } = req.body
@@ -320,7 +326,7 @@ router.post(
         pullRequest
       })
     } catch (error) {
-      logger.error("Failed to create GitHub pull request:", error)
+      log.error("Failed to create GitHub pull request:", error)
       res.status(500).json({ error: "Failed to create pull request" })
     }
   }
@@ -338,6 +344,7 @@ router.post(
     assignees: Joi.array().items(Joi.string())
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const integrationId = req.params.id
       const { title, description, labels, assignees } = req.body
@@ -377,7 +384,7 @@ router.post(
         issue
       })
     } catch (error) {
-      logger.error("Failed to create GitHub issue:", error)
+      log.error("Failed to create GitHub issue:", error)
       res.status(500).json({ error: "Failed to create issue" })
     }
   }

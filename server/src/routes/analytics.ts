@@ -3,7 +3,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validateQuery } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 
 interface AuthRequest extends express.Request {
@@ -21,7 +21,8 @@ const router = express.Router()
 router.get("/dashboard", 
   authenticateToken,
   async (req: AuthRequest, res: express.Response) => {
-    try {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
       const userId = req.user?.id
 
       // Check cache first
@@ -75,7 +76,7 @@ router.get("/dashboard",
         LIMIT 10
       `, [userId])
 
-      const analytics = {
+  const analytics = {
         projects: projectStats.rows[0],
         documents: documentStats.rows[0],
         ai: aiStats.rows[0],
@@ -86,10 +87,10 @@ router.get("/dashboard",
       // Cache for 5 minutes
       await cache.set(cacheKey, analytics, 300)
 
-      res.json(analytics)
+  res.json(analytics)
     } catch (error) {
-      logger.error("Get dashboard analytics error:", error)
-      res.status(500).json({ error: "Internal server error" })
+  log.error("Get dashboard analytics error:", error)
+  res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -102,6 +103,7 @@ router.get("/system",
     period: Joi.string().valid("7d", "30d", "90d", "1y").default("30d"),
   })),
   async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { period = "30d" } = req.query
 
@@ -206,10 +208,10 @@ router.get("/system",
       // Cache for 10 minutes
       await cache.set(cacheKey, analytics, 600)
 
-      res.json(analytics)
+  res.json(analytics)
     } catch (error) {
-      logger.error("Get system analytics error:", error)
-      res.status(500).json({ error: "Internal server error" })
+  log.error("Get system analytics error:", error)
+  res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -218,6 +220,7 @@ router.get("/system",
 router.post("/events", 
   authenticateToken,
   async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { event_type, properties = {} } = req.body
 
@@ -230,10 +233,10 @@ router.post("/events",
         VALUES ($1, $2, $3)
       `, [req.user?.id, event_type, JSON.stringify(properties)])
 
-      res.json({ message: "Event tracked successfully" })
+  res.json({ message: "Event tracked successfully" })
     } catch (error) {
-      logger.error("Track event error:", error)
-      res.status(500).json({ error: "Internal server error" })
+  log.error("Track event error:", error)
+  res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -247,6 +250,7 @@ router.get("/activity/:userId",
     action: Joi.string().optional(),
   })),
   async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { userId } = req.params
       const { page = 1, limit = 20, action } = req.query
@@ -309,7 +313,7 @@ router.get("/activity/:userId",
         },
       })
     } catch (error) {
-      logger.error("Get user activity error:", error)
+      log.error("Get user activity error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -320,6 +324,7 @@ router.get("/performance",
   authenticateToken,
   requirePermission("analytics.system"),
   async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const cacheKey = "analytics:performance"
       const cached = await cache.get(cacheKey)
@@ -365,10 +370,10 @@ router.get("/performance",
       // Cache for 2 minutes
       await cache.set(cacheKey, metrics, 120)
 
-      res.json(metrics)
+  res.json(metrics)
     } catch (error) {
-      logger.error("Get performance metrics error:", error)
-      res.status(500).json({ error: "Internal server error" })
+  log.error("Get performance metrics error:", error)
+  res.status(500).json({ error: "Internal server error" })
     }
   }
 )

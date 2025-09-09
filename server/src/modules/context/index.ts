@@ -30,8 +30,7 @@ export {
 
 export {
   ContextPrioritizer,
-  ContextPriority,
-  PriorityConfig
+  ContextPriority
 } from './prioritizer'
 
 export {

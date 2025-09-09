@@ -3,7 +3,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, validateQuery } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
 
 const router = express.Router()
@@ -18,6 +18,7 @@ router.get("/",
     is_active: Joi.boolean().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { page = 1, limit = 10, type, is_active } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -86,7 +87,7 @@ router.get("/",
         },
       })
     } catch (error) {
-      logger.error("Get integrations error:", error)
+      log.error("Get integrations error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -97,6 +98,7 @@ router.get("/:id",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -124,7 +126,7 @@ router.get("/:id",
 
       res.json({ integration })
     } catch (error) {
-      logger.error("Get integration error:", error)
+      log.error("Get integration error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -142,6 +144,7 @@ router.post("/",
     is_active: Joi.boolean().default(true),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { name, type, configuration, credentials, is_active } = req.body
 
@@ -169,14 +172,14 @@ router.post("/",
         [id, name, type, JSON.stringify(configuration), encryptedCredentials, is_active, req.user?.id]
       )
 
-      logger.info(`Integration created: ${name} (${type}) by ${req.user?.email}`)
+  log.info(`Integration created: ${name} (${type}) by ${req.user?.email}`)
 
       res.status(201).json({
         message: "Integration created successfully",
         integration: result.rows[0],
       })
     } catch (error) {
-      logger.error("Create integration error:", error)
+      log.error("Create integration error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -194,6 +197,7 @@ router.put("/:id",
     is_active: Joi.boolean().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
       const { name, configuration, credentials, is_active } = req.body
@@ -246,14 +250,14 @@ router.put("/:id",
         ]
       )
 
-      logger.info(`Integration updated: ${id} by ${req.user?.email}`)
+    log.info(`Integration updated: ${id} by ${req.user?.email}`)
 
       res.json({
         message: "Integration updated successfully",
         integration: result.rows[0],
       })
     } catch (error) {
-      logger.error("Update integration error:", error)
+      log.error("Update integration error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -265,6 +269,7 @@ router.delete("/:id",
   requirePermission("integrations.delete"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -277,11 +282,11 @@ router.delete("/:id",
         return res.status(404).json({ error: "Integration not found" })
       }
 
-      logger.info(`Integration deleted: ${id} by ${req.user?.email}`)
+    log.info(`Integration deleted: ${id} by ${req.user?.email}`)
 
       res.json({ message: "Integration deleted successfully" })
     } catch (error) {
-      logger.error("Delete integration error:", error)
+      log.error("Delete integration error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -293,6 +298,7 @@ router.post("/:id/test",
   requirePermission("integrations.test"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -321,7 +327,7 @@ router.post("/:id/test",
         [testResult.success ? "connected" : "error", id]
       )
 
-      logger.info(`Integration test: ${id} - ${testResult.success ? "success" : "failed"}`)
+  log.info(`Integration test: ${id} - ${testResult.success ? "success" : "failed"}`)
 
       res.json({
         success: testResult.success,
@@ -329,7 +335,7 @@ router.post("/:id/test",
         details: testResult.details,
       })
     } catch (error) {
-      logger.error("Test integration error:", error)
+      log.error("Test integration error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -341,6 +347,7 @@ router.post("/:id/sync",
   requirePermission("integrations.sync"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -374,7 +381,7 @@ router.post("/:id/sync",
         [syncResult.success ? "completed" : "error", id]
       )
 
-      logger.info(`Integration sync: ${id} - ${syncResult.success ? "success" : "failed"}`)
+    log.info(`Integration sync: ${id} - ${syncResult.success ? "success" : "failed"}`)
 
       res.json({
         message: "Sync completed",
@@ -382,21 +389,22 @@ router.post("/:id/sync",
         details: syncResult.details,
       })
     } catch (error) {
-      logger.error("Sync integration error:", error)
+      log.error("Sync integration error:", error)
       
       // Update sync status to error
-      await pool.query(
+  await pool.query(
         "UPDATE integrations SET sync_status = 'error', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
         [req.params.id]
       )
 
       res.status(500).json({ error: "Internal server error" })
-    }
+  }
   }
 )
 
 // Get available integration types
 router.get("/types/available", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const types = [
       {
@@ -445,7 +453,7 @@ router.get("/types/available", authenticateToken, async (req, res) => {
 
     res.json({ types })
   } catch (error) {
-    logger.error("Get integration types error:", error)
+    log.error("Get integration types error:", error)
     res.status(500).json({ error: "Internal server error" })
   }
 })

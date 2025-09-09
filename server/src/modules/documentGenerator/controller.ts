@@ -5,12 +5,9 @@
 
 import { Request, Response } from 'express'
 import { documentGeneratorService } from './service'
-import { logger } from '../../utils/logger'
-import type {
-  DocumentGenerationRequest,
-  OutputFormat,
-  AuthenticatedUser
-} from './types'
+import { logger, childLogger } from '../../utils/logger'
+import type { DocumentGenerationRequest, AuthenticatedUser } from './types'
+import { OutputFormat } from './types'
 
 export class DocumentGeneratorController {
   /**
@@ -60,11 +57,12 @@ export class DocumentGeneratorController {
       })
 
     } catch (error) {
-      logger.error('Document generation failed', {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Document generation failed', {
         error: error.message,
         stack: error.stack,
         user: req.user?.email,
-        body: req.body
+        body: req.body,
       })
 
       if (error.code === 'TEMPLATE_NOT_FOUND') {
@@ -123,9 +121,10 @@ export class DocumentGeneratorController {
       })
 
     } catch (error) {
-      logger.error('Failed to get generation status', {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Failed to get generation status', {
         error: error.message,
-        generation_id: req.params.id
+        generation_id: req.params.id,
       })
 
       res.status(500).json({
@@ -149,9 +148,10 @@ export class DocumentGeneratorController {
       })
 
     } catch (error) {
-      logger.error('Failed to get generation stats', {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Failed to get generation stats', {
         error: error.message,
-        user: req.user?.email
+        user: req.user?.email,
       })
 
       res.status(500).json({
@@ -229,9 +229,10 @@ export class DocumentGeneratorController {
       stream.pipe(res)
 
     } catch (error) {
-      logger.error('Failed to download document', {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Failed to download document', {
         error: error.message,
-        filename: req.params.filename
+        filename: req.params.filename,
       })
 
       res.status(500).json({
@@ -261,7 +262,8 @@ export class DocumentGeneratorController {
       })
 
     } catch (error) {
-      logger.error('Failed to get supported formats', error)
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.error('Failed to get supported formats', error)
 
       res.status(500).json({
         error: 'Failed to get supported formats',
@@ -301,9 +303,10 @@ export class DocumentGeneratorController {
       })
 
     } catch (error) {
-      logger.error('Template data validation failed', {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error('Template data validation failed', {
         error: error.message,
-        template_id: req.body.template_id
+        template_id: req.body.template_id,
       })
 
       res.status(500).json({

@@ -3,7 +3,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, validateQuery, schemas } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
 
@@ -21,6 +21,7 @@ router.get("/",
     is_public: Joi.boolean().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { page = 1, limit = 10, framework, category, search, is_public } = req.query
       const offset = (Number(page) - 1) * Number(limit)
@@ -107,7 +108,7 @@ router.get("/",
         },
       })
     } catch (error) {
-      logger.error("Get templates error:", error)
+      log.error("Get templates error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -118,6 +119,7 @@ router.get("/:id",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -149,7 +151,7 @@ router.get("/:id",
 
       res.json({ template })
     } catch (error) {
-      logger.error("Get template error:", error)
+      log.error("Get template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -161,6 +163,7 @@ router.post("/",
   requirePermission("templates.create"),
   validate(schemas.createTemplate),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { name, description, framework, category, content, variables, is_public } = req.body
 
@@ -185,14 +188,14 @@ router.post("/",
         ]
       )
 
-      logger.info(`Template created: ${name} by ${req.user?.email}`)
+  log.info(`Template created: ${name} by ${req.user?.email}`)
 
       res.status(201).json({
         message: "Template created successfully",
         template: result.rows[0],
       })
     } catch (error) {
-      logger.error("Create template error:", error)
+      log.error("Create template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -213,6 +216,7 @@ router.put("/:id",
     is_public: Joi.boolean().optional(),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
       const { name, description, framework, category, content, variables, is_public } = req.body
@@ -262,14 +266,14 @@ router.put("/:id",
       // Clear cache
       await cache.del(`template:${id}`)
 
-      logger.info(`Template updated: ${id} by ${req.user?.email}`)
+  log.info(`Template updated: ${id} by ${req.user?.email}`)
 
       res.json({
         message: "Template updated successfully",
         template: result.rows[0],
       })
     } catch (error) {
-      logger.error("Update template error:", error)
+      log.error("Update template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -281,6 +285,7 @@ router.delete("/:id",
   requirePermission("templates.delete"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -320,11 +325,11 @@ router.delete("/:id",
   // Clear cache
   await cache.del(`template:${id}`)
 
-  logger.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
+  log.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
 
   res.json({ message: "Template deleted (soft) successfully" })
     } catch (error) {
-      logger.error("Delete template error:", error)
+      log.error("Delete template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -341,6 +346,7 @@ router.post("/:id/clone",
     is_public: Joi.boolean().default(false),
   })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
       const { name, description, is_public } = req.body
@@ -380,14 +386,14 @@ router.post("/:id/clone",
         ]
       )
 
-      logger.info(`Template cloned: ${id} -> ${newId} by ${req.user?.email}`)
+  log.info(`Template cloned: ${id} -> ${newId} by ${req.user?.email}`)
 
       res.status(201).json({
         message: "Template cloned successfully",
         template: result.rows[0],
       })
     } catch (error) {
-      logger.error("Clone template error:", error)
+      log.error("Clone template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -398,6 +404,7 @@ router.post("/:id/use",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -423,7 +430,7 @@ router.post("/:id/use",
         usage_count: result.rows[0].usage_count,
       })
     } catch (error) {
-      logger.error("Record template usage error:", error)
+      log.error("Record template usage error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -438,6 +445,7 @@ router.get(
   authenticateToken,
   requirePermission("templates.view"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const page = Number(req.query.page || 1)
       const limit = Math.min(Number(req.query.limit || 10), 100)
@@ -480,7 +488,7 @@ router.get(
         },
       })
     } catch (error) {
-      logger.error("Get trash templates error:", error)
+      log.error("Get trash templates error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -492,6 +500,7 @@ router.post("/:id/restore",
   requirePermission("templates.update"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
 
@@ -507,7 +516,7 @@ router.post("/:id/restore",
       await cache.del(`template:${id}`)
       res.json({ message: "Template restored", template: result.rows[0] })
     } catch (error) {
-      logger.error("Restore template error:", error)
+      log.error("Restore template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }
@@ -534,7 +543,8 @@ router.delete("/:id/hard",
       await cache.del(`template:${id}`)
       res.json({ message: "Template permanently deleted" })
     } catch (error) {
-      logger.error("Hard delete template error:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Hard delete template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }

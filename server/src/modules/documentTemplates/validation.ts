@@ -26,7 +26,17 @@ export const templateValidationSchemas = {
   createTemplate: Joi.object({
     name: Joi.string().min(2).max(255).required(),
     description: Joi.string().max(1000).optional(),
-    framework: Joi.string().valid('TOGAF', 'SABSA', 'COBIT', 'ITIL', 'Custom').required(),
+    // Accept common enterprise frameworks plus the domain-specific ones used in the frontend
+    framework: Joi.string().valid(
+      'TOGAF',
+      'SABSA',
+      'COBIT',
+      'ITIL',
+      'Custom',
+      'BABOK v3',
+      'PMBOK 7',
+      'DMBOK 2.0'
+    ).required(),
     category: Joi.string().max(100).optional(),
     content: Joi.object().required(),
     variables: Joi.array().items(templateVariable).default([]),
@@ -37,7 +47,16 @@ export const templateValidationSchemas = {
   updateTemplate: Joi.object({
     name: Joi.string().min(2).max(255).optional(),
     description: Joi.string().max(1000).optional(),
-    framework: Joi.string().valid('TOGAF', 'SABSA', 'COBIT', 'ITIL', 'Custom').optional(),
+    framework: Joi.string().valid(
+      'TOGAF',
+      'SABSA',
+      'COBIT',
+      'ITIL',
+      'Custom',
+      'BABOK v3',
+      'PMBOK 7',
+      'DMBOK 2.0'
+    ).optional(),
     category: Joi.string().max(100).optional(),
     content: Joi.object().optional(),
     variables: Joi.array().items(templateVariable).optional(),
@@ -55,7 +74,16 @@ export const templateValidationSchemas = {
   templateListQuery: Joi.object({
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(10),
-    framework: Joi.string().valid('TOGAF', 'SABSA', 'COBIT', 'ITIL', 'Custom').optional(),
+    framework: Joi.string().valid(
+      'TOGAF',
+      'SABSA',
+      'COBIT',
+      'ITIL',
+      'Custom',
+      'BABOK v3',
+      'PMBOK 7',
+      'DMBOK 2.0'
+    ).optional(),
     category: Joi.string().max(100).optional(),
     search: Joi.string().max(100).optional(),
     is_public: Joi.boolean().optional(),

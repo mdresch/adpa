@@ -118,13 +118,13 @@ Authorization: Bearer <jwt_token>
 - `POST /api/ai/providers` - Create AI provider (admin)
 - `POST /api/ai/providers/:name/configure` - Configure provider (admin)
 
-#### Templates
-- `GET /api/templates` - List templates
-- `POST /api/templates` - Create template
-- `GET /api/templates/:id` - Get template
-- `PUT /api/templates/:id` - Update template
-- `DELETE /api/templates/:id` - Delete template
-- `POST /api/templates/:id/clone` - Clone template
+#### Document Templates
+- `GET /api/document-templates` - List templates
+- `POST /api/document-templates` - Create template
+- `GET /api/document-templates/:id` - Get template
+- `PUT /api/document-templates/:id` - Update template
+- `DELETE /api/document-templates/:id` - Delete template
+- `POST /api/document-templates/:id/clone` - Clone template
 
 #### Users (Admin)
 - `GET /api/users` - List users

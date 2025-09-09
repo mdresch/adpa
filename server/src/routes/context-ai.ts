@@ -8,7 +8,7 @@ import express from "express"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { ContextPriority } from "../modules/context/types"
 import { pool } from "../database/connection"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
 
 const router = express.Router()
@@ -18,6 +18,7 @@ const router = express.Router()
  * Generate AI response with automatic context injection
  */
 router.post("/generate", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { 
       prompt, 
@@ -81,7 +82,7 @@ router.post("/generate", async (req, res) => {
     // Generate response with context
     const startTime = Date.now()
     
-    const response = await ContextAwareAIService.generateWithContext({
+  const response = await ContextAwareAIService.generateWithContext({
       prompt,
       provider,
       model,
@@ -99,7 +100,7 @@ router.post("/generate", async (req, res) => {
 
     const duration = Date.now() - startTime
 
-    // Update job with success
+  // Update job with success
     await pool.query(`
       UPDATE jobs 
       SET status = $1, result = $2, completed_at = CURRENT_TIMESTAMP, progress = 100
@@ -133,8 +134,7 @@ router.post("/generate", async (req, res) => {
     })
 
   } catch (error) {
-    logger.error("Context-aware AI generation failed:", error)
-    
+    log.error("Context-aware AI generation failed:", error)
     // Update job with error if jobId exists
     if (req.body.jobId) {
       await pool.query(`
@@ -156,6 +156,7 @@ router.post("/generate", async (req, res) => {
  * Get context preview without generating AI response
  */
 router.post("/preview", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const {
       prompt,
@@ -192,7 +193,7 @@ router.post("/preview", async (req, res) => {
     res.json(preview)
 
   } catch (error) {
-    logger.error("Context preview failed:", error)
+    log.error("Context preview failed:", error)
     res.status(500).json({
       error: "Context preview failed",
       message: error.message
@@ -205,6 +206,7 @@ router.post("/preview", async (req, res) => {
  * Get context statistics and recommendations
  */
 router.post("/statistics", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const {
       prompt,
@@ -241,7 +243,7 @@ router.post("/statistics", async (req, res) => {
     res.json(statistics)
 
   } catch (error) {
-    logger.error("Context statistics failed:", error)
+    log.error("Context statistics failed:", error)
     res.status(500).json({
       error: "Context statistics failed",
       message: error.message
@@ -254,6 +256,7 @@ router.post("/statistics", async (req, res) => {
  * Process multiple context-aware AI requests
  */
 router.post("/batch", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { requests } = req.body
 
@@ -290,7 +293,7 @@ router.post("/batch", async (req, res) => {
     })
 
   } catch (error) {
-    logger.error("Batch context-aware AI generation failed:", error)
+    log.error("Batch context-aware AI generation failed:", error)
     res.status(500).json({
       error: "Batch AI generation failed",
       message: error.message
@@ -303,6 +306,7 @@ router.post("/batch", async (req, res) => {
  * Get available providers with context capabilities
  */
 router.get("/providers", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
     const result = await pool.query(`
       SELECT name, provider_type, configuration, is_active
@@ -327,7 +331,7 @@ router.get("/providers", async (req, res) => {
     res.json({ providers })
 
   } catch (error) {
-    logger.error("Failed to get context-aware providers:", error)
+    log.error("Failed to get context-aware providers:", error)
     res.status(500).json({
       error: "Failed to get providers",
       message: error.message
@@ -340,6 +344,9 @@ router.get("/providers", async (req, res) => {
  * Get available context priority options
  */
 router.get("/priority-options", (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  log.info("Returning context priority options")
+
   res.json({
     priority_levels: {
       LOW: ContextPriority.LOW,

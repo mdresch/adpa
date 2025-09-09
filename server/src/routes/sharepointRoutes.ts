@@ -4,7 +4,7 @@ import multer from "multer"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, validateQuery } from "../middleware/validation"
-import { logger } from "../utils/logger"
+import { logger, childLogger } from "../utils/logger"
 import { sharepointService } from "../services/sharepointService"
 
 const router = express.Router()
@@ -12,9 +12,10 @@ const upload = multer({ storage: multer.memoryStorage() })
 
 // Test SharePoint connection
 router.post("/test", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
   try {
-    console.log("SharePoint test endpoint hit!")
-    console.log("Request body:", req.body)
+    log.info("SharePoint test endpoint hit")
+    log.debug("Request body:", req.body)
 
     const { tenantId, clientId, clientSecret } = req.body
 
@@ -52,7 +53,7 @@ router.post("/test", async (req, res) => {
     })
 
   } catch (error: any) {
-    console.error("SharePoint connection test failed:", error)
+    log.error("SharePoint connection test failed:", error)
     res.status(500).json({
       success: false,
       error: error.response?.data?.error_description || error.message || "Connection test failed"
@@ -73,11 +74,12 @@ router.get("/:integrationId/sites",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId } = req.params
       const { search, limit = 25 } = req.query
 
       // Get integration configuration
-      const integration = await pool.query(
+  const integration = await pool.query(
         "SELECT * FROM integrations WHERE id = $1 AND type = 'sharepoint' AND is_active = true",
         [integrationId]
       )
@@ -106,7 +108,8 @@ router.get("/:integrationId/sites",
         sites 
       })
     } catch (error) {
-      logger.error("Failed to get SharePoint sites:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Failed to get SharePoint sites:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Failed to get sites" 
@@ -125,6 +128,7 @@ router.get("/:integrationId/sites/:siteId/drives",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId, siteId } = req.params
 
       // Get integration configuration
@@ -157,7 +161,8 @@ router.get("/:integrationId/sites/:siteId/drives",
         drives 
       })
     } catch (error) {
-      logger.error("Failed to get SharePoint drives:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Failed to get SharePoint drives:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Failed to get drives" 
@@ -180,6 +185,7 @@ router.get("/:integrationId/drives/:driveId/files",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId, driveId } = req.params
       const { folderId = "root", limit = 100 } = req.query
 
@@ -213,7 +219,8 @@ router.get("/:integrationId/drives/:driveId/files",
         files 
       })
     } catch (error) {
-      logger.error("Failed to get SharePoint files:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Failed to get SharePoint files:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Failed to get files" 
@@ -236,6 +243,7 @@ router.post("/:integrationId/sync",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId } = req.params
       const { siteId, driveId, projectId } = req.body
 
@@ -263,7 +271,8 @@ router.post("/:integrationId/sync",
       })
 
       // Start sync
-      const syncResult = await sharepointService.syncDocuments(siteId, driveId, projectId)
+
+  const syncResult = await sharepointService.syncDocuments(siteId, driveId, projectId)
 
       // Update integration with sync status
       await pool.query(
@@ -283,7 +292,8 @@ router.post("/:integrationId/sync",
         lastSyncTime: syncResult.lastSyncTime,
       })
     } catch (error) {
-      logger.error("SharePoint sync failed:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("SharePoint sync failed:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Sync failed" 
@@ -306,6 +316,7 @@ router.get("/:integrationId/search",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId } = req.params
       const { query, siteId, limit = 25 } = req.query
 
@@ -339,7 +350,8 @@ router.get("/:integrationId/search",
         results: files 
       })
     } catch (error) {
-      logger.error("SharePoint search failed:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("SharePoint search failed:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Search failed" 
@@ -359,6 +371,7 @@ router.post("/:integrationId/drives/:driveId/upload",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId, driveId } = req.params
       const { parentFolderId = "root" } = req.body
 
@@ -389,7 +402,7 @@ router.post("/:integrationId/drives/:driveId/upload",
         syncInterval: config.sync_interval,
       })
 
-      const uploadedFile = await sharepointService.uploadDocument(
+  const uploadedFile = await sharepointService.uploadDocument(
         driveId,
         req.file.originalname,
         req.file.buffer,
@@ -401,7 +414,8 @@ router.post("/:integrationId/drives/:driveId/upload",
         file: uploadedFile 
       })
     } catch (error) {
-      logger.error("SharePoint file upload failed:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("SharePoint file upload failed:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Upload failed" 
@@ -419,6 +433,7 @@ router.get("/:integrationId/onedrive",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId } = req.params
 
       // Get integration configuration
@@ -451,7 +466,8 @@ router.get("/:integrationId/onedrive",
         drive 
       })
     } catch (error) {
-      logger.error("Failed to get OneDrive:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Failed to get OneDrive:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Failed to get OneDrive" 
@@ -473,6 +489,7 @@ router.get("/:integrationId/onedrive/files",
   })),
   async (req, res) => {
     try {
+      const log = childLogger({ requestId: (req as any).requestId })
       const { integrationId } = req.params
       const { folderId = "root", limit = 100 } = req.query
 
@@ -506,7 +523,8 @@ router.get("/:integrationId/onedrive/files",
         files 
       })
     } catch (error) {
-      logger.error("Failed to get OneDrive files:", error)
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Failed to get OneDrive files:", error)
       res.status(500).json({ 
         success: false, 
         error: error.message || "Failed to get OneDrive files" 

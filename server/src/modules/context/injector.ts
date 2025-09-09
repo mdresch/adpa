@@ -5,7 +5,8 @@
  * Handles context extraction, prioritization, and intelligent prompt enhancement.
  */
 
-import {
+import { ContextPriority } from './types'
+import type {
   ContextData,
   ContextRequest,
   ContextResponse,
@@ -13,8 +14,7 @@ import {
   ContextError,
   ContextSection,
   ExtractionOptions,
-  PriorityConfig,
-  ContextPriority
+  PriorityConfig
 } from './types'
 import {
   ProjectContextExtractor,

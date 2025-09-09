@@ -216,7 +216,23 @@ export default function Projects() {
 
   // Handle edit project
   const handleEditProject = (project: Project) => {
-    setEditingProject(project)
+    // Normalize dates to YYYY-MM-DD so <input type="date"> displays them correctly
+    const normalizeDate = (d?: string | null) => {
+      try {
+        if (!d) return ""
+        const dt = new Date(d)
+        if (isNaN(dt.getTime())) return ""
+        return dt.toISOString().slice(0, 10)
+      } catch (e) {
+        return ""
+      }
+    }
+
+    setEditingProject({
+      ...project,
+      start_date: normalizeDate(project.start_date as any),
+      end_date: normalizeDate(project.end_date as any),
+    })
     setEditDialogOpen(true)
   }
 

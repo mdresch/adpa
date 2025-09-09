@@ -3,31 +3,10 @@
  * Provides premium PDF generation capabilities using Adobe PDF Services API
  */
 
-import {
-  ServicePrincipalCredentials,
-  PDFServices,
-  MimeType,
-  CreatePDFJob,
-  CreatePDFResult,
-  SDKError,
-  ServiceUsageError,
-  ServiceApiError,
-  ExportPDFJob,
-  ExportPDFResult,
-  ExportPDFToFormat,
-  CompressPDFJob,
-  CompressPDFResult,
-  LinearizePDFJob,
-  LinearizePDFResult,
-  ProtectPDFJob,
-  ProtectPDFResult,
-  Permissions,
-  EncryptionAlgorithm,
-  ContentEncryption,
-  OCRJob,
-  OCRResult
-} from '@adobe/pdfservices-node-sdk'
+// @ts-ignore: missing type declarations for Adobe PDF Services SDK
+import * as PDFServicesSDK from '@adobe/pdfservices-node-sdk'
 import fs from 'fs/promises'
+import fsSync from 'fs'
 import path from 'path'
 import { logger } from '../utils/logger'
 
@@ -79,7 +58,7 @@ export interface PDFOperationResult {
 }
 
 export class AdobePDFService {
-  private pdfServices: PDFServices | null = null
+  private pdfServices: any = null
   private config: AdobePDFConfig
   private initialized = false
 
@@ -104,7 +83,7 @@ export class AdobePDFService {
       }
 
       // Create credentials
-      const credentials = new ServicePrincipalCredentials({
+  const credentials: any = new (PDFServicesSDK as any).ServicePrincipalCredentials({
         clientId: this.config.clientId,
         clientSecret: this.config.clientSecret,
         organizationId: this.config.organizationId,
@@ -113,7 +92,7 @@ export class AdobePDFService {
       })
 
       // Initialize PDF Services
-      this.pdfServices = new PDFServices({ credentials })
+  this.pdfServices = new (PDFServicesSDK as any).PDFServices({ credentials })
       this.initialized = true
 
       logger.info('Adobe PDF Services initialized successfully')
@@ -159,30 +138,37 @@ export class AdobePDFService {
 
       try {
         // Create PDF job
-        const job = new CreatePDFJob({
-          inputAsset: await this.pdfServices.upload({
-            readStream: await fs.readFile(tempHtmlPath),
-            mimeType: MimeType.HTML
-          }),
-          params: {
-            documentLanguage: options?.documentLanguage || 'en-US',
-            includeTaggedPDF: options?.includeTaggedPDF || false
-          }
-        })
+            const job = new PDFServicesSDK.CreatePDFJob({
+              inputAsset: await this.pdfServices.upload({
+                readStream: fsSync.createReadStream(tempHtmlPath),
+                mimeType: PDFServicesSDK.MimeType.HTML
+              }),
+              params: {
+                documentLanguage: options?.documentLanguage || 'en-US',
+                includeTaggedPDF: options?.includeTaggedPDF || false
+              }
+            })
 
         // Execute job
         const pollingURL = await this.pdfServices.submit({ job })
         const pdfServicesResponse = await this.pdfServices.getJobResult({
           pollingURL,
-          resultType: CreatePDFResult
+          resultType: (PDFServicesSDK as any).CreatePDFResult
         })
 
         // Download result
         const resultAsset = pdfServicesResponse.result.asset
         const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
         
-        // Save to output path
-        await fs.writeFile(outputPath, streamAsset.readStream)
+        // Save to output path (streamAsset.readStream is a Readable stream)
+        await new Promise<void>((resolve, reject) => {
+          const writeStream = fsSync.createWriteStream(outputPath)
+          const readStream = streamAsset.readStream
+          readStream.on('error', (err: any) => reject(err))
+          writeStream.on('error', (err: any) => reject(err))
+          writeStream.on('finish', () => resolve())
+          readStream.pipe(writeStream)
+        })
 
         // Get file stats
         const stats = await fs.stat(outputPath)
@@ -252,10 +238,10 @@ export class AdobePDFService {
       }
 
       // Create PDF job
-      const job = new CreatePDFJob({
+      const job = new PDFServicesSDK.CreatePDFJob({
         inputAsset: await this.pdfServices.upload({
-          readStream: await fs.readFile(docxPath),
-          mimeType: MimeType.DOCX
+          readStream: fsSync.createReadStream(docxPath),
+          mimeType: PDFServicesSDK.MimeType.DOCX
         }),
         params: {
           documentLanguage: options?.documentLanguage || 'en-US',
@@ -265,17 +251,24 @@ export class AdobePDFService {
 
       // Execute job
       const pollingURL = await this.pdfServices.submit({ job })
-      const pdfServicesResponse = await this.pdfServices.getJobResult({
-        pollingURL,
-        resultType: CreatePDFResult
-      })
+        const pdfServicesResponse = await this.pdfServices.getJobResult({
+          pollingURL,
+          resultType: (PDFServicesSDK as any).CreatePDFResult
+        })
 
       // Download result
       const resultAsset = pdfServicesResponse.result.asset
       const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
       
-      // Save to output path
-      await fs.writeFile(outputPath, streamAsset.readStream)
+      // Save to output path (stream)
+      await new Promise<void>((resolve, reject) => {
+        const writeStream = fsSync.createWriteStream(outputPath)
+        const readStream = streamAsset.readStream
+        readStream.on('error', (err: any) => reject(err))
+        writeStream.on('error', (err: any) => reject(err))
+        writeStream.on('finish', () => resolve())
+        readStream.pipe(writeStream)
+      })
 
       // Get file stats
       const stats = await fs.stat(outputPath)
@@ -309,10 +302,10 @@ export class AdobePDFService {
 
     const outputPath = inputPath.replace('.pdf', '-compressed.pdf')
 
-    const job = new CompressPDFJob({
+      const job = new (PDFServicesSDK as any).CompressPDFJob({
       inputAsset: await this.pdfServices.upload({
-        readStream: await fs.readFile(inputPath),
-        mimeType: MimeType.PDF
+        readStream: fsSync.createReadStream(inputPath),
+        mimeType: PDFServicesSDK.MimeType.PDF
       }),
       params: {
         compressionLevel: this.getCompressionLevel(options?.quality)
@@ -320,15 +313,22 @@ export class AdobePDFService {
     })
 
     const pollingURL = await this.pdfServices.submit({ job })
-    const pdfServicesResponse = await this.pdfServices.getJobResult({
+      const pdfServicesResponse = await this.pdfServices.getJobResult({
       pollingURL,
-      resultType: CompressPDFResult
+      resultType: (PDFServicesSDK as any).CompressPDFResult
     })
 
     const resultAsset = pdfServicesResponse.result.asset
     const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
     
-    await fs.writeFile(outputPath, streamAsset.readStream)
+    await new Promise<void>((resolve, reject) => {
+      const writeStream = fsSync.createWriteStream(outputPath)
+      const readStream = streamAsset.readStream
+      readStream.on('error', (err: any) => reject(err))
+      writeStream.on('error', (err: any) => reject(err))
+      writeStream.on('finish', () => resolve())
+      readStream.pipe(writeStream)
+    })
 
     // Remove original file and rename compressed file
     await fs.unlink(inputPath)
@@ -347,23 +347,30 @@ export class AdobePDFService {
 
     const outputPath = inputPath.replace('.pdf', '-linearized.pdf')
 
-    const job = new LinearizePDFJob({
+  const job = new (PDFServicesSDK as any).LinearizePDFJob({
       inputAsset: await this.pdfServices.upload({
-        readStream: await fs.readFile(inputPath),
-        mimeType: MimeType.PDF
+        readStream: fsSync.createReadStream(inputPath),
+        mimeType: PDFServicesSDK.MimeType.PDF
       })
     })
 
     const pollingURL = await this.pdfServices.submit({ job })
     const pdfServicesResponse = await this.pdfServices.getJobResult({
       pollingURL,
-      resultType: LinearizePDFResult
+      resultType: (PDFServicesSDK as any).LinearizePDFResult
     })
 
     const resultAsset = pdfServicesResponse.result.asset
     const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
     
-    await fs.writeFile(outputPath, streamAsset.readStream)
+    await new Promise<void>((resolve, reject) => {
+      const writeStream = fsSync.createWriteStream(outputPath)
+      const readStream = streamAsset.readStream
+      readStream.on('error', (err: any) => reject(err))
+      writeStream.on('error', (err: any) => reject(err))
+      writeStream.on('finish', () => resolve())
+      readStream.pipe(writeStream)
+    })
 
     // Remove original file and rename linearized file
     await fs.unlink(inputPath)
@@ -387,37 +394,44 @@ export class AdobePDFService {
     const outputPath = inputPath.replace('.pdf', '-protected.pdf')
 
     // Configure permissions
-    const pdfPermissions = new Permissions()
-    if (permissions?.print !== false) pdfPermissions.addPermission(Permissions.Permission.PRINT_LOW_QUALITY)
-    if (permissions?.editContent !== false) pdfPermissions.addPermission(Permissions.Permission.EDIT_DOCUMENT_ASSEMBLY)
-    if (permissions?.editAnnotations !== false) pdfPermissions.addPermission(Permissions.Permission.EDIT_ANNOTATIONS)
-    if (permissions?.fillAndSign !== false) pdfPermissions.addPermission(Permissions.Permission.FILL_AND_SIGN_FORM_FIELDS)
-    if (permissions?.extract !== false) pdfPermissions.addPermission(Permissions.Permission.COPY_CONTENT)
+  const pdfPermissions = new (PDFServicesSDK as any).Permissions()
+  if (permissions?.print !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.PRINT_LOW_QUALITY)
+  if (permissions?.editContent !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.EDIT_DOCUMENT_ASSEMBLY)
+  if (permissions?.editAnnotations !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.EDIT_ANNOTATIONS)
+  if (permissions?.fillAndSign !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.FILL_AND_SIGN_FORM_FIELDS)
+  if (permissions?.extract !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.COPY_CONTENT)
 
-    const job = new ProtectPDFJob({
-      inputAsset: await this.pdfServices.upload({
-        readStream: await fs.readFile(inputPath),
-        mimeType: MimeType.PDF
-      }),
+    const job = new PDFServicesSDK.ProtectPDFJob({
+        inputAsset: await this.pdfServices.upload({
+          readStream: fsSync.createReadStream(inputPath),
+          mimeType: PDFServicesSDK.MimeType.PDF
+        }),
       params: {
         userPassword: password,
         ownerPassword: password + '_owner',
         permissions: pdfPermissions,
-        encryptionAlgorithm: EncryptionAlgorithm.AES_256,
-        contentEncryption: ContentEncryption.ALL_CONTENT_EXCEPT_METADATA
+        encryptionAlgorithm: PDFServicesSDK.EncryptionAlgorithm.AES_256,
+        contentEncryption: PDFServicesSDK.ContentEncryption.ALL_CONTENT_EXCEPT_METADATA
       }
     })
 
     const pollingURL = await this.pdfServices.submit({ job })
     const pdfServicesResponse = await this.pdfServices.getJobResult({
       pollingURL,
-      resultType: ProtectPDFResult
+      resultType: (PDFServicesSDK as any).ProtectPDFResult
     })
 
     const resultAsset = pdfServicesResponse.result.asset
     const streamAsset = await this.pdfServices.getContent({ asset: resultAsset })
     
-    await fs.writeFile(outputPath, streamAsset.readStream)
+    await new Promise<void>((resolve, reject) => {
+      const writeStream = fsSync.createWriteStream(outputPath)
+      const readStream = streamAsset.readStream
+      readStream.on('error', (err: any) => reject(err))
+      writeStream.on('error', (err: any) => reject(err))
+      writeStream.on('finish', () => resolve())
+      readStream.pipe(writeStream)
+    })
 
     // Remove original file and rename protected file
     await fs.unlink(inputPath)
@@ -443,10 +457,10 @@ export class AdobePDFService {
 
       const exportFormat = this.getExportFormat(format)
       
-      const job = new ExportPDFJob({
+  const job = new (PDFServicesSDK as any).ExportPDFJob({
         inputAsset: await this.pdfServices.upload({
-          readStream: await fs.readFile(inputPath),
-          mimeType: MimeType.PDF
+          readStream: fsSync.createReadStream(inputPath),
+          mimeType: PDFServicesSDK.MimeType.PDF
         }),
         params: {
           targetFormat: exportFormat
@@ -456,7 +470,7 @@ export class AdobePDFService {
       const pollingURL = await this.pdfServices.submit({ job })
       const pdfServicesResponse = await this.pdfServices.getJobResult({
         pollingURL,
-        resultType: ExportPDFResult
+        resultType: (PDFServicesSDK as any).ExportPDFResult
       })
 
       const resultAsset = pdfServicesResponse.result.asset
@@ -489,17 +503,17 @@ export class AdobePDFService {
         throw new Error('Adobe PDF Services not initialized')
       }
 
-      const job = new OCRJob({
+  const job = new (PDFServicesSDK as any).OCRJob({
         inputAsset: await this.pdfServices.upload({
-          readStream: await fs.readFile(inputPath),
-          mimeType: MimeType.PDF
+          readStream: fsSync.createReadStream(inputPath),
+          mimeType: PDFServicesSDK.MimeType.PDF
         })
       })
 
       const pollingURL = await this.pdfServices.submit({ job })
       const pdfServicesResponse = await this.pdfServices.getJobResult({
         pollingURL,
-        resultType: OCRResult
+        resultType: (PDFServicesSDK as any).OCRResult
       })
 
       const resultAsset = pdfServicesResponse.result.asset
@@ -543,17 +557,17 @@ export class AdobePDFService {
   private getExportFormat(format: string) {
     switch (format.toLowerCase()) {
       case 'docx':
-        return ExportPDFToFormat.DOCX
+  return (PDFServicesSDK as any).ExportPDFToFormat.DOCX
       case 'pptx':
-        return ExportPDFToFormat.PPTX
+  return (PDFServicesSDK as any).ExportPDFToFormat.PPTX
       case 'xlsx':
-        return ExportPDFToFormat.XLSX
+  return (PDFServicesSDK as any).ExportPDFToFormat.XLSX
       case 'rtf':
-        return ExportPDFToFormat.RTF
+  return (PDFServicesSDK as any).ExportPDFToFormat.RTF
       case 'jpeg':
-        return ExportPDFToFormat.JPEG
+  return (PDFServicesSDK as any).ExportPDFToFormat.JPEG
       case 'png':
-        return ExportPDFToFormat.PNG
+  return (PDFServicesSDK as any).ExportPDFToFormat.PNG
       default:
         throw new Error(`Unsupported export format: ${format}`)
     }

@@ -4,12 +4,20 @@
  */
 
 import dotenv from 'dotenv'
-dotenv.config()
+import fsSync from 'fs'
+import fs from 'fs/promises'
+import path from 'path'
+
+// Prefer loading environment from server/.env if present (developer put secrets there)
+const serverEnvPath = path.join(process.cwd(), 'server', '.env')
+if (fsSync.existsSync(serverEnvPath)) {
+    dotenv.config({ path: serverEnvPath })
+} else {
+    dotenv.config()
+}
 
 import { adobePdfService } from '../services/adobePdfService'
 import { logger } from '../utils/logger'
-import fs from 'fs/promises'
-import path from 'path'
 
 // Sample HTML content for demonstration
 const sampleHTMLContent = `
@@ -460,9 +468,10 @@ async function runDemo() {
   }
 }
 
-// Run the demo if this file is executed directly
-if (require.main === module) {
-  runDemo().catch(console.error)
-}
+// Run the demo when executed
+runDemo().catch((err) => {
+    console.error('Demo runner error:', err)
+    process.exit(1)
+})
 
 export { runDemo }

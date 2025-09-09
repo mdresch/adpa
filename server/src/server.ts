@@ -8,6 +8,7 @@ import { createServer } from "http"
 import { Server as SocketIOServer } from "socket.io"
 
 import { errorHandler } from "./middleware/errorHandler"
+import requestIdMiddleware from "./middleware/requestId"
 import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
@@ -52,6 +53,8 @@ app.use(
     credentials: true,
   }),
 )
+// assign a request id to each incoming request
+app.use(requestIdMiddleware)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
@@ -238,9 +241,13 @@ async function startServer() {
   }
 }
 
+
 // Only start server if this file is run directly
 // if (import.meta.url === `file://${process.argv[1]}`) {
   startServer()
 // }
 
 export { app, io }
+
+
+

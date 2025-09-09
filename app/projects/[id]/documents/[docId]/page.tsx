@@ -409,7 +409,7 @@ export default function DocumentEditor() {
                   <Download className="h-4 w-4 mr-2" />
                   Export
                 </Button>
-                <Button onClick={saveDocument} disabled={saving}>
+                <Button onClick={() => saveDocument()} disabled={saving}>
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving..." : "Save"}
                 </Button>
