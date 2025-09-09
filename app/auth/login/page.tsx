@@ -25,7 +25,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 
 export default function AuthPage() {
-  const { login, register, isAuthenticated, loading } = useAuth()
+  const { login, register, demoLogin, isAuthenticated, loading } = useAuth()
   const router = useRouter()
   
   const [activeTab, setActiveTab] = useState("login")
@@ -101,10 +101,10 @@ export default function AuthPage() {
     }
   }
 
-  const demoLogin = async () => {
+  const handleDemoLogin = async () => {
     setIsSubmitting(true)
     try {
-      await login("admin@adpa.com", "admin123")
+      await demoLogin()
     } catch (error) {
       setError("Demo login failed")
     } finally {
@@ -264,7 +264,7 @@ export default function AuthPage() {
                     type="button"
                     variant="outline"
                     className="w-full"
-                    onClick={demoLogin}
+                    onClick={handleDemoLogin}
                     disabled={isSubmitting}
                   >
                     <Zap className="mr-2 h-4 w-4" />
