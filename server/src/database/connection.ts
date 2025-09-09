@@ -14,7 +14,9 @@ const pool = new Pool({
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 2000,
-  ssl: false, // Disable SSL for local development
+  // SSL can be enabled by setting DB_SSL=true. Many managed Postgres services require SSL.
+  // When enabled we default to rejectUnauthorized: false to allow self-signed certs in dev.
+  ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
 })
 
 export async function connectDatabase() {
