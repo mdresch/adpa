@@ -184,4 +184,50 @@ router.post("/refresh", authenticateToken, async (req, res) => {
   }
 })
 
+// Dev-only: create or return a demo admin user and issue a token
+router.post("/demo", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+
+  if (process.env.NODE_ENV === "production") {
+    log.warn("Demo endpoint attempted in production")
+    return res.status(404).json({ error: "Not found" })
+  }
+
+  try {
+    const demoEmail = process.env.DEMO_EMAIL || "admin@adpa.com"
+    const demoPassword = process.env.DEMO_PASSWORD || "admin123"
+
+    // Check if user exists
+    const existing = await pool.query("SELECT id, email, name, role, permissions, is_active FROM users WHERE email = $1", [demoEmail])
+    let user
+
+    if (existing.rows.length === 0) {
+      // Create demo admin user
+      const saltRounds = 12
+      const passwordHash = await bcrypt.hash(demoPassword, saltRounds)
+      const created = await pool.query(
+        `INSERT INTO users (email, password_hash, name, role, permissions, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, email, name, role, permissions, is_active, created_at`,
+        [demoEmail, passwordHash, "Demo Admin", "admin", JSON.stringify({ admin: true }), true],
+      )
+      user = created.rows[0]
+      log.info(`Demo user created: ${demoEmail}`)
+    } else {
+      user = existing.rows[0]
+      log.info(`Demo user exists: ${demoEmail}`)
+    }
+
+    // Issue token
+    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET || "your-secret-key", {
+      expiresIn: "24h",
+    })
+
+    return res.json({ message: "Demo login", user: { id: user.id, email: user.email, name: user.name, role: user.role, permissions: user.permissions }, token })
+  } catch (error) {
+    log.error("Demo login error:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 export default router
