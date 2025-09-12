@@ -43,6 +43,7 @@ services:
       # Ensure Next dev listens on all interfaces inside the container so the
       # host can reach it via the forwarded port.
       - HOST=0.0.0.0
+      - CI=true
       # Enable polling so file change events are detected reliably when the
       # filesystem is mounted from Windows into the container.
       - CHOKIDAR_USEPOLLING=true
@@ -56,10 +57,11 @@ services:
       - /app/.next
     # Run as root in development to avoid permission issues with mounted volumes
     user: root
-    # Start Next in dev mode binding to 0.0.0.0 so the host can access it
-    # through the forwarded port. Invoke Next directly to avoid argument parsing
-    # differences between pnpm/npm and the shell which caused `--hostname` to
-    # be treated as a positional project directory.
-    command: "npm run dev"
+    # Start Next in dev mode binding to 0.0.0.0 so the host can access it.
+    # As a safety, attempt to install dependencies (using frozen lockfile) if
+    # pnpm reports missing modules; this handles cases where the image wasn't
+    # rebuilt or host mounts affected node_modules. If install fails, fall back
+    # to running the dev server so logs surface the root issue.
+    command: "sh -c 'pnpm install --frozen-lockfile || pnpm install || true && pnpm run dev'"
     ports:
       - "3000:3000"
