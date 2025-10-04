@@ -8,6 +8,9 @@ import { aiService } from "../services/aiService"
 import { ContextAwareAIService, generateWithContext } from "../modules/context/integration"
 import { addJob } from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
+import { openaiConnector } from "../modules/ai/openai"
+import { googleConnector } from "../modules/ai/google"
+import { mistralConnector } from "../modules/ai/mistral"
 
 const router = express.Router()
 
@@ -131,6 +134,194 @@ router.get("/providers", authenticateToken, async (req, res) => {
   }
 })
 
+// Toggle AI provider active status
+router.post("/providers/:id/toggle", 
+  authenticateToken,
+  requirePermission("ai.configure"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      
+      // Get current status
+      const result = await pool.query(
+        "SELECT is_active FROM ai_providers WHERE id = $1",
+        [id]
+      )
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found" })
+      }
+      
+      const currentStatus = result.rows[0].is_active
+      const newStatus = !currentStatus
+      
+      // Update status
+      await pool.query(
+        "UPDATE ai_providers SET is_active = $1, updated_at = NOW() WHERE id = $2",
+        [newStatus, id]
+      )
+      
+      log.info(`Toggled provider ${id} from ${currentStatus} to ${newStatus}`)
+      res.json({ 
+        success: true, 
+        is_active: newStatus,
+        message: `Provider ${newStatus ? 'activated' : 'deactivated'} successfully`
+      })
+      
+    } catch (error) {
+      log.error("Toggle provider error:", error)
+      res.status(500).json({ error: "Failed to toggle provider" })
+    }
+  }
+)
+
+// Get available models for a specific AI provider
+router.get("/providers/:id/models", 
+  authenticateToken,
+  requirePermission("ai.read"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      
+      // Get provider information
+      const providerResult = await pool.query(
+        'SELECT id, name, provider_type, configuration FROM ai_providers WHERE id = $1',
+        [id]
+      )
+      
+      if (providerResult.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found" })
+      }
+      
+      const provider = providerResult.rows[0]
+      const config = JSON.parse(provider.configuration || '{}')
+      
+      let models: any[] = []
+      
+      // Get models based on provider type
+      switch (provider.provider_type) {
+        case 'openai':
+          models = await openaiConnector.getAvailableModels(provider.name)
+          break
+        case 'google':
+          models = await googleConnector.getAvailableModels(provider.name)
+          break
+        case 'mistral':
+          models = await mistralConnector.getAvailableModels(provider.name)
+          break
+        case 'azure':
+          // Azure models are typically deployment-specific
+          models = [
+            { id: 'gpt-4', name: 'GPT-4', contextWindow: 8192, maxTokens: 4096 },
+            { id: 'gpt-35-turbo', name: 'GPT-3.5 Turbo', contextWindow: 4096, maxTokens: 2048 },
+            { id: 'gpt-4-32k', name: 'GPT-4 32K', contextWindow: 32768, maxTokens: 8192 }
+          ]
+          break
+        case 'ollama':
+          // For Ollama, we'll return a generic list since models are installed locally
+          models = [
+            { id: 'llama3.1:latest', name: 'Llama 3.1 Latest', contextWindow: 128000, maxTokens: 4096 },
+            { id: 'llama3.1:8b', name: 'Llama 3.1 8B', contextWindow: 128000, maxTokens: 4096 },
+            { id: 'llama3.1:70b', name: 'Llama 3.1 70B', contextWindow: 128000, maxTokens: 4096 },
+            { id: 'codellama:latest', name: 'Code Llama Latest', contextWindow: 16384, maxTokens: 4096 },
+            { id: 'mistral:latest', name: 'Mistral Latest', contextWindow: 32768, maxTokens: 4096 }
+          ]
+          break
+        default:
+          models = []
+      }
+      
+      // Convert string models to objects with metadata
+      const modelsWithMetadata = models.map((model, index) => {
+        if (typeof model === 'string') {
+          return {
+            id: model,
+            name: model,
+            contextWindow: getDefaultContextWindow(model, provider.provider_type),
+            maxTokens: getDefaultMaxTokens(model, provider.provider_type),
+            temperature: 0.7,
+            type: 'chat'
+          }
+        }
+        return model
+      })
+      
+      res.json({ 
+        success: true, 
+        models: modelsWithMetadata,
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          type: provider.provider_type
+        }
+      })
+      
+    } catch (error) {
+      log.error("Get provider models error:", error)
+      res.status(500).json({ error: "Failed to get provider models" })
+    }
+  }
+)
+
+// Helper functions for default model parameters
+function getDefaultContextWindow(modelId: string, providerType: string): number {
+  const contextWindows: Record<string, Record<string, number>> = {
+    openai: {
+      'gpt-4': 8192,
+      'gpt-4-turbo': 128000,
+      'gpt-4-32k': 32768,
+      'gpt-3.5-turbo': 4096,
+      'gpt-3.5-turbo-16k': 16384
+    },
+    google: {
+      'gemini-pro': 32768,
+      'gemini-pro-vision': 16384,
+      'gemini-1.5-pro': 2000000,
+      'gemini-1.5-flash': 1000000,
+      'gemini-2.5-flash': 2000000
+    },
+    mistral: {
+      'mistral-large-latest': 128000,
+      'mistral-medium-latest': 32000,
+      'mistral-small-latest': 32000,
+      'mistral-tiny': 8000
+    }
+  }
+  
+  return contextWindows[providerType]?.[modelId] || 4096
+}
+
+function getDefaultMaxTokens(modelId: string, providerType: string): number {
+  const maxTokens: Record<string, Record<string, number>> = {
+    openai: {
+      'gpt-4': 4096,
+      'gpt-4-turbo': 4096,
+      'gpt-4-32k': 8192,
+      'gpt-3.5-turbo': 2048,
+      'gpt-3.5-turbo-16k': 4096
+    },
+    google: {
+      'gemini-pro': 2048,
+      'gemini-pro-vision': 4096,
+      'gemini-1.5-pro': 8192,
+      'gemini-1.5-flash': 8192,
+      'gemini-2.5-flash': 8192
+    },
+    mistral: {
+      'mistral-large-latest': 8192,
+      'mistral-medium-latest': 4096,
+      'mistral-small-latest': 2048,
+      'mistral-tiny': 1024
+    }
+  }
+  
+  return maxTokens[providerType]?.[modelId] || 2048
+}
+
 // Get AI provider details
 router.get("/providers/:name", 
   authenticateToken,
@@ -232,14 +423,33 @@ router.post("/providers",
   requirePermission("ai.configure"),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).required(),
-    provider_type: Joi.string().valid("openai", "google", "azure").required(),
+    provider_type: Joi.string().valid("openai", "google", "azure", "mistral", "ollama").required(),
     api_key: Joi.string().required(),
     configuration: Joi.object().default({}),
     is_active: Joi.boolean().default(true),
+    // Model parameters
+    contextWindow: Joi.number().integer().min(1000).max(10000000).default(128000),
+    maxTokens: Joi.number().integer().min(1).max(100000).default(4096),
+    temperature: Joi.number().min(0).max(2).default(0.7),
+    topP: Joi.number().min(0).max(1).default(1.0),
+    frequencyPenalty: Joi.number().min(-2).max(2).default(0.0),
+    presencePenalty: Joi.number().min(-2).max(2).default(0.0),
   })),
   async (req, res) => {
     try {
-      const { name, provider_type, api_key, configuration, is_active } = req.body
+      const { 
+        name, 
+        provider_type, 
+        api_key, 
+        configuration, 
+        is_active,
+        contextWindow,
+        maxTokens,
+        temperature,
+        topP,
+        frequencyPenalty,
+        presencePenalty
+      } = req.body
 
       // Check if provider name already exists
       const existingProvider = await pool.query(
@@ -254,6 +464,19 @@ router.post("/providers",
       // Encrypt API key
       const encryptedApiKey = Buffer.from(api_key).toString("base64")
 
+      // Create enhanced configuration with model parameters
+      const enhancedConfiguration = {
+        ...configuration,
+        modelParameters: {
+          contextWindow,
+          maxTokens,
+          temperature,
+          topP,
+          frequencyPenalty,
+          presencePenalty
+        }
+      }
+
       const id = uuidv4()
 
       const result = await pool.query(
@@ -262,7 +485,7 @@ router.post("/providers",
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING id, name, provider_type, is_active, created_at, updated_at
       `,
-        [id, name, provider_type, encryptedApiKey, JSON.stringify(configuration), is_active]
+        [id, name, provider_type, encryptedApiKey, JSON.stringify(enhancedConfiguration), is_active]
       )
 
       // Initialize the new provider
@@ -270,7 +493,7 @@ router.post("/providers",
         name,
         type: provider_type as any,
         apiKey: api_key,
-        configuration,
+        configuration: enhancedConfiguration,
       })
 
   const log = childLogger({ requestId: (req as any).requestId })

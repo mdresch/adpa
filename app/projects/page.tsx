@@ -1136,6 +1136,11 @@ export default function Projects() {
                                 <p className="font-medium text-sm text-slate-700 dark:text-slate-200">
                                   {project.team_members?.length || 0} members
                                 </p>
+                                {(project as any).owner_name && (
+                                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                                    Manager: {(project as any).owner_name}
+                                  </p>
+                                )}
                               </div>
                             </motion.div>
 

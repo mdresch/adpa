@@ -26,6 +26,7 @@ export interface Project {
   status: string
   priority: string
   owner_id: string
+  owner_name?: string
   team_members: string[]
   start_date?: string
   end_date?: string
@@ -548,6 +549,42 @@ class ApiClient {
     return response.providers
   }
 
+  // AI Model Configuration API
+  async getProviderModels(providerId: string): Promise<{ models: any[], provider: any }> {
+    return await this.request(`/ai-models/providers/${providerId}/models`)
+  }
+
+  async getModelConfiguration(providerId: string, modelId: string): Promise<{ model: any }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`)
+  }
+
+  async createModelConfiguration(providerId: string, modelData: any): Promise<{ model: any, message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models`, {
+      method: "POST",
+      body: JSON.stringify(modelData)
+    })
+  }
+
+  async updateModelConfiguration(providerId: string, modelId: string, modelData: any): Promise<{ model: any, message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`, {
+      method: "PUT",
+      body: JSON.stringify(modelData)
+    })
+  }
+
+  async deleteModelConfiguration(providerId: string, modelId: string): Promise<{ message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`, {
+      method: "DELETE"
+    })
+  }
+
+  async testModelConfiguration(providerId: string, modelId: string, testData?: any): Promise<{ test: any, message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}/test`, {
+      method: "POST",
+      body: JSON.stringify(testData || {})
+    })
+  }
+
   async generateContent(data: {
     prompt: string
     provider: string
@@ -664,6 +701,22 @@ class ApiClient {
 
   async getSystemAnalytics(period: string = "30d"): Promise<any> {
     const response = await this.request(`/analytics/system?period=${period}`)
+    return response
+  }
+
+  // AI Analytics API
+  async getAIModelAnalytics(period: string = "30d"): Promise<any> {
+    const response = await this.request(`/ai-analytics/models?period=${period}`)
+    return response
+  }
+
+  async getAIProviderAnalytics(providerId: string, period: string = "30d"): Promise<any> {
+    const response = await this.request(`/ai-analytics/providers/${providerId}?period=${period}`)
+    return response
+  }
+
+  async getAITrends(period: string = "30d"): Promise<any> {
+    const response = await this.request(`/ai-analytics/trends?period=${period}`)
     return response
   }
 

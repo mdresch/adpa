@@ -4,10 +4,11 @@ import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import { openaiConnector, OpenAIRequest } from "../modules/ai/openai"
 import { googleConnector, GoogleRequest } from "../modules/ai/google"
+import { mistralConnector, MistralRequest } from "../modules/ai/mistral"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure"
+  type: "openai" | "google" | "azure" | "mistral"
   apiKey: string
   configuration?: any
 }
@@ -39,33 +40,61 @@ class AIService {
 
   async initializeProviders() {
     try {
-      // Initialize OpenAI connector first
-      await openaiConnector.initializeProviders()
+      // Initialize OpenAI connector first with error handling
+      try {
+        await openaiConnector.initializeProviders()
+        logger.info("OpenAI connector initialized successfully")
+      } catch (error) {
+        logger.warn("Failed to initialize OpenAI connector, continuing without it:", error)
+      }
 
-      // Initialize Google AI connector
-      await googleConnector.initializeProviders()
+      // Initialize Google AI connector with error handling
+      try {
+        await googleConnector.initializeProviders()
+        logger.info("Google AI connector initialized successfully")
+      } catch (error) {
+        logger.warn("Failed to initialize Google AI connector, continuing without it:", error)
+      }
 
-      const result = await pool.query(
-        "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
-      )
+      // Initialize Mistral AI connector with error handling
+      try {
+        await mistralConnector.initializeProviders()
+        logger.info("Mistral AI connector initialized successfully")
+      } catch (error) {
+        logger.warn("Failed to initialize Mistral AI connector, continuing without it:", error)
+      }
 
-      for (const provider of result.rows) {
-        // Skip OpenAI and Google providers as they're handled by their respective connectors
-        if (provider.provider_type === 'openai' || provider.provider_type === 'google') {
+      // Initialize other providers with error handling
+      try {
+        const result = await pool.query(
+          "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
+        )
+
+        for (const provider of result.rows) {
+        // Skip OpenAI, Google, and Mistral providers as they're handled by their respective connectors
+        if (provider.provider_type === 'openai' || provider.provider_type === 'google' || provider.provider_type === 'mistral') {
           continue
         }
 
-        await this.addProvider({
-          name: provider.name,
-          type: provider.provider_type,
-          apiKey: this.decryptApiKey(provider.api_key_encrypted),
-          configuration: provider.configuration,
-        })
-      }
+          try {
+            await this.addProvider({
+              name: provider.name,
+              type: provider.provider_type,
+              apiKey: this.decryptApiKey(provider.api_key_encrypted),
+              configuration: provider.configuration,
+            })
+          } catch (providerError) {
+            logger.warn(`Failed to initialize provider ${provider.name}, skipping:`, providerError)
+          }
+        }
 
-      logger.info(`Initialized ${this.providers.size} legacy AI providers + OpenAI connector + Google AI connector`)
+        logger.info(`Initialized ${this.providers.size} legacy AI providers`)
+      } catch (error) {
+        logger.warn("Failed to initialize legacy AI providers, continuing without them:", error)
+      }
     } catch (error) {
       logger.error("Failed to initialize AI providers:", error)
+      // Don't throw error to prevent server crash
     }
   }
 
@@ -93,6 +122,11 @@ class AIService {
               "api-key": provider.apiKey,
             },
           }))
+          break
+
+        case "mistral":
+          // Mistral providers are handled by the mistralConnector
+          // This is just for legacy compatibility
           break
 
         default:
@@ -293,10 +327,10 @@ class AIService {
     }
   }
 
-  async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[] }>> {
+  async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any }>> {
     try {
       const result = await pool.query(
-        "SELECT name, provider_type, configuration FROM ai_providers WHERE is_active = true"
+        "SELECT id, name, provider_type, configuration, is_active FROM ai_providers ORDER BY name"
       )
 
       const providers = []
@@ -306,24 +340,33 @@ class AIService {
           // Get models from OpenAI connector
           const models = await openaiConnector.getAvailableModels(provider.name)
           providers.push({
+            id: provider.id,
             name: provider.name,
             type: provider.provider_type,
             models: models,
+            is_active: provider.is_active,
+            configuration: provider.configuration,
           })
         } else if (provider.provider_type === 'google') {
           // Get models from Google AI connector
           const models = await googleConnector.getAvailableModels(provider.name)
           providers.push({
+            id: provider.id,
             name: provider.name,
             type: provider.provider_type,
             models: models,
+            is_active: provider.is_active,
+            configuration: provider.configuration,
           })
         } else {
           // Use legacy method for other providers
           providers.push({
+            id: provider.id,
             name: provider.name,
             type: provider.provider_type,
             models: this.getModelsForProvider(provider.provider_type),
+            is_active: provider.is_active,
+            configuration: provider.configuration,
           })
         }
       }
