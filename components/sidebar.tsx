@@ -23,6 +23,8 @@ import {
   Search,
   Layers,
   LogOut,
+  Workflow,
+  TrendingUp,
 } from "lucide-react"
 
 const navigation = [
@@ -30,9 +32,11 @@ const navigation = [
   { name: "Projects", href: "/projects", icon: FolderOpen },
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap },
+  { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
   { name: "Integrations", href: "/integrations", icon: LinkIcon },
   { name: "Templates", href: "/templates", icon: FileText },
   { name: "Template Builder", href: "/templates/builder", icon: Layers },
+  { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow },
   { name: "Users & Roles", href: "/users", icon: Users },
   { name: "Job Monitor", href: "/jobs", icon: Activity },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },

@@ -581,7 +581,7 @@ export default function ProjectDetail() {
   const progress = getProjectProgress()
 
   // Determine project manager and other members for Team tab ordering
-  const managerName = (project as any).owner_id || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : undefined)
+  const managerName = (project as any).owner_name || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : undefined)
   const otherMembers = project.team_members ? project.team_members.filter((m) => m !== managerName) : []
 
   return (
@@ -1036,7 +1036,7 @@ export default function ProjectDetail() {
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Progress</CardTitle>
@@ -1056,6 +1056,17 @@ export default function ProjectDetail() {
                     <CardContent>
                       <div className="text-2xl font-bold">{project.budget || 'Not set'}</div>
                       <p className="text-xs text-muted-foreground">Total allocated</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Manager</CardTitle>
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-lg font-bold">{managerName || 'Not assigned'}</div>
+                      <p className="text-xs text-muted-foreground">Project manager</p>
                     </CardContent>
                   </Card>
 

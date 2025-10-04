@@ -81,7 +81,8 @@ class OpenAIConnector {
   private failoverQueue: string[] = []
 
   constructor() {
-    this.initializeProviders()
+    // Don't initialize providers in constructor to avoid startup crashes
+    // Providers will be initialized when needed
   }
 
   /**
@@ -140,7 +141,7 @@ class OpenAIConnector {
       logger.info(`Initialized ${this.providers.size} OpenAI providers`)
     } catch (error) {
       logger.error("Failed to initialize OpenAI providers:", error)
-      throw error
+      // Don't throw error to prevent server crash - just log and continue
     }
   }
 

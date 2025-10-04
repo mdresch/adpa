@@ -1,0 +1,1367 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
+import { toast } from "sonner"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { Sidebar } from "@/components/sidebar"
+import { Header } from "@/components/header"
+import { 
+  ArrowLeft, 
+  Settings, 
+  Zap, 
+  Activity, 
+  Clock, 
+  BarChart3, 
+  TestTube,
+  ChevronDown,
+  Plus,
+  Edit,
+  Trash2,
+  CheckCircle,
+  AlertCircle
+} from "@/components/ui/icons-shim"
+import { apiClient } from "@/lib/api"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+
+interface ProviderDetails {
+  id: string
+  name: string
+  type: string
+  is_active: boolean
+  models: string[]
+  configuration: any
+  usage_stats?: any
+  created_at: string
+  updated_at: string
+}
+
+interface Model {
+  id: string
+  name: string
+  contextWindow: number
+  maxTokens: number
+  temperature: number
+  topP: number
+  frequencyPenalty: number
+  presencePenalty: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export default function AIProviderDetails() {
+  const params = useParams()
+  const router = useRouter()
+  const providerId = params.id as string
+
+  const [provider, setProvider] = useState<ProviderDetails | null>(null)
+  const [models, setModels] = useState<Model[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [addModelDialogOpen, setAddModelDialogOpen] = useState(false)
+  const [editModelDialogOpen, setEditModelDialogOpen] = useState<string | null>(null)
+  const [deleteModelDialogOpen, setDeleteModelDialogOpen] = useState<string | null>(null)
+  
+  // Testing state
+  const [testing, setTesting] = useState(false)
+  const [testResults, setTestResults] = useState<any[]>([])
+  
+  // Collapsible state
+  const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false)
+  const [currentConfigOpen, setCurrentConfigOpen] = useState(false)
+  
+  // Add model state
+  const [addingModel, setAddingModel] = useState(false)
+  const [newModelForm, setNewModelForm] = useState({
+    modelId: "",
+    modelName: "",
+    is_active: true,
+    contextWindow: 128000,
+    maxTokens: 4096,
+    temperature: 0.7,
+    topP: 1.0,
+    frequencyPenalty: 0.0,
+    presencePenalty: 0.0,
+    configuration: {}
+  })
+  
+  // Configuration form state
+  const [configForm, setConfigForm] = useState({
+    endpoint: "",
+    apiKey: "",
+    priority: 1,
+    timeout: 30,
+    // Azure-specific fields
+    apiVersion: "2024-04-01-preview",
+    deployment: "",
+    modelName: "",
+    tenantId: "",
+    clientId: "",
+    clientSecret: "",
+    resourceName: "",
+    region: ""
+  })
+
+  // Initialize API client with token
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (token && !(apiClient as any).token) {
+      ;(apiClient as any).setToken(token)
+    }
+  }, [])
+
+  // Load provider details
+  const loadProviderDetails = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const providers = await apiClient.getAIProviders()
+      const providerData = providers.find((p: any) => p.id === providerId)
+      
+      if (!providerData) {
+        setError("Provider not found")
+        return
+      }
+
+      setProvider(providerData)
+      
+      // Update configuration form state with provider data
+      setConfigForm({
+        endpoint: providerData.configuration?.endpoint || "",
+        apiKey: "", // Never pre-fill API key for security
+        priority: providerData.configuration?.priority || 1,
+        timeout: providerData.configuration?.timeout || 30,
+        // Azure-specific fields
+        apiVersion: providerData.configuration?.apiVersion || "2024-04-01-preview",
+        deployment: providerData.configuration?.deployment || "",
+        modelName: providerData.configuration?.modelName || "",
+        tenantId: providerData.configuration?.tenantId || "",
+        clientId: providerData.configuration?.clientId || "",
+        clientSecret: "", // Never pre-fill client secret for security
+        resourceName: providerData.configuration?.resourceName || "",
+        region: providerData.configuration?.region || ""
+      })
+      
+      // Load models for this provider
+      await loadProviderModels()
+    } catch (err: any) {
+      console.error(err)
+      setError(err?.message || "Failed to load provider details")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Load models for this provider
+  const loadProviderModels = async () => {
+    try {
+      const response = await apiClient.getProviderModels(providerId)
+      setModels(response.models || [])
+    } catch (err: any) {
+      console.error("Failed to load models:", err)
+      setModels([])
+    }
+  }
+
+  useEffect(() => {
+    if (providerId) {
+      loadProviderDetails()
+    }
+  }, [providerId])
+
+  const handleToggleProvider = async () => {
+    if (!provider) return
+    
+    try {
+      const response = await apiClient.request(`/ai/providers/${providerId}/toggle`, {
+        method: "POST",
+      })
+      
+      setProvider(prev => prev ? { ...prev, is_active: response.is_active } : null)
+      toast.success(response.message || `Provider ${response.is_active ? 'activated' : 'deactivated'}`)
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "Failed to toggle provider")
+    }
+  }
+
+  const handleDeleteModel = async (modelId: string) => {
+    try {
+      await apiClient.deleteModelConfiguration(providerId, modelId)
+      await loadProviderModels()
+      setDeleteModelDialogOpen(null)
+      toast.success("Model deleted successfully")
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "Failed to delete model")
+    }
+  }
+
+  const handleAddModel = async () => {
+    if (!newModelForm.modelId || !newModelForm.modelName) {
+      toast.error("Model ID and Model Name are required")
+      return
+    }
+
+    setAddingModel(true)
+    try {
+      await apiClient.createModelConfiguration(providerId, newModelForm)
+      await loadProviderModels()
+      setAddModelDialogOpen(false)
+      
+      // Reset form
+      setNewModelForm({
+        modelId: "",
+        modelName: "",
+        is_active: true,
+        contextWindow: 128000,
+        maxTokens: 4096,
+        temperature: 0.7,
+        topP: 1.0,
+        frequencyPenalty: 0.0,
+        presencePenalty: 0.0,
+        configuration: {}
+      })
+      
+      toast.success("Model added successfully")
+    } catch (err: any) {
+      console.error(err)
+      toast.error(err?.message || "Failed to add model")
+    } finally {
+      setAddingModel(false)
+    }
+  }
+
+  // Define available connectivity tests for providers
+  const connectivityTests = [
+    { id: 'endpoint_validation', name: 'Endpoint Validation', description: 'Validate endpoint URL format and security' },
+    { id: 'api_connection', name: 'API Connection', description: 'Verify provider API is accessible' },
+    { id: 'authentication', name: 'Authentication', description: 'Validate API key and permissions' },
+    { id: 'azure_connectivity', name: 'Azure Connectivity', description: 'Validate Azure-specific configuration (Azure providers only)' }
+  ]
+
+  // Run a single connectivity test
+  const runSingleTest = async (testId: string) => {
+    try {
+      const response = await apiClient.request(`/ai-models/providers/${providerId}/test-connectivity`, {
+        method: 'POST',
+        body: JSON.stringify({
+          testId: testId
+        })
+      })
+      return response
+    } catch (error: any) {
+      console.error(`Test ${testId} failed:`, error)
+      throw error
+    }
+  }
+
+  // Run connectivity test suite
+  const runConnectivityTests = async () => {
+    setTesting(true)
+    setTestResults([])
+    
+    const results = []
+    
+    for (const test of connectivityTests) {
+      try {
+        const result = await runSingleTest(test.id)
+        results.push({
+          testId: test.id,
+          testName: test.name,
+          status: 'completed',
+          result
+        })
+      } catch (error: any) {
+        results.push({
+          testId: test.id,
+          testName: test.name,
+          status: 'failed',
+          error: error.message
+        })
+      }
+    }
+    
+    setTestResults(results)
+    setTesting(false)
+    
+    const passedTests = results.filter(r => r.status === 'completed' && r.result?.success).length
+    const totalTests = results.length
+    
+    if (passedTests === totalTests) {
+      toast.success(`Connectivity Test completed! ${passedTests}/${totalTests} tests passed`)
+    } else {
+      toast.error(`Connectivity Test completed with issues. ${passedTests}/${totalTests} tests passed`)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-7xl mx-auto">
+              <div className="animate-pulse space-y-6">
+                <div className="h-8 bg-slate-200 dark:bg-slate-700 rounded w-1/3"></div>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                  <div className="h-64 bg-slate-200 dark:bg-slate-700 rounded"></div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  if (error || !provider) {
+    return (
+      <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6">
+            <div className="max-w-7xl mx-auto">
+              <div className="text-center py-12">
+                <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 mb-2">
+                  {error || "Provider Not Found"}
+                </h2>
+                <p className="text-slate-600 dark:text-slate-400 mb-6">
+                  {error || "The requested AI provider could not be found."}
+                </p>
+                <Button onClick={() => router.push('/ai-providers')}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to AI Providers
+                </Button>
+              </div>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      <Sidebar />
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <Header />
+        <main className="flex-1 overflow-y-auto p-6">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => router.push('/ai-providers')}
+                >
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Providers
+                </Button>
+                <div>
+                  <h1 className="text-3xl font-bold text-slate-900 dark:text-slate-100">
+                    {provider.name}
+                  </h1>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Badge variant={provider.is_active ? "default" : "secondary"}>
+                      {provider.is_active ? "Active" : "Inactive"}
+                    </Badge>
+                    <Badge variant="outline">{provider.type}</Badge>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Overview Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Models</CardTitle>
+                  <Zap className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{models.length}</div>
+                  <p className="text-xs text-muted-foreground">
+                    Configured models
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Status</CardTitle>
+                  <Activity className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {provider.is_active ? (
+                      <CheckCircle className="h-6 w-6 text-green-500" />
+                    ) : (
+                      <AlertCircle className="h-6 w-6 text-red-500" />
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {provider.is_active ? "Operational" : "Offline"}
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Last Used</CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {provider.usage_stats?.last_used || "Never"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Last API call
+                  </p>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Requests</CardTitle>
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {provider.usage_stats?.total_requests || 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Total API calls
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Provider Information */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5" />
+                  Provider Information
+                </CardTitle>
+                <CardDescription>
+                  Detailed configuration and connection information for this AI provider
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {/* Basic Information */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Basic Information</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-sm font-medium">Provider Name</Label>
+                        <div className="text-sm text-muted-foreground mt-1">{provider.name}</div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Provider Type</Label>
+                        <div className="text-sm text-muted-foreground mt-1 capitalize">{provider.type}</div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Provider ID</Label>
+                        <div className="text-sm text-muted-foreground mt-1 font-mono">{provider.id}</div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Status</Label>
+                        <div className="mt-1">
+                          <Badge variant={provider.is_active ? "default" : "secondary"}>
+                            {provider.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Configuration Details */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Configuration</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-sm font-medium">API Key Status</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.type === 'ollama' ? (
+                            <Badge variant="outline">Not Required</Badge>
+                          ) : (
+                            <Badge variant="default">Configured</Badge>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Endpoint</Label>
+                        <div className="text-sm text-muted-foreground mt-1 font-mono">
+                          {provider.configuration?.endpoint || 'Default API endpoint'}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Default Model</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.configuration?.model || provider.configuration?.default_model || 'Not specified'}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Priority</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.configuration?.priority || 1}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Usage & Timestamps */}
+                  <div className="space-y-4">
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Usage & Timestamps</h4>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-sm font-medium">Total Requests</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.usage_stats?.total_requests || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Total Tokens</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.usage_stats?.total_tokens || 0}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Created</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.created_at ? new Date(provider.created_at).toLocaleDateString() : 'Unknown'}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium">Last Updated</Label>
+                        <div className="text-sm text-muted-foreground mt-1">
+                          {provider.updated_at ? new Date(provider.updated_at).toLocaleDateString() : 'Unknown'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Advanced Configuration */}
+                {provider.configuration && Object.keys(provider.configuration).length > 0 && (
+                  <div className="mt-6 pt-6 border-t">
+                    <Collapsible open={advancedConfigOpen} onOpenChange={setAdvancedConfigOpen}>
+                      <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                        <ChevronDown className={`h-4 w-4 transition-transform ${advancedConfigOpen ? 'rotate-180' : ''}`} />
+                        <span className="font-medium uppercase tracking-wide">Advanced Configuration (Debug)</span>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="mt-4">
+                        <div className="bg-muted p-4 rounded-lg">
+                          <pre className="text-xs text-muted-foreground overflow-x-auto">
+                            {JSON.stringify(provider.configuration, null, 2)}
+                          </pre>
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Main Content Tabs */}
+            <Tabs defaultValue="models" className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="models">Models</TabsTrigger>
+                <TabsTrigger value="configuration">Configuration</TabsTrigger>
+                <TabsTrigger value="testing">Testing</TabsTrigger>
+                <TabsTrigger value="analytics">Analytics</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="models" className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-lg font-semibold">Configured Models</h3>
+                  <Button onClick={() => setAddModelDialogOpen(true)}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Model
+                  </Button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {models.map((model) => (
+                    <Card key={model.id} className="hover:shadow-md transition-shadow">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">{model.name}</CardTitle>
+                          <div className="flex items-center space-x-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => router.push(`/ai-providers/${providerId}/model/${model.id}`)}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => setDeleteModelDialogOpen(model.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant={model.is_active ? "default" : "secondary"}>
+                            {model.is_active ? "Active" : "Inactive"}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Context Window:</span>
+                            <span>{model.contextWindow?.toLocaleString() || 'Unknown'} tokens</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Max Tokens:</span>
+                            <span>{model.maxTokens?.toLocaleString() || 'Unknown'} tokens</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Temperature:</span>
+                            <span>{model.temperature || 0.7}</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  
+                  {models.length === 0 && (
+                    <div className="col-span-full text-center py-12">
+                      <Zap className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No Models Configured</h3>
+                      <p className="text-muted-foreground mb-4">
+                        Add your first model to start using this AI provider.
+                      </p>
+                      <Button onClick={() => setAddModelDialogOpen(true)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add Model
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="configuration" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings className="h-5 w-5" />
+                      Provider Configuration
+                    </CardTitle>
+                    <CardDescription>
+                      Configure API credentials, endpoints, and authentication settings for this AI provider.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-6">
+                      {/* Basic Configuration */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Basic Configuration</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="provider-name">Provider Name</Label>
+                            <Input
+                              id="provider-name"
+                              value={provider.name}
+                              disabled
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Provider name cannot be changed</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="provider-type">Provider Type</Label>
+                            <Input
+                              id="provider-type"
+                              value={provider.type}
+                              disabled
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">Provider type cannot be changed</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* API Configuration */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">API Configuration</h4>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="api-endpoint">API Endpoint</Label>
+                            <Input
+                              id="api-endpoint"
+                              placeholder="https://api.openai.com/v1"
+                              value={configForm.endpoint}
+                              onChange={(e) => setConfigForm(prev => ({ ...prev, endpoint: e.target.value }))}
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              The base URL for the AI provider's API
+                            </p>
+                          </div>
+                          
+                          {provider.type !== 'ollama' && (
+                            <div>
+                              <Label htmlFor="api-key">API Key</Label>
+                              <Input
+                                id="api-key"
+                                type="password"
+                                placeholder="Enter your API key"
+                                value={configForm.apiKey}
+                                onChange={(e) => setConfigForm(prev => ({ ...prev, apiKey: e.target.value }))}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                🔒 API key will be encrypted and stored securely. Leave blank to keep existing key.
+                              </p>
+                            </div>
+                          )}
+                          
+                          {provider.type === 'ollama' && (
+                            <div>
+                              <Label htmlFor="api-key">API Key</Label>
+                              <Input
+                                id="api-key"
+                                disabled
+                                placeholder="Not required for local Ollama"
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                🏠 Local Ollama doesn't require an API key - it runs locally on your machine.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Azure AI Specific Configuration */}
+                      {provider.type === 'azure' && (
+                        <div className="space-y-4">
+                          <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Azure AI Configuration</h4>
+                          
+                          {/* Azure OpenAI Client Configuration */}
+                          <div className="space-y-4">
+                            <h5 className="font-medium text-sm text-blue-600 dark:text-blue-400">Azure OpenAI Client Settings</h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="api-version">API Version</Label>
+                                <Input
+                                  id="api-version"
+                                  placeholder="2024-04-01-preview"
+                                  value={configForm.apiVersion}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, apiVersion: e.target.value }))}
+                                  className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Azure OpenAI API version (e.g., 2024-04-01-preview)
+                                </p>
+                              </div>
+                              <div>
+                                <Label htmlFor="deployment">Deployment Name</Label>
+                                <Input
+                                  id="deployment"
+                                  placeholder="gpt-5-mini"
+                                  value={configForm.deployment}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, deployment: e.target.value }))}
+                                  className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Model deployment name in Azure (e.g., gpt-5-mini)
+                                </p>
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="model-name">Model Name</Label>
+                              <Input
+                                id="model-name"
+                                placeholder="gpt-5-mini"
+                                value={configForm.modelName}
+                                onChange={(e) => setConfigForm(prev => ({ ...prev, modelName: e.target.value }))}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                The specific model name to use (e.g., gpt-5-mini)
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Azure AD Authentication (Optional) */}
+                          <div className="space-y-4">
+                            <h5 className="font-medium text-sm text-blue-600 dark:text-blue-400">Azure AD Authentication (Optional)</h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="tenant-id">Tenant ID</Label>
+                                <Input
+                                  id="tenant-id"
+                                  placeholder="12345678-1234-1234-1234-123456789012"
+                                  value={configForm.tenantId}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, tenantId: e.target.value }))}
+                                  className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Azure Active Directory tenant identifier (for Azure AD auth)
+                                </p>
+                              </div>
+                              <div>
+                                <Label htmlFor="client-id">Client ID</Label>
+                                <Input
+                                  id="client-id"
+                                  placeholder="87654321-4321-4321-4321-210987654321"
+                                  value={configForm.clientId}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, clientId: e.target.value }))}
+                                  className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Azure application client identifier (for Azure AD auth)
+                                </p>
+                              </div>
+                            </div>
+                            <div>
+                              <Label htmlFor="client-secret">Client Secret</Label>
+                              <Input
+                                id="client-secret"
+                                type="password"
+                                placeholder="Enter your client secret"
+                                value={configForm.clientSecret}
+                                onChange={(e) => setConfigForm(prev => ({ ...prev, clientSecret: e.target.value }))}
+                                className="mt-1"
+                              />
+                              <p className="text-xs text-muted-foreground mt-1">
+                                🔒 Client secret for Azure AD authentication. Leave blank to keep existing secret.
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Azure Resource Configuration */}
+                          <div className="space-y-4">
+                            <h5 className="font-medium text-sm text-blue-600 dark:text-blue-400">Azure Resource Configuration</h5>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div>
+                                <Label htmlFor="resource-name">Resource Name</Label>
+                                <Input
+                                  id="resource-name"
+                                  placeholder="cognisync-knowledgehub-resource"
+                                  value={configForm.resourceName}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, resourceName: e.target.value }))}
+                                  className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Azure AI resource name (e.g., cognisync-knowledgehub-resource)
+                                </p>
+                              </div>
+                              <div>
+                                <Label htmlFor="region">Region</Label>
+                                <Input
+                                  id="region"
+                                  placeholder="eastus"
+                                  value={configForm.region}
+                                  onChange={(e) => setConfigForm(prev => ({ ...prev, region: e.target.value }))}
+                                  className="mt-1"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Azure region where the resource is deployed
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Advanced Configuration */}
+                      <div className="space-y-4">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Advanced Configuration</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="priority">Priority</Label>
+                            <Input
+                              id="priority"
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={configForm.priority}
+                              onChange={(e) => setConfigForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Provider priority (1 = highest, 10 = lowest)
+                            </p>
+                          </div>
+                          <div>
+                            <Label htmlFor="timeout">Request Timeout (seconds)</Label>
+                            <Input
+                              id="timeout"
+                              type="number"
+                              min="10"
+                              max="300"
+                              value={configForm.timeout}
+                              onChange={(e) => setConfigForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
+                              className="mt-1"
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              API request timeout in seconds
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Current Configuration Display */}
+                      <div className="space-y-4">
+                        <Collapsible open={currentConfigOpen} onOpenChange={setCurrentConfigOpen}>
+                          <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
+                            <ChevronDown className={`h-4 w-4 transition-transform ${currentConfigOpen ? 'rotate-180' : ''}`} />
+                            <span className="font-medium uppercase tracking-wide">Current Configuration (Debug)</span>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-4">
+                            <div className="bg-muted p-4 rounded-lg">
+                              <pre className="text-xs text-muted-foreground overflow-x-auto">
+                                {JSON.stringify(provider.configuration, null, 2)}
+                              </pre>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Changes will be saved automatically when you click "Save Configuration"
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button variant="outline" onClick={() => {
+                            // Reset form to original provider values
+                            setConfigForm({
+                              endpoint: provider.configuration?.endpoint || "",
+                              apiKey: "", // Never pre-fill API key for security
+                              priority: provider.configuration?.priority || 1,
+                              timeout: provider.configuration?.timeout || 30,
+                              // Azure-specific fields
+                              apiVersion: provider.configuration?.apiVersion || "2024-04-01-preview",
+                              deployment: provider.configuration?.deployment || "",
+                              modelName: provider.configuration?.modelName || "",
+                              tenantId: provider.configuration?.tenantId || "",
+                              clientId: provider.configuration?.clientId || "",
+                              clientSecret: "", // Never pre-fill client secret for security
+                              resourceName: provider.configuration?.resourceName || "",
+                              region: provider.configuration?.region || ""
+                            })
+                          }}>
+                            Reset
+                          </Button>
+                          <Button onClick={async () => {
+                            try {
+                              // Build configuration data from form state
+                              const configData: any = {
+                                endpoint: configForm.endpoint || provider.configuration?.endpoint,
+                                priority: configForm.priority,
+                                timeout: configForm.timeout
+                              }
+
+                              // Add API key if provided
+                              if (configForm.apiKey && provider.type !== 'ollama') {
+                                configData.apiKey = configForm.apiKey
+                              }
+
+                              // Add Azure-specific fields
+                              if (provider.type === 'azure') {
+                                // Azure OpenAI Client Settings
+                                if (configForm.apiVersion) configData.apiVersion = configForm.apiVersion
+                                if (configForm.deployment) configData.deployment = configForm.deployment
+                                if (configForm.modelName) configData.modelName = configForm.modelName
+                                
+                                // Azure AD Authentication (Optional)
+                                if (configForm.tenantId) configData.tenantId = configForm.tenantId
+                                if (configForm.clientId) configData.clientId = configForm.clientId
+                                if (configForm.clientSecret) configData.clientSecret = configForm.clientSecret
+                                
+                                // Azure Resource Configuration
+                                if (configForm.resourceName) configData.resourceName = configForm.resourceName
+                                if (configForm.region) configData.region = configForm.region
+                              }
+
+                              // Update provider configuration
+                              await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
+                                method: 'POST',
+                                body: JSON.stringify({
+                                  configuration: configData
+                                })
+                              })
+
+                              toast.success("Provider configuration updated successfully")
+                              
+                              // Update form state with saved values (keep sensitive fields empty for security)
+                              setConfigForm(prev => ({
+                                ...prev,
+                                endpoint: configData.endpoint || prev.endpoint,
+                                priority: configData.priority || prev.priority,
+                                timeout: configData.timeout || prev.timeout,
+                                // Azure-specific fields
+                                apiVersion: configData.apiVersion || prev.apiVersion,
+                                deployment: configData.deployment || prev.deployment,
+                                modelName: configData.modelName || prev.modelName,
+                                tenantId: configData.tenantId || prev.tenantId,
+                                clientId: configData.clientId || prev.clientId,
+                                resourceName: configData.resourceName || prev.resourceName,
+                                region: configData.region || prev.region,
+                                // Clear sensitive fields for security
+                                apiKey: "",
+                                clientSecret: ""
+                              }))
+                              
+                              // Reload provider data to update the provider state
+                              await loadProviderDetails()
+                              
+                            } catch (error: any) {
+                              console.error("Failed to update provider configuration:", error)
+                              toast.error(error?.message || "Failed to update provider configuration")
+                            }
+                          }}>
+                            <Settings className="h-4 w-4 mr-2" />
+                            Save Configuration
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="testing" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <TestTube className="h-5 w-5" />
+                      Provider Connectivity Testing
+                    </CardTitle>
+                    <CardDescription>
+                      Test the AI provider connection, authentication, and configuration settings.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-6">
+                      {/* Connectivity Test Overview */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {connectivityTests.map((test) => (
+                          <Card key={test.id} className="hover:shadow-md transition-shadow">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-sm">{test.name}</CardTitle>
+                              <CardDescription className="text-xs">{test.description}</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs text-muted-foreground">
+                                  {provider?.type === 'azure' || test.id !== 'azure_connectivity' ? 'Available' : 'N/A'}
+                                </div>
+                                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        ))}
+                      </div>
+
+                      {/* Test Controls */}
+                      <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                        <div>
+                          <h4 className="font-medium">Connectivity Test Controls</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Test provider endpoint, authentication, and configuration
+                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button 
+                            onClick={runConnectivityTests}
+                            disabled={testing}
+                            className="min-w-[140px]"
+                          >
+                            <TestTube className="h-4 w-4 mr-2" />
+                            {testing ? 'Testing...' : 'Run Connectivity Tests'}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Test Results */}
+                      {testResults.length > 0 && (
+                        <div className="space-y-4">
+                          <div className="flex items-center justify-between">
+                            <h4 className="font-medium">Test Results</h4>
+                            <div className="text-sm text-muted-foreground">
+                              {testResults.filter(r => r.status === 'completed' && r.result?.success).length} of {testResults.length} tests passed
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-3">
+                            {testResults.map((testResult, index) => (
+                              <Card key={index} className="border-l-4 border-l-green-500">
+                                <CardContent className="p-4">
+                                  <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                      <span className="font-medium">{testResult.testName}</span>
+                                      <Badge variant="outline" className="text-xs">Connectivity</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <Badge variant={testResult.status === 'completed' && testResult.result?.success ? "default" : "destructive"}>
+                                        {testResult.status === 'completed' && testResult.result?.success ? 'Passed' : 'Failed'}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                                    <div>
+                                      <span className="text-muted-foreground">Response Time:</span>
+                                      <div className="font-mono">
+                                        {testResult.result?.responseTime ? `${testResult.result.responseTime}ms` : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Status:</span>
+                                      <div className="font-mono">
+                                        {testResult.result?.success ? 'Success' : 'Failed'}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Response:</span>
+                                      <div className="font-mono text-xs">
+                                        {testResult.result?.response || testResult.error || 'N/A'}
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <span className="text-muted-foreground">Timestamp:</span>
+                                      <div className="font-mono text-xs">
+                                        {testResult.result?.timestamp ? new Date(testResult.result.timestamp).toLocaleTimeString() : 'N/A'}
+                                      </div>
+                                    </div>
+                                  </div>
+                                  
+                                  {testResult.result?.success ? (
+                                    <div className="mt-3 p-2 bg-green-50 dark:bg-green-900/20 rounded text-sm text-green-700 dark:text-green-300">
+                                      ✅ {testResult.testName} completed successfully.
+                                    </div>
+                                  ) : (
+                                    <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 rounded text-sm text-red-700 dark:text-red-300">
+                                      ❌ {testResult.testName} failed: {testResult.error || testResult.result?.message || 'Unknown error'}
+                                    </div>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="analytics" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5" />
+                      Usage Analytics
+                    </CardTitle>
+                    <CardDescription>
+                      View usage statistics and performance metrics.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label>Total Requests</Label>
+                          <div className="text-2xl font-bold">
+                            {provider.usage_stats?.total_requests || 0}
+                          </div>
+                        </div>
+                        <div>
+                          <Label>Last Used</Label>
+                          <div className="text-lg">
+                            {provider.usage_stats?.last_used || "Never"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </main>
+      </div>
+
+      {/* Add Model Dialog */}
+      <Dialog open={addModelDialogOpen} onOpenChange={setAddModelDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add New Model</DialogTitle>
+            <DialogDescription>
+              Configure a new AI model for {provider?.name}. Fill in the required information below.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            {/* Basic Information */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="modelId">Model ID *</Label>
+                <Input
+                  id="modelId"
+                  placeholder="gpt-4"
+                  value={newModelForm.modelId}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, modelId: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Unique identifier for the model (e.g., gpt-4, claude-3-sonnet)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="modelName">Model Name *</Label>
+                <Input
+                  id="modelName"
+                  placeholder="GPT-4"
+                  value={newModelForm.modelName}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, modelName: e.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Display name for the model
+                </p>
+              </div>
+            </div>
+
+            {/* Model Parameters */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="contextWindow">Context Window</Label>
+                <Input
+                  id="contextWindow"
+                  type="number"
+                  min="1000"
+                  max="10000000"
+                  value={newModelForm.contextWindow}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 128000 }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum context tokens (default: 128,000)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="maxTokens">Max Tokens</Label>
+                <Input
+                  id="maxTokens"
+                  type="number"
+                  min="1"
+                  max="100000"
+                  value={newModelForm.maxTokens}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 4096 }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Maximum response tokens (default: 4,096)
+                </p>
+              </div>
+            </div>
+
+            {/* Advanced Parameters */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="temperature">Temperature</Label>
+                <Input
+                  id="temperature"
+                  type="number"
+                  min="0"
+                  max="2"
+                  step="0.1"
+                  value={newModelForm.temperature}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0.7 }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Creativity (0-2, default: 0.7)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="topP">Top P</Label>
+                <Input
+                  id="topP"
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.1"
+                  value={newModelForm.topP}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, topP: parseFloat(e.target.value) || 1.0 }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Nucleus sampling (0-1, default: 1.0)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="frequencyPenalty">Frequency Penalty</Label>
+                <Input
+                  id="frequencyPenalty"
+                  type="number"
+                  min="-2"
+                  max="2"
+                  step="0.1"
+                  value={newModelForm.frequencyPenalty}
+                  onChange={(e) => setNewModelForm(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0.0 }))}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Reduce repetition (-2 to 2, default: 0.0)
+                </p>
+              </div>
+            </div>
+
+            {/* Status */}
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="isActive"
+                checked={newModelForm.is_active}
+                onCheckedChange={(checked) => setNewModelForm(prev => ({ ...prev, is_active: checked }))}
+              />
+              <Label htmlFor="isActive">Active</Label>
+              <p className="text-xs text-muted-foreground">
+                Enable this model for use
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddModelDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleAddModel}
+              disabled={!newModelForm.modelId || !newModelForm.modelName || addingModel}
+            >
+              {addingModel ? "Adding..." : "Add Model"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}

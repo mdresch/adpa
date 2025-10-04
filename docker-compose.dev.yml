@@ -58,10 +58,8 @@ services:
     # Run as root in development to avoid permission issues with mounted volumes
     user: root
     # Start Next in dev mode binding to 0.0.0.0 so the host can access it.
-    # As a safety, attempt to install dependencies (using frozen lockfile) if
-    # pnpm reports missing modules; this handles cases where the image wasn't
-    # rebuilt or host mounts affected node_modules. If install fails, fall back
-    # to running the dev server so logs surface the root issue.
-    command: "sh -c 'pnpm install --frozen-lockfile || pnpm install || true && pnpm run dev'"
+    # Enable corepack and ensure pnpm is available, then install dependencies
+    # and start the dev server
+    command: "sh -c 'corepack enable && pnpm install --frozen-lockfile && pnpm run dev'"
     ports:
       - "3000:3000"

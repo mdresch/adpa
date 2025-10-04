@@ -1,8 +1,8 @@
 # Development Dockerfile for ADPA Frontend
 FROM node:18-alpine
 
-# Install pnpm
-RUN npm install -g pnpm
+# Install pnpm using corepack (recommended method)
+RUN corepack enable
 
 # Set working directory
 WORKDIR /app
