@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { apiClient, Project } from "@/lib/api"
+import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from "sonner"
@@ -70,6 +70,26 @@ interface Document {
   updated_at: string
 }
 
+interface Stakeholder {
+  id: string
+  project_id: string
+  name?: string
+  role: string
+  department?: string
+  email: string
+  phone?: string
+  interest_level: 'high' | 'medium' | 'low'
+  influence_level: 'high' | 'medium' | 'low'
+  engagement_approach: 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'
+  communication_frequency: 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'
+  stakeholder_type: 'internal' | 'external'
+  stakeholder_category: 'primary' | 'secondary'
+  expectations?: string
+  potential_impact?: string
+  created_at: string
+  updated_at: string
+}
+
 export default function ProjectDetail() {
   const params = useParams()
   const projectId = params.id as string
@@ -77,9 +97,22 @@ export default function ProjectDetail() {
 
   const [project, setProject] = useState<Project | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
+  const [stakeholders, setStakeholders] = useState<Stakeholder[]>([])
   const [loading, setLoading] = useState(true)
   const [documentsLoading, setDocumentsLoading] = useState(true)
+  const [stakeholdersLoading, setStakeholdersLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [documentsPagination, setDocumentsPagination] = useState<{
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0,
+  })
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [creatingDocument, setCreatingDocument] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState("")
@@ -87,9 +120,38 @@ export default function ProjectDetail() {
   const [documentDescription, setDocumentDescription] = useState("")
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [stakeholderDialogOpen, setStakeholderDialogOpen] = useState(false)
+  const [editingStakeholder, setEditingStakeholder] = useState<Stakeholder | null>(null)
+  const [savingStakeholder, setSavingStakeholder] = useState(false)
+  
+  // Document upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [uploadForm, setUploadForm] = useState<{
+    name: string
+    file: File | null
+    template_id: string
+  }>({
+    name: "",
+    file: null,
+    template_id: "",
+  })
   
   // Edit form state
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    name: string
+    description: string
+    framework: string
+    status: string
+    priority: string
+    start_date: string
+    end_date: string
+    budget: string
+    manager: string
+    team_members: string[]
+  }>({
     name: "",
     description: "",
     framework: "",
@@ -99,7 +161,38 @@ export default function ProjectDetail() {
     end_date: "",
     budget: "",
     manager: "",
-    team_members: [] as string[]
+    team_members: []
+  })
+
+  // Stakeholder form state
+  const [stakeholderForm, setStakeholderForm] = useState<{
+    name: string
+    role: string
+    department: string
+    email: string
+    phone: string
+    interest_level: 'high' | 'medium' | 'low'
+    influence_level: 'high' | 'medium' | 'low'
+    engagement_approach: 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'
+    communication_frequency: 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'
+    stakeholder_type: 'internal' | 'external'
+    stakeholder_category: 'primary' | 'secondary'
+    expectations: string
+    potential_impact: string
+  }>({
+    name: "",
+    role: "",
+    department: "",
+    email: "",
+    phone: "",
+    interest_level: "medium",
+    influence_level: "medium",
+    engagement_approach: "keep_informed",
+    communication_frequency: "weekly",
+    stakeholder_type: "internal",
+    stakeholder_category: "primary",
+    expectations: "",
+    potential_impact: ""
   })
 
   // Fetch project data
@@ -109,8 +202,8 @@ export default function ProjectDetail() {
       const projectData = await apiClient.getProject(projectId)
       setProject(projectData)
       
-      // Also fetch documents for this project
-      await fetchDocuments()
+      // Also fetch documents and stakeholders for this project
+      await Promise.all([fetchDocuments(), fetchStakeholders()])
     } catch (error) {
       console.error("Failed to fetch project:", error)
       toast.error("Failed to load project")
@@ -141,14 +234,40 @@ export default function ProjectDetail() {
   const fetchDocuments = async () => {
     try {
       setDocumentsLoading(true)
-      const documentsData = await apiClient.getProjectDocuments(projectId)
+      const params = {
+        page: documentsPagination.page,
+        limit: documentsPagination.limit,
+        search: searchTerm || undefined,
+      }
+      const documentsData = await apiClient.getProjectDocuments(projectId, params)
       setDocuments(documentsData.documents || [])
+      setDocumentsPagination(documentsData.pagination || {
+        page: 1,
+        limit: 10,
+        total: 0,
+        pages: 0,
+      })
     } catch (error) {
       console.error("Failed to fetch documents:", error)
       // Don't show error toast for documents, just use empty array
       setDocuments([])
     } finally {
       setDocumentsLoading(false)
+    }
+  }
+
+  // Fetch stakeholders separately
+  const fetchStakeholders = async () => {
+    try {
+      setStakeholdersLoading(true)
+      const stakeholdersData = await apiClient.getProjectStakeholders(projectId)
+      setStakeholders(Array.isArray(stakeholdersData.stakeholders) ? stakeholdersData.stakeholders : [])
+    } catch (error) {
+      console.error("Failed to fetch stakeholders:", error)
+      // Fallback to empty array if API fails
+      setStakeholders([])
+    } finally {
+      setStakeholdersLoading(false)
     }
   }
 
@@ -304,28 +423,107 @@ export default function ProjectDetail() {
     }
   }
 
-  // Upload document
-  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  // Fetch templates for upload
+  const fetchTemplatesForUpload = async () => {
+    try {
+      setLoadingTemplates(true)
+      const response = await apiClient.getTemplates({ 
+        framework: project?.framework || undefined,
+        limit: 50 
+      })
+      setTemplates(Array.isArray(response.templates) ? response.templates : [])
+    } catch (error) {
+      console.error("Failed to fetch templates:", error)
+      toast.error("Failed to load templates")
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  // Handle upload document button click
+  const handleUploadDocumentClick = () => {
+    setUploadForm({
+      name: "",
+      file: null,
+      template_id: "",
+    })
+    setUploadDialogOpen(true)
+    fetchTemplatesForUpload()
+  }
+
+  // Upload document handler
+  const handleUploadDocumentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!uploadForm.name || !uploadForm.file || !uploadForm.template_id) {
+      toast.error("Please fill in all required fields including template selection")
+      return
+    }
 
     try {
-      // For now, we'll create a document with the file content
-      // In a real implementation, you'd upload the file to storage first
-      const content = await file.text()
+      setUploadingDocument(true)
+      
+      // Handle file content
+      let content: any
+      if (uploadForm.file.type === 'text/plain' || 
+          uploadForm.file.type === 'application/json' ||
+          uploadForm.file.name.endsWith('.txt') ||
+          uploadForm.file.name.endsWith('.md')) {
+        // Handle text files - wrap in object as expected by backend
+        const textContent = await uploadForm.file.text()
+        content = {
+          text: textContent,
+          fileName: uploadForm.file.name,
+          fileType: uploadForm.file.type,
+          uploadedAt: new Date().toISOString()
+        }
+      } else {
+        content = {
+          fileName: uploadForm.file.name,
+          fileSize: uploadForm.file.size,
+          fileType: uploadForm.file.type,
+          uploadedAt: new Date().toISOString(),
+          note: "Binary file uploaded - content stored separately"
+        }
+      }
       
       await apiClient.createDocument(projectId, {
-        name: file.name,
-        content: { text: content },
+        name: uploadForm.name,
+        content: content,
+        template_id: uploadForm.template_id,
         status: "draft"
       })
       
       toast.success("Document uploaded successfully!")
+      setUploadDialogOpen(false)
+      setUploadForm({
+        name: "",
+        file: null,
+        template_id: "",
+      })
       await fetchDocuments()
     } catch (error) {
       console.error("Failed to upload document:", error)
       toast.error("Failed to upload document")
+    } finally {
+      setUploadingDocument(false)
     }
+  }
+
+  // Legacy upload handler (for backward compatibility)
+  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Show template selection dialog instead of direct upload
+    setUploadForm({
+      name: file.name,
+      file: file,
+      template_id: "",
+    })
+    setUploadDialogOpen(true)
+    fetchTemplatesForUpload()
   }
 
   // Edit document (redirect to editor)
@@ -341,7 +539,7 @@ export default function ProjectDetail() {
       // Create a blob with the document content
       const content = typeof docData.content === 'string' 
         ? docData.content 
-        : JSON.stringify(docData.content)
+        : docData.content ? JSON.stringify(docData.content) : 'No content available'
       
       const blob = new Blob([content], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
@@ -455,19 +653,121 @@ export default function ProjectDetail() {
     }))
   }
 
+  // Handle opening new stakeholder dialog
+  const handleAddStakeholder = () => {
+    setEditingStakeholder(null)
+    setStakeholderForm({
+      name: "",
+      role: "",
+      department: "",
+      email: "",
+      phone: "",
+      interest_level: "medium",
+      influence_level: "medium",
+      engagement_approach: "keep_informed",
+      communication_frequency: "weekly",
+      stakeholder_type: "internal",
+      stakeholder_category: "primary",
+      expectations: "",
+      potential_impact: ""
+    })
+    setStakeholderDialogOpen(true)
+  }
+
+  // Handle opening edit stakeholder dialog
+  const handleEditStakeholder = (stakeholder: Stakeholder) => {
+    setEditingStakeholder(stakeholder)
+    setStakeholderForm({
+      name: stakeholder.name,
+      role: stakeholder.role,
+      department: stakeholder.department,
+      email: stakeholder.email,
+      phone: stakeholder.phone || "",
+      interest_level: stakeholder.interest_level,
+      influence_level: stakeholder.influence_level,
+      engagement_approach: stakeholder.engagement_approach,
+      communication_frequency: stakeholder.communication_frequency,
+      stakeholder_type: stakeholder.stakeholder_type,
+      stakeholder_category: stakeholder.stakeholder_category,
+      expectations: stakeholder.expectations,
+      potential_impact: stakeholder.potential_impact
+    })
+    setStakeholderDialogOpen(true)
+  }
+
+  // Save stakeholder (create or update)
+  const handleSaveStakeholder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!stakeholderForm.role || !stakeholderForm.email) {
+      toast.error("Please fill in required fields (Role, Email)")
+      return
+    }
+
+    try {
+      setSavingStakeholder(true)
+      
+      if (editingStakeholder) {
+        // Update existing stakeholder
+        await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
+        toast.success("Stakeholder updated successfully!")
+      } else {
+        // Create new stakeholder
+        await apiClient.createStakeholder({
+          project_id: projectId,
+          ...stakeholderForm
+        })
+        toast.success("Stakeholder added successfully!")
+      }
+      
+      setStakeholderDialogOpen(false)
+      // Refresh stakeholders list
+      await fetchStakeholders()
+    } catch (error) {
+      console.error("Failed to save stakeholder:", error)
+      toast.error("Failed to save stakeholder")
+    } finally {
+      setSavingStakeholder(false)
+    }
+  }
+
+  // Delete stakeholder
+  const handleDeleteStakeholder = async (stakeholderId: string) => {
+    if (!confirm("Are you sure you want to delete this stakeholder? This action cannot be undone.")) {
+      return
+    }
+    
+    try {
+      await apiClient.deleteStakeholder(stakeholderId)
+      toast.success("Stakeholder deleted successfully!")
+      // Refresh stakeholders list
+      await fetchStakeholders()
+    } catch (error) {
+      console.error("Failed to delete stakeholder:", error)
+      toast.error("Failed to delete stakeholder")
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated && projectId) {
       fetchProject()
     }
   }, [projectId, isAuthenticated])
 
+  // Fetch documents when pagination or search changes
+  useEffect(() => {
+    if (isAuthenticated && projectId) {
+      fetchDocuments()
+    }
+  }, [documentsPagination.page, searchTerm])
+
   // Listen for document creation events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
-    const handleDocumentCreated = (data: any) => {
+    const handleDocumentCreated = (data: { document?: { project_id: string; name: string } }) => {
       try {
         const doc = data?.document
-        if (doc && String(doc.project_id) === String(projectId)) {
+        if (doc && doc.project_id && doc.name && String(doc.project_id) === String(projectId)) {
           toast.success(`New document created: ${doc.name}`)
           fetchDocuments()
         }
@@ -483,10 +783,8 @@ export default function ProjectDetail() {
     }
   }, [projectId, on, off])
 
-  const filteredDocuments = documents.filter(
-    (doc) =>
-      doc.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Documents are now filtered server-side, so we use them directly
+  const displayDocuments = documents
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -511,6 +809,80 @@ export default function ProjectDetail() {
         return "outline"
       default:
         return "secondary"
+    }
+  }
+
+  // Helper functions for stakeholder display
+  const getInterestLevelColor = (level: string) => {
+    switch (level) {
+      case "high":
+        return "destructive"
+      case "medium":
+        return "secondary"
+      case "low":
+        return "outline"
+      default:
+        return "secondary"
+    }
+  }
+
+  const getInfluenceLevelColor = (level: string) => {
+    switch (level) {
+      case "high":
+        return "default"
+      case "medium":
+        return "secondary"
+      case "low":
+        return "outline"
+      default:
+        return "secondary"
+    }
+  }
+
+  const getEngagementApproachColor = (approach: string) => {
+    switch (approach) {
+      case "manage_closely":
+        return "default"
+      case "keep_satisfied":
+        return "secondary"
+      case "keep_informed":
+        return "outline"
+      case "monitor":
+        return "destructive"
+      default:
+        return "secondary"
+    }
+  }
+
+  const formatEngagementApproach = (approach: string) => {
+    switch (approach) {
+      case "manage_closely":
+        return "Manage Closely"
+      case "keep_satisfied":
+        return "Keep Satisfied"
+      case "keep_informed":
+        return "Keep Informed"
+      case "monitor":
+        return "Monitor"
+      default:
+        return approach
+    }
+  }
+
+  const formatCommunicationFrequency = (frequency: string) => {
+    switch (frequency) {
+      case "daily":
+        return "Daily"
+      case "weekly":
+        return "Weekly"
+      case "bi_weekly":
+        return "Bi-weekly"
+      case "monthly":
+        return "Monthly"
+      case "as_needed":
+        return "As Needed"
+      default:
+        return frequency
     }
   }
 
@@ -581,7 +953,7 @@ export default function ProjectDetail() {
   const progress = getProjectProgress()
 
   // Determine project manager and other members for Team tab ordering
-  const managerName = (project as any).owner_name || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : undefined)
+  const managerName = (project as any).owner_name || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : 'Not assigned')
   const otherMembers = project.team_members ? project.team_members.filter((m) => m !== managerName) : []
 
   return (
@@ -898,6 +1270,338 @@ export default function ProjectDetail() {
                     </form>
                   </DialogContent>
                 </Dialog>
+
+                {/* Stakeholder Dialog */}
+                <Dialog open={stakeholderDialogOpen} onOpenChange={setStakeholderDialogOpen}>
+                  <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+                    <form onSubmit={handleSaveStakeholder}>
+                      <DialogHeader>
+                        <DialogTitle>
+                          {editingStakeholder ? 'Edit Stakeholder' : 'Add New Stakeholder'}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {editingStakeholder 
+                            ? 'Update stakeholder information and PMBOK parameters.'
+                            : 'Add a new stakeholder with their PMBOK management parameters. You can create placeholders for roles that need to be recruited by leaving the name field blank.'
+                          }
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-6 py-4">
+                        {/* Basic Information */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="stakeholder-role" className="text-sm font-semibold">
+                              Role *
+                            </Label>
+                            <Input 
+                              id="stakeholder-role" 
+                              placeholder="Enter role/title (e.g., Project Manager, Business Analyst)" 
+                              className="mt-2"
+                              value={stakeholderForm.role}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, role: e.target.value}))}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="stakeholder-name" className="text-sm font-semibold">
+                              Name (Optional)
+                            </Label>
+                            <Input 
+                              id="stakeholder-name" 
+                              placeholder="Enter stakeholder name (leave blank if to be recruited)" 
+                              className="mt-2"
+                              value={stakeholderForm.name}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, name: e.target.value}))}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="stakeholder-department" className="text-sm font-semibold">
+                              Department
+                            </Label>
+                            <Input 
+                              id="stakeholder-department" 
+                              placeholder="Enter department" 
+                              className="mt-2"
+                              value={stakeholderForm.department}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, department: e.target.value}))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="stakeholder-email" className="text-sm font-semibold">
+                              Email *
+                            </Label>
+                            <Input 
+                              id="stakeholder-email" 
+                              type="email"
+                              placeholder="Enter email address" 
+                              className="mt-2"
+                              value={stakeholderForm.email}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, email: e.target.value}))}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="stakeholder-phone" className="text-sm font-semibold">
+                              Phone
+                            </Label>
+                            <Input 
+                              id="stakeholder-phone" 
+                              placeholder="Enter phone number" 
+                              className="mt-2"
+                              value={stakeholderForm.phone}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, phone: e.target.value}))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="stakeholder-type" className="text-sm font-semibold">
+                              Stakeholder Type
+                            </Label>
+                            <select
+                              id="stakeholder-type"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={stakeholderForm.stakeholder_type}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, stakeholder_type: e.target.value as 'internal' | 'external'}))}
+                            >
+                              <option value="internal">Internal</option>
+                              <option value="external">External</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* PMBOK Parameters */}
+                        <div className="border-t pt-4">
+                          <h3 className="text-lg font-semibold mb-4">PMBOK Stakeholder Parameters</h3>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="interest-level" className="text-sm font-semibold">
+                                Interest Level
+                              </Label>
+                              <select
+                                id="interest-level"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.interest_level}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, interest_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                              >
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="influence-level" className="text-sm font-semibold">
+                                Influence Level
+                              </Label>
+                              <select
+                                id="influence-level"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.influence_level}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, influence_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                              >
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                              <Label htmlFor="engagement-approach" className="text-sm font-semibold">
+                                Engagement Approach
+                              </Label>
+                              <select
+                                id="engagement-approach"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.engagement_approach}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, engagement_approach: e.target.value as 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'}))}
+                              >
+                                <option value="manage_closely">Manage Closely</option>
+                                <option value="keep_satisfied">Keep Satisfied</option>
+                                <option value="keep_informed">Keep Informed</option>
+                                <option value="monitor">Monitor</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="communication-frequency" className="text-sm font-semibold">
+                                Communication Frequency
+                              </Label>
+                              <select
+                                id="communication-frequency"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.communication_frequency}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, communication_frequency: e.target.value as 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'}))}
+                              >
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="bi_weekly">Bi-weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="as_needed">As Needed</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                              <Label htmlFor="stakeholder-category" className="text-sm font-semibold">
+                                Stakeholder Category
+                              </Label>
+                              <select
+                                id="stakeholder-category"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.stakeholder_category}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, stakeholder_category: e.target.value as 'primary' | 'secondary'}))}
+                              >
+                                <option value="primary">Primary</option>
+                                <option value="secondary">Secondary</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expectations and Impact */}
+                        <div className="border-t pt-4">
+                          <h3 className="text-lg font-semibold mb-4">Stakeholder Analysis</h3>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="expectations" className="text-sm font-semibold">
+                                Expectations
+                              </Label>
+                              <Textarea
+                                id="expectations"
+                                placeholder="Describe what this stakeholder expects from the project"
+                                className="mt-2"
+                                value={stakeholderForm.expectations}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, expectations: e.target.value}))}
+                                rows={3}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="potential-impact" className="text-sm font-semibold">
+                                Potential Impact on Project
+                              </Label>
+                              <Textarea
+                                id="potential-impact"
+                                placeholder="Describe how this stakeholder can impact the project"
+                                className="mt-2"
+                                value={stakeholderForm.potential_impact}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, potential_impact: e.target.value}))}
+                                rows={3}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setStakeholderDialogOpen(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={savingStakeholder}>
+                          {savingStakeholder && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          {savingStakeholder ? "Saving..." : (editingStakeholder ? "Update Stakeholder" : "Add Stakeholder")}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Upload Document Dialog */}
+                <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                  <DialogContent className="sm:max-w-[600px]">
+                    <form onSubmit={handleUploadDocumentSubmit}>
+                      <DialogHeader>
+                        <DialogTitle>Upload Document</DialogTitle>
+                        <DialogDescription>
+                          Upload a document to {project?.name}. Select a template to ensure proper metadata tagging.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-6 py-4">
+                        <div>
+                          <Label htmlFor="upload-doc-name" className="text-sm font-semibold">
+                            Document Name *
+                          </Label>
+                          <Input
+                            id="upload-doc-name"
+                            placeholder="Enter document name"
+                            value={uploadForm.name}
+                            onChange={(e) => setUploadForm({...uploadForm, name: e.target.value})}
+                            className="mt-2"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="upload-template-select" className="text-sm font-semibold">
+                            Template *
+                          </Label>
+                          <select 
+                            id="upload-template-select"
+                            title="Select a template for metadata tagging"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                            value={uploadForm.template_id}
+                            onChange={(e) => setUploadForm({...uploadForm, template_id: e.target.value})}
+                            required
+                          >
+                            <option value="">Select a template (required)</option>
+                            {loadingTemplates ? (
+                              <option disabled>Loading templates...</option>
+                            ) : (
+                              templates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.name} ({template.framework})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Template selection is required to ensure proper document metadata and review compliance
+                          </p>
+                        </div>
+                        <div>
+                          <Label htmlFor="file-upload" className="text-sm font-semibold">
+                            File *
+                          </Label>
+                          <Input
+                            id="file-upload"
+                            type="file"
+                            accept=".pdf,.doc,.docx,.txt,.md"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              setUploadForm({...uploadForm, file})
+                            }}
+                            className="mt-2"
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Supported formats: PDF, DOC, DOCX, TXT, MD
+                          </p>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setUploadDialogOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={uploadingDocument}
+                        >
+                          {uploadingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Upload Document
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
@@ -905,7 +1609,7 @@ export default function ProjectDetail() {
               <TabsList>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="team">Team</TabsTrigger>
+                <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
               </TabsList>
 
@@ -921,18 +1625,10 @@ export default function ProjectDetail() {
                       className="pl-10"
                     />
                   </div>
-                  <Button variant="outline" onClick={() => document.getElementById('document-upload')?.click()}>
+                  <Button variant="outline" onClick={handleUploadDocumentClick}>
                     <Plus className="h-4 w-4 mr-2" />
                     Upload Document
                   </Button>
-                  <input
-                    id="document-upload"
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt"
-                    className="hidden"
-                    onChange={handleDocumentUpload}
-                    title="Upload document"
-                  />
                 </div>
 
                 {/* Loading state for documents */}
@@ -943,7 +1639,7 @@ export default function ProjectDetail() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {filteredDocuments.map((doc) => (
+                    {displayDocuments.map((doc) => (
                       <Card key={doc.id} className="hover:shadow-sm transition-shadow">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
@@ -952,7 +1648,7 @@ export default function ProjectDetail() {
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2">
                                   <Link
-                                    href={`/projects/${projectId}/documents/${doc.id}`}
+                                    href={`/projects/${projectId}/documents/${doc.id}/view`}
                                     className="font-semibold hover:text-primary transition-colors"
                                   >
                                     {doc.name}
@@ -973,6 +1669,11 @@ export default function ProjectDetail() {
                             <div className="flex items-center space-x-2">
                               <Button variant="ghost" size="sm" asChild>
                                 <Link href={`/projects/${projectId}/documents/${doc.id}`}>
+                                  <Edit className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/projects/${projectId}/documents/${doc.id}/view`}>
                                   <Eye className="h-4 w-4" />
                                 </Link>
                               </Button>
@@ -988,7 +1689,13 @@ export default function ProjectDetail() {
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem onClick={() => handleEditDocument(doc.id)}>
                                     <Edit className="h-4 w-4 mr-2" />
-                                    Edit
+                                    Edit in Text Editor
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/projects/${projectId}/documents/${doc.id}/view`}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View in Rich Editor
+                                    </Link>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleDownloadDocument(doc.id)}>
                                     <Download className="h-4 w-4 mr-2" />
@@ -1009,7 +1716,7 @@ export default function ProjectDetail() {
                       </Card>
                     ))}
                     
-                    {filteredDocuments.length === 0 && (
+                    {displayDocuments.length === 0 && (
                       <div className="text-center py-8">
                         <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                         <h3 className="text-lg font-semibold mb-2">No documents found</h3>
@@ -1029,6 +1736,36 @@ export default function ProjectDetail() {
                             </DialogTrigger>
                           </Dialog>
                         )}
+                      </div>
+                    )}
+
+                    {/* Pagination Controls */}
+                    {displayDocuments.length > 0 && documentsPagination.pages > 1 && (
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Showing {((documentsPagination.page - 1) * documentsPagination.limit) + 1} to {Math.min(documentsPagination.page * documentsPagination.limit, documentsPagination.total)} of {documentsPagination.total} documents
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDocumentsPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                            disabled={documentsPagination.page <= 1}
+                          >
+                            Previous
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            Page {documentsPagination.page} of {documentsPagination.pages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDocumentsPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                            disabled={documentsPagination.page >= documentsPagination.pages}
+                          >
+                            Next
+                          </Button>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1054,7 +1791,9 @@ export default function ProjectDetail() {
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{project.budget || 'Not set'}</div>
+                      <div className="text-2xl font-bold">
+                        {project.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
+                      </div>
                       <p className="text-xs text-muted-foreground">Total allocated</p>
                     </CardContent>
                   </Card>
@@ -1094,54 +1833,146 @@ export default function ProjectDetail() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="team" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Project Team</CardTitle>
-                    <CardDescription>Team members and their roles</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Show manager first if available */}
-                      {managerName && (
-                        <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/5">
-                          <div className="flex items-center space-x-3">
-                            <Skeleton className="w-10 h-10 rounded-full" />
-                            <div>
-                              <p className="font-medium">{managerName}</p>
-                              <p className="text-sm text-muted-foreground">Project Manager</p>
-                            </div>
-                          </div>
-                          <Badge variant="secondary">Manager</Badge>
-                        </div>
-                      )}
+              <TabsContent value="stakeholders" className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">Project Stakeholders</h2>
+                    <p className="text-muted-foreground">Manage stakeholders and their PMBOK parameters</p>
+                  </div>
+                  <Button onClick={handleAddStakeholder}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Stakeholder
+                  </Button>
+                </div>
 
-                      {/* Then show other members */}
-                      {otherMembers.length > 0 ? (
-                        otherMembers.map((member, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <Skeleton className="w-10 h-10 rounded-full" />
-                              <div>
-                                <p className="font-medium">{member}</p>
-                                <p className="text-sm text-muted-foreground">Team Member</p>
+                {/* Loading state for stakeholders */}
+                {stakeholdersLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <span className="ml-2">Loading stakeholders...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {stakeholders.length > 0 ? (
+                      stakeholders.map((stakeholder) => (
+                        <Card key={stakeholder.id} className="hover:shadow-sm transition-shadow">
+                          <CardContent className="p-6">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 space-y-4">
+                                {/* Header with role as primary identifier */}
+                                <div className="flex items-center space-x-4">
+                                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Users className="h-6 w-6 text-primary" />
+                                  </div>
+                                  <div>
+                                    <h3 className="text-lg font-semibold">{stakeholder.role}</h3>
+                                    <p className="text-muted-foreground">
+                                      {stakeholder.name ? `${stakeholder.name} • ` : ''}{stakeholder.department}
+                                    </p>
+                                    <div className="flex items-center space-x-2 mt-1">
+                                      <Badge variant={stakeholder.stakeholder_type === 'internal' ? 'default' : 'secondary'}>
+                                        {stakeholder.stakeholder_type === 'internal' ? 'Internal' : 'External'}
+                                      </Badge>
+                                      <Badge variant={stakeholder.stakeholder_category === 'primary' ? 'default' : 'outline'}>
+                                        {stakeholder.stakeholder_category === 'primary' ? 'Primary' : 'Secondary'}
+                                      </Badge>
+                                      {!stakeholder.name && (
+                                        <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                          To Be Recruited
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Contact Information */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Email</p>
+                                    <p className="text-sm">{stakeholder.email}</p>
+                                  </div>
+                                  {stakeholder.phone && (
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground">Phone</p>
+                                      <p className="text-sm">{stakeholder.phone}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* PMBOK Parameters */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Interest Level</p>
+                                    <Badge variant={getInterestLevelColor(stakeholder.interest_level)}>
+                                      {stakeholder.interest_level.charAt(0).toUpperCase() + stakeholder.interest_level.slice(1)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Influence Level</p>
+                                    <Badge variant={getInfluenceLevelColor(stakeholder.influence_level)}>
+                                      {stakeholder.influence_level.charAt(0).toUpperCase() + stakeholder.influence_level.slice(1)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Engagement Approach</p>
+                                    <Badge variant={getEngagementApproachColor(stakeholder.engagement_approach)}>
+                                      {formatEngagementApproach(stakeholder.engagement_approach)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Communication</p>
+                                    <Badge variant="outline">
+                                      {formatCommunicationFrequency(stakeholder.communication_frequency)}
+                                    </Badge>
+                                  </div>
+                                </div>
+
+                                {/* Expectations and Impact */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Expectations</p>
+                                    <p className="text-sm">{stakeholder.expectations || 'Not specified'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Potential Impact</p>
+                                    <p className="text-sm">{stakeholder.potential_impact || 'Not specified'}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex items-center space-x-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditStakeholder(stakeholder)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleDeleteStakeholder(stakeholder.id)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
-                            <Badge variant="outline">Member</Badge>
-                          </div>
-                        ))
-                      ) : (
-                        !managerName && (
-                          <div className="text-center py-8">
-                            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="text-lg font-semibold mb-2">No team members</h3>
-                            <p className="text-muted-foreground">Add team members to get started</p>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No stakeholders found</h3>
+                        <p className="text-muted-foreground mb-4">
+                          Start by adding stakeholders or creating placeholders for roles that need to be recruited
+                        </p>
+                        <Button onClick={handleAddStakeholder}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add First Stakeholder
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="timeline" className="space-y-4">

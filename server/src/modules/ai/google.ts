@@ -149,7 +149,7 @@ class GoogleConnector {
     try {
       // Validate API key. If validation fails, mark provider inactive and continue
       try {
-        const modelName = provider.config.model || "gemini-2.5-flash"
+        const modelName = (provider.config as any).model || "gemini-2.5-flash"
         await this.validateApiKey(provider.config.apiKey, modelName)
       } catch (validationError) {
         logger.error(`Google API key validation failed for provider ${provider.name}:`, validationError)
@@ -239,11 +239,12 @@ class GoogleConnector {
    */
   async getAvailableModels(providerName?: string): Promise<string[]> {
     const defaultModels = [
-      "gemini-pro",
-      "gemini-pro-vision",
+      "gemini-2.5-flash",
       "gemini-1.5-pro",
       "gemini-1.5-flash",
-      "gemini-1.0-pro"
+      "gemini-1.0-pro",
+      "gemini-pro",
+      "gemini-pro-vision"
     ]
 
     if (!providerName) {
@@ -257,8 +258,23 @@ class GoogleConnector {
       }
 
       // Google AI SDK doesn't expose a models.list method like OpenAI
-      // Return the known available models
-      return defaultModels
+      // Test each model by trying to create a generative model instance
+      const availableModels: string[] = []
+      
+      for (const modelName of defaultModels) {
+        try {
+          // Try to create a generative model to test if it's available
+          const model = client.getGenerativeModel({ model: modelName })
+          // If no error is thrown, the model is available
+          availableModels.push(modelName)
+        } catch (error) {
+          // Model is not available, skip it
+          logger.debug(`Model ${modelName} not available for provider ${providerName}`)
+        }
+      }
+      
+      // If no models were found available, return defaults
+      return availableModels.length > 0 ? availableModels : defaultModels
     } catch (error) {
       logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
       return defaultModels
@@ -277,7 +293,7 @@ class GoogleConnector {
 
       // Get the provider to access its model configuration
       const provider = this.providers.get(providerName)
-      const modelName = provider?.config.model || "gemini-2.5-flash"
+      const modelName = (provider?.config as any)?.model || "gemini-2.5-flash"
 
       // Make a simple API call to test connection
       const model = client.getGenerativeModel({ model: modelName })
@@ -381,7 +397,7 @@ class GoogleConnector {
       // Convert messages to a single prompt for Google AI
       const prompt = this.convertMessagesToPrompt(request.messages)
       
-      const modelName = request.model || provider.config.model || "gemini-2.5-flash"
+      const modelName = request.model || (provider.config as any).model || "gemini-2.5-flash"
       const model = client.getGenerativeModel({ 
         model: modelName,
         generationConfig: {

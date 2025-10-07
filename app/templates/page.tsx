@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { FileText, Plus, Edit, Copy, Trash2, Download, Upload, Search, Filter } from "lucide-react"
+import { FileText, Plus, Edit, Copy, Trash2, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 import {
@@ -20,6 +20,53 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+
+// System prompt suggestions based on framework
+const getSystemPromptSuggestions = (framework: string): string[] => {
+  const suggestions: Record<string, string[]> = {
+    'BABOK v3': [
+      'You are an expert business analyst specializing in BABOK v3 methodology. Your role is to help create comprehensive business requirements documents that are clear, actionable, and aligned with industry best practices. Focus on stakeholder needs, business value, and technical feasibility. Ensure all requirements are SMART (Specific, Measurable, Achievable, Relevant, Time-bound) and include proper traceability.',
+      'You are a senior business analyst with extensive experience in BABOK v3. Create detailed business analysis documents that follow BABOK v3 guidelines, including proper stakeholder analysis, requirements elicitation, and solution assessment. Focus on business value delivery and stakeholder satisfaction.',
+      'As a BABOK v3 expert, help generate business analysis documents that demonstrate deep understanding of business analysis knowledge areas, including business analysis planning, elicitation, analysis, traceability, and solution evaluation.'
+    ],
+    'PMBOK 7': [
+      'You are a senior project management expert specializing in PMBOK 7 methodology. Your expertise includes project charter development, stakeholder management, and project planning. Create comprehensive project documents that align with PMBOK 7 principles, ensuring clear project definition, stakeholder alignment, and realistic scope and timeline planning. Focus on value delivery and adaptive project management approaches.',
+      'You are a certified project manager with deep knowledge of PMBOK 7. Generate project management documents that reflect modern project management practices, including agile and hybrid approaches. Focus on delivering value, managing complexity, and ensuring stakeholder satisfaction.',
+      'As a PMBOK 7 specialist, create project documents that demonstrate understanding of the project management principles, performance domains, and tailoring approaches outlined in PMBOK 7.'
+    ],
+    'DMBOK 2.0': [
+      'You are a senior data governance expert specializing in DMBOK 2.0 methodology. Your expertise includes data governance framework development, regulatory compliance, and data quality management. Create comprehensive data governance documents that align with DMBOK 2.0 principles, ensuring regulatory compliance, data quality, and organizational alignment. Focus on practical implementation, stakeholder engagement, and measurable outcomes.',
+      'You are a data management professional with extensive DMBOK 2.0 knowledge. Generate data governance documents that reflect best practices in data management, including data architecture, data quality, and data security. Focus on creating actionable frameworks that drive business value.',
+      'As a DMBOK 2.0 expert, create data management documents that demonstrate comprehensive understanding of data management knowledge areas, including data governance, data architecture, data quality, and data security.'
+    ],
+    'TOGAF': [
+      'You are an enterprise architect specializing in TOGAF methodology. Your expertise includes enterprise architecture development, business architecture, and solution architecture. Create comprehensive architecture documents that align with TOGAF principles, ensuring business-IT alignment, stakeholder engagement, and practical implementation. Focus on creating architectures that drive business value and enable organizational transformation.',
+      'You are a certified enterprise architect with deep TOGAF knowledge. Generate architecture documents that reflect TOGAF best practices, including proper architecture development method (ADM) phases and deliverables. Focus on creating architectures that are both strategic and implementable.',
+      'As a TOGAF expert, create enterprise architecture documents that demonstrate understanding of TOGAF framework, including architecture domains, ADM phases, and architecture governance.'
+    ],
+    'SABSA': [
+      'You are a security architect specializing in SABSA methodology. Your expertise includes security architecture development, risk management, and security governance. Create comprehensive security architecture documents that align with SABSA principles, ensuring business-driven security, risk-based approach, and practical implementation. Focus on creating security architectures that protect business assets while enabling business objectives.',
+      'You are a certified security architect with extensive SABSA knowledge. Generate security architecture documents that reflect SABSA best practices, including proper security architecture layers and security service management. Focus on creating security architectures that are both comprehensive and business-aligned.',
+      'As a SABSA expert, create security architecture documents that demonstrate understanding of SABSA framework, including security architecture layers, security service management, and security governance.'
+    ],
+    'COBIT': [
+      'You are a governance and risk management expert specializing in COBIT methodology. Your expertise includes IT governance framework development, risk management, and compliance management. Create comprehensive governance documents that align with COBIT principles, ensuring effective governance, risk management, and compliance. Focus on creating governance frameworks that drive business value and ensure regulatory compliance.',
+      'You are a certified governance professional with deep COBIT knowledge. Generate governance documents that reflect COBIT best practices, including proper governance and management objectives. Focus on creating governance frameworks that are both comprehensive and implementable.',
+      'As a COBIT expert, create governance documents that demonstrate understanding of COBIT framework, including governance and management objectives, processes, and practices.'
+    ],
+    'ITIL': [
+      'You are an IT service management expert specializing in ITIL methodology. Your expertise includes service management framework development, service design, and service operations. Create comprehensive service management documents that align with ITIL principles, ensuring effective service delivery, customer satisfaction, and continuous improvement. Focus on creating service management frameworks that drive business value and ensure service excellence.',
+      'You are a certified IT service management professional with extensive ITIL knowledge. Generate service management documents that reflect ITIL best practices, including proper service lifecycle management. Focus on creating service management frameworks that are both comprehensive and customer-focused.',
+      'As an ITIL expert, create service management documents that demonstrate understanding of ITIL framework, including service lifecycle, processes, and functions.'
+    ]
+  }
+
+  return suggestions[framework] || [
+    'You are an expert document generator with deep knowledge of business and technical documentation. Create comprehensive, well-structured documents that are clear, actionable, and aligned with best practices. Focus on stakeholder needs, business value, and practical implementation.',
+    'You are a professional document creator with extensive experience in business documentation. Generate high-quality documents that are well-organized, comprehensive, and tailored to the specific needs of the target audience.',
+    'As a documentation expert, create documents that demonstrate professional quality, clear communication, and practical value. Focus on creating content that is both informative and actionable.'
+  ]
+}
 
 export default function Templates() {
   const [templates, setTemplates] = useState<any[]>([])
@@ -80,6 +127,15 @@ export default function Templates() {
   const [formCategory, setFormCategory] = useState("")
   const [formVersion, setFormVersion] = useState("")
   const [formDescription, setFormDescription] = useState("")
+  const [formSystemPrompt, setFormSystemPrompt] = useState("")
+  const [formTemplateParagraphs, setFormTemplateParagraphs] = useState<Array<{
+    section_name: string
+    section_type: 'header' | 'paragraph' | 'list' | 'table' | 'code_block' | 'summary' | 'conclusion'
+    description: string
+    required: boolean
+    order: number
+    prompt_guidance?: string
+  }>>([])
   // client-side validation errors
   const [formErrors, setFormErrors] = useState<{ name?: string; framework?: string }>({})
 
@@ -90,6 +146,8 @@ export default function Templates() {
     setFormCategory("")
     setFormVersion("1.0")
     setFormDescription("")
+    setFormSystemPrompt("")
+    setFormTemplateParagraphs([])
     setIsDialogOpen(true)
   }
 
@@ -102,6 +160,8 @@ export default function Templates() {
   setFormCategory(fresh?.category || "")
   setFormVersion(fresh?.version ? String(fresh.version) : "1.0")
   setFormDescription(fresh?.description || "")
+  setFormSystemPrompt(fresh?.system_prompt || "")
+  setFormTemplateParagraphs(fresh?.template_paragraphs || [])
   setIsDialogOpen(true)
   }
 
@@ -118,6 +178,8 @@ export default function Templates() {
       setFormCategory(editingTemplate.category || "")
       setFormVersion(editingTemplate.version ? String(editingTemplate.version) : "1.0")
       setFormDescription(editingTemplate.description || "")
+      setFormSystemPrompt(editingTemplate.system_prompt || "")
+      setFormTemplateParagraphs(editingTemplate.template_paragraphs || [])
     } else if (!isDialogOpen) {
       // clear when dialog closed and no editing template
       setFormName("")
@@ -125,6 +187,8 @@ export default function Templates() {
       setFormCategory("")
       setFormVersion("")
       setFormDescription("")
+      setFormSystemPrompt("")
+      setFormTemplateParagraphs([])
     }
   }, [editingTemplate, isDialogOpen])
   const [submitting, setSubmitting] = useState(false)
@@ -346,6 +410,8 @@ export default function Templates() {
         content: { blocks: [] },
         variables: [],
         is_public: false,
+        system_prompt: formSystemPrompt || undefined,
+        template_paragraphs: formTemplateParagraphs.length > 0 ? formTemplateParagraphs : undefined,
       }
 
       if (editingTemplate) {
@@ -481,6 +547,182 @@ export default function Templates() {
                             onChange={(e) => setFormDescription(e.target.value)}
                           />
                         </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium">System Prompt</label>
+                            <div className="flex space-x-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  const suggestions = getSystemPromptSuggestions(formFramework)
+                                  if (suggestions.length > 0) {
+                                    setFormSystemPrompt(suggestions[0])
+                                  }
+                                }}
+                              >
+                                <Wand2 className="h-4 w-4 mr-1" />
+                                Suggest
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setFormSystemPrompt("")}
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                          </div>
+                          <textarea
+                            className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1 font-mono text-sm"
+                            placeholder="Define the AI assistant's role and behavior for this template (optional)"
+                            value={formSystemPrompt}
+                            onChange={(e) => setFormSystemPrompt(e.target.value)}
+                          />
+                          <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-muted-foreground">
+                              This prompt defines how the AI should behave when generating documents using this template.
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formSystemPrompt.length} characters
+                            </p>
+                          </div>
+                          {formSystemPrompt.length > 0 && (
+                            <div className="mt-2 p-2 bg-muted rounded-md">
+                              <p className="text-xs font-medium mb-1">Preview:</p>
+                              <p className="text-xs text-muted-foreground italic">
+                                "{formSystemPrompt.substring(0, 100)}{formSystemPrompt.length > 100 ? '...' : ''}"
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-sm font-medium">Expected Document Sections</label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                const newParagraph = {
+                                  section_name: "",
+                                  section_type: "paragraph" as const,
+                                  description: "",
+                                  required: true,
+                                  order: formTemplateParagraphs.length + 1,
+                                  prompt_guidance: ""
+                                }
+                                setFormTemplateParagraphs([...formTemplateParagraphs, newParagraph])
+                              }}
+                            >
+                              <Plus className="h-4 w-4 mr-1" />
+                              Add Section
+                            </Button>
+                          </div>
+                          <div className="space-y-3 max-h-60 overflow-y-auto">
+                            {formTemplateParagraphs.map((paragraph, index) => (
+                              <div key={index} className="p-3 border rounded-lg bg-muted/30">
+                                <div className="grid grid-cols-2 gap-2 mb-2">
+                                  <div>
+                                    <label className="text-xs font-medium">Section Name</label>
+                                    <Input
+                                      placeholder="e.g., Executive Summary"
+                                      value={paragraph.section_name}
+                                      onChange={(e) => {
+                                        const updated = [...formTemplateParagraphs]
+                                        updated[index].section_name = e.target.value
+                                        setFormTemplateParagraphs(updated)
+                                      }}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="text-xs font-medium">Type</label>
+                                    <select
+                                      value={paragraph.section_type}
+                                      onChange={(e) => {
+                                        const updated = [...formTemplateParagraphs]
+                                        updated[index].section_type = e.target.value as any
+                                        setFormTemplateParagraphs(updated)
+                                      }}
+                                      className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+                                    >
+                                      <option value="header">Header</option>
+                                      <option value="paragraph">Paragraph</option>
+                                      <option value="list">List</option>
+                                      <option value="table">Table</option>
+                                      <option value="code_block">Code Block</option>
+                                      <option value="summary">Summary</option>
+                                      <option value="conclusion">Conclusion</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="mb-2">
+                                  <label className="text-xs font-medium">Description</label>
+                                  <Input
+                                    placeholder="Describe what this section should contain"
+                                    value={paragraph.description}
+                                    onChange={(e) => {
+                                      const updated = [...formTemplateParagraphs]
+                                      updated[index].description = e.target.value
+                                      setFormTemplateParagraphs(updated)
+                                    }}
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="mb-2">
+                                  <label className="text-xs font-medium">AI Guidance (Optional)</label>
+                                  <Input
+                                    placeholder="Specific instructions for AI on how to generate this section"
+                                    value={paragraph.prompt_guidance || ""}
+                                    onChange={(e) => {
+                                      const updated = [...formTemplateParagraphs]
+                                      updated[index].prompt_guidance = e.target.value
+                                      setFormTemplateParagraphs(updated)
+                                    }}
+                                    className="h-8 text-sm"
+                                  />
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={paragraph.required}
+                                      onChange={(e) => {
+                                        const updated = [...formTemplateParagraphs]
+                                        updated[index].required = e.target.checked
+                                        setFormTemplateParagraphs(updated)
+                                      }}
+                                      className="h-4 w-4"
+                                    />
+                                    <label className="text-xs">Required</label>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      const updated = formTemplateParagraphs.filter((_, i) => i !== index)
+                                      setFormTemplateParagraphs(updated)
+                                    }}
+                                  >
+                                    <Minus className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            {formTemplateParagraphs.length === 0 && (
+                              <div className="text-center py-4 text-muted-foreground text-sm">
+                                No sections defined. Click "Add Section" to define expected document structure.
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Define the expected sections/paragraphs that the AI should generate for this template.
+                          </p>
+                        </div>
                       </div>
                       <DialogFooter>
                         <div className="flex gap-2">
@@ -603,6 +845,12 @@ export default function Templates() {
                               {template.status}
                             </Badge>
                             <Badge variant="outline">{template.framework}</Badge>
+                            {template.system_prompt && (
+                              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                                <Brain className="h-3 w-3 mr-1" />
+                                AI
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <CardTitle className="text-lg">{template.name}</CardTitle>
@@ -626,6 +874,24 @@ export default function Templates() {
                             <span className="text-muted-foreground">Author:</span>
                             <span className="font-medium">{template.author}</span>
                           </div>
+
+                          {/* AI Enhancement Information */}
+                          {template.system_prompt && (
+                            <div className="pt-2 border-t">
+                              <div className="flex items-center justify-between text-sm mb-2">
+                                <span className="text-muted-foreground">AI Enhancement:</span>
+                                <Badge variant="outline" className="text-xs">
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Enhanced
+                                </Badge>
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                <p className="line-clamp-2">
+                                  {template.system_prompt.substring(0, 80)}...
+                                </p>
+                              </div>
+                            </div>
+                          )}
 
                           <div className="flex space-x-2 pt-2">
                             <Button size="sm" className="flex-1" onClick={() => openEditDialog(template)}>

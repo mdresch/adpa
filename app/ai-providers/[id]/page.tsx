@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useParams } from "next/navigation"
 import { toast } from "sonner"
@@ -80,7 +80,12 @@ export default function AIProviderDetails() {
   
   // Testing state
   const [testing, setTesting] = useState(false)
-  const [testResults, setTestResults] = useState<any[]>([])
+  const [testResults, setTestResults] = useState<Array<{
+    testName: string
+    status: string
+    result: any
+    timestamp: string
+  }>>([])
   
   // Collapsible state
   const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false)
@@ -88,7 +93,18 @@ export default function AIProviderDetails() {
   
   // Add model state
   const [addingModel, setAddingModel] = useState(false)
-  const [newModelForm, setNewModelForm] = useState({
+  const [newModelForm, setNewModelForm] = useState<{
+    modelId: string
+    modelName: string
+    is_active: boolean
+    contextWindow: number
+    maxTokens: number
+    temperature: number
+    topP: number
+    frequencyPenalty: number
+    presencePenalty: number
+    configuration: Record<string, any>
+  }>({
     modelId: "",
     modelName: "",
     is_active: true,
@@ -102,7 +118,21 @@ export default function AIProviderDetails() {
   })
   
   // Configuration form state
-  const [configForm, setConfigForm] = useState({
+  const [configForm, setConfigForm] = useState<{
+    endpoint: string
+    apiKey: string
+    priority: number
+    timeout: number
+    // Azure-specific fields
+    apiVersion: string
+    deployment: string
+    modelName: string
+    tenantId: string
+    clientId: string
+    clientSecret: string
+    resourceName: string
+    region: string
+  }>({
     endpoint: "",
     apiKey: "",
     priority: 1,
@@ -189,7 +219,10 @@ export default function AIProviderDetails() {
     if (!provider) return
     
     try {
-      const response = await apiClient.request(`/ai/providers/${providerId}/toggle`, {
+      const response = await apiClient.request<{
+        is_active: boolean
+        message?: string
+      }>(`/ai/providers/${providerId}/toggle`, {
         method: "POST",
       })
       
@@ -283,17 +316,17 @@ export default function AIProviderDetails() {
       try {
         const result = await runSingleTest(test.id)
         results.push({
-          testId: test.id,
           testName: test.name,
           status: 'completed',
-          result
+          result,
+          timestamp: new Date().toISOString()
         })
       } catch (error: any) {
         results.push({
-          testId: test.id,
           testName: test.name,
           status: 'failed',
-          error: error.message
+          result: { error: error.message },
+          timestamp: new Date().toISOString()
         })
       }
     }
@@ -301,7 +334,7 @@ export default function AIProviderDetails() {
     setTestResults(results)
     setTesting(false)
     
-    const passedTests = results.filter(r => r.status === 'completed' && r.result?.success).length
+    const passedTests = results.filter(r => r.status === 'completed' && (r.result as any)?.success).length
     const totalTests = results.length
     
     if (passedTests === totalTests) {
@@ -719,7 +752,7 @@ export default function AIProviderDetails() {
                               id="api-endpoint"
                               placeholder="https://api.openai.com/v1"
                               value={configForm.endpoint}
-                              onChange={(e) => setConfigForm(prev => ({ ...prev, endpoint: e.target.value }))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, endpoint: e.target.value }))}
                               className="mt-1"
                             />
                             <p className="text-xs text-muted-foreground mt-1">
@@ -735,7 +768,7 @@ export default function AIProviderDetails() {
                                 type="password"
                                 placeholder="Enter your API key"
                                 value={configForm.apiKey}
-                                onChange={(e) => setConfigForm(prev => ({ ...prev, apiKey: e.target.value }))}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, apiKey: e.target.value }))}
                                 className="mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
@@ -776,7 +809,7 @@ export default function AIProviderDetails() {
                                   id="api-version"
                                   placeholder="2024-04-01-preview"
                                   value={configForm.apiVersion}
-                                  onChange={(e) => setConfigForm(prev => ({ ...prev, apiVersion: e.target.value }))}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, apiVersion: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -789,7 +822,7 @@ export default function AIProviderDetails() {
                                   id="deployment"
                                   placeholder="gpt-5-mini"
                                   value={configForm.deployment}
-                                  onChange={(e) => setConfigForm(prev => ({ ...prev, deployment: e.target.value }))}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, deployment: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -803,7 +836,7 @@ export default function AIProviderDetails() {
                                 id="model-name"
                                 placeholder="gpt-5-mini"
                                 value={configForm.modelName}
-                                onChange={(e) => setConfigForm(prev => ({ ...prev, modelName: e.target.value }))}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, modelName: e.target.value }))}
                                 className="mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
@@ -822,7 +855,7 @@ export default function AIProviderDetails() {
                                   id="tenant-id"
                                   placeholder="12345678-1234-1234-1234-123456789012"
                                   value={configForm.tenantId}
-                                  onChange={(e) => setConfigForm(prev => ({ ...prev, tenantId: e.target.value }))}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, tenantId: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -835,7 +868,7 @@ export default function AIProviderDetails() {
                                   id="client-id"
                                   placeholder="87654321-4321-4321-4321-210987654321"
                                   value={configForm.clientId}
-                                  onChange={(e) => setConfigForm(prev => ({ ...prev, clientId: e.target.value }))}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, clientId: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -850,7 +883,7 @@ export default function AIProviderDetails() {
                                 type="password"
                                 placeholder="Enter your client secret"
                                 value={configForm.clientSecret}
-                                onChange={(e) => setConfigForm(prev => ({ ...prev, clientSecret: e.target.value }))}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, clientSecret: e.target.value }))}
                                 className="mt-1"
                               />
                               <p className="text-xs text-muted-foreground mt-1">
@@ -869,7 +902,7 @@ export default function AIProviderDetails() {
                                   id="resource-name"
                                   placeholder="cognisync-knowledgehub-resource"
                                   value={configForm.resourceName}
-                                  onChange={(e) => setConfigForm(prev => ({ ...prev, resourceName: e.target.value }))}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, resourceName: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -882,7 +915,7 @@ export default function AIProviderDetails() {
                                   id="region"
                                   placeholder="eastus"
                                   value={configForm.region}
-                                  onChange={(e) => setConfigForm(prev => ({ ...prev, region: e.target.value }))}
+                                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, region: e.target.value }))}
                                   className="mt-1"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
@@ -906,7 +939,7 @@ export default function AIProviderDetails() {
                               min="1"
                               max="10"
                               value={configForm.priority}
-                              onChange={(e) => setConfigForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, priority: parseInt(e.target.value) || 1 }))}
                               className="mt-1"
                             />
                             <p className="text-xs text-muted-foreground mt-1">
@@ -921,7 +954,7 @@ export default function AIProviderDetails() {
                               min="10"
                               max="300"
                               value={configForm.timeout}
-                              onChange={(e) => setConfigForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfigForm(prev => ({ ...prev, timeout: parseInt(e.target.value) || 30 }))}
                               className="mt-1"
                             />
                             <p className="text-xs text-muted-foreground mt-1">
@@ -1148,7 +1181,7 @@ export default function AIProviderDetails() {
                                     <div>
                                       <span className="text-muted-foreground">Response:</span>
                                       <div className="font-mono text-xs">
-                                        {testResult.result?.response || testResult.error || 'N/A'}
+                                        {testResult.result?.response || (testResult.result as any)?.error || 'N/A'}
                                       </div>
                                     </div>
                                     <div>
@@ -1165,7 +1198,23 @@ export default function AIProviderDetails() {
                                     </div>
                                   ) : (
                                     <div className="mt-3 p-2 bg-red-50 dark:bg-red-900/20 rounded text-sm text-red-700 dark:text-red-300">
-                                      ❌ {testResult.testName} failed: {testResult.error || testResult.result?.message || 'Unknown error'}
+                                      ❌ {testResult.testName} failed: {(testResult.result as any)?.error || testResult.result?.message || 'Unknown error'}
+                                    </div>
+                                  )}
+                                  
+                                  {/* Display available models for Model Availability test */}
+                                  {testResult.testName === 'Model Availability' && (testResult.result as any)?.availableModels && (testResult.result as any).availableModels.length > 0 && (
+                                    <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded border">
+                                      <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                                        📋 Available Models ({((testResult.result as any).availableModels as string[]).length})
+                                      </div>
+                                      <div className="flex flex-wrap gap-1">
+                                        {((testResult.result as any).availableModels as string[]).map((model: string, idx: number) => (
+                                          <Badge key={idx} variant="outline" className="text-xs bg-white dark:bg-gray-800">
+                                            {model}
+                                          </Badge>
+                                        ))}
+                                      </div>
                                     </div>
                                   )}
                                 </CardContent>
@@ -1234,7 +1283,7 @@ export default function AIProviderDetails() {
                   id="modelId"
                   placeholder="gpt-4"
                   value={newModelForm.modelId}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, modelId: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, modelId: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Unique identifier for the model (e.g., gpt-4, claude-3-sonnet)
@@ -1246,7 +1295,7 @@ export default function AIProviderDetails() {
                   id="modelName"
                   placeholder="GPT-4"
                   value={newModelForm.modelName}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, modelName: e.target.value }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, modelName: e.target.value }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Display name for the model
@@ -1264,7 +1313,7 @@ export default function AIProviderDetails() {
                   min="1000"
                   max="10000000"
                   value={newModelForm.contextWindow}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 128000 }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 128000 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum context tokens (default: 128,000)
@@ -1278,7 +1327,7 @@ export default function AIProviderDetails() {
                   min="1"
                   max="100000"
                   value={newModelForm.maxTokens}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 4096 }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 4096 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Maximum response tokens (default: 4,096)
@@ -1297,7 +1346,7 @@ export default function AIProviderDetails() {
                   max="2"
                   step="0.1"
                   value={newModelForm.temperature}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0.7 }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0.7 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Creativity (0-2, default: 0.7)
@@ -1312,7 +1361,7 @@ export default function AIProviderDetails() {
                   max="1"
                   step="0.1"
                   value={newModelForm.topP}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, topP: parseFloat(e.target.value) || 1.0 }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, topP: parseFloat(e.target.value) || 1.0 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Nucleus sampling (0-1, default: 1.0)
@@ -1327,7 +1376,7 @@ export default function AIProviderDetails() {
                   max="2"
                   step="0.1"
                   value={newModelForm.frequencyPenalty}
-                  onChange={(e) => setNewModelForm(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0.0 }))}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewModelForm(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0.0 }))}
                 />
                 <p className="text-xs text-muted-foreground">
                   Reduce repetition (-2 to 2, default: 0.0)
@@ -1340,7 +1389,7 @@ export default function AIProviderDetails() {
               <Switch
                 id="isActive"
                 checked={newModelForm.is_active}
-                onCheckedChange={(checked) => setNewModelForm(prev => ({ ...prev, is_active: checked }))}
+                onCheckedChange={(checked: boolean) => setNewModelForm(prev => ({ ...prev, is_active: checked }))}
               />
               <Label htmlFor="isActive">Active</Label>
               <p className="text-xs text-muted-foreground">

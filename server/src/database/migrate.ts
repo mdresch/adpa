@@ -139,6 +139,30 @@ async function runMigrations() {
       logger.warn("Templates soft-delete migration failed (may already be applied):", error)
     }
 
+    // Run stakeholders migration
+    try {
+      const stakeholdersMigrationPath = join(__dirname, "migrations", "007_stakeholders.sql")
+      const stakeholdersMigration = readFileSync(stakeholdersMigrationPath, "utf-8")
+
+      const stakeholdersMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["007_stakeholders"]
+      )
+
+      if (stakeholdersMigrationCheck.rows.length === 0) {
+        await pool.query(stakeholdersMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["007_stakeholders"]
+        )
+        logger.info("Stakeholders migration completed")
+      } else {
+        logger.info("Stakeholders migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Stakeholders migration failed (may already be applied):", error)
+    }
+
     logger.info("Database migrations completed successfully")
   } catch (error) {
     logger.error("Migration failed:", error)

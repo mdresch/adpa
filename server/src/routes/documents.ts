@@ -10,6 +10,124 @@ import { v4 as uuidv4 } from "uuid"
 
 const router = express.Router()
 
+// Test endpoint to verify server is working
+router.get("/test", (req, res) => {
+  res.json({ message: "Documents route is working", timestamp: new Date().toISOString() })
+})
+
+// Test feedback endpoint (no auth required for testing)
+router.post("/test-feedback", (req, res) => {
+  res.json({ 
+    message: "Feedback endpoint is working", 
+    body: req.body,
+    timestamp: new Date().toISOString() 
+  })
+})
+
+// Submit feedback for a document
+router.post("/:id/feedback", 
+  authenticateToken, 
+  requirePermission("documents.update"),
+  validateParams(Joi.object({ id: schemas.uuid })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { comment, rating, category } = req.body
+      
+      // Debug logging
+      log.info("Submit feedback request:", { id, body: req.body })
+      
+      // Basic validation
+      if (!id) {
+        return res.status(400).json({ error: "Document ID is required" })
+      }
+      
+      if (!comment || comment.trim() === "") {
+        return res.status(400).json({ error: "Comment is required" })
+      }
+      
+      if (!rating || rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "Rating must be between 1 and 5" })
+      }
+      
+      // Check if document exists and user has access
+      const docCheck = await pool.query(
+        `
+        SELECT d.*, p.owner_id, p.team_members
+        FROM documents d
+        JOIN projects p ON d.project_id = p.id
+        WHERE d.id = $1
+      `,
+        [id]
+      )
+
+      if (docCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Document not found" })
+      }
+
+      const doc = docCheck.rows[0]
+      const teamMembers = doc.team_members || []
+
+      // Check if user is owner or in team_members array
+      const isOwner = doc.owner_id === req.user?.id
+      const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
+
+      if (!isOwner && !isInTeam) {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      // Create new feedback
+      const newFeedback = {
+        id: uuidv4(),
+        user: req.user?.email || "Unknown User",
+        user_id: req.user?.id,
+        comment: comment.trim(),
+        rating: parseInt(rating),
+        category: category || "general",
+        timestamp: new Date().toISOString()
+      }
+
+      // Get current metadata and add feedback
+      const currentMetadata = doc.metadata || {}
+      const currentFeedback = currentMetadata.stakeholder_feedback || []
+      
+      const updatedMetadata = {
+        ...currentMetadata,
+        stakeholder_feedback: [...currentFeedback, newFeedback]
+      }
+
+      // Update document with new feedback
+      const result = await pool.query(
+        `
+        UPDATE documents 
+        SET metadata = $1,
+            updated_by = $2,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+        RETURNING *
+      `,
+        [JSON.stringify(updatedMetadata), req.user?.id, id]
+      )
+
+      // Clear cache
+      await cache.del(`document:${id}`)
+
+      log.info(`Feedback submitted for document: ${id} by ${req.user?.email}`)
+
+      res.json({
+        success: true,
+        feedback: newFeedback,
+        document: result.rows[0]
+      })
+
+    } catch (error) {
+      log.error("Error submitting feedback:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
 // Get all documents (for export functionality)
 router.get("/", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
@@ -272,12 +390,44 @@ router.put("/:id",
   authenticateToken, 
   requirePermission("documents.update"),
   validateParams(Joi.object({ id: schemas.uuid })),
-  validate(schemas.updateDocument),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      const { name, content, status } = req.body
+      const { name, content, status, tags, template_id, metadata } = req.body
+      
+      // Debug logging
+      log.info("Update document request:", { 
+        id, 
+        body: req.body,
+        hasTemplateId: !!template_id,
+        hasMetadata: !!metadata,
+        templateIdType: typeof template_id,
+        metadataType: typeof metadata
+      })
+      
+      // Manual validation
+      if (!id) {
+        return res.status(400).json({ error: "Document ID is required" })
+      }
+      
+      // Validate template_id if provided
+      if (template_id && template_id.trim() !== "") {
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        if (!uuidRegex.test(template_id)) {
+          return res.status(400).json({ error: "Invalid template_id format" })
+        }
+      }
+      
+      // Validate status if provided
+      if (status && !["draft", "review", "approved", "published"].includes(status)) {
+        return res.status(400).json({ error: "Invalid status value" })
+      }
+      
+      // Validate name if provided
+      if (name && (typeof name !== "string" || name.length < 1 || name.length > 255)) {
+        return res.status(400).json({ error: "Invalid name format" })
+      }
 
       // Check if document exists and user has access
       const docCheck = await pool.query(
@@ -308,19 +458,38 @@ router.put("/:id",
       // Increment version if content changed
       const versionIncrement = content ? ", version = version + 1" : ""
 
+      // Prepare metadata update
+      let metadataUpdate = doc.metadata || {}
+      if (metadata) {
+        metadataUpdate = { ...metadataUpdate, ...metadata }
+      }
+      if (tags) {
+        metadataUpdate.tags = tags
+      }
+
       const result = await pool.query(
         `
         UPDATE documents 
         SET name = COALESCE($1, name), 
             content = COALESCE($2, content), 
             status = COALESCE($3, status),
-            updated_by = $4,
+            template_id = COALESCE($4, template_id),
+            metadata = COALESCE($5, metadata),
+            updated_by = $6,
             updated_at = CURRENT_TIMESTAMP
             ${versionIncrement}
-        WHERE id = $5
+        WHERE id = $7
         RETURNING *
       `,
-        [name, content ? JSON.stringify(content) : null, status, req.user?.id, id]
+        [
+          name, 
+          content ? JSON.stringify(content) : null, 
+          status, 
+          template_id,
+          JSON.stringify(metadataUpdate),
+          req.user?.id, 
+          id
+        ]
       )
 
       // Clear cache

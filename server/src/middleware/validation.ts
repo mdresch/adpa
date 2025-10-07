@@ -4,6 +4,12 @@ import { logger } from "../utils/logger"
 
 export const validate = (schema: Joi.ObjectSchema) => {
   return (req: Request, res: Response, next: NextFunction) => {
+    // Debug: Log the schema being used
+    logger.info("Using validation schema:", { 
+      schemaKeys: Object.keys(schema.describe().keys || {}),
+      bodyKeys: Object.keys(req.body || {})
+    })
+    
     const { error } = schema.validate(req.body, { abortEarly: false })
     
     if (error) {
@@ -12,7 +18,11 @@ export const validate = (schema: Joi.ObjectSchema) => {
         message: detail.message,
       }))
       
-      logger.warn("Validation error:", { errors, body: req.body })
+      logger.warn("Validation error:", { 
+        errors, 
+        body: req.body,
+        schemaKeys: Object.keys(schema.describe().keys || {})
+      })
       
       return res.status(400).json({
         error: "Validation failed",
@@ -127,11 +137,14 @@ export const schemas = {
     status: Joi.string().valid("draft", "review", "approved", "published").default("draft"),
   }),
   
-  updateDocument: Joi.object({
-    name: Joi.string().min(2).max(255).optional(),
+  updateDocument: Joi.object().keys({
+    name: Joi.string().min(1).max(255).allow("").optional(),
     content: Joi.object().optional(),
-    status: Joi.string().valid("draft", "review", "approved", "published").optional(),
-  }),
+    status: Joi.string().valid("draft", "review", "approved", "published").allow("").optional(),
+    tags: Joi.array().items(Joi.string().allow("")).optional(),
+    template_id: Joi.string().uuid().allow("").optional(),
+    metadata: Joi.object().optional(),
+  }).unknown(true),
   
   // AI schemas
   aiGenerate: Joi.object({
@@ -159,5 +172,14 @@ export const schemas = {
       options: Joi.array().when("type", { is: "select", then: Joi.required() }),
     })).default([]),
     is_public: Joi.boolean().default(false),
+    system_prompt: Joi.string().max(5000).optional(),
+    template_paragraphs: Joi.array().items(Joi.object({
+      section_name: Joi.string().required(),
+      section_type: Joi.string().valid("header", "paragraph", "list", "table", "code_block", "summary", "conclusion").required(),
+      description: Joi.string().required(),
+      required: Joi.boolean().default(true),
+      order: Joi.number().integer().min(1).required(),
+      prompt_guidance: Joi.string().max(1000).optional(),
+    })).optional(),
   }),
 }

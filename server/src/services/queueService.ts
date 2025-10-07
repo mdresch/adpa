@@ -6,13 +6,15 @@ import { aiService } from "./aiService"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
 
-// Create job queues
+// Create job queues with IP-first configuration
 const aiQueueOptions = {
   redis: {
-    host: process.env.REDIS_HOST || "redis",
+    host: "172.19.0.2", // Use IP address first to avoid DNS issues
     port: Number.parseInt(process.env.REDIS_PORT || "6379"),
     password: process.env.REDIS_PASSWORD,
     db: Number.parseInt(process.env.REDIS_DB || "0"),
+    connectTimeout: 30000, // 30 seconds per attempt
+    lazyConnect: true,
   },
   defaultJobOptions: {
     removeOnComplete: 100,
@@ -25,16 +27,16 @@ const aiQueueOptions = {
   },
 }
 
-export const aiQueue = process.env.REDIS_URL
-  ? new Bull("ai-processing", process.env.REDIS_URL, aiQueueOptions)
-  : new Bull("ai-processing", aiQueueOptions)
+export const aiQueue = new Bull("ai-processing", aiQueueOptions)
 
 const documentQueueOptions = {
   redis: {
-    host: process.env.REDIS_HOST || "redis",
+    host: "172.19.0.2", // Use IP address first to avoid DNS issues
     port: Number.parseInt(process.env.REDIS_PORT || "6379"),
     password: process.env.REDIS_PASSWORD,
     db: Number.parseInt(process.env.REDIS_DB || "0"),
+    connectTimeout: 30000, // 30 seconds per attempt
+    lazyConnect: true,
   },
   defaultJobOptions: {
     removeOnComplete: 50,
@@ -47,9 +49,7 @@ const documentQueueOptions = {
   },
 }
 
-export const documentQueue = process.env.REDIS_URL
-  ? new Bull("document-processing", process.env.REDIS_URL, documentQueueOptions)
-  : new Bull("document-processing", documentQueueOptions)
+export const documentQueue = new Bull("document-processing", documentQueueOptions)
 
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
