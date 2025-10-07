@@ -6,9 +6,10 @@ import { logger } from "../utils/logger"
 
 // Hybrid connection approach: try hostnames first, then IP addresses
 const connectionMethods = [
-  { host: "postgres", description: "PostgreSQL hostname" },
-  { host: process.env.DB_HOST || "postgres", description: "Environment hostname" },
-  { host: "172.19.0.3", description: "PostgreSQL IP address" }
+  { host: process.env.DB_HOST || "localhost", description: "Environment hostname" },
+  { host: "localhost", description: "Localhost fallback" },
+  { host: "postgres", description: "PostgreSQL hostname (Docker)" },
+  { host: "172.19.0.3", description: "PostgreSQL IP address (Docker)" }
 ]
 
 const createPool = (host: string) => {
@@ -21,18 +22,18 @@ const createPool = (host: string) => {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 60000, // 60 seconds per attempt
-    // acquireTimeoutMillis: 60000,    // 60 seconds per attempt - not available in this version
-    // SSL can be enabled by setting DB_SSL=true. Many managed Postgres services require SSL.
-    // When enabled we default to rejectUnauthorized: false to allow self-signed certs in dev.
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
+    // SSL configuration for Neon and other cloud providers
+    ssl: host.includes('neon.tech') || host.includes('azure') || process.env.DB_SSL === "true" 
+      ? { rejectUnauthorized: false } 
+      : false,
   })
 }
 
 let pool = createPool(connectionMethods[0].host) // Start with IP address
 
 export async function connectDatabase() {
-  const maxRetriesPerMethod = 5
-  const retryDelay = 10000 // 10 seconds
+  const maxRetriesPerMethod = 2
+  const retryDelay = 5000 // 5 seconds
   
   // Try each connection method
   for (const method of connectionMethods) {
@@ -51,9 +52,15 @@ export async function connectDatabase() {
           timeout: "30 seconds"
         })
         
-        const client = await testPool.connect()
+        const client = await Promise.race([
+          testPool.connect(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 10000))
+        ]) as any
         logger.info("Database client acquired, testing connection...")
-        await client.query("SELECT NOW()")
+        await Promise.race([
+          client.query("SELECT NOW()"),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 5000))
+        ])
         client.release()
         
         // If successful, update the global pool and return

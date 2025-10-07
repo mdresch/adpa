@@ -1,11 +1,9 @@
 import { createClient } from "redis"
 import { logger } from "./logger"
 
-// Hybrid connection approach: try IP addresses first, then hostnames
+// Simple localhost Redis connection for local development
 const redisConnectionMethods = [
-  { host: "172.19.0.2", description: "Redis IP address" },
-  { host: "redis", description: "Redis hostname" },
-  { host: process.env.REDIS_HOST || "redis", description: "Environment hostname" }
+  { host: process.env.REDIS_HOST || "localhost", description: "Localhost Redis" }
 ]
 
 const createRedisConfig = (host: string) => {
@@ -48,8 +46,8 @@ const getRedisClient = () => {
 }
 
 export async function connectRedis() {
-  const maxRetriesPerMethod = 3
-  const retryDelay = 5000 // 5 seconds
+  const maxRetriesPerMethod = 2
+  const retryDelay = 2000 // 2 seconds
   
   // Try each connection method
   for (const method of redisConnectionMethods) {

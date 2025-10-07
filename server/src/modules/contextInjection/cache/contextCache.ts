@@ -113,8 +113,8 @@ export class ContextCache {
     }
 
     const createdDates = entries.map(entry => new Date(entry.createdAt))
-    const oldestEntry = new Date(Math.min(...createdDates))
-    const newestEntry = new Date(Math.max(...createdDates))
+    const oldestEntry = new Date(Math.min(...createdDates.map(date => date.getTime())))
+    const newestEntry = new Date(Math.max(...createdDates.map(date => date.getTime())))
 
     return {
       size: this.cache.size,
