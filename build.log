@@ -1,0 +1,55 @@
+
+> adpa-admin-frontend@0.1.0 build
+> next build
+
+ ⚠ Invalid next.config.mjs options detected: 
+ ⚠     Unrecognized key(s) in object: 'serverExternalPackages'
+ ⚠ See more info here: https://nextjs.org/docs/messages/invalid-next-config
+  ▲ Next.js 14.2.32
+  - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Skipping validation of types
+   Skipping linting
+   Collecting page data ...
+   Generating static pages (0/21) ...
+   Generating static pages (5/21) 
+   Generating static pages (10/21) 
+   Generating static pages (15/21) 
+ ✓ Generating static pages (21/21)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    7.73 kB         210 kB
+├ ○ /_not-found                          880 B          88.2 kB
+├ ○ /ai                                  13.6 kB         221 kB
+├ ○ /ai-providers                        10.2 kB         181 kB
+├ ○ /analytics                           9.53 kB         332 kB
+├ ○ /auth/login                          3.63 kB         166 kB
+├ ƒ /documents/[id]/collaborate          8.11 kB         211 kB
+├ ○ /integrations                        9.68 kB         177 kB
+├ ○ /integrations/confluence             7.69 kB         222 kB
+├ ○ /integrations/github                 9.45 kB         210 kB
+├ ○ /integrations/sharepoint             10.7 kB         225 kB
+├ ○ /jobs                                6.84 kB         219 kB
+├ ○ /login                               3.63 kB         166 kB
+├ ○ /projects                            13.6 kB         214 kB
+├ ƒ /projects/[id]                       14.7 kB         179 kB
+├ ƒ /projects/[id]/documents/[docId]     6.53 kB         174 kB
+├ ○ /search                              10.1 kB         217 kB
+├ ○ /security                            11.5 kB         328 kB
+├ ○ /settings                            5.52 kB         211 kB
+├ ○ /templates                           9.89 kB         174 kB
+├ ○ /templates/builder                   9.05 kB         216 kB
+└ ○ /users                               13.8 kB         221 kB
++ First Load JS shared by all            87.4 kB
+  ├ chunks/2117-f7cb4380440a18b4.js      31.8 kB
+  ├ chunks/fd9d1056-f03758da1054d506.js  53.6 kB
+  └ other shared chunks (total)          1.98 kB
+
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

@@ -34,15 +34,15 @@ import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
 import adobePdfRoutes from "./routes/adobe-pdf"
 import contextAiRoutes from "./routes/context-ai"
-import ecsAiRoutes from "./routes/ecs-ai"
-import quantumStabilityRoutes from "./routes/quantum-stability"
-import speedOfLightRoutes from "./routes/speed-of-light"
-import monteCarloProofRoutes from "./routes/monte-carlo-proof"
-import aiProviderTestingRoutes from "./routes/ai-provider-testing"
-import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
-import processFlowRoutes from "./routes/process-flow"
-import aiModelsRoutes from "./routes/ai-models"
-import aiAnalyticsRoutes from "./routes/ai-analytics"
+// import ecsAiRoutes from "./routes/ecs-ai"
+// import quantumStabilityRoutes from "./routes/quantum-stability"
+// import speedOfLightRoutes from "./routes/speed-of-light"
+// import monteCarloProofRoutes from "./routes/monte-carlo-proof"
+// import aiProviderTestingRoutes from "./routes/ai-provider-testing"
+// import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
+// import processFlowRoutes from "./routes/process-flow"
+// import aiModelsRoutes from "./routes/ai-models"
+// import aiAnalyticsRoutes from "./routes/ai-analytics"
 import stakeholderRoutes from "./routes/stakeholders"
 import contentStructuringRoutes from "./routes/content-structuring"
 import compressionRoutes from "./routes/compression"
@@ -112,15 +112,15 @@ app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
 app.use("/api/adobe-pdf", adobePdfRoutes)
 app.use("/api/context-ai", contextAiRoutes)
-app.use("/api/ecs-ai", ecsAiRoutes)
-app.use("/api/quantum-stability", quantumStabilityRoutes)
-app.use("/api/speed-of-light", speedOfLightRoutes)
-app.use("/api/monte-carlo-proof", monteCarloProofRoutes)
-app.use("/api/ai-provider-testing", aiProviderTestingRoutes)
-app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
-app.use("/api/process-flow", processFlowRoutes)
-app.use("/api/ai-models", aiModelsRoutes)
-app.use("/api/ai-analytics", aiAnalyticsRoutes)
+// app.use("/api/ecs-ai", ecsAiRoutes)
+// app.use("/api/quantum-stability", quantumStabilityRoutes)
+// app.use("/api/speed-of-light", speedOfLightRoutes)
+// app.use("/api/monte-carlo-proof", monteCarloProofRoutes)
+// app.use("/api/ai-provider-testing", aiProviderTestingRoutes)
+// app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
+// app.use("/api/process-flow", processFlowRoutes)
+// app.use("/api/ai-models", aiModelsRoutes)
+// app.use("/api/ai-analytics", aiAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
 app.use("/api/compression", compressionRoutes)
