@@ -165,14 +165,14 @@ router.post("/",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { name, description, framework, category, content, variables, is_public } = req.body
+      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs } = req.body
 
       const id = uuidv4()
 
       const result = await pool.query(
         `
-        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by, system_prompt, template_paragraphs)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `,
         [
@@ -185,6 +185,8 @@ router.post("/",
           JSON.stringify(variables),
           is_public,
           req.user?.id,
+          system_prompt || null,
+          template_paragraphs ? JSON.stringify(template_paragraphs) : null,
         ]
       )
 
@@ -214,12 +216,21 @@ router.put("/:id",
     content: Joi.object().optional(),
     variables: Joi.array().optional(),
     is_public: Joi.boolean().optional(),
+    system_prompt: Joi.string().max(5000).optional(),
+    template_paragraphs: Joi.array().items(Joi.object({
+      section_name: Joi.string().required(),
+      section_type: Joi.string().valid("header", "paragraph", "list", "table", "code_block", "summary", "conclusion").required(),
+      description: Joi.string().required(),
+      required: Joi.boolean().default(true),
+      order: Joi.number().integer().min(1).required(),
+      prompt_guidance: Joi.string().max(1000).optional(),
+    })).optional(),
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      const { name, description, framework, category, content, variables, is_public } = req.body
+      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs } = req.body
 
       // Check if template exists and user has permission
       const templateCheck = await pool.query(
@@ -247,8 +258,10 @@ router.put("/:id",
             content = COALESCE($5, content),
             variables = COALESCE($6, variables),
             is_public = COALESCE($7, is_public),
+            system_prompt = COALESCE($8, system_prompt),
+            template_paragraphs = COALESCE($9, template_paragraphs),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $8
+        WHERE id = $10
         RETURNING *
       `,
         [
@@ -259,6 +272,8 @@ router.put("/:id",
           content ? JSON.stringify(content) : null,
           variables ? JSON.stringify(variables) : null,
           is_public,
+          system_prompt || null,
+          template_paragraphs ? JSON.stringify(template_paragraphs) : null,
           id,
         ]
       )

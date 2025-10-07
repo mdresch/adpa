@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -58,6 +59,7 @@ export default function Dashboard() {
   const { user, isAuthenticated } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
+  const router = useRouter()
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [aiProviders, setAiProviders] = useState<any[]>([])
   const [recentJobs, setRecentJobs] = useState<any[]>([])
@@ -105,16 +107,7 @@ export default function Dashboard() {
   }, [isAuthenticated])
 
   if (!isAuthenticated) {
-    return (
-      <PageTransition>
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold mb-4">Please log in to access the dashboard</h1>
-            <Button onClick={() => window.location.href = "/login"}>Go to Login</Button>
-          </div>
-        </div>
-      </PageTransition>
-    )
+    return <LandingPage />
   }
   const statsData = [
     {
@@ -585,5 +578,447 @@ export default function Dashboard() {
         </div>
       </div>
     </PageTransition>
+  )
+}
+
+// Landing Page Component
+function LandingPage() {
+  const router = useRouter()
+  
+  const features = [
+    {
+      icon: Brain,
+      title: "AI-Powered Processing",
+      description: "Advanced AI models for intelligent document analysis, generation, and automation",
+      color: "from-blue-500 to-cyan-500"
+    },
+    {
+      icon: FileText,
+      title: "Document Automation",
+      description: "Streamline document workflows with automated generation, processing, and management",
+      color: "from-purple-500 to-pink-500"
+    },
+    {
+      icon: "🛡️",
+      title: "Enterprise Security",
+      description: "Bank-grade security with encryption, compliance, and audit trails",
+      color: "from-emerald-500 to-teal-500"
+    },
+    {
+      icon: Zap,
+      title: "Real-time Collaboration",
+      description: "Live document editing, instant updates, and seamless team collaboration",
+      color: "from-orange-500 to-red-500"
+    },
+    {
+      icon: TrendingUp,
+      title: "Analytics & Insights",
+      description: "Comprehensive analytics and reporting for document processing and AI usage",
+      color: "from-indigo-500 to-purple-500"
+    },
+    {
+      icon: Users,
+      title: "Team Management",
+      description: "Role-based access control, user management, and permission systems",
+      color: "from-pink-500 to-rose-500"
+    }
+  ]
+
+  const integrations = [
+    { name: "SharePoint", logo: "🔗" },
+    { name: "Confluence", logo: "📝" },
+    { name: "Adobe PDF", logo: "📄" },
+    { name: "Microsoft 365", logo: "💼" },
+    { name: "Google Workspace", logo: "🌐" },
+    { name: "Slack", logo: "💬" }
+  ]
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900">
+      {/* Navigation */}
+      <nav className="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center space-x-3">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl"
+              >
+                <Brain className="h-6 w-6 text-white" />
+              </motion.div>
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                ADPA Framework
+              </span>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/login")}
+                className="text-slate-600 dark:text-slate-300 hover:text-blue-600"
+              >
+                Sign In
+              </Button>
+              <Button
+                onClick={() => router.push("/login")}
+                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+              >
+                Get Started
+              </Button>
+            </div>
+          </div>
+        </div>
+      </nav>
+
+      {/* Hero Section */}
+      <section className="pt-32 pb-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="mb-8"
+          >
+            <h1 className="text-5xl md:text-7xl font-bold mb-6">
+              <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                Advanced Document
+              </span>
+              <br />
+              <span className="text-slate-800 dark:text-slate-100">
+                Processing & Automation
+              </span>
+            </h1>
+            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300 max-w-4xl mx-auto leading-relaxed">
+              Transform your document workflows with AI-powered automation, intelligent processing, 
+              and seamless integrations. Boost productivity, ensure compliance, and scale your operations.
+            </p>
+          </motion.div>
+
+          {/* ADPA Framework Core Cycle */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.3, duration: 0.8 }}
+            className="mb-16"
+          >
+            <div className="max-w-6xl mx-auto">
+              {/* Center Title */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4, duration: 0.8 }}
+                className="text-center mb-12"
+              >
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 mb-6">
+                  <Brain className="h-12 w-12 text-white" />
+                </div>
+                <h3 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">ADPA Framework</h3>
+                <p className="text-lg text-slate-600 dark:text-slate-300">Advanced Data Processing Automation</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">From raw data to real-time decisions</p>
+              </motion.div>
+
+              {/* Four Segments in Grid Layout */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+                {[
+                  { 
+                    icon: "🔎", 
+                    title: "Analyze", 
+                    description: "Inventory sources & contracts\nProfile & validate data quality\nDefine KPIs & outcomes",
+                    color: "from-indigo-500 to-blue-500"
+                  },
+                  { 
+                    icon: "📐", 
+                    title: "Design", 
+                    description: "Model schemas & transformations\nOrchestrate flow (batch/stream)\nGuardrails: security • governance • lineage",
+                    color: "from-cyan-500 to-teal-500"
+                  },
+                  { 
+                    icon: "⚙️", 
+                    title: "Process", 
+                    description: "Execute pipelines on scalable compute\nMonitor SLAs, cost, carbon\nAutomate incident response",
+                    color: "from-lime-500 to-green-500"
+                  },
+                  { 
+                    icon: "🔁", 
+                    title: "Adapt", 
+                    description: "Feedback loops & drift detection\nContinuous optimization (AutoML, tuning)\nVersioning, rollback, A/B",
+                    color: "from-amber-500 to-orange-500"
+                  }
+                ].map((segment, index) => (
+                  <motion.div
+                    key={segment.title}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: 0.5 + index * 0.1, duration: 0.6 }}
+                    whileHover={{ y: -5, scale: 1.02 }}
+                    className="group"
+                  >
+                    <Card className="h-full border-0 shadow-lg hover:shadow-2xl transition-all duration-300 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                      <CardContent className="p-8 text-center">
+                        <div className={`w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br ${segment.color} flex items-center justify-center text-3xl shadow-lg group-hover:scale-110 transition-transform duration-300`}>
+                          {segment.icon}
+                        </div>
+                        <h4 className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-4">{segment.title}</h4>
+                        <div className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line">
+                          {segment.description}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Benefits Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mb-8">
+                {[
+                  { title: "Faster time-to-insight", icon: "⚡" },
+                  { title: "Lower run costs", icon: "💰" },
+                  { title: "Higher reliability", icon: "🛡️" },
+                  { title: "Compliant by design", icon: "✅" }
+                ].map((benefit, index) => (
+                  <motion.div
+                    key={benefit.title}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.8 + index * 0.1, duration: 0.6 }}
+                    whileHover={{ y: -5, scale: 1.02 }}
+                    className="bg-white/10 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-200/20 dark:border-slate-700/50 rounded-2xl p-6 text-center shadow-lg hover:shadow-xl transition-all duration-300"
+                  >
+                    <div className="text-3xl mb-3">{benefit.icon}</div>
+                    <h5 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
+                      {benefit.title}
+                    </h5>
+                  </motion.div>
+                ))}
+              </div>
+
+              {/* Footer Lockup */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 1.2, duration: 0.8 }}
+                className="text-center"
+              >
+                <div className="inline-flex items-center space-x-2 text-slate-600 dark:text-slate-400">
+                  <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 rounded-full"></div>
+                  <span className="text-sm font-medium">Built for modern data and AI ops</span>
+                  <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 rounded-full"></div>
+                </div>
+              </motion.div>
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.4, duration: 0.8 }}
+            className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-16"
+          >
+            <Button
+              size="lg"
+              onClick={() => router.push("/login")}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 text-lg"
+            >
+              <Sparkles className="mr-2 h-5 w-5" />
+              Start Free Trial
+            </Button>
+            <Button
+              size="lg"
+              variant="outline"
+              className="border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-8 py-4 text-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <Activity className="mr-2 h-5 w-5" />
+              View Demo
+            </Button>
+          </motion.div>
+
+          {/* Stats */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4, duration: 0.8 }}
+            className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto"
+          >
+            <div className="text-center">
+              <div className="text-4xl font-bold text-blue-600 mb-2">10M+</div>
+              <div className="text-slate-600 dark:text-slate-300">Documents Processed</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-purple-600 mb-2">500+</div>
+              <div className="text-slate-600 dark:text-slate-300">Enterprise Clients</div>
+            </div>
+            <div className="text-center">
+              <div className="text-4xl font-bold text-indigo-600 mb-2">99.9%</div>
+              <div className="text-slate-600 dark:text-slate-300">Uptime Guarantee</div>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Features Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-white/50 dark:bg-slate-800/50">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-800 dark:text-slate-100 mb-6">
+              Powerful Features for Modern Teams
+            </h2>
+            <p className="text-xl text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
+              Everything you need to automate, process, and manage documents at scale
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, index) => (
+              <motion.div
+                key={feature.title}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.1, duration: 0.8 }}
+                whileHover={{ y: -5, scale: 1.02 }}
+                className="group"
+              >
+                <Card className="h-full border-0 shadow-lg hover:shadow-2xl transition-all duration-300 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                  <CardContent className="p-8">
+                    <div className={`w-16 h-16 rounded-2xl bg-gradient-to-br ${feature.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                      {typeof feature.icon === 'string' ? (
+                        <span className="text-2xl">{feature.icon}</span>
+                      ) : (
+                        <feature.icon className="h-8 w-8 text-white" />
+                      )}
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 mb-4">
+                      {feature.title}
+                    </h3>
+                    <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                      {feature.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Integrations Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl md:text-5xl font-bold text-slate-800 dark:text-slate-100 mb-6">
+              Seamless Integrations
+            </h2>
+            <p className="text-xl text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
+              Connect with your favorite tools and platforms for a unified workflow experience
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-8">
+            {integrations.map((integration, index) => (
+              <motion.div
+                key={integration.name}
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ delay: index * 0.1, duration: 0.8 }}
+                whileHover={{ scale: 1.1, y: -5 }}
+                className="text-center"
+              >
+                <Card className="border-0 shadow-lg hover:shadow-xl transition-all duration-300 bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm">
+                  <CardContent className="p-6">
+                    <div className="text-4xl mb-4">{integration.logo}</div>
+                    <div className="text-sm font-medium text-slate-700 dark:text-slate-200">
+                      {integration.name}
+                    </div>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA Section */}
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600">
+        <div className="max-w-4xl mx-auto text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
+              Ready to Transform Your Workflow?
+            </h2>
+            <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
+              Join thousands of teams already using ADPA to automate their document processes 
+              and boost productivity by 300%.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                size="lg"
+                onClick={() => router.push("/login")}
+                className="bg-white text-blue-600 hover:bg-blue-50 px-8 py-4 text-lg font-semibold"
+              >
+                <Sparkles className="mr-2 h-5 w-5" />
+                Start Your Free Trial
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => router.push("/login")}
+                className="border-2 border-white text-white hover:bg-white hover:text-blue-600 px-8 py-4 text-lg font-semibold"
+              >
+                Schedule a Demo
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="py-12 px-4 sm:px-6 lg:px-8 bg-slate-900 text-white">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <div className="flex items-center space-x-3 mb-4 md:mb-0">
+              <motion.div
+                animate={{ rotate: 360 }}
+                transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl"
+              >
+                <Brain className="h-6 w-6 text-white" />
+              </motion.div>
+              <span className="text-xl font-bold">ADPA Framework</span>
+            </div>
+            <div className="flex items-center space-x-6 text-sm text-slate-400">
+              <span>© 2024 ADPA Framework. All rights reserved.</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/login")}
+                className="text-slate-400 hover:text-white"
+              >
+                Privacy Policy
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/login")}
+                className="text-slate-400 hover:text-white"
+              >
+                Terms of Service
+              </Button>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
   )
 }

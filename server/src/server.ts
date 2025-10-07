@@ -43,6 +43,11 @@ import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
 import processFlowRoutes from "./routes/process-flow"
 import aiModelsRoutes from "./routes/ai-models"
 import aiAnalyticsRoutes from "./routes/ai-analytics"
+import stakeholderRoutes from "./routes/stakeholders"
+import contentStructuringRoutes from "./routes/content-structuring"
+import compressionRoutes from "./routes/compression"
+import contextInjectionRoutes from "./routes/context-injection"
+import pipelineRoutes from "./routes/pipeline"
 
 const app = express()
 const server = createServer(app)
@@ -116,6 +121,11 @@ app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
 app.use("/api/process-flow", processFlowRoutes)
 app.use("/api/ai-models", aiModelsRoutes)
 app.use("/api/ai-analytics", aiAnalyticsRoutes)
+app.use("/api/stakeholders", stakeholderRoutes)
+app.use("/api/content-structuring", contentStructuringRoutes)
+app.use("/api/compression", compressionRoutes)
+app.use("/api/context-injection", contextInjectionRoutes)
+app.use("/api/pipeline", pipelineRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling

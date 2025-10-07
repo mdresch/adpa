@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { Settings, Plus, Trash2, CheckCircle, AlertCircle, Zap, Eye, EyeOff, TestTube, BarChart3, Clock, Activity } from "lucide-react"
+import { Settings, Plus, Trash2, CheckCircle, AlertCircle, Zap, Eye, TestTube, BarChart3, Clock, Activity } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 import {
   Dialog,
@@ -23,9 +23,12 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import googleProviderStubRaw from "./google"
+import { googleProviderStub as googleProviderStubRaw } from "./google"
 
 const googleProviderStub = {
+  // You can spread googleProviderStubRaw if needed for additional properties
+  ...googleProviderStubRaw,
+  // Override with specific values for this page
   id: "2",
   name: "Google AI",
   type: "google",
@@ -38,8 +41,6 @@ const googleProviderStub = {
   lastUsed: "10 minutes ago",
   requestCount: 456,
   errorRate: 0.1,
-  // You can spread googleProviderStubRaw if needed for additional properties
-  ...googleProviderStubRaw,
 }
 
 export default function AIProviders() {
@@ -54,21 +55,73 @@ export default function AIProviders() {
       ;(apiClient as any).setToken(token)
     }
   }, [])
-  const [providers, setProviders] = useState<any[]>([])
+  const [providers, setProviders] = useState<Array<{
+    id: string
+    name: string
+    type: string
+    model: string
+    status: string
+    priority: number
+    endpoint: string
+    apiKey: string
+    lastUsed: string
+    requestCount: number
+    errorRate: number
+    enabled: boolean
+  }>>([])
   const [loading, setLoading] = useState(false)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
   const [error, setError] = useState<string | null>(null)
-  const [ollamaModels, setOllamaModels] = useState<any[]>([])
+  const [ollamaModels, setOllamaModels] = useState<Array<{
+    name: string
+    size: number
+    digest: string
+    modified_at: string
+  }>>([])
   
   // Testing suite state
-  const [healthMetrics, setHealthMetrics] = useState<any[]>([])
+  const [healthMetrics, setHealthMetrics] = useState<Array<{
+    providerId: string
+    providerName: string
+    providerType: string
+    overallHealth: number
+    availability: number
+    responseTime: number
+    successRate: number
+    lastTested: string
+    recommendations: string[]
+  }>>([])
   const [testing, setTesting] = useState(false)
-  const [testResults, setTestResults] = useState<any[]>([])
+  const [testResults, setTestResults] = useState<Array<{
+    providerId: string
+    testName: string
+    status: string
+    result: any
+    timestamp: string
+  }>>([])
 
   // Add dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false)
 
-  const [formState, setFormState] = useState({
+  const [formState, setFormState] = useState<{
+    id: string
+    name: string
+    type: "openai" | "google" | "azure" | "mistral" | "ollama" | "copilot"
+    apiKey: string
+    endpoint: string
+    priority: number
+    enabled: boolean
+    // Azure AI Foundry specific fields
+    resourceName: string
+    deploymentName: string
+    apiVersion: string
+    tenantId: string
+    clientId: string
+    clientSecret: string
+    subscriptionId: string
+    region: string
+    authorizationType: "api-key" | "azure-ad" | "managed-identity"
+  }>({
     id: "",
     name: "",
     type: "openai",
@@ -85,7 +138,7 @@ export default function AIProviders() {
     clientSecret: "",
     subscriptionId: "",
     region: "",
-    authorizationType: "api-key" as "api-key" | "azure-ad" | "managed-identity"
+    authorizationType: "api-key"
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
@@ -122,7 +175,7 @@ export default function AIProviders() {
 
     // Map some UI types to server provider types when validating
     const uiType = state.type
-    const providerType = uiType === "azure-openai" ? "azure" : uiType === "copilot" ? "openai" : uiType
+    const providerType = uiType === "copilot" ? "openai" : uiType
 
     if (!["openai", "google", "azure", "mistral", "ollama"].includes(providerType)) {
       errs.type = "Unsupported provider type for creation. Choose OpenAI, Google, Azure, Mistral, or Ollama."
@@ -271,7 +324,10 @@ export default function AIProviders() {
       setError(null)
       try {
         // Use the new toggle endpoint
-        const response = await apiClient.request(`/ai/providers/${encodeURIComponent(id)}/toggle`, {
+        const response = await apiClient.request<{
+          is_active: boolean
+          message?: string
+        }>(`/ai/providers/${encodeURIComponent(id)}/toggle`, {
           method: "POST",
         })
 
@@ -293,7 +349,12 @@ export default function AIProviders() {
 
 
   // Load Ollama models from local machine
-  const loadOllamaModels = async () => {
+  const loadOllamaModels = async (): Promise<Array<{
+    name: string
+    size: number
+    digest: string
+    modified_at: string
+  }>> => {
     try {
       const response = await fetch('http://localhost:11434/api/tags', {
         method: 'GET',
@@ -306,7 +367,12 @@ export default function AIProviders() {
         throw new Error(`Ollama API not available: ${response.status}`)
       }
       
-      const data = await response.json()
+      const data = await response.json() as { models?: Array<{
+        name: string
+        size: number
+        digest: string
+        modified_at: string
+      }> }
       return data.models || []
     } catch (error) {
       console.warn('Could not connect to Ollama:', error)
@@ -316,32 +382,39 @@ export default function AIProviders() {
 
 
   // Load providers from backend
-  const loadProviders = async () => {
+  const loadProviders = async (): Promise<void> => {
     setLoading(true)
     setError(null)
     try {
       // Use the same endpoint as dashboard for consistency
       const providers = await apiClient.getAIProviders()
       // normalize providers for display
-      const normalized = providers.map((p: any) => ({ 
+      const normalized = providers.map((p: {
+        id: string
+        name: string
+        type: string
+        models?: string[]
+        is_active: boolean
+        configuration?: any
+      }) => ({ 
         id: p.id,
         name: p.name,
         type: p.type,
         model: p.models?.[0] || 'Not specified', // Use first model as default
-        models: p.models || [],
-        enabled: p.is_active,
         status: p.is_active ? 'active' : 'inactive',
         priority: 1, // Default priority
-        endpoint: '', // Will be populated from configuration if needed
+        endpoint: p.configuration?.endpoint || '', // Will be populated from configuration if needed
         apiKey: 'Set', // Don't expose actual key
         lastUsed: 'Never',
         requestCount: 0,
-        errorRate: 0
+        errorRate: 0,
+        enabled: p.is_active
       }))
       setProviders(normalized)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err)
-      setError(err?.message || "Failed to load providers")
+      const errorMessage = err instanceof Error ? err.message : "Failed to load providers"
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -354,9 +427,22 @@ export default function AIProviders() {
   }, [])
 
   // Testing suite functions
-  const loadHealthDashboard = async () => {
+  const loadHealthDashboard = async (): Promise<void> => {
     try {
-      const response = await apiClient.request('/ai-provider-testing/health-dashboard', { method: 'GET' })
+      const response = await apiClient.request<{
+        success: boolean
+        data?: Array<{
+          providerId: string
+          providerName: string
+          providerType: string
+          overallHealth: number
+          availability: number
+          responseTime: number
+          successRate: number
+          lastTested: string
+          recommendations: string[]
+        }>
+      }>('/ai-provider-testing/health-dashboard', { method: 'GET' })
       if (response.success) {
         setHealthMetrics(response.data || [])
       }
@@ -365,7 +451,7 @@ export default function AIProviders() {
     }
   }
 
-  const runFullTestSuite = async () => {
+  const runFullTestSuite = async (): Promise<void> => {
     setTesting(true)
     try {
       const response = await fetch(apiUrl('/api/ai-provider-testing/run-full-suite'), {
@@ -373,11 +459,29 @@ export default function AIProviders() {
         credentials: 'include'
       })
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json() as {
+          data: {
+            results: Array<{
+              providerId: string
+              providerName: string
+              providerType: string
+              overallHealth: number
+              availability: number
+              responseTime: number
+              successRate: number
+              lastTested: string
+              recommendations: string[]
+            }>
+            summary: {
+              healthyProviders: number
+              totalProviders: number
+            }
+          }
+        }
         setHealthMetrics(data.data.results || [])
         toast.success(`Test suite completed! ${data.data.summary.healthyProviders}/${data.data.summary.totalProviders} providers healthy`)
       } else {
-        const error = await response.json()
+        const error = await response.json() as { message?: string }
         toast.error(error.message || 'Failed to run test suite')
       }
     } catch (error) {
@@ -388,7 +492,7 @@ export default function AIProviders() {
     }
   }
 
-  const testProvider = async (providerId: string) => {
+  const testProvider = async (providerId: string): Promise<void> => {
     setTesting(true)
     try {
       const response = await fetch(apiUrl(`/api/ai-provider-testing/test/${providerId}`), {
@@ -396,14 +500,26 @@ export default function AIProviders() {
         credentials: 'include'
       })
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json() as {
+          data: {
+            providerId: string
+            providerName: string
+            providerType: string
+            overallHealth: number
+            availability: number
+            responseTime: number
+            successRate: number
+            lastTested: string
+            recommendations: string[]
+          }
+        }
         // Update the specific provider in health metrics
         setHealthMetrics(prev => prev.map(h => 
           h.providerId === providerId ? data.data : h
         ))
         toast.success(`Provider test completed! Health: ${data.data.overallHealth.toFixed(1)}%`)
       } else {
-        const error = await response.json()
+        const error = await response.json() as { message?: string }
         toast.error(error.message || 'Failed to test provider')
       }
     } catch (error) {
@@ -415,7 +531,7 @@ export default function AIProviders() {
   }
 
   // Azure AI Foundry validation functions
-  const validateAzureEndpoint = async () => {
+  const validateAzureEndpoint = async (): Promise<void> => {
     try {
       const response = await fetch(apiUrl('/api/azure-ai-foundry/validate-endpoint'), {
         method: 'POST',
@@ -431,18 +547,25 @@ export default function AIProviders() {
       })
       
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json() as {
+          data: {
+            isValid: boolean
+            availableModels: string[]
+            resourceName?: string
+            error?: string
+          }
+        }
         if (data.data.isValid) {
           toast.success(`Endpoint validated! Found ${data.data.availableModels.length} models`)
           // Auto-fill resource name if empty
           if (!formState.resourceName && data.data.resourceName) {
-            setFormState(prev => ({ ...prev, resourceName: data.data.resourceName }))
+            setFormState(prev => ({ ...prev, resourceName: data.data.resourceName! }))
           }
         } else {
           toast.error(`Endpoint validation failed: ${data.data.error}`)
         }
       } else {
-        const error = await response.json()
+        const error = await response.json() as { message?: string }
         toast.error(error.message || 'Failed to validate endpoint')
       }
     } catch (error) {
@@ -451,7 +574,7 @@ export default function AIProviders() {
     }
   }
 
-  const validateAzureAuth = async () => {
+  const validateAzureAuth = async (): Promise<void> => {
     try {
       const response = await fetch(apiUrl('/api/azure-ai-foundry/validate-authorization'), {
         method: 'POST',
@@ -468,14 +591,20 @@ export default function AIProviders() {
       })
       
       if (response.ok) {
-        const data = await response.json()
+        const data = await response.json() as {
+          data: {
+            isAuthorized: boolean
+            permissions: string[]
+            error?: string
+          }
+        }
         if (data.data.isAuthorized) {
           toast.success(`Authorization validated! Permissions: ${data.data.permissions.join(', ')}`)
         } else {
           toast.error(`Authorization failed: ${data.data.error}`)
         }
       } else {
-        const error = await response.json()
+        const error = await response.json() as { message?: string }
         toast.error(error.message || 'Failed to validate authorization')
       }
     } catch (error) {
@@ -513,7 +642,7 @@ export default function AIProviders() {
                         <Label htmlFor="provider-type" className="text-right">
                           Provider
                         </Label>
-                        <Select onValueChange={(val) => setFormState((s) => ({ ...s, type: val }))}>
+                        <Select onValueChange={(val: string) => setFormState((s) => ({ ...s, type: val as typeof s.type }))}>
                           <SelectTrigger className="col-span-3">
                             <SelectValue placeholder="Select provider" />
                           </SelectTrigger>
@@ -532,7 +661,7 @@ export default function AIProviders() {
                           Name
                         </Label>
                         <div className="col-span-3">
-                          <Input id="name" value={formState.name} onChange={(e) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
+                          <Input id="name" value={formState.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, name: e.target.value }))} placeholder="Provider name" />
                           {formErrors.name && <div className="text-xs text-red-600 mt-1">{formErrors.name}</div>}
                         </div>
                       </div>
@@ -545,7 +674,7 @@ export default function AIProviders() {
                             id="api-key" 
                             type="password" 
                             value={formState.apiKey} 
-                            onChange={(e) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, apiKey: e.target.value }))} 
                             placeholder={formState.type === "ollama" ? "Not required for local Ollama" : "Enter API key (will be encrypted and stored securely)"}
                             disabled={formState.type === "ollama"}
                           />
@@ -571,7 +700,7 @@ export default function AIProviders() {
                               <Input 
                                 id="endpoint" 
                                 value={formState.endpoint} 
-                                onChange={(e) => setFormState((s) => ({ ...s, endpoint: e.target.value }))} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, endpoint: e.target.value }))} 
                                 placeholder="https://your-resource.region.cognitiveservices.azure.com" 
                               />
                               {formErrors.endpoint && <div className="text-xs text-red-600 mt-1">{formErrors.endpoint}</div>}
@@ -585,7 +714,7 @@ export default function AIProviders() {
                               <Input 
                                 id="resource-name" 
                                 value={formState.resourceName} 
-                                onChange={(e) => setFormState((s) => ({ ...s, resourceName: e.target.value }))} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, resourceName: e.target.value }))} 
                                 placeholder="your-ai-resource" 
                               />
                               {formErrors.resourceName && <div className="text-xs text-red-600 mt-1">{formErrors.resourceName}</div>}
@@ -599,7 +728,7 @@ export default function AIProviders() {
                               <Input 
                                 id="deployment-name" 
                                 value={formState.deploymentName} 
-                                onChange={(e) => setFormState((s) => ({ ...s, deploymentName: e.target.value }))} 
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, deploymentName: e.target.value }))} 
                                 placeholder="gpt-4o-mini" 
                               />
                               {formErrors.deploymentName && <div className="text-xs text-red-600 mt-1">{formErrors.deploymentName}</div>}
@@ -609,7 +738,7 @@ export default function AIProviders() {
                             <Label htmlFor="api-version" className="text-right">
                               API Version
                             </Label>
-                            <Select onValueChange={(val) => setFormState((s) => ({ ...s, apiVersion: val }))}>
+                            <Select onValueChange={(val: string) => setFormState((s) => ({ ...s, apiVersion: val }))}>
                               <SelectTrigger className="col-span-3">
                                 <SelectValue placeholder="Select API version" />
                               </SelectTrigger>
@@ -624,7 +753,7 @@ export default function AIProviders() {
                             <Label htmlFor="authorization-type" className="text-right">
                               Auth Type
                             </Label>
-                            <Select onValueChange={(val) => setFormState((s) => ({ ...s, authorizationType: val as any }))}>
+                            <Select onValueChange={(val: string) => setFormState((s) => ({ ...s, authorizationType: val as typeof s.authorizationType }))}>
                               <SelectTrigger className="col-span-3">
                                 <SelectValue placeholder="Select authorization type" />
                               </SelectTrigger>
@@ -647,7 +776,7 @@ export default function AIProviders() {
                                   <Input 
                                     id="tenant-id" 
                                     value={formState.tenantId} 
-                                    onChange={(e) => setFormState((s) => ({ ...s, tenantId: e.target.value }))} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, tenantId: e.target.value }))} 
                                     placeholder="your-tenant-id" 
                                   />
                                   {formErrors.tenantId && <div className="text-xs text-red-600 mt-1">{formErrors.tenantId}</div>}
@@ -661,7 +790,7 @@ export default function AIProviders() {
                                   <Input 
                                     id="client-id" 
                                     value={formState.clientId} 
-                                    onChange={(e) => setFormState((s) => ({ ...s, clientId: e.target.value }))} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, clientId: e.target.value }))} 
                                     placeholder="your-client-id" 
                                   />
                                   {formErrors.clientId && <div className="text-xs text-red-600 mt-1">{formErrors.clientId}</div>}
@@ -676,7 +805,7 @@ export default function AIProviders() {
                                     id="client-secret" 
                                     type="password" 
                                     value={formState.clientSecret} 
-                                    onChange={(e) => setFormState((s) => ({ ...s, clientSecret: e.target.value }))} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState((s) => ({ ...s, clientSecret: e.target.value }))} 
                                     placeholder="your-client-secret" 
                                   />
                                   {formErrors.clientSecret && <div className="text-xs text-red-600 mt-1">{formErrors.clientSecret}</div>}

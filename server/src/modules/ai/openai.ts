@@ -90,6 +90,7 @@ class OpenAIConnector {
    */
   async initializeProviders(): Promise<void> {
     try {
+      logger.info("Initializing OpenAI providers from database...")
       const result = await pool.query(`
         SELECT 
           id, name, api_key_encrypted, configuration, is_active,
@@ -97,11 +98,14 @@ class OpenAIConnector {
           COALESCE(rate_limits, '{}') as rate_limits,
           COALESCE(usage_stats, '{}') as usage_stats
         FROM ai_providers 
-        WHERE provider_type = 'openai' 
+        WHERE provider_type IN ('openai', 'azure') 
         ORDER BY priority ASC, name ASC
       `)
 
+      logger.info(`Found ${result.rows.length} OpenAI/Azure providers in database`)
+      
   for (const row of result.rows) {
+        logger.info(`Processing OpenAI provider: ${row.name} (${row.id})`)
         const config: OpenAIConfig = {
           apiKey: this.decryptApiKey(row.api_key_encrypted),
           ...row.configuration
@@ -131,6 +135,7 @@ class OpenAIConnector {
 
         try {
           await this.addProvider(provider)
+          logger.info(`Successfully added OpenAI provider: ${provider.name}`)
         } catch (err) {
           // Don't fail startup for a single bad/missing provider; log and continue
           logger.warn(`Skipping OpenAI provider '${provider.name}' during initialization:`, err)
@@ -250,20 +255,30 @@ class OpenAIConnector {
     ]
 
     if (!providerName) {
+      logger.info(`getAvailableModels called without providerName, returning defaults`)
       return defaultModels
     }
 
     try {
+      logger.info(`getAvailableModels called for provider: ${providerName}`)
+      logger.info(`Available clients: ${Array.from(this.clients.keys()).join(', ')}`)
+      logger.info(`Available providers: ${Array.from(this.providers.keys()).join(', ')}`)
+      
       const client = this.clients.get(providerName)
       if (!client) {
+        logger.warn(`No client found for provider: ${providerName}`)
         return defaultModels
       }
 
+      logger.info(`Found client for provider: ${providerName}, fetching models...`)
       const models = await client.models.list()
-      return models.data
+      const availableModels = models.data
         .filter(model => model.id.startsWith("gpt-"))
         .map(model => model.id)
         .sort()
+      
+      logger.info(`Found ${availableModels.length} available models for ${providerName}: ${availableModels.join(', ')}`)
+      return availableModels
     } catch (error) {
       logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
       return defaultModels
@@ -306,8 +321,13 @@ class OpenAIConnector {
   // Private helper methods
 
   private async validateApiKey(apiKey: string): Promise<void> {
-    if (!apiKey || !apiKey.startsWith("sk-")) {
-      throw new Error("Invalid OpenAI API key format")
+    if (!apiKey) {
+      throw new Error("API key is required")
+    }
+
+    // Accept both OpenAI format (sk-*) and Azure format (any string)
+    if (!apiKey.startsWith("sk-") && !apiKey.match(/^[A-Za-z0-9+/=]{20,}$/)) {
+      throw new Error("Invalid API key format")
     }
 
     try {
@@ -328,23 +348,41 @@ class OpenAIConnector {
   }
 
   private updateFailoverQueue(): void {
-    this.failoverQueue = Array.from(this.providers.values())
-      .filter(provider => provider.isActive)
+    logger.info(`updateFailoverQueue called - providers map size: ${this.providers.size}`)
+    const activeProviders = Array.from(this.providers.values()).filter(provider => provider.isActive)
+    logger.info(`Active providers: [${activeProviders.map(p => `${p.name} (priority: ${p.priority})`).join(', ')}]`)
+    
+    this.failoverQueue = activeProviders
       .sort((a, b) => a.priority - b.priority)
       .map(provider => provider.name)
+    
+    logger.info(`Updated failoverQueue: [${this.failoverQueue.join(', ')}]`)
   }
 
   private getAvailableProviders(preferredProvider?: string): string[] {
+    logger.info(`getAvailableProviders called - preferredProvider: ${preferredProvider}`)
+    logger.info(`failoverQueue: [${this.failoverQueue.join(', ')}]`)
+    logger.info(`providers map size: ${this.providers.size}`)
+    logger.info(`providers map keys: [${Array.from(this.providers.keys()).join(', ')}]`)
+    
     const available = this.failoverQueue.filter(name => {
       const provider = this.providers.get(name)
-      return provider?.isActive && this.checkRateLimits(provider)
+      const isActive = provider?.isActive
+      const rateLimitOk = provider ? this.checkRateLimits(provider) : false
+      logger.info(`Provider ${name}: isActive=${isActive}, rateLimitOk=${rateLimitOk}`)
+      return isActive && rateLimitOk
     })
+
+    logger.info(`Available providers after filtering: [${available.join(', ')}]`)
 
     if (preferredProvider && available.includes(preferredProvider)) {
       // Move preferred provider to front
-      return [preferredProvider, ...available.filter(name => name !== preferredProvider)]
+      const result = [preferredProvider, ...available.filter(name => name !== preferredProvider)]
+      logger.info(`Returning providers with preferred first: [${result.join(', ')}]`)
+      return result
     }
 
+    logger.info(`Returning available providers: [${available.join(', ')}]`)
     return available
   }
 

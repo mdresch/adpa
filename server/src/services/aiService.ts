@@ -2,9 +2,6 @@ import OpenAI from "openai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
-import { openaiConnector, OpenAIRequest } from "../modules/ai/openai"
-import { googleConnector, GoogleRequest } from "../modules/ai/google"
-import { mistralConnector, MistralRequest } from "../modules/ai/mistral"
 
 export interface AIProvider {
   name: string
@@ -40,58 +37,25 @@ class AIService {
 
   async initializeProviders() {
     try {
-      // Initialize OpenAI connector first with error handling
-      try {
-        await openaiConnector.initializeProviders()
-        logger.info("OpenAI connector initialized successfully")
-      } catch (error) {
-        logger.warn("Failed to initialize OpenAI connector, continuing without it:", error)
-      }
+      // Initialize providers with error handling
+      const result = await pool.query(
+        "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
+      )
 
-      // Initialize Google AI connector with error handling
-      try {
-        await googleConnector.initializeProviders()
-        logger.info("Google AI connector initialized successfully")
-      } catch (error) {
-        logger.warn("Failed to initialize Google AI connector, continuing without it:", error)
-      }
-
-      // Initialize Mistral AI connector with error handling
-      try {
-        await mistralConnector.initializeProviders()
-        logger.info("Mistral AI connector initialized successfully")
-      } catch (error) {
-        logger.warn("Failed to initialize Mistral AI connector, continuing without it:", error)
-      }
-
-      // Initialize other providers with error handling
-      try {
-        const result = await pool.query(
-          "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
-        )
-
-        for (const provider of result.rows) {
-        // Skip OpenAI, Google, and Mistral providers as they're handled by their respective connectors
-        if (provider.provider_type === 'openai' || provider.provider_type === 'google' || provider.provider_type === 'mistral') {
-          continue
+      for (const provider of result.rows) {
+        try {
+          await this.addProvider({
+            name: provider.name,
+            type: provider.provider_type,
+            apiKey: this.decryptApiKey(provider.api_key_encrypted),
+            configuration: provider.configuration,
+          })
+        } catch (providerError) {
+          logger.warn(`Failed to initialize provider ${provider.name}, skipping:`, providerError)
         }
-
-          try {
-            await this.addProvider({
-              name: provider.name,
-              type: provider.provider_type,
-              apiKey: this.decryptApiKey(provider.api_key_encrypted),
-              configuration: provider.configuration,
-            })
-          } catch (providerError) {
-            logger.warn(`Failed to initialize provider ${provider.name}, skipping:`, providerError)
-          }
-        }
-
-        logger.info(`Initialized ${this.providers.size} legacy AI providers`)
-      } catch (error) {
-        logger.warn("Failed to initialize legacy AI providers, continuing without them:", error)
       }
+
+      logger.info(`Initialized ${this.providers.size} AI providers`)
     } catch (error) {
       logger.error("Failed to initialize AI providers:", error)
       // Don't throw error to prevent server crash
@@ -164,43 +128,11 @@ class AIService {
       switch (providerType) {
         case "openai":
         case "azure":
-          // Use the new OpenAI connector with failover and rate limiting
-          const openaiRequest: OpenAIRequest = {
-            model: request.model || "gpt-3.5-turbo",
-            messages: [{ role: "user", content: processedPrompt }],
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-          }
-          
-          const openaiResponse = await openaiConnector.generateCompletion(openaiRequest, request.provider)
-          
-          return {
-            content: openaiResponse.choices[0]?.message?.content || "",
-            provider: openaiResponse.provider,
-            model: openaiResponse.model,
-            usage: openaiResponse.usage,
-            metadata: openaiResponse.metadata,
-          }
-
+          return await this.generateOpenAI(processedPrompt, request, providerType)
         case "google":
-          // Use the new Google AI connector with failover and rate limiting
-          const googleRequest: GoogleRequest = {
-            model: request.model || "gemini-pro",
-            messages: [{ role: "user", content: processedPrompt }],
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-          }
-          
-          const googleResponse = await googleConnector.generateCompletion(googleRequest, request.provider)
-          
-          return {
-            content: googleResponse.choices[0]?.message?.content || "",
-            provider: googleResponse.provider,
-            model: googleResponse.model,
-            usage: googleResponse.usage,
-            metadata: googleResponse.metadata,
-          }
-
+          return await this.generateGoogle(processedPrompt, request)
+        case "mistral":
+          return await this.generateMistral(processedPrompt, request)
         default:
           throw new Error(`Unsupported provider type: ${providerType}`)
       }
@@ -211,6 +143,100 @@ class AIService {
   }
 
   private async generateOpenAI(
+    prompt: string,
+    request: AIGenerateRequest,
+    providerType: string
+  ): Promise<AIGenerateResponse> {
+    const provider = this.providers.get(request.provider)
+    if (!provider) {
+      throw new Error(`Provider ${request.provider} not found`)
+    }
+
+    const client = new OpenAI({
+      apiKey: provider.apiKey,
+      baseURL: provider.configuration?.baseURL,
+    })
+
+    const response = await client.chat.completions.create({
+      model: request.model || "gpt-3.5-turbo",
+      messages: [{ role: "user", content: prompt }],
+      temperature: request.temperature || 0.7,
+      max_tokens: request.max_tokens || 1000,
+    })
+
+    const choice = response.choices[0]
+    return {
+      content: choice?.message?.content || "",
+      provider: request.provider,
+      model: request.model || "gpt-3.5-turbo",
+      usage: response.usage ? {
+        prompt_tokens: response.usage.prompt_tokens,
+        completion_tokens: response.usage.completion_tokens,
+        total_tokens: response.usage.total_tokens,
+      } : undefined,
+      metadata: {
+        finishReason: choice?.finish_reason,
+        model: response.model,
+      }
+    }
+  }
+
+  private async generateGoogle(
+    prompt: string,
+    request: AIGenerateRequest
+  ): Promise<AIGenerateResponse> {
+    const provider = this.providers.get(request.provider)
+    if (!provider) {
+      throw new Error(`Provider ${request.provider} not found`)
+    }
+
+    const genAI = new GoogleGenerativeAI(provider.apiKey)
+    const model = genAI.getGenerativeModel({ 
+      model: request.model || "gemini-pro" 
+    })
+
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const text = response.text()
+
+    return {
+      content: text,
+      provider: request.provider,
+      model: request.model || "gemini-pro",
+      usage: {
+        prompt_tokens: 0, // Google AI doesn't provide token usage in the same way
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
+      metadata: {
+        finishReason: "stop",
+        model: request.model || "gemini-pro",
+      }
+    }
+  }
+
+  private async generateMistral(
+    prompt: string,
+    request: AIGenerateRequest
+  ): Promise<AIGenerateResponse> {
+    // For now, return a placeholder response since Mistral AI SDK has issues
+    return {
+      content: "Mistral AI integration temporarily disabled due to dependency conflicts",
+      provider: request.provider,
+      model: request.model || "mistral-large-latest",
+      usage: {
+        prompt_tokens: 0,
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
+      metadata: {
+        finishReason: "error",
+        model: request.model || "mistral-large-latest",
+      }
+    }
+  }
+
+  private async generateOpenAIOld(
     client: OpenAI,
     prompt: string,
     request: AIGenerateRequest,
@@ -329,48 +355,88 @@ class AIService {
 
   async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any }>> {
     try {
+      logger.info("Getting available providers from database")
       const result = await pool.query(
         "SELECT id, name, provider_type, configuration, is_active FROM ai_providers ORDER BY name"
       )
 
+      logger.info(`Found ${result.rows.length} providers in database`)
       const providers = []
 
       for (const provider of result.rows) {
-        if (provider.provider_type === 'openai') {
-          // Get models from OpenAI connector
-          const models = await openaiConnector.getAvailableModels(provider.name)
-          providers.push({
-            id: provider.id,
-            name: provider.name,
-            type: provider.provider_type,
-            models: models,
-            is_active: provider.is_active,
-            configuration: provider.configuration,
-          })
-        } else if (provider.provider_type === 'google') {
-          // Get models from Google AI connector
-          const models = await googleConnector.getAvailableModels(provider.name)
-          providers.push({
-            id: provider.id,
-            name: provider.name,
-            type: provider.provider_type,
-            models: models,
-            is_active: provider.is_active,
-            configuration: provider.configuration,
-          })
-        } else {
-          // Use legacy method for other providers
-          providers.push({
-            id: provider.id,
-            name: provider.name,
-            type: provider.provider_type,
-            models: this.getModelsForProvider(provider.provider_type),
-            is_active: provider.is_active,
-            configuration: provider.configuration,
-          })
+        try {
+          logger.info(`Processing provider: ${provider.name} (${provider.provider_type})`)
+          
+          if (provider.provider_type === 'openai') {
+            // Get models from OpenAI connector
+            try {
+              const models = await openaiConnector.getAvailableModels(provider.name)
+              providers.push({
+                id: provider.id,
+                name: provider.name,
+                type: provider.provider_type,
+                models: models,
+                is_active: provider.is_active,
+                configuration: provider.configuration,
+              })
+              logger.info(`Added OpenAI provider: ${provider.name} with ${models.length} models`)
+            } catch (error) {
+              logger.warn(`Failed to get models for OpenAI provider ${provider.name}:`, error)
+              // Add provider without models
+              providers.push({
+                id: provider.id,
+                name: provider.name,
+                type: provider.provider_type,
+                models: [],
+                is_active: provider.is_active,
+                configuration: provider.configuration,
+              })
+            }
+          } else if (provider.provider_type === 'google') {
+            // Get models from Google AI connector
+            try {
+              const models = await googleConnector.getAvailableModels(provider.name)
+              providers.push({
+                id: provider.id,
+                name: provider.name,
+                type: provider.provider_type,
+                models: models,
+                is_active: provider.is_active,
+                configuration: provider.configuration,
+              })
+              logger.info(`Added Google provider: ${provider.name} with ${models.length} models`)
+            } catch (error) {
+              logger.warn(`Failed to get models for Google provider ${provider.name}:`, error)
+              // Add provider without models
+              providers.push({
+                id: provider.id,
+                name: provider.name,
+                type: provider.provider_type,
+                models: [],
+                is_active: provider.is_active,
+                configuration: provider.configuration,
+              })
+            }
+          } else {
+            // Use legacy method for other providers
+            const models = this.getModelsForProvider(provider.provider_type)
+            providers.push({
+              id: provider.id,
+              name: provider.name,
+              type: provider.provider_type,
+              models: models,
+              is_active: provider.is_active,
+              configuration: provider.configuration,
+            })
+            logger.info(`Added ${provider.provider_type} provider: ${provider.name} with ${models.length} models`)
+          }
+        } catch (error) {
+          logger.error(`Error processing provider ${provider.name}:`, error)
+          // Continue with other providers
         }
       }
 
+      logger.info(`Returning ${providers.length} providers`)
       return providers
     } catch (error) {
       logger.error("Failed to get available providers:", error)
@@ -468,4 +534,5 @@ class AIService {
   }
 }
 
+export { AIService }
 export const aiService = new AIService()

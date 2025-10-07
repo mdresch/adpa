@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -32,7 +32,7 @@ import {
   Loader2,
   FileUp,
   Wand2,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import {
   Dialog,
   DialogContent,
@@ -53,9 +53,14 @@ export default function Projects() {
   const [updating, setUpdating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [pagination, setPagination] = useState({
+  const [pagination, setPagination] = useState<{
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }>({
     page: 1,
-    limit: 10,
+    limit: 9,
     total: 0,
     pages: 0,
   })
@@ -63,7 +68,16 @@ export default function Projects() {
   const { isAuthenticated } = useAuth()
 
   // Form state for creating new project
-  const [newProject, setNewProject] = useState({
+  const [newProject, setNewProject] = useState<{
+    name: string
+    description: string
+    framework: string
+    priority: string
+    start_date: string
+    end_date: string
+    budget: string
+    manager: string
+  }>({
     name: "",
     description: "",
     framework: "",
@@ -82,7 +96,11 @@ export default function Projects() {
   const [generatingDocument, setGeneratingDocument] = useState(false)
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
   const [selectedProjectForGeneration, setSelectedProjectForGeneration] = useState<Project | null>(null)
-  const [documentGenerationForm, setDocumentGenerationForm] = useState({
+  const [documentGenerationForm, setDocumentGenerationForm] = useState<{
+    name: string
+    template_id: string
+    prompt: string
+  }>({
     name: "",
     template_id: "",
     prompt: "",
@@ -92,9 +110,14 @@ export default function Projects() {
   const [uploadingDocument, setUploadingDocument] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [selectedProjectForUpload, setSelectedProjectForUpload] = useState<Project | null>(null)
-  const [documentUploadForm, setDocumentUploadForm] = useState({
+  const [documentUploadForm, setDocumentUploadForm] = useState<{
+    name: string
+    file: File | null
+    template_id: string
+  }>({
     name: "",
-    file: null as File | null,
+    file: null,
+    template_id: "",
   })
 
   // Templates state
@@ -281,8 +304,10 @@ export default function Projects() {
     setDocumentUploadForm({
       name: "",
       file: null,
+      template_id: "",
     })
     setUploadDialogOpen(true)
+    fetchTemplatesForUpload(project.framework)
   }
 
   // Fetch templates for document generation
@@ -290,6 +315,24 @@ export default function Projects() {
     try {
       setLoadingTemplates(true)
       const framework = selectedProjectForGeneration?.framework || ""
+      const response = await apiClient.getTemplates({ 
+        framework: framework || undefined,
+        limit: 50 
+      })
+      setTemplates(response.templates || [])
+    } catch (error) {
+      console.error("Failed to fetch templates:", error)
+      toast.error("Failed to load templates")
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  // Fetch templates for document upload
+  const fetchTemplatesForUpload = async (framework: string) => {
+    try {
+      setLoadingTemplates(true)
       const response = await apiClient.getTemplates({ 
         framework: framework || undefined,
         limit: 50 
@@ -351,8 +394,8 @@ export default function Projects() {
   const handleUploadDocumentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!selectedProjectForUpload || !documentUploadForm.name || !documentUploadForm.file) {
-      toast.error("Please fill in required fields")
+    if (!selectedProjectForUpload || !documentUploadForm.name || !documentUploadForm.file || !documentUploadForm.template_id) {
+      toast.error("Please fill in all required fields including template selection")
       return
     }
 
@@ -367,8 +410,14 @@ export default function Projects() {
           documentUploadForm.file.type === 'application/json' ||
           documentUploadForm.file.name.endsWith('.txt') ||
           documentUploadForm.file.name.endsWith('.md')) {
-        // Handle text files
-        content = await documentUploadForm.file.text()
+        // Handle text files - wrap in object as expected by backend
+        const textContent = await documentUploadForm.file.text()
+        content = {
+          text: textContent,
+          fileName: documentUploadForm.file.name,
+          fileType: documentUploadForm.file.type,
+          uploadedAt: new Date().toISOString()
+        }
       } else {
         // For binary files, create a placeholder
         content = {
@@ -383,6 +432,7 @@ export default function Projects() {
       await apiClient.createDocument(selectedProjectForUpload.id, {
         name: documentUploadForm.name,
         content: content,
+        template_id: documentUploadForm.template_id,
         status: "draft",
       })
 
@@ -392,6 +442,7 @@ export default function Projects() {
       setDocumentUploadForm({
         name: "",
         file: null,
+        template_id: "",
       })
       
       // Refresh projects to update document count
@@ -555,7 +606,7 @@ export default function Projects() {
                                 id="project-name"
                                 placeholder="Enter project name"
                                 value={newProject.name}
-                                onChange={(e) => setNewProject({...newProject, name: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, name: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                                 required
                               />
@@ -569,7 +620,7 @@ export default function Projects() {
                                 title="Priority"
                                 className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                                 value={newProject.priority}
-                                onChange={(e) => setNewProject({...newProject, priority: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewProject({...newProject, priority: e.target.value})}
                               >
                                 <option value="low">Low</option>
                                 <option value="medium">Medium</option>
@@ -912,7 +963,7 @@ export default function Projects() {
                         Upload Document
                       </DialogTitle>
                       <DialogDescription className="text-slate-600 dark:text-slate-300">
-                        Upload a document to {selectedProjectForUpload?.name}
+                        Upload a document to {selectedProjectForUpload?.name}. Select a template to ensure proper metadata tagging.
                       </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-6 py-4">
@@ -928,6 +979,33 @@ export default function Projects() {
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
+                      </div>
+                      <div>
+                        <Label htmlFor="upload-template-select" className="text-sm font-semibold">
+                          Template *
+                        </Label>
+                        <select 
+                          id="upload-template-select"
+                          title="Select a template for metadata tagging"
+                          className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
+                          value={documentUploadForm.template_id}
+                          onChange={(e) => setDocumentUploadForm({...documentUploadForm, template_id: e.target.value})}
+                          required
+                        >
+                          <option value="">Select a template (required)</option>
+                          {loadingTemplates ? (
+                            <option disabled>Loading templates...</option>
+                          ) : (
+                            templates.map((template) => (
+                              <option key={template.id} value={template.id}>
+                                {template.name} ({template.framework})
+                              </option>
+                            ))
+                          )}
+                        </select>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                          Template selection is required to ensure proper document metadata and review compliance
+                        </p>
                       </div>
                       <div>
                         <Label htmlFor="file-upload" className="text-sm font-semibold">
@@ -977,7 +1055,7 @@ export default function Projects() {
                     <Input
                       placeholder="Search projects..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                       className="pl-10 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-all duration-200 focus:shadow-lg focus:shadow-blue-500/20"
                     />
                   </motion.div>

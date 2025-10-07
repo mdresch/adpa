@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useParams, useRouter } from "next/navigation"
+import React, { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,7 @@ import {
   CheckCircle,
   AlertCircle,
   Brain
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 
 interface ModelDetails {
@@ -73,7 +74,12 @@ export default function ModelDetails() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
-  const [testResults, setTestResults] = useState<any[]>([])
+  const [testResults, setTestResults] = useState<Array<{
+    testName: string
+    status: string
+    result: any
+    timestamp: string
+  }>>([])
   const [testProgress, setTestProgress] = useState<{ [key: string]: { status: 'pending' | 'running' | 'completed' | 'failed', progress: number, result?: any } }>({})
   const [formState, setFormState] = useState<ModelFormState>({
     name: "",
@@ -363,19 +369,17 @@ export default function ModelDetails() {
       try {
         const result = await runSingleTest(testType, test.id)
         results.push({
-          testType,
-          testId: test.id,
           testName: test.name,
           status: 'completed',
-          result
+          result,
+          timestamp: new Date().toISOString()
         })
       } catch (err: any) {
         results.push({
-          testType,
-          testId: test.id,
           testName: test.name,
           status: 'failed',
-          error: err.message
+          result: { error: err.message },
+          timestamp: new Date().toISOString()
         })
       }
     }
@@ -396,19 +400,17 @@ export default function ModelDetails() {
         try {
           const result = await runSingleTest(testSuite.id, test.id)
           allResults.push({
-            testType: testSuite.id,
-            testId: test.id,
             testName: test.name,
             status: 'completed',
-            result
+            result,
+            timestamp: new Date().toISOString()
           })
         } catch (err: any) {
           allResults.push({
-            testType: testSuite.id,
-            testId: test.id,
             testName: test.name,
             status: 'failed',
-            error: err.message
+            result: { error: err.message },
+            timestamp: new Date().toISOString()
           })
         }
       }
@@ -673,7 +675,7 @@ export default function ModelDetails() {
                           <Input
                             id="name"
                             value={formState.name}
-                            onChange={(e) => setFormState(prev => ({ ...prev, name: e.target.value }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, name: e.target.value }))}
                             placeholder="Model name"
                           />
                         </div>
@@ -684,7 +686,7 @@ export default function ModelDetails() {
                             id="contextWindow"
                             type="number"
                             value={formState.contextWindow}
-                            onChange={(e) => setFormState(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 0 }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, contextWindow: parseInt(e.target.value) || 0 }))}
                             placeholder="128000"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -698,7 +700,7 @@ export default function ModelDetails() {
                             id="maxTokens"
                             type="number"
                             value={formState.maxTokens}
-                            onChange={(e) => setFormState(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 0 }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 0 }))}
                             placeholder="4096"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -717,7 +719,7 @@ export default function ModelDetails() {
                             min="0"
                             max="2"
                             value={formState.temperature}
-                            onChange={(e) => setFormState(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.7"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -734,7 +736,7 @@ export default function ModelDetails() {
                             min="0"
                             max="1"
                             value={formState.topP}
-                            onChange={(e) => setFormState(prev => ({ ...prev, topP: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, topP: parseFloat(e.target.value) || 0 }))}
                             placeholder="1.0"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -751,7 +753,7 @@ export default function ModelDetails() {
                             min="-2"
                             max="2"
                             value={formState.frequencyPenalty}
-                            onChange={(e) => setFormState(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, frequencyPenalty: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.0"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -768,7 +770,7 @@ export default function ModelDetails() {
                             min="-2"
                             max="2"
                             value={formState.presencePenalty}
-                            onChange={(e) => setFormState(prev => ({ ...prev, presencePenalty: parseFloat(e.target.value) || 0 }))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormState(prev => ({ ...prev, presencePenalty: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.0"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -782,7 +784,7 @@ export default function ModelDetails() {
                       <Switch
                         id="is_active"
                         checked={formState.is_active}
-                        onCheckedChange={(checked) => setFormState(prev => ({ ...prev, is_active: checked }))}
+                        onCheckedChange={(checked: boolean) => setFormState(prev => ({ ...prev, is_active: checked }))}
                       />
                       <Label htmlFor="is_active">Model is active</Label>
                     </div>
@@ -927,7 +929,7 @@ export default function ModelDetails() {
                                         <div>
                                           <CardTitle className="text-base">{result.testName}</CardTitle>
                                           <CardDescription>
-                                            {result.testType.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                            {(result as any).testType?.replace(/_/g, ' ')?.replace(/\b\w/g, (l: string) => l.toUpperCase()) || 'Test'}
                                           </CardDescription>
                                         </div>
                                       </div>
@@ -966,10 +968,10 @@ export default function ModelDetails() {
 
                                     {/* Model Response */}
                                     {result.result?.test?.response && (
-                                      <div>
+                                      <div className="col-span-2">
                                         <Label className="text-sm font-medium">Model Response:</Label>
-                                        <div className="mt-2 p-3 bg-muted rounded-lg">
-                                          <pre className="text-sm whitespace-pre-wrap font-mono">
+                                        <div className="mt-2 p-4 bg-muted rounded-lg max-h-96 overflow-y-auto">
+                                          <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
                                             {result.result.test.response}
                                           </pre>
                                         </div>
@@ -978,10 +980,10 @@ export default function ModelDetails() {
 
                                     {/* Test Prompt */}
                                     {result.result?.test?.prompt && (
-                                      <div>
+                                      <div className="col-span-2">
                                         <Label className="text-sm font-medium">Test Prompt:</Label>
-                                        <div className="mt-2 p-3 bg-muted rounded-lg">
-                                          <pre className="text-sm whitespace-pre-wrap font-mono">
+                                        <div className="mt-2 p-4 bg-muted rounded-lg max-h-32 overflow-y-auto">
+                                          <pre className="text-sm whitespace-pre-wrap font-mono leading-relaxed">
                                             {result.result.test.prompt || 'No prompt provided'}
                                           </pre>
                                         </div>
@@ -998,11 +1000,11 @@ export default function ModelDetails() {
                                               Test Failed
                                             </div>
                                             <div className="text-sm text-red-800 dark:text-red-200">
-                                              {result.error || result.result?.test?.error || 'Unknown error occurred'}
+                                              {(result.result as any)?.error || result.result?.test?.error || 'Unknown error occurred'}
                                             </div>
                                             <div className="text-xs text-red-700 dark:text-red-300">
                                               <strong>Troubleshooting:</strong>
-                                              {getTroubleshootingGuidance(result.testType, result.testId, result.error)}
+                                              {getTroubleshootingGuidance((result as any).testType, (result as any).testId, (result.result as any)?.error)}
                                             </div>
                                           </div>
                                         </div>
@@ -1019,9 +1021,25 @@ export default function ModelDetails() {
                                               Test Passed
                                             </div>
                                             <div className="text-sm text-green-800 dark:text-green-200">
-                                              {getSuccessMessage(result.testType, result.testId)}
+                                              {getSuccessMessage((result as any).testType, (result as any).testId)}
                                             </div>
                                           </div>
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Display available models for Model Availability test */}
+                                    {(result as any).testId === 'model_availability' && (result.result as any)?.availableModels && (result.result as any).availableModels.length > 0 && (
+                                      <div className="mt-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                                        <div className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-2">
+                                          📋 Available Models ({((result.result as any).availableModels as string[]).length})
+                                        </div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {((result.result as any).availableModels as string[]).map((model: string, idx: number) => (
+                                            <Badge key={idx} variant="outline" className="text-xs bg-white dark:bg-gray-800">
+                                              {model}
+                                            </Badge>
+                                          ))}
                                         </div>
                                       </div>
                                     )}

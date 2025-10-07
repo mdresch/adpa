@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -47,7 +47,7 @@ import {
   Server,
   Eye,
   Timer,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 
 // Mock data for analytics
 const userActivityData = [
@@ -103,8 +103,17 @@ export default function AnalyticsPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
 
-  const [timeRange, setTimeRange] = useState("7d")
-  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [timeRange, setTimeRange] = useState<"1d" | "7d" | "30d" | "90d">("7d")
+  const [analyticsData, setAnalyticsData] = useState<{
+    total_users?: number
+    active_users?: number
+    total_documents?: number
+    documents_today?: number
+    total_sessions?: number
+    avg_session_time?: string
+    system_uptime?: string
+    api_calls?: number
+  } | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchAnalytics = async () => {

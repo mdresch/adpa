@@ -1,5 +1,5 @@
-import { generateText } from 'ai';
-import { createAzure } from '@ai-sdk/azure';
+// import { generateText } from 'ai'; // Temporarily disabled
+// import { createAzure } from '@ai-sdk/azure'; // Temporarily disabled
 
 export interface AzureConfig {
   resourceName: string;
