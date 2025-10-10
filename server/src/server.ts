@@ -40,8 +40,8 @@ import contextAiRoutes from "./routes/context-ai"
 // import monteCarloProofRoutes from "./routes/monte-carlo-proof"
 // import aiProviderTestingRoutes from "./routes/ai-provider-testing"
 // import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
-// import processFlowRoutes from "./routes/process-flow"
-import aiModelsRoutes from "./routes/ai-models"
+import processFlowRoutes from "./routes/process-flow"
+// import aiModelsRoutes from "./routes/ai-models"
 // import aiAnalyticsRoutes from "./routes/ai-analytics"
 import stakeholderRoutes from "./routes/stakeholders"
 import contentStructuringRoutes from "./routes/content-structuring"
@@ -118,8 +118,8 @@ app.use("/api/context-ai", contextAiRoutes)
 // app.use("/api/monte-carlo-proof", monteCarloProofRoutes)
 // app.use("/api/ai-provider-testing", aiProviderTestingRoutes)
 // app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
-// app.use("/api/process-flow", processFlowRoutes)
-app.use("/api/ai-models", aiModelsRoutes)
+app.use("/api/process-flow", processFlowRoutes)
+// app.use("/api/ai-models", aiModelsRoutes)
 // app.use("/api/ai-analytics", aiAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
