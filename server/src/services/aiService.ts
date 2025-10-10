@@ -5,7 +5,7 @@ import { pool } from "../database/connection"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure" | "mistral"
+  type: "openai" | "google" | "azure" | "mistral" | "groq"
   apiKey: string
   configuration?: any
 }
@@ -91,6 +91,15 @@ class AIService {
         case "mistral":
           // Mistral providers are handled by the mistralConnector
           // This is just for legacy compatibility
+          break
+
+        case "groq":
+          // Groq uses OpenAI-compatible API
+          this.providers.set(provider.name, new OpenAI({
+            apiKey: provider.apiKey,
+            baseURL: provider.configuration?.baseURL || "https://api.groq.com/openai/v1",
+            ...provider.configuration,
+          }))
           break
 
         default:

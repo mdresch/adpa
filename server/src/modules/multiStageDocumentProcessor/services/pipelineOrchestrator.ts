@@ -429,15 +429,9 @@ export class PipelineOrchestrator {
   }
 
   private async executeTemplateProcessingStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual TemplateProcessingStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { template: 'processed' },
-      quality_score: 0.85,
-      processing_time: 1500,
-      metadata: { stage: 'template_processing' }
-    }
+    const { TemplateProcessingStage } = await import('../stages/templateProcessingStage')
+    const stage = new TemplateProcessingStage()
+    return await stage.execute(input)
   }
 
   private async executeAIGenerationStage(input: StageInput): Promise<StageOutput> {

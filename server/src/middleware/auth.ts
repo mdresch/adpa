@@ -75,6 +75,11 @@ export const requirePermission = (permission: string) => {
       return res.status(401).json({ error: "Authentication required" })
     }
 
+    // Admins have all permissions
+    if (req.user.role === 'admin') {
+      return next()
+    }
+
     const userPermissions = req.user.permissions || {}
     if (!userPermissions[permission]) {
       return res.status(403).json({ error: `Permission '${permission}' required` })

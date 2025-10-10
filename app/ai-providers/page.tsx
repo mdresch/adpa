@@ -649,6 +649,7 @@ export default function AIProviders() {
                           <SelectContent>
                             <SelectItem value="openai">OpenAI</SelectItem>
                             <SelectItem value="google">Google AI</SelectItem>
+                            <SelectItem value="groq">Groq AI (FREE & Fast)</SelectItem>
                             <SelectItem value="azure">Azure AI Foundry</SelectItem>
                             <SelectItem value="mistral">Mistral AI</SelectItem>
                             <SelectItem value="ollama">Ollama</SelectItem>
