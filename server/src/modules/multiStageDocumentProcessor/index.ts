@@ -24,6 +24,10 @@ export type { FormatConversionOptions, ConversionResult } from './engines/multiF
 export { MultiModelAIGenerationService } from '../../services/multiModelAIGenerationService'
 export { DocumentRefinementEngine } from '../../services/documentRefinementEngine'
 
+// Context Injection Services
+export { ContextInjectionEngine } from '../../services/contextInjectionEngine'
+export { PersonalizationEngine } from '../../services/personalizationEngine'
+
 export type {
   // Main service types
   MultiStageDocumentProcessor as IMultiStageDocumentProcessor,
