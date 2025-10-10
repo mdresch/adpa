@@ -16,6 +16,10 @@ export { ContextInjectionStage } from './stages/contextInjectionStage'
 export { QualityAssuranceStage } from './stages/qualityAssuranceStage'
 export { OutputFormattingStage } from './stages/outputFormattingStage'
 
+// Format conversion engines
+export { MultiFormatOutputEngine } from './engines/multiFormatOutputEngine'
+export type { FormatConversionOptions, ConversionResult } from './engines/multiFormatOutputEngine'
+
 // AI Generation Services
 export { MultiModelAIGenerationService } from '../../services/multiModelAIGenerationService'
 export { DocumentRefinementEngine } from '../../services/documentRefinementEngine'
@@ -34,6 +38,10 @@ export type {
   ContextInjectionStage as IContextInjectionStage,
   QualityAssuranceStage as IQualityAssuranceStage,
   OutputFormattingStage as IOutputFormattingStage,
+
+  // Format conversion types
+  FormatConversionOptions,
+  ConversionResult,
 
   // Main processing types
   DocumentProcessingRequest,
