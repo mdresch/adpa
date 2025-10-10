@@ -174,7 +174,23 @@ export default function Projects() {
     e.preventDefault()
     
     if (!newProject.name || !newProject.framework) {
-      toast.error("Please fill in required fields")
+      toast.error("Please fill in required fields (Name and Framework)")
+      return
+    }
+
+    // Validate dates if provided
+    if (newProject.start_date && newProject.end_date) {
+      const startDate = new Date(newProject.start_date)
+      const endDate = new Date(newProject.end_date)
+      if (endDate <= startDate) {
+        toast.error("End date must be after start date")
+        return
+      }
+    }
+
+    // Validate budget if provided
+    if (newProject.budget && isNaN(parseFloat(newProject.budget))) {
+      toast.error("Please enter a valid budget amount")
       return
     }
 
@@ -202,7 +218,7 @@ export default function Projects() {
       fetchProjects() // Refresh the list
     } catch (error) {
       console.error("Failed to create project:", error)
-      toast.error("Failed to create project")
+      toast.error("Failed to create project. Please try again.")
     } finally {
       setCreating(false)
     }
@@ -213,7 +229,23 @@ export default function Projects() {
     e.preventDefault()
     
     if (!editingProject?.name || !editingProject?.framework) {
-      toast.error("Please fill in required fields")
+      toast.error("Please fill in required fields (Name and Framework)")
+      return
+    }
+
+    // Validate dates if provided
+    if (editingProject.start_date && editingProject.end_date) {
+      const startDate = new Date(editingProject.start_date)
+      const endDate = new Date(editingProject.end_date)
+      if (endDate <= startDate) {
+        toast.error("End date must be after start date")
+        return
+      }
+    }
+
+    // Validate budget if provided
+    if (editingProject.budget && isNaN(parseFloat(editingProject.budget.toString()))) {
+      toast.error("Please enter a valid budget amount")
       return
     }
 
@@ -231,7 +263,7 @@ export default function Projects() {
       fetchProjects() // Refresh the list
     } catch (error) {
       console.error("Failed to update project:", error)
-      toast.error("Failed to update project")
+      toast.error("Failed to update project. Please try again.")
     } finally {
       setUpdating(false)
     }
@@ -245,8 +277,14 @@ export default function Projects() {
         if (!d) return ""
         const dt = new Date(d)
         if (isNaN(dt.getTime())) return ""
-        return dt.toISOString().slice(0, 10)
+        
+        // Ensure we get the date in local timezone for the input
+        const year = dt.getFullYear()
+        const month = String(dt.getMonth() + 1).padStart(2, '0')
+        const day = String(dt.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
       } catch (e) {
+        console.warn("Error formatting date:", d, e)
         return ""
       }
     }

@@ -565,10 +565,22 @@ export default function ProjectDetail() {
     if (!project) return
     
     // Format dates for input fields (YYYY-MM-DD)
-    const formatDateForInput = (dateString?: string) => {
+    const formatDateForInput = (dateString?: string | null) => {
       if (!dateString) return ""
-      const date = new Date(dateString)
-      return date.toISOString().split('T')[0]
+      try {
+        // Handle different date formats that might come from the database
+        const date = new Date(dateString)
+        if (isNaN(date.getTime())) return ""
+        
+        // Ensure we get the date in local timezone for the input
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      } catch (error) {
+        console.warn("Error formatting date:", dateString, error)
+        return ""
+      }
     }
     
     // Extract manager from team_members (assuming first member is manager)
@@ -596,7 +608,23 @@ export default function ProjectDetail() {
     e.preventDefault()
     
     if (!editForm.name || !editForm.framework) {
-      toast.error("Please fill in required fields")
+      toast.error("Please fill in required fields (Name and Framework)")
+      return
+    }
+
+    // Validate dates if provided
+    if (editForm.start_date && editForm.end_date) {
+      const startDate = new Date(editForm.start_date)
+      const endDate = new Date(editForm.end_date)
+      if (endDate <= startDate) {
+        toast.error("End date must be after start date")
+        return
+      }
+    }
+
+    // Validate budget if provided
+    if (editForm.budget && isNaN(parseFloat(editForm.budget))) {
+      toast.error("Please enter a valid budget amount")
       return
     }
 
@@ -628,7 +656,7 @@ export default function ProjectDetail() {
       await fetchProject()
     } catch (error) {
       console.error("Failed to update project:", error)
-      toast.error("Failed to update project")
+      toast.error("Failed to update project. Please try again.")
     } finally {
       setUpdating(false)
     }
@@ -638,19 +666,28 @@ export default function ProjectDetail() {
   const handleAddTeamMember = () => {
     const memberName = prompt("Enter team member name:")
     if (memberName && memberName.trim()) {
+      const trimmedName = memberName.trim()
+      // Check if member already exists
+      if (editForm.team_members.includes(trimmedName)) {
+        toast.error("Team member already exists")
+        return
+      }
       setEditForm(prev => ({
         ...prev,
-        team_members: [...prev.team_members, memberName.trim()]
+        team_members: [...prev.team_members, trimmedName]
       }))
+      toast.success("Team member added successfully")
     }
   }
 
   // Remove team member
   const handleRemoveTeamMember = (index: number) => {
+    const memberName = editForm.team_members[index]
     setEditForm(prev => ({
       ...prev,
       team_members: prev.team_members.filter((_, i) => i !== index)
     }))
+    toast.success(`Removed ${memberName} from team`)
   }
 
   // Handle opening new stakeholder dialog
