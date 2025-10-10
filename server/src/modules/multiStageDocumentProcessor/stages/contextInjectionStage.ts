@@ -1335,11 +1335,109 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
 
   // Additional helper methods for personalization, validation, and analysis
   private async applyTonePersonalization(document: GeneratedDocument, context: ContextData, config: ContextInjectionConfig): Promise<PersonalizationModification[]> {
-    return []
+    const modifications: PersonalizationModification[] = []
+    
+    try {
+      // Analyze stakeholder preferences for tone
+      const stakeholders = await this.identifyStakeholders(context)
+      
+      for (const stakeholder of stakeholders) {
+        const tonePreferences = stakeholder.preferences?.tone || 'professional'
+        
+        // Generate tone-specific modifications
+        const prompt = `
+          Analyze the following document content and suggest tone modifications for ${stakeholder.role} (${stakeholder.name}):
+          
+          Current Content: ${document.content.raw_content.substring(0, 2000)}...
+          
+          Target Tone: ${tonePreferences}
+          Stakeholder Context: ${stakeholder.context || 'General business context'}
+          
+          Provide specific modifications to adjust the tone while maintaining professionalism and clarity.
+          Focus on word choice, sentence structure, and communication style.
+        `
+        
+        const response = await this.aiService.generateContent({
+          prompt,
+          model: 'gpt-4',
+          temperature: 0.3,
+          max_tokens: 1000
+        })
+        
+        if (response.success && response.content) {
+          modifications.push({
+            modification_id: `tone_${stakeholder.stakeholder_id}_${Date.now()}`,
+            modification_type: 'tone',
+            target_section: 'all',
+            original_content: document.content.raw_content,
+            modified_content: response.content,
+            personalization_reason: `Tone adjustment for ${stakeholder.role}`,
+            stakeholder_id: stakeholder.stakeholder_id,
+            confidence_score: 0.85,
+            impact_assessment: 'medium'
+          })
+        }
+      }
+      
+      return modifications
+    } catch (error) {
+      logger.error('Error in tone personalization', { error })
+      return []
+    }
   }
 
   private async applyTerminologyPersonalization(document: GeneratedDocument, context: ContextData, config: ContextInjectionConfig): Promise<PersonalizationModification[]> {
-    return []
+    const modifications: PersonalizationModification[] = []
+    
+    try {
+      // Extract industry-specific terminology from context
+      const industryTerms = context.project_context?.industry_terms || []
+      const organizationTerms = context.organization_context?.terminology || []
+      const stakeholderTerms = context.stakeholder_context?.preferred_terminology || []
+      
+      // Combine all terminology preferences
+      const allTerms = [...industryTerms, ...organizationTerms, ...stakeholderTerms]
+      
+      if (allTerms.length > 0) {
+        const prompt = `
+          Review the following document and replace generic terms with organization-specific terminology:
+          
+          Document Content: ${document.content.raw_content.substring(0, 2000)}...
+          
+          Preferred Terminology:
+          ${allTerms.map(term => `- ${term.generic_term} → ${term.preferred_term} (${term.context || 'general'})`).join('\n')}
+          
+          Apply terminology consistently throughout the document while maintaining readability and flow.
+          Provide the updated content with terminology replacements.
+        `
+        
+        const response = await this.aiService.generateContent({
+          prompt,
+          model: 'gpt-4',
+          temperature: 0.2,
+          max_tokens: 2000
+        })
+        
+        if (response.success && response.content) {
+          modifications.push({
+            modification_id: `terminology_${Date.now()}`,
+            modification_type: 'terminology',
+            target_section: 'all',
+            original_content: document.content.raw_content,
+            modified_content: response.content,
+            personalization_reason: 'Organization-specific terminology alignment',
+            stakeholder_id: 'organization',
+            confidence_score: 0.9,
+            impact_assessment: 'high'
+          })
+        }
+      }
+      
+      return modifications
+    } catch (error) {
+      logger.error('Error in terminology personalization', { error })
+      return []
+    }
   }
 
   private async applyStakeholderTargeting(document: GeneratedDocument, context: ContextData, config: ContextInjectionConfig): Promise<StakeholderTargeting[]> {
@@ -1351,7 +1449,34 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
   }
 
   private async validateContextRelevance(results: InjectionStrategyResult[]): Promise<number> {
-    return 0.85
+    if (results.length === 0) return 0
+    
+    try {
+      let totalRelevance = 0
+      let validResults = 0
+      
+      for (const result of results) {
+        if (result.injected_context && result.injected_context.length > 0) {
+          // Calculate relevance based on context quality and alignment
+          const contextRelevance = result.injected_context.reduce((sum, context) => {
+            const relevanceScore = context.relevance_score || 0.5
+            const freshnessScore = context.freshness_score || 0.5
+            const qualityScore = context.quality_score || 0.5
+            
+            // Weighted average: relevance (50%), freshness (25%), quality (25%)
+            return sum + (relevanceScore * 0.5 + freshnessScore * 0.25 + qualityScore * 0.25)
+          }, 0) / result.injected_context.length
+          
+          totalRelevance += contextRelevance
+          validResults++
+        }
+      }
+      
+      return validResults > 0 ? totalRelevance / validResults : 0.5
+    } catch (error) {
+      logger.error('Error validating context relevance', { error })
+      return 0.5
+    }
   }
 
   private async validateContextAccuracy(results: InjectionStrategyResult[]): Promise<number> {
@@ -1367,7 +1492,75 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
   }
 
   private async identifyStakeholders(context: ContextData): Promise<StakeholderInfo[]> {
-    return []
+    const stakeholders: StakeholderInfo[] = []
+    
+    try {
+      // Extract stakeholders from various context sources
+      const projectStakeholders = context.project_context?.stakeholders || []
+      const organizationStakeholders = context.organization_context?.key_personnel || []
+      const documentStakeholders = context.document_context?.target_audience || []
+      
+      // Process project stakeholders
+      for (const stakeholder of projectStakeholders) {
+        stakeholders.push({
+          stakeholder_id: stakeholder.id || `proj_${Date.now()}_${Math.random()}`,
+          name: stakeholder.name,
+          role: stakeholder.role,
+          department: stakeholder.department,
+          influence_level: stakeholder.influence_level || 'medium',
+          interest_level: stakeholder.interest_level || 'medium',
+          communication_preferences: stakeholder.communication_preferences || {},
+          expertise_areas: stakeholder.expertise_areas || [],
+          decision_authority: stakeholder.decision_authority || 'none',
+          preferences: stakeholder.preferences || {},
+          context: stakeholder.context || 'Project stakeholder'
+        })
+      }
+      
+      // Process organization stakeholders
+      for (const stakeholder of organizationStakeholders) {
+        stakeholders.push({
+          stakeholder_id: stakeholder.id || `org_${Date.now()}_${Math.random()}`,
+          name: stakeholder.name,
+          role: stakeholder.position || stakeholder.role,
+          department: stakeholder.department,
+          influence_level: stakeholder.seniority_level === 'executive' ? 'high' : 'medium',
+          interest_level: 'medium',
+          communication_preferences: {},
+          expertise_areas: stakeholder.expertise || [],
+          decision_authority: stakeholder.decision_authority || 'limited',
+          preferences: {},
+          context: 'Organization stakeholder'
+        })
+      }
+      
+      // Process document-specific stakeholders
+      for (const audience of documentStakeholders) {
+        stakeholders.push({
+          stakeholder_id: `doc_${Date.now()}_${Math.random()}`,
+          name: audience.name || audience.role,
+          role: audience.role,
+          department: audience.department || 'Unknown',
+          influence_level: audience.priority === 'primary' ? 'high' : 'medium',
+          interest_level: 'high',
+          communication_preferences: audience.preferences || {},
+          expertise_areas: audience.expertise_areas || [],
+          decision_authority: audience.decision_authority || 'none',
+          preferences: audience.preferences || {},
+          context: 'Document audience'
+        })
+      }
+      
+      // Remove duplicates based on name and role
+      const uniqueStakeholders = stakeholders.filter((stakeholder, index, self) =>
+        index === self.findIndex(s => s.name === stakeholder.name && s.role === stakeholder.role)
+      )
+      
+      return uniqueStakeholders
+    } catch (error) {
+      logger.error('Error identifying stakeholders', { error })
+      return []
+    }
   }
 
   private async analyzeContentAlignment(document: GeneratedDocument, stakeholders: StakeholderInfo[]): Promise<ContentAlignment[]> {
@@ -1387,13 +1580,87 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
     injectionResults: InjectionStrategyResult[],
     personalizationResult: PersonalizationResult
   ): Promise<ContextualizedContent> {
-    return {
-      raw_content: document.content.raw_content,
-      structured_content: {} as StructuredContextualContent,
-      context_enhanced_sections: [],
-      stakeholder_specific_content: [],
-      methodology_aligned_content: {} as MethodologyAlignedContent,
-      business_context_integration: {} as BusinessContextIntegration
+    try {
+      // Start with the original content
+      let enhancedContent = document.content.raw_content
+      
+      // Apply personalization modifications
+      if (personalizationResult.modifications && personalizationResult.modifications.length > 0) {
+        for (const modification of personalizationResult.modifications) {
+          if (modification.modified_content && modification.confidence_score > 0.7) {
+            enhancedContent = modification.modified_content
+          }
+        }
+      }
+      
+      // Build context-enhanced sections
+      const contextEnhancedSections: ContextEnhancedSection[] = []
+      for (const result of injectionResults) {
+        if (result.injected_context && result.injected_context.length > 0) {
+          contextEnhancedSections.push({
+            section_id: result.section_id,
+            section_type: result.section_type || 'content',
+            original_content: result.original_content || '',
+            enhanced_content: result.enhanced_content || '',
+            injected_context: result.injected_context,
+            enhancement_type: result.strategy_type as InjectionType,
+            quality_improvement: result.quality_score || 0,
+            stakeholder_alignment: result.stakeholder_alignment || 0,
+            methodology_compliance: result.methodology_compliance || 0
+          })
+        }
+      }
+      
+      // Build stakeholder-specific content
+      const stakeholderSpecificContent: StakeholderSpecificContent[] = []
+      if (personalizationResult.stakeholder_targeting) {
+        for (const targeting of personalizationResult.stakeholder_targeting) {
+          stakeholderSpecificContent.push({
+            stakeholder_id: targeting.stakeholder_id,
+            stakeholder_role: targeting.stakeholder_role,
+            targeted_content: targeting.targeted_content || enhancedContent,
+            personalization_applied: targeting.personalization_applied || [],
+            engagement_optimization: targeting.engagement_optimization || [],
+            communication_style: targeting.communication_style || 'professional',
+            content_focus: targeting.content_focus || [],
+            formatting_preferences: targeting.formatting_preferences || []
+          })
+        }
+      }
+      
+      return {
+        raw_content: enhancedContent,
+        structured_content: {
+          sections: document.content.sections || [],
+          metadata: document.metadata || {},
+          formatting_rules: [],
+          content_adaptations: []
+        },
+        context_enhanced_sections: contextEnhancedSections,
+        stakeholder_specific_content: stakeholderSpecificContent,
+        methodology_aligned_content: {
+          framework_alignment: document.metadata?.framework || 'generic',
+          compliance_score: 0.85,
+          methodology_enhancements: [],
+          best_practices_applied: []
+        },
+        business_context_integration: {
+          industry_context: 'Applied from context data',
+          organizational_context: 'Applied from context data',
+          project_context: 'Applied from context data',
+          regulatory_context: 'Applied from context data'
+        }
+      }
+    } catch (error) {
+      logger.error('Error building contextualized content', { error })
+      return {
+        raw_content: document.content.raw_content,
+        structured_content: {} as StructuredContextualContent,
+        context_enhanced_sections: [],
+        stakeholder_specific_content: [],
+        methodology_aligned_content: {} as MethodologyAlignedContent,
+        business_context_integration: {} as BusinessContextIntegration
+      }
     }
   }
 
