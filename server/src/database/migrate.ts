@@ -163,6 +163,54 @@ async function runMigrations() {
       logger.warn("Stakeholders migration failed (may already be applied):", error)
     }
 
+    // Run template AI enhancements migration
+    try {
+      const aiEnhancementsMigrationPath = join(__dirname, "..", "..", "migrations", "add_template_ai_enhancements.sql")
+      const aiEnhancementsMigration = readFileSync(aiEnhancementsMigrationPath, "utf-8")
+
+      const aiEnhancementsMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_template_ai_enhancements"]
+      )
+
+      if (aiEnhancementsMigrationCheck.rows.length === 0) {
+        await pool.query(aiEnhancementsMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_template_ai_enhancements"]
+        )
+        logger.info("Template AI enhancements migration completed")
+      } else {
+        logger.info("Template AI enhancements migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Template AI enhancements migration failed (may already be applied):", error)
+    }
+
+    // Run template paragraphs migration
+    try {
+      const templateParagraphsMigrationPath = join(__dirname, "..", "..", "migrations", "add_template_paragraphs.sql")
+      const templateParagraphsMigration = readFileSync(templateParagraphsMigrationPath, "utf-8")
+
+      const templateParagraphsMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_template_paragraphs"]
+      )
+
+      if (templateParagraphsMigrationCheck.rows.length === 0) {
+        await pool.query(templateParagraphsMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_template_paragraphs"]
+        )
+        logger.info("Template paragraphs migration completed")
+      } else {
+        logger.info("Template paragraphs migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Template paragraphs migration failed (may already be applied):", error)
+    }
+
     logger.info("Database migrations completed successfully")
   } catch (error) {
     logger.error("Migration failed:", error)

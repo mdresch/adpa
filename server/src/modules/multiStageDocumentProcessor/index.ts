@@ -16,6 +16,10 @@ export { ContextInjectionStage } from './stages/contextInjectionStage'
 export { QualityAssuranceStage } from './stages/qualityAssuranceStage'
 export { OutputFormattingStage } from './stages/outputFormattingStage'
 
+// AI Generation Services
+export { MultiModelAIGenerationService } from '../../services/multiModelAIGenerationService'
+export { DocumentRefinementEngine } from '../../services/documentRefinementEngine'
+
 export type {
   // Main service types
   MultiStageDocumentProcessor as IMultiStageDocumentProcessor,
