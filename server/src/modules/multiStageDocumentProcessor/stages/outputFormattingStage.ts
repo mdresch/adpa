@@ -4,9 +4,16 @@
  */
 
 import { logger } from '../../../utils/logger'
+import { MultiFormatOutputEngine, FormatConversionOptions } from '../engines/multiFormatOutputEngine'
 import type { StageInput, StageOutput } from '../types'
 
 export class OutputFormattingStage {
+  private formatEngine: MultiFormatOutputEngine
+
+  constructor() {
+    this.formatEngine = MultiFormatOutputEngine.getInstance()
+  }
+
   async execute(input: StageInput): Promise<StageOutput> {
     try {
       logger.info('Executing output formatting stage', {
@@ -18,7 +25,11 @@ export class OutputFormattingStage {
 
       // Extract input data
       const { quality_assessed_document } = input.input_data
-      const { output_config } = input.context
+      const output_config = (input.context as any)?.output_config || {
+        primary_format: 'markdown',
+        secondary_formats: [],
+        include_metadata: false
+      }
 
       // Generate primary format
       const primaryFormat = await this.generatePrimaryFormat(quality_assessed_document, output_config)
@@ -86,24 +97,29 @@ export class OutputFormattingStage {
   }
 
   private async generatePrimaryFormat(qualityAssessedDocument: any, outputConfig: any): Promise<any> {
-    // Generate primary format
-    const primaryFormat = outputConfig.primary_format
+    // Extract markdown content from the document
+    const markdownContent = this.extractMarkdownContent(qualityAssessedDocument)
+    
+    // Prepare conversion options
+    const conversionOptions: FormatConversionOptions = {
+      includeMetadata: outputConfig.include_metadata || false,
+      styling: outputConfig.styling || {},
+      pageSettings: outputConfig.page_settings || {}
+    }
 
-    switch (primaryFormat) {
-      case 'pdf':
-        return await this.generatePDF(qualityAssessedDocument)
-      case 'docx':
-        return await this.generateDOCX(qualityAssessedDocument)
-      case 'markdown':
-        return await this.generateMarkdown(qualityAssessedDocument)
-      case 'html':
-        return await this.generateHTML(qualityAssessedDocument)
-      case 'json':
-        return await this.generateJSON(qualityAssessedDocument)
-      case 'xml':
-        return await this.generateXML(qualityAssessedDocument)
-      default:
-        throw new Error(`Unsupported primary format: ${primaryFormat}`)
+    // Generate primary format using the engine
+    const result = await this.formatEngine.convertFromMarkdown(
+      markdownContent,
+      outputConfig.primary_format,
+      conversionOptions
+    )
+
+    return {
+      format: outputConfig.primary_format,
+      content: result.content,
+      metadata: result.metadata,
+      size: result.metadata.size,
+      generated_at: result.metadata.generatedAt
     }
   }
 
@@ -128,248 +144,39 @@ export class OutputFormattingStage {
   }
 
   private async generateSecondaryFormat(qualityAssessedDocument: any, format: string, primaryFormat: any): Promise<any> {
-    // Generate secondary format
-    switch (format) {
-      case 'pdf':
-        return await this.generatePDF(qualityAssessedDocument)
-      case 'docx':
-        return await this.generateDOCX(qualityAssessedDocument)
-      case 'markdown':
-        return await this.generateMarkdown(qualityAssessedDocument)
-      case 'html':
-        return await this.generateHTML(qualityAssessedDocument)
-      case 'json':
-        return await this.generateJSON(qualityAssessedDocument)
-      case 'xml':
-        return await this.generateXML(qualityAssessedDocument)
-      default:
-        throw new Error(`Unsupported secondary format: ${format}`)
-    }
-  }
-
-  private async generatePDF(qualityAssessedDocument: any): Promise<any> {
-    // Generate PDF format
-    const pdfContent = await this.convertToPDF(qualityAssessedDocument)
+    // Extract markdown content from the document
+    const markdownContent = this.extractMarkdownContent(qualityAssessedDocument)
     
+    // Use same conversion options as primary format
+    const conversionOptions: FormatConversionOptions = {
+      includeMetadata: false, // Secondary formats typically don't include metadata
+      styling: primaryFormat.metadata?.styling || {},
+      pageSettings: primaryFormat.metadata?.pageSettings || {}
+    }
+
+    // Generate secondary format using the engine
+    const result = await this.formatEngine.convertFromMarkdown(
+      markdownContent,
+      format,
+      conversionOptions
+    )
+
     return {
-      format: 'pdf',
-      content: pdfContent,
-      metadata: {
-        size: pdfContent.length,
-        pages: this.calculatePageCount(qualityAssessedDocument),
-        generated_at: new Date(),
-        generator: 'pdf-generator'
-      },
-      size: pdfContent.length,
-      generated_at: new Date()
+      format: format,
+      content: result.content,
+      metadata: result.metadata,
+      size: result.metadata.size,
+      generated_at: result.metadata.generatedAt
     }
   }
 
-  private async generateDOCX(qualityAssessedDocument: any): Promise<any> {
-    // Generate DOCX format
-    const docxContent = await this.convertToDOCX(qualityAssessedDocument)
-    
-    return {
-      format: 'docx',
-      content: docxContent,
-      metadata: {
-        size: docxContent.length,
-        pages: this.calculatePageCount(qualityAssessedDocument),
-        generated_at: new Date(),
-        generator: 'docx-generator'
-      },
-      size: docxContent.length,
-      generated_at: new Date()
-    }
-  }
-
-  private async generateMarkdown(qualityAssessedDocument: any): Promise<any> {
-    // Generate Markdown format
-    const markdownContent = await this.convertToMarkdown(qualityAssessedDocument)
-    
-    return {
-      format: 'markdown',
-      content: markdownContent,
-      metadata: {
-        size: markdownContent.length,
-        lines: markdownContent.split('\n').length,
-        generated_at: new Date(),
-        generator: 'markdown-generator'
-      },
-      size: markdownContent.length,
-      generated_at: new Date()
-    }
-  }
-
-  private async generateHTML(qualityAssessedDocument: any): Promise<any> {
-    // Generate HTML format
-    const htmlContent = await this.convertToHTML(qualityAssessedDocument)
-    
-    return {
-      format: 'html',
-      content: htmlContent,
-      metadata: {
-        size: htmlContent.length,
-        generated_at: new Date(),
-        generator: 'html-generator'
-      },
-      size: htmlContent.length,
-      generated_at: new Date()
-    }
-  }
-
-  private async generateJSON(qualityAssessedDocument: any): Promise<any> {
-    // Generate JSON format
-    const jsonContent = JSON.stringify(qualityAssessedDocument, null, 2)
-    
-    return {
-      format: 'json',
-      content: jsonContent,
-      metadata: {
-        size: jsonContent.length,
-        generated_at: new Date(),
-        generator: 'json-generator'
-      },
-      size: jsonContent.length,
-      generated_at: new Date()
-    }
-  }
-
-  private async generateXML(qualityAssessedDocument: any): Promise<any> {
-    // Generate XML format
-    const xmlContent = await this.convertToXML(qualityAssessedDocument)
-    
-    return {
-      format: 'xml',
-      content: xmlContent,
-      metadata: {
-        size: xmlContent.length,
-        generated_at: new Date(),
-        generator: 'xml-generator'
-      },
-      size: xmlContent.length,
-      generated_at: new Date()
-    }
-  }
-
-  private async convertToPDF(qualityAssessedDocument: any): Promise<Buffer> {
-    // Convert document to PDF format
-    // This would integrate with PDF generation library
-    const pdfContent = `PDF content for document ${qualityAssessedDocument.document_id}`
-    return Buffer.from(pdfContent)
-  }
-
-  private async convertToDOCX(qualityAssessedDocument: any): Promise<Buffer> {
-    // Convert document to DOCX format
-    // This would integrate with DOCX generation library
-    const docxContent = `DOCX content for document ${qualityAssessedDocument.document_id}`
-    return Buffer.from(docxContent)
-  }
-
-  private async convertToMarkdown(qualityAssessedDocument: any): Promise<string> {
-    // Convert document to Markdown format
-    let markdownContent = `# ${qualityAssessedDocument.document_id}\n\n`
-
-    if (qualityAssessedDocument.personalized_sections) {
-      for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.personalized_sections)) {
-        markdownContent += `## ${sectionKey}\n\n`
-        
-        if (sectionData.personalized_content) {
-          if (typeof sectionData.personalized_content === 'string') {
-            markdownContent += `${sectionData.personalized_content}\n\n`
-          } else if (sectionData.personalized_content.contextualized_content) {
-            markdownContent += `${sectionData.personalized_content.contextualized_content}\n\n`
-          }
-        }
-      }
-    }
-
-    return markdownContent
-  }
-
-  private async convertToHTML(qualityAssessedDocument: any): Promise<string> {
-    // Convert document to HTML format
-    let htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-    <title>${qualityAssessedDocument.document_id}</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        h1 { color: #333; }
-        h2 { color: #666; }
-        p { line-height: 1.6; }
-    </style>
-</head>
-<body>
-    <h1>${qualityAssessedDocument.document_id}</h1>
-`
-
-    if (qualityAssessedDocument.personalized_sections) {
-      for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.personalized_sections)) {
-        htmlContent += `    <h2>${sectionKey}</h2>\n`
-        
-        if (sectionData.personalized_content) {
-          if (typeof sectionData.personalized_content === 'string') {
-            htmlContent += `    <p>${sectionData.personalized_content}</p>\n`
-          } else if (sectionData.personalized_content.contextualized_content) {
-            htmlContent += `    <p>${sectionData.personalized_content.contextualized_content}</p>\n`
-          }
-        }
-      }
-    }
-
-    htmlContent += `
-</body>
-</html>
-`
-
-    return htmlContent
-  }
-
-  private async convertToXML(qualityAssessedDocument: any): Promise<string> {
-    // Convert document to XML format
-    let xmlContent = `<?xml version="1.0" encoding="UTF-8"?>\n<document id="${qualityAssessedDocument.document_id}">\n`
-
-    if (qualityAssessedDocument.personalized_sections) {
-      for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.personalized_sections)) {
-        xmlContent += `  <section name="${sectionKey}">\n`
-        
-        if (sectionData.personalized_content) {
-          if (typeof sectionData.personalized_content === 'string') {
-            xmlContent += `    <content><![CDATA[${sectionData.personalized_content}]]></content>\n`
-          } else if (sectionData.personalized_content.contextualized_content) {
-            xmlContent += `    <content><![CDATA[${sectionData.personalized_content.contextualized_content}]]></content>\n`
-          }
-        }
-        
-        xmlContent += `  </section>\n`
-      }
-    }
-
-    xmlContent += `</document>`
-
-    return xmlContent
-  }
 
   private calculatePageCount(qualityAssessedDocument: any): number {
-    // Calculate estimated page count
-    let totalContentLength = 0
-
-    if (qualityAssessedDocument.personalized_sections) {
-      for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.personalized_sections)) {
-        if (sectionData.personalized_content) {
-          if (typeof sectionData.personalized_content === 'string') {
-            totalContentLength += sectionData.personalized_content.length
-          } else if (sectionData.personalized_content.contextualized_content) {
-            totalContentLength += sectionData.personalized_content.contextualized_content.length
-          }
-        }
-      }
-    }
-
-    // Estimate pages based on content length (approximately 2000 characters per page)
-    return Math.max(1, Math.ceil(totalContentLength / 2000))
+    // Extract markdown content and estimate page count
+    const markdownContent = this.extractMarkdownContent(qualityAssessedDocument)
+    const wordsPerPage = 250
+    const wordCount = markdownContent.trim().split(/\s+/).filter(word => word.length > 0).length
+    return Math.max(1, Math.ceil(wordCount / wordsPerPage))
   }
 
   private async generateDocumentMetadata(qualityAssessedDocument: any, primaryFormat: any, secondaryFormats: Record<string, any>): Promise<any> {
@@ -455,6 +262,62 @@ export class OutputFormattingStage {
     }
 
     return deliveryOptions
+  }
+
+  /**
+   * Extract markdown content from the quality assessed document
+   */
+  private extractMarkdownContent(qualityAssessedDocument: any): string {
+    let markdownContent = ''
+
+    // Check if document already has markdown content
+    if (qualityAssessedDocument.markdown_content) {
+      return qualityAssessedDocument.markdown_content
+    }
+
+    // Extract from personalized sections
+    if (qualityAssessedDocument.personalized_sections) {
+      for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.personalized_sections)) {
+        markdownContent += `## ${sectionKey}\n\n`
+        
+        if ((sectionData as any).personalized_content) {
+          const personalizedContent = (sectionData as any).personalized_content
+          if (typeof personalizedContent === 'string') {
+            markdownContent += `${personalizedContent}\n\n`
+          } else if (personalizedContent.contextualized_content) {
+            markdownContent += `${personalizedContent.contextualized_content}\n\n`
+          }
+        }
+      }
+    }
+
+    // Extract from content sections if available
+    if (qualityAssessedDocument.content_sections) {
+      for (const section of qualityAssessedDocument.content_sections) {
+        if (section.title) {
+          markdownContent += `## ${section.title}\n\n`
+        }
+        if (section.content) {
+          markdownContent += `${section.content}\n\n`
+        }
+      }
+    }
+
+    // Extract from raw content if available
+    if (qualityAssessedDocument.content && typeof qualityAssessedDocument.content === 'string') {
+      markdownContent += qualityAssessedDocument.content
+    }
+
+    // If no content found, create a basic document
+    if (!markdownContent.trim()) {
+      markdownContent = `# ${qualityAssessedDocument.document_id || 'Document'}\n\n`
+      markdownContent += `*This document was generated but contains no content.*\n\n`
+      markdownContent += `**Document ID:** ${qualityAssessedDocument.document_id || 'Unknown'}\n`
+      markdownContent += `**Template ID:** ${qualityAssessedDocument.template_id || 'Unknown'}\n`
+      markdownContent += `**Generated:** ${new Date().toISOString()}\n`
+    }
+
+    return markdownContent.trim()
   }
 
   private async calculateFormattingQuality(primaryFormat: any, secondaryFormats: Record<string, any>, documentMetadata: any): Promise<number> {
@@ -635,6 +498,18 @@ export class OutputFormattingStage {
     // Assess delivery options quality
     // This would assess the quality of delivery options
     return 0.9
+  }
+
+  /**
+   * Cleanup resources used by the stage
+   */
+  async cleanup(): Promise<void> {
+    try {
+      await this.formatEngine.cleanup()
+      logger.info('OutputFormattingStage cleanup completed')
+    } catch (error) {
+      logger.error('OutputFormattingStage cleanup failed', { error: error.message })
+    }
   }
 }
 

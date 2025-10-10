@@ -33,6 +33,7 @@ import templateRoutes from "./routes/templates"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
 import adobePdfRoutes from "./routes/adobe-pdf"
+import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
 // import ecsAiRoutes from "./routes/ecs-ai"
 // import quantumStabilityRoutes from "./routes/quantum-stability"
@@ -111,6 +112,7 @@ app.use("/api/templates", templateRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
 app.use("/api/adobe-pdf", adobePdfRoutes)
+app.use("/api/documents", createDocumentFormatRoutes(pool))
 app.use("/api/context-ai", contextAiRoutes)
 // app.use("/api/ecs-ai", ecsAiRoutes)
 // app.use("/api/quantum-stability", quantumStabilityRoutes)
