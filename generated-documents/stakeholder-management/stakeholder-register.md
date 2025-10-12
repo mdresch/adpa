@@ -51,32 +51,74 @@ These are stakeholders impacted by the system or with a supporting role.
 
 ---
 
-## 2. Detailed Stakeholder Information
+## 2. Stakeholder Assessment Information
+
+### 2.1 Assessment Methodology
+
+**Assessment Criteria:**
+- **Power Level:** Ability to influence project decisions, resource allocation, and outcomes
+- **Interest Level:** Degree of concern about project success and personal/organizational impact
+- **Influence Type:** Direct (formal authority) vs. Indirect (expertise, relationships)
+- **Attitude:** Supportive, Neutral, Resistant, or Unknown
+- **Engagement Readiness:** High, Medium, Low based on availability and willingness to participate
+
+**Assessment Process:**
+1. **Stakeholder Identification Workshops:** Conducted with project team and key sponsors
+2. **Power-Interest Analysis:** Systematic evaluation using standardized criteria
+3. **Influence Mapping:** Documentation of formal and informal influence networks
+4. **Attitude Assessment:** Based on initial interviews and organizational knowledge
+5. **Validation Reviews:** Quarterly reassessment of stakeholder positions
+
+### 2.2 Stakeholder Classification Framework
+
+**Primary Classification (Power/Interest Matrix):**
+- **Manage Closely (High Power, High Interest):** Key decision makers requiring intensive engagement
+- **Keep Satisfied (High Power, Low Interest):** Influential stakeholders needing periodic updates
+- **Keep Informed (Low Power, High Interest):** Affected parties requiring regular communication
+- **Monitor (Low Power, Low Interest):** Peripheral stakeholders requiring minimal engagement
+
+**Secondary Classification (Engagement Type):**
+- **Champions:** Active supporters who promote the project
+- **Supporters:** Generally positive but less active in promotion
+- **Neutral:** No strong opinion, may be swayed either direction
+- **Skeptics:** Have concerns but may be convinced with proper engagement
+- **Opponents:** Actively resist the project and may create obstacles
+
+**Tertiary Classification (Functional Role):**
+- **Decision Makers:** Have formal authority to approve/reject project elements
+- **Influencers:** Shape opinions and decisions of others
+- **Implementers:** Responsible for executing project deliverables
+- **Users:** Will directly use project outputs
+- **Affected Parties:** Impacted by project but not direct users
+
+---
+
+## 3. Detailed Stakeholder Information
 
 Stakeholders were identified by analyzing the project context, technical documentation, and standards integration features. Organizational names and contact details must be confirmed.
 
-| Stakeholder Name                | Role/Title                          | Organization                      | Project Role                            | Contact Information             | Power Level | Interest Level | Current Engagement      | Desired Engagement         |
-|---------------------------------|-------------------------------------|------------------------------------|-----------------------------------------|-------------------------------|-------------|---------------|------------------------|----------------------------|
-| Project Sponsor                 | VP Digital Transformation           | [Your Organization]                | Executive Sponsor, funding/oversight    | [TBD by Org]                  | High        | High          | Informed/Approver      | Manage Closely             |
-| Product Owner / PM              | Lead Product Manager                | [Your Organization]                | Requirements, Delivery, Roadmap         | [TBD by Org]                  | High        | High          | Active                 | Manage Closely             |
-| Enterprise Business Analyst     | Senior Business Analyst             | [Your Organization]                | Requirements, Standards, User Liaison   | [TBD by Org]                  | Medium      | High          | Active                 | Manage Closely             |
-| Enterprise IT Architect         | Chief Architect                     | [Your Organization]                | Integration, Security, Scalability      | [TBD by Org]                  | High        | Medium        | Consulted              | Keep Satisfied             |
-| DevOps Lead                     | DevOps Engineer                     | [Your Organization]                | Deployment, Operations                  | [TBD by Org]                  | Medium      | High          | Active                 | Keep Informed              |
-| Power User / Pilot Group Lead   | Business Champion                   | [Your Organization]                | Early Adoption, Feedback                | [TBD by Org]                  | Low/Med     | High          | Consulted              | Keep Informed              |
-| Compliance & Security Officer   | Compliance/Security Manager         | [Your Organization]                | Regulatory, Security Oversight          | [TBD by Org]                  | High        | Medium        | Informed/Consulted     | Keep Satisfied             |
-| Legal Counsel                   | Legal Advisor                       | [Your Organization]                | Licensing, Risk, Contracts              | [TBD by Org]                  | Medium      | Low/Med       | Informed               | Keep Satisfied             |
-| Finance Controller              | Financial Analyst/Controller        | [Your Organization]                | Budget, ROI, Cost Management            | [TBD by Org]                  | Medium      | Medium        | Informed               | Keep Satisfied             |
-| End User                        | Documentation Specialist/Analyst    | [Your Organization] / Client Dept. | Uses CLI/API/Admin UI, document creator | [TBD by Org]                  | Low         | High          | Consulted              | Keep Informed              |
-| Regulatory Authority Contact    | Regulator/Auditor                   | [Regulatory Body]                  | Audit, Regulatory Acceptance            | [TBD by Org]                  | High        | Variable      | External/Periodic      | Monitor/Consult as needed  |
-| Vendor – OpenAI                 | Account Executive                   | OpenAI                             | AI Provider, SLA, Integration           | [TBD by Org]                  | Medium      | Medium        | Informed               | Keep Satisfied             |
-| Vendor – Microsoft/Adobe/Atlassian | Partner Manager                  | Microsoft/Adobe/Atlassian          | Integration, Support, Licensing         | [TBD by Org]                  | Medium      | Medium        | Informed               | Keep Satisfied             |
-| Customer/Client Representative  | Client Success Manager              | [Client Organization]              | Receives Deliverables, Provides Feedback| [TBD by Org]                  | Medium      | High          | Consulted              | Keep Informed              |
+| Stakeholder Name                | Role/Title                          | Organization                      | Project Role                            | Contact Information             | Power Level | Interest Level | Classification | Attitude | Engagement Type | Current Engagement      | Desired Engagement         |
+|---------------------------------|-------------------------------------|------------------------------------|-----------------------------------------|-------------------------------|-------------|---------------|----------------|----------|-----------------|------------------------|----------------------------|
+| Project Sponsor                 | VP Digital Transformation           | [Your Organization]                | Executive Sponsor, funding/oversight    | [TBD by Org]                  | High        | High          | Manage Closely | Supportive | Champion | Informed/Approver      | Manage Closely             |
+| Product Owner / PM              | Lead Product Manager                | [Your Organization]                | Requirements, Delivery, Roadmap         | [TBD by Org]                  | High        | High          | Manage Closely | Supportive | Champion | Active                 | Manage Closely             |
+| Enterprise Business Analyst     | Senior Business Analyst             | [Your Organization]                | Requirements, Standards, User Liaison   | [TBD by Org]                  | Medium      | High          | Manage Closely | Supportive | Supporter | Active                 | Manage Closely             |
+| Enterprise IT Architect         | Chief Architect                     | [Your Organization]                | Integration, Security, Scalability      | [TBD by Org]                  | High        | Medium        | Keep Satisfied | Neutral | Influencer | Consulted              | Keep Satisfied             |
+| DevOps Lead                     | DevOps Engineer                     | [Your Organization]                | Deployment, Operations                  | [TBD by Org]                  | Medium      | High          | Keep Informed | Supportive | Implementer | Active                 | Keep Informed              |
+| Power User / Pilot Group Lead   | Business Champion                   | [Your Organization]                | Early Adoption, Feedback                | [TBD by Org]                  | Low/Med     | High          | Keep Informed | Supportive | User | Consulted              | Keep Informed              |
+| Compliance & Security Officer   | Compliance/Security Manager         | [Your Organization]                | Regulatory, Security Oversight          | [TBD by Org]                  | High        | Medium        | Keep Satisfied | Skeptical | Decision Maker | Informed/Consulted     | Keep Satisfied             |
+| Legal Counsel                   | Legal Advisor                       | [Your Organization]                | Licensing, Risk, Contracts              | [TBD by Org]                  | Medium      | Low/Med       | Keep Satisfied | Neutral | Decision Maker | Informed               | Keep Satisfied             |
+| Finance Controller              | Financial Analyst/Controller        | [Your Organization]                | Budget, ROI, Cost Management            | [TBD by Org]                  | Medium      | Medium        | Keep Satisfied | Neutral | Decision Maker | Informed               | Keep Satisfied             |
+| End User                        | Documentation Specialist/Analyst    | [Your Organization] / Client Dept. | Uses CLI/API/Admin UI, document creator | [TBD by Org]                  | Low         | High          | Keep Informed | Unknown | User | Consulted              | Keep Informed              |
+| Regulatory Authority Contact    | Regulator/Auditor                   | [Regulatory Body]                  | Audit, Regulatory Acceptance            | [TBD by Org]                  | High        | Variable      | Monitor | Unknown | Affected Party | External/Periodic      | Monitor/Consult as needed  |
+| Vendor – OpenAI                 | Account Executive                   | OpenAI                             | AI Provider, SLA, Integration           | [TBD by Org]                  | Medium      | Medium        | Keep Satisfied | Supportive | Implementer | Informed               | Keep Satisfied             |
+| Vendor – Microsoft/Adobe/Atlassian | Partner Manager                  | Microsoft/Adobe/Atlassian          | Integration, Support, Licensing         | [TBD by Org]                  | Medium      | Medium        | Keep Satisfied | Supportive | Implementer | Informed               | Keep Satisfied             |
+| Customer/Client Representative  | Client Success Manager              | [Client Organization]              | Receives Deliverables, Provides Feedback| [TBD by Org]                  | Medium      | High          | Keep Informed | Supportive | User | Consulted              | Keep Informed              |
 
 > **Note:** Replace `[Your Organization]` and `[TBD by Org]` with actual data from your directory or organizational chart.
 
 ---
 
-## 3. Organizational Stakeholders (Requires Organizational Input)
+## 4. Organizational Stakeholders (Requires Organizational Input)
 
 Please validate and fill in the following with specific names and contact info:
 
@@ -101,7 +143,7 @@ Please validate and fill in the following with specific names and contact info:
 
 ---
 
-## 4. Stakeholder Analysis Matrix
+## 5. Stakeholder Analysis Matrix
 
 ### Power/Interest Grid
 
@@ -126,7 +168,7 @@ Please validate and fill in the following with specific names and contact info:
 
 ---
 
-## 5. Stakeholder Requirements and Expectations
+## 6. Stakeholder Requirements and Expectations
 
 | Stakeholder              | Preferred Communication Method         | Frequency          | Key Information Needs                        |
 |--------------------------|----------------------------------------|--------------------|----------------------------------------------|
@@ -144,7 +186,7 @@ Please validate and fill in the following with specific names and contact info:
 
 ---
 
-## 6. Data Sources and Completion Instructions
+## 7. Data Sources and Completion Instructions
 
 **To Complete This Register:**
 
