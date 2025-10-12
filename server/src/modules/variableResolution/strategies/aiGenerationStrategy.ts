@@ -67,8 +67,8 @@ export class AIGenerationStrategy {
           generation_time: generationTime,
           variable_type: variable.variable_type,
           validation_result: validationResult,
-          model_used: response.model,
-          provider_used: response.provider,
+          model_used: aiResponse.model,
+          provider_used: aiResponse.provider,
           generation_strategy: 'ai_generation'
         }
       }

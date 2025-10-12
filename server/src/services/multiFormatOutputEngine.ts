@@ -5,7 +5,7 @@
 
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
-import type { AIGenerationRequest } from './aiService'
+import type { AIGenerateRequest } from './aiService'
 
 export interface MultiFormatOutputEngineConfig {
   enable_pdf_generation: boolean

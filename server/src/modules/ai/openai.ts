@@ -544,12 +544,3 @@ class OpenAIConnector {
 
 // Export singleton instance
 export const openaiConnector = new OpenAIConnector()
-
-// Export types and interfaces
-export type {
-  OpenAIConfig,
-  OpenAIProvider,
-  OpenAIRequest,
-  OpenAIResponse,
-  OpenAIError
-}

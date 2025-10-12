@@ -6,15 +6,13 @@
 
 export {
   openaiConnector,
-  OpenAIConfig,
-  OpenAIProvider,
-  OpenAIRequest,
-  OpenAIResponse,
-  OpenAIError
 } from './openai'
 
 export {
-  googleConnector,
+  googleConnector
+} from './google'
+
+export type {
   GoogleConfig,
   GoogleProvider,
   GoogleRequest,

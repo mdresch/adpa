@@ -5,7 +5,7 @@
 
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
-import type { AIGenerationRequest } from './aiService'
+import type { AIGenerateRequest } from './aiService'
 
 export interface QualityAssessmentConfig {
   enable_content_quality_assessment: boolean
