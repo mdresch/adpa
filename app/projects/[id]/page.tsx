@@ -711,6 +711,30 @@ export default function ProjectDetail() {
     setStakeholderDialogOpen(true)
   }
 
+  // Handle closing stakeholder dialog
+  const handleCloseStakeholderDialog = (open: boolean) => {
+    setStakeholderDialogOpen(open)
+    if (!open) {
+      // Reset form when dialog closes
+      setEditingStakeholder(null)
+      setStakeholderForm({
+        name: "",
+        role: "",
+        department: "",
+        email: "",
+        phone: "",
+        interest_level: "medium",
+        influence_level: "medium",
+        engagement_approach: "keep_informed",
+        communication_frequency: "weekly",
+        stakeholder_type: "internal",
+        stakeholder_category: "primary",
+        expectations: "",
+        potential_impact: ""
+      })
+    }
+  }
+
   // Handle opening edit stakeholder dialog
   const handleEditStakeholder = (stakeholder: Stakeholder) => {
     setEditingStakeholder(stakeholder)
@@ -757,7 +781,7 @@ export default function ProjectDetail() {
         toast.success("Stakeholder added successfully!")
       }
       
-      setStakeholderDialogOpen(false)
+      handleCloseStakeholderDialog(false)
       // Refresh stakeholders list
       await fetchStakeholders()
     } catch (error) {
@@ -1309,7 +1333,7 @@ export default function ProjectDetail() {
                 </Dialog>
 
                 {/* Stakeholder Dialog */}
-                <Dialog open={stakeholderDialogOpen} onOpenChange={setStakeholderDialogOpen}>
+                <Dialog open={stakeholderDialogOpen} onOpenChange={handleCloseStakeholderDialog}>
                   <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
                     <form onSubmit={handleSaveStakeholder}>
                       <DialogHeader>
@@ -1537,7 +1561,7 @@ export default function ProjectDetail() {
                         </div>
                       </div>
                       <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setStakeholderDialogOpen(false)}>
+                        <Button type="button" variant="outline" onClick={() => handleCloseStakeholderDialog(false)}>
                           Cancel
                         </Button>
                         <Button type="submit" disabled={savingStakeholder}>
