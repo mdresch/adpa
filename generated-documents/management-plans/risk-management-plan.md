@@ -94,6 +94,83 @@ Project Risks
 
 ---
 
+## Risk Categories
+
+### Primary Risk Categories
+
+**1. Technical Risks**
+- **Definition:** Risks related to technology choices, implementation complexity, and technical performance
+- **Examples:** 
+  - AI provider API limitations or changes
+  - Integration complexity with enterprise systems
+  - Performance and scalability bottlenecks
+  - Technology obsolescence
+  - Security vulnerabilities
+- **Mitigation Approach:** Technical reviews, proof-of-concepts, fallback technologies
+
+**2. Project Management Risks**
+- **Definition:** Risks related to project execution, resource management, and delivery
+- **Examples:**
+  - Scope creep and requirement changes
+  - Resource constraints and availability
+  - Timeline compression
+  - Stakeholder alignment issues
+  - Communication breakdowns
+- **Mitigation Approach:** Strong governance, change control, resource planning
+
+**3. External Risks**
+- **Definition:** Risks from external factors beyond direct project control
+- **Examples:**
+  - Vendor dependency and reliability
+  - Regulatory changes
+  - Market conditions
+  - Third-party service outages
+  - Economic factors
+- **Mitigation Approach:** Vendor management, regulatory monitoring, contingency planning
+
+**4. Organizational Risks**
+- **Definition:** Risks related to internal organizational factors
+- **Examples:**
+  - Resistance to change
+  - Skill gaps and training needs
+  - Competing priorities
+  - Leadership changes
+  - Cultural barriers
+- **Mitigation Approach:** Change management, training programs, stakeholder engagement
+
+**5. Compliance and Security Risks**
+- **Definition:** Risks related to regulatory compliance and information security
+- **Examples:**
+  - Data privacy violations (GDPR, HIPAA)
+  - Security breaches
+  - Audit failures
+  - Regulatory non-compliance
+  - Access control issues
+- **Mitigation Approach:** Security frameworks, compliance audits, access controls
+
+**6. Financial Risks**
+- **Definition:** Risks related to project costs and financial impact
+- **Examples:**
+  - Budget overruns
+  - Cost escalation
+  - ROI shortfall
+  - Funding cuts
+  - Currency fluctuations (for international vendors)
+- **Mitigation Approach:** Financial controls, budget monitoring, cost management
+
+### Risk Category Matrix
+
+| Category | Likelihood | Impact | Priority | Monitoring Frequency |
+|----------|------------|--------|----------|---------------------|
+| Technical | Medium | High | High | Weekly |
+| Project Management | High | Medium | High | Weekly |
+| External | Medium | Medium | Medium | Monthly |
+| Organizational | Medium | High | High | Bi-weekly |
+| Compliance/Security | Low | Very High | High | Monthly |
+| Financial | Medium | Medium | Medium | Monthly |
+
+---
+
 ## Risk Analysis Framework
 
 ### Probability Scale
