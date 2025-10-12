@@ -2,9 +2,13 @@ import dotenv from "dotenv"
 dotenv.config()
 
 import { readFileSync } from "fs"
-import { join } from "path"
+import { join, dirname } from "path"
+import { fileURLToPath } from "url"
 import { pool } from "./connection"
 import { logger } from "../utils/logger"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 async function runMigrations() {
   try {
