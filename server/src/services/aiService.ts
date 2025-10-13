@@ -2,6 +2,7 @@ import OpenAI from "openai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
+import { openaiConnector, googleConnector } from "../modules/ai"
 
 export interface AIProvider {
   name: string
