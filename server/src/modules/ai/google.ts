@@ -584,11 +584,4 @@ class GoogleConnector {
 export const googleConnector = new GoogleConnector()
 
 // Export types and interfaces
-export type {
-  GoogleConfig,
-  GoogleProvider,
-  GoogleRequest,
-  GoogleResponse,
-  GoogleError
-}
 

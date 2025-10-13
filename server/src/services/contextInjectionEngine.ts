@@ -5,7 +5,7 @@
 
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
-import type { AIGenerateRequest } from './aiService'
+import type { AIGenerationRequest } from './aiService'
 
 export interface ContextInjectionConfig {
   injection_strategies: InjectionStrategy[]

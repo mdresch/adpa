@@ -5,7 +5,7 @@
 
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
-import type { AIGenerateRequest, AIGenerateResponse } from './aiService'
+import type { AIGenerationRequest, AIGenerationResponse } from './aiService'
 
 export interface MultiModelConfig {
   primary_models: ModelConfig[]

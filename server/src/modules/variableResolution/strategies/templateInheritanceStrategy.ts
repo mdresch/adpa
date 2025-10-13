@@ -4,7 +4,6 @@
  */
 
 import { logger } from '../../../utils/logger'
-import { pool } from '../../../database/connection'
 import type { TemplateVariable, ResolutionContext, ResolutionStrategy } from '../types'
 
 export interface TemplateInheritanceResult {
