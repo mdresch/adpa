@@ -191,6 +191,39 @@ class AIService {
     }
   }
 
+  private async generateGoogle(
+    prompt: string,
+    request: AIGenerateRequest
+  ): Promise<AIGenerateResponse> {
+    const provider = this.providers.get(request.provider)
+    if (!provider) {
+      throw new Error(`Provider ${request.provider} not found`)
+    }
+
+    const genAI = new GoogleGenerativeAI(provider.apiKey)
+    const model = genAI.getGenerativeModel({ 
+      model: request.model || "gemini-pro" 
+    })
+
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const text = response.text()
+
+    return {
+      content: text,
+      provider: request.provider,
+      model: request.model || "gemini-pro",
+      usage: {
+        prompt_tokens: 0, // Google AI doesn't provide token usage in the same way
+        completion_tokens: 0,
+        total_tokens: 0,
+      },
+      metadata: {
+        finishReason: "stop",
+        model: request.model || "gemini-pro",
+      }
+    }
+  }
 
   private async generateMistral(
     prompt: string,

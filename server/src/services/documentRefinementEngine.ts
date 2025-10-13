@@ -6,7 +6,7 @@
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
 import { MultiModelAIGenerationService } from './multiModelAIGenerationService'
-import type { AIGenerateRequest } from './aiService'
+import type { AIGenerationRequest } from './aiService'
 
 export interface RefinementConfig {
   enable_iterative_refinement: boolean

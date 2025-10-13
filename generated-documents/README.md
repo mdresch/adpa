@@ -167,6 +167,91 @@ This directory contains comprehensive PMBOK (Project Management Body of Knowledg
 
 Each document is AI-generated based on your project's README.md context and follows PMBOK standards. The documents are organized into logical categories for easy navigation and reference.
 
+## Document Generation and Building
+
+### How Documents Are Generated
+
+All documents in this directory are automatically generated using the ADPA Document Generator module. The generation process:
+
+1. **Template Selection**: Selects appropriate PMBOK/BABOK/DMBOK templates
+2. **Context Injection**: Injects project-specific context from README.md and configuration
+3. **AI Enhancement**: Uses AI providers (OpenAI, Google AI, etc.) to enhance content
+4. **Validation**: Validates generated content against framework standards
+5. **Output Generation**: Produces documents in multiple formats (Markdown, PDF, DOCX)
+
+### Building Documents
+
+To generate or regenerate documents:
+
+```bash
+# Using the API
+POST /api/document-generator/generate
+{
+  "template_id": "uuid",
+  "data": { ... },
+  "output_format": "markdown"
+}
+
+# Using the admin portal
+# Navigate to Documents → Generate New Document
+# Select template and provide required data
+```
+
+For detailed API documentation, see [Document Generator Module](../server/src/modules/documentGenerator/README.md).
+
+## Document Validation
+
+### Validation Process
+
+Generated documents undergo multiple validation checks:
+
+1. **Structure Validation**: Ensures required sections are present
+2. **Content Validation**: Validates content length and quality requirements
+3. **Framework Compliance**: Checks compliance with PMBOK/BABOK/DMBOK standards
+4. **Variable Validation**: Ensures all required variables are resolved
+5. **Format Validation**: Validates output format and file integrity
+
+### Validation Tools
+
+#### API Validation Endpoint
+```bash
+POST /api/document-generator/validate
+{
+  "template_id": "uuid",
+  "data": { ... }
+}
+```
+
+#### Validation Schema
+The validation uses Joi schemas to ensure:
+- Valid template IDs (UUID format)
+- Required data fields are present
+- Output formats are supported (markdown, pdf, docx, html)
+- File naming conventions are followed
+- Page sizes and margins are valid CSS measurements
+- Custom styles meet security requirements
+
+#### Security Validation
+- **Input Validation**: All inputs validated using Joi schemas
+- **Path Traversal Protection**: Filenames sanitized to prevent directory traversal
+- **CSS Sanitization**: CSS inputs checked for potentially dangerous content
+- **File Size Limits**: Generated files limited to prevent resource exhaustion
+- **Timeout Protection**: Generation processes have maximum time limits
+
+### Validation Error Handling
+
+Common validation errors and resolutions:
+
+| Error Code | Description | Resolution |
+|------------|-------------|------------|
+| `TEMPLATE_NOT_FOUND` | Template ID does not exist | Verify template ID is correct |
+| `MISSING_VARIABLES` | Required template variables missing | Provide all required data fields |
+| `GENERATION_ERROR` | Document generation failed | Check logs for detailed error |
+| `INVALID_FORMAT` | Unsupported output format | Use: markdown, pdf, docx, or html |
+| `VALIDATION_ERROR` | Data validation failed | Review validation messages |
+
+For comprehensive validation documentation, see [Validation Module](../server/src/modules/documentGenerator/validation.ts).
+
 ## Categories Explained
 
 - **Enterprise Architecture**: Enterprise architecture frameworks and methodologies including TOGAF
