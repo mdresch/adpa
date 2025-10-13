@@ -249,21 +249,24 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
-  // Fetch templates
+  // Fetch templates (fetch ALL templates, not just project framework)
   const fetchTemplates = async () => {
+    console.log('🔵 [Documents Page] fetchTemplates starting...')
     try {
       setLoadingTemplates(true)
+      console.log('🔵 [Documents Page] Calling apiClient.getTemplates with limit=100')
       const response = await apiClient.getTemplates({ 
-        framework: project?.framework || undefined,
-        limit: 50 
+        limit: 100  // Increased limit to get all templates
       })
+      console.log('📊 [Documents Page] Templates loaded:', response.templates?.length || 0, 'templates')
       setTemplates(response.templates || [])
     } catch (error) {
-      console.error("Failed to fetch templates:", error)
+      console.error("❌ [Documents Page] Failed to fetch templates:", error)
       toast.error("Failed to load templates")
       setTemplates([])
     } finally {
       setLoadingTemplates(false)
+      console.log('🔵 [Documents Page] fetchTemplates completed')
     }
   }
 

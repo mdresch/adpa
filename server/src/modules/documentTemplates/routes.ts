@@ -39,8 +39,8 @@ const router = express.Router()
  *         schema:
  *           type: integer
  *           minimum: 1
- *           maximum: 100
- *           default: 10
+ *           maximum: 200
+ *           default: 100
  *         description: Number of templates per page
  *       - in: query
  *         name: framework
@@ -103,8 +103,8 @@ router.get(
  *         schema:
  *           type: integer
  *           minimum: 1
- *           maximum: 100
- *           default: 10
+ *           maximum: 200
+ *           default: 100
  *         description: Number of templates per page
  *     responses:
  *       200:

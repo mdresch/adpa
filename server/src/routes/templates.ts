@@ -14,8 +14,8 @@ router.get("/",
   authenticateToken,
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
-    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").optional(),
+    limit: Joi.number().integer().min(1).max(200).default(100),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "BABOK v3", "PMBOK", "PMBOK 7", "DMBOK", "DMBOK 2.0").optional(),
     category: Joi.string().max(100).optional(),
     search: Joi.string().max(100).optional(),
     is_public: Joi.boolean().optional(),
@@ -23,8 +23,10 @@ router.get("/",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { page = 1, limit = 10, framework, category, search, is_public } = req.query
+      const { page = 1, limit = 100, framework, category, search, is_public } = req.query
       const offset = (Number(page) - 1) * Number(limit)
+      
+      log.info(`Fetching templates: page=${page}, limit=${limit}, framework=${framework || 'all'}`)
 
       let query = `
         SELECT t.*, u.name as created_by_name
@@ -97,6 +99,8 @@ router.get("/",
 
       const countResult = await pool.query(countQuery, countParams)
       const total = Number.parseInt(countResult.rows[0].count)
+
+      log.info(`Returning ${result.rows.length} templates out of ${total} total`)
 
       res.json({
         templates: result.rows,

@@ -423,26 +423,33 @@ export default function ProjectDetail() {
     }
   }
 
-  // Fetch templates for upload
+  // Fetch templates for upload (fetch ALL templates, not just project framework)
   const fetchTemplatesForUpload = async () => {
+    console.log('🔵 fetchTemplatesForUpload starting...')
     try {
       setLoadingTemplates(true)
+      console.log('🔵 Calling apiClient.getTemplates with limit=100')
       const response = await apiClient.getTemplates({ 
-        framework: project?.framework || undefined,
-        limit: 50 
+        limit: 100  // Increased limit to get more templates
       })
+      console.log('📊 Templates API response:', response)
+      console.log('📊 Templates loaded for upload:', response.templates?.length || 0, 'templates')
+      console.log('📊 Template names:', response.templates?.map(t => t.name) || [])
       setTemplates(Array.isArray(response.templates) ? response.templates : [])
+      console.log('📊 Templates state set:', Array.isArray(response.templates) ? response.templates.length : 0)
     } catch (error) {
-      console.error("Failed to fetch templates:", error)
+      console.error("❌ Failed to fetch templates:", error)
       toast.error("Failed to load templates")
       setTemplates([])
     } finally {
       setLoadingTemplates(false)
+      console.log('🔵 fetchTemplatesForUpload completed')
     }
   }
 
   // Handle upload document button click
   const handleUploadDocumentClick = () => {
+    console.log('🔵 Upload Document clicked - opening dialog and fetching templates...')
     setUploadForm({
       name: "",
       file: null,
@@ -450,6 +457,7 @@ export default function ProjectDetail() {
     })
     setUploadDialogOpen(true)
     fetchTemplatesForUpload()
+    console.log('🔵 fetchTemplatesForUpload() called')
   }
 
   // Upload document handler

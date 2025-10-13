@@ -200,6 +200,8 @@ export default function Projects() {
         ...newProject,
         team_members: newProject.manager ? [newProject.manager] : [],
         budget: newProject.budget ? parseFloat(newProject.budget) : undefined,
+        start_date: newProject.start_date || undefined,
+        end_date: newProject.end_date || undefined,
       }
       
       await apiClient.createProject(projectData)
@@ -254,6 +256,8 @@ export default function Projects() {
       const projectData = {
         ...editingProject,
         budget: editingProject.budget ? parseFloat(editingProject.budget.toString()) : undefined,
+        start_date: editingProject.start_date || undefined,
+        end_date: editingProject.end_date || undefined,
       }
       
       await apiClient.updateProject(editingProject.id, projectData)
@@ -348,14 +352,12 @@ export default function Projects() {
     fetchTemplatesForUpload(project.framework)
   }
 
-  // Fetch templates for document generation
+  // Fetch templates for document generation (fetch ALL templates)
   const fetchTemplates = async () => {
     try {
       setLoadingTemplates(true)
-      const framework = selectedProjectForGeneration?.framework || ""
       const response = await apiClient.getTemplates({ 
-        framework: framework || undefined,
-        limit: 50 
+        limit: 100  // Increased limit to get more templates
       })
       setTemplates(response.templates || [])
     } catch (error) {
@@ -367,13 +369,12 @@ export default function Projects() {
     }
   }
 
-  // Fetch templates for document upload
+  // Fetch templates for document upload (fetch ALL templates)
   const fetchTemplatesForUpload = async (framework: string) => {
     try {
       setLoadingTemplates(true)
       const response = await apiClient.getTemplates({ 
-        framework: framework || undefined,
-        limit: 50 
+        limit: 100  // Increased limit to get more templates
       })
       setTemplates(response.templates || [])
     } catch (error) {

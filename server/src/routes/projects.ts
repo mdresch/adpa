@@ -157,6 +157,11 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
 
     const id = uuidv4()
 
+    // Convert empty strings to null for date and numeric fields
+    const startDateValue = start_date && start_date.trim() !== '' ? start_date : null
+    const endDateValue = end_date && end_date.trim() !== '' ? end_date : null
+    const budgetValue = budget && budget !== '' ? parseFloat(budget) : null
+
     const result = await pool.query(
       `
       INSERT INTO projects (id, name, description, framework, priority, start_date, end_date, budget, owner_id, team_members)
@@ -169,9 +174,9 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
         description,
         framework,
         priority,
-        start_date,
-        end_date,
-        budget,
+        startDateValue,
+        endDateValue,
+        budgetValue,
         req.user?.id,
         JSON.stringify(team_members),
       ],
@@ -196,6 +201,11 @@ router.put("/:id", authenticateToken, requirePermission("projects.update"), asyn
     const { id } = req.params
     const { name, description, framework, status, priority, start_date, end_date, budget, team_members } = req.body
 
+    // Convert empty strings to null for date and numeric fields
+    const startDateValue = start_date && start_date.trim() !== '' ? start_date : null
+    const endDateValue = end_date && end_date.trim() !== '' ? end_date : null
+    const budgetValue = budget && budget !== '' && budget !== null ? parseFloat(budget.toString()) : null
+
     const result = await pool.query(
       `
       UPDATE projects 
@@ -205,7 +215,7 @@ router.put("/:id", authenticateToken, requirePermission("projects.update"), asyn
       WHERE id = $10
       RETURNING *
     `,
-      [name, description, framework, status, priority, start_date, end_date, budget, JSON.stringify(team_members), id],
+      [name, description, framework, status, priority, startDateValue, endDateValue, budgetValue, JSON.stringify(team_members), id],
     )
 
     if (result.rows.length === 0) {
@@ -258,14 +268,15 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
         d.id,
         COALESCE(d.title, d.name) as title,
         d.content,
-        COALESCE(u.name, 'Unknown') as author,
+        COALESCE(d.author, u.name, 'Unknown') as author,
         d.created_at,
         d.updated_at,
         d.status,
         d.project_id,
         p.name as project_name,
         d.version,
-        d.content_length,
+        d.word_count,
+        d.character_count,
         d.metadata,
         d.template_id,
         d.framework
@@ -320,14 +331,11 @@ router.get("/:projectId/documents/:documentId/versions", authenticateToken, asyn
     const query = `
       SELECT 
         dv.id,
-        dv.version_number as version,
+        dv.version,
         dv.created_at,
         COALESCE(u.name, 'Unknown') as author,
         dv.changes,
-        CASE 
-          WHEN dv.content IS NOT NULL THEN LENGTH(dv.content) / 4 
-          ELSE 0 
-        END as word_count
+        dv.word_count
       FROM document_versions dv
       LEFT JOIN users u ON dv.author_id = u.id
       WHERE dv.document_id = $1

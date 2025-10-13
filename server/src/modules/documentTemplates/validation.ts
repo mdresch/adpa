@@ -153,15 +153,18 @@ export const templateValidationSchemas = {
   // Query parameters for listing templates
   templateListQuery: Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
+    limit: Joi.number().integer().min(1).max(200).default(100),
     framework: Joi.string().valid(
       'TOGAF',
       'SABSA',
       'COBIT',
       'ITIL',
       'Custom',
+      'BABOK',
       'BABOK v3',
+      'PMBOK',
       'PMBOK 7',
+      'DMBOK',
       'DMBOK 2.0'
     ).optional(),
     category: Joi.string().max(100).optional(),
@@ -177,7 +180,7 @@ export const templateValidationSchemas = {
   // Trash query parameters
   trashQuery: Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
+    limit: Joi.number().integer().min(1).max(200).default(100),
   }),
 }
 
