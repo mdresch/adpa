@@ -22,8 +22,10 @@ export class DocumentTemplateService {
    * Get paginated list of templates
    */
   async getTemplates(query: TemplateListQuery, user: AuthenticatedUser): Promise<TemplateListResponse> {
-    const { page = 1, limit = 10, framework, category, search, is_public } = query
+    const { page = 1, limit = 100, framework, category, search, is_public } = query
     const offset = (Number(page) - 1) * Number(limit)
+
+    logger.info(`📊 getTemplates called: page=${page}, limit=${limit}, framework=${framework || 'none'}, user=${user.email}`)
 
     let sqlQuery = `
       SELECT t.*, u.name as created_by_name
@@ -65,6 +67,8 @@ export class DocumentTemplateService {
 
     const result = await pool.query(sqlQuery, params)
 
+    logger.info(`📋 Found ${result.rows.length} templates in query result`)
+
     // Count total matching templates
     let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1) AND t.deleted_at IS NULL"
     const countParams = [user.id]
@@ -96,6 +100,8 @@ export class DocumentTemplateService {
 
     const countResult = await pool.query(countQuery, countParams)
     const total = Number.parseInt(countResult.rows[0].count)
+
+    logger.info(`📊 Returning ${result.rows.length} templates out of ${total} total (limit=${limit})`)
 
     return {
       templates: result.rows,
@@ -385,7 +391,7 @@ export class DocumentTemplateService {
   /**
    * Get deleted templates (trash)
    */
-  async getDeletedTemplates(page: number = 1, limit: number = 10, user: AuthenticatedUser): Promise<TemplateListResponse> {
+  async getDeletedTemplates(page: number = 1, limit: number = 100, user: AuthenticatedUser): Promise<TemplateListResponse> {
     const offset = (page - 1) * limit
 
     // If user is admin, allow viewing all deleted templates; otherwise restrict to templates deleted by the current user

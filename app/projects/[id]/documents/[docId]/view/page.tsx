@@ -36,6 +36,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { jsPDF } from "jspdf"
@@ -316,9 +317,25 @@ The ADPA system represents a significant advancement in document processing auto
         const documentData = documentResponse
         const versionsData = versionsResponse || []
         
-        setDocument(documentData)
+        // Convert content to string if it's an object
+        let contentString = ''
+        if (typeof documentData.content === 'string') {
+          contentString = documentData.content
+        } else if (documentData.content && typeof documentData.content === 'object') {
+          // Handle different content object formats
+          if (documentData.content.text) {
+            contentString = documentData.content.text
+          } else if (documentData.content.markdown) {
+            contentString = documentData.content.markdown
+          } else {
+            // Fallback: stringify the object
+            contentString = JSON.stringify(documentData.content, null, 2)
+          }
+        }
+        
+        setDocument({...documentData, content: contentString})
         setVersions(versionsData)
-        setEditedContent(documentData.content || '')
+        setEditedContent(contentString)
       } catch (error) {
         console.error("Failed to load document:", error)
         
@@ -607,11 +624,87 @@ The ADPA system represents a significant advancement in document processing auto
                           </div>
                         </div>
                       </CardHeader>
-                      <CardContent>
+                      <CardContent className="p-8">
                         {!isEditing ? (
-                          <div className="prose prose-lg max-w-none">
+                          <div className="prose prose-lg max-w-none dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-4xl prose-h1:mb-6 prose-h1:mt-8 prose-h1:pb-2 prose-h1:border-b prose-h2:text-3xl prose-h2:mb-4 prose-h2:mt-6 prose-h3:text-2xl prose-h3:mb-3 prose-h3:mt-5 prose-p:mb-4 prose-p:leading-7 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-strong:font-semibold prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:text-sm prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:pl-4 prose-blockquote:italic prose-ul:my-4 prose-ol:my-4 prose-li:my-1">
                             <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
                               components={{
+                                h1({ children }) {
+                                  return (
+                                    <h1 className="text-4xl font-bold mb-6 mt-8 pb-2 border-b border-gray-200 dark:border-gray-700">
+                                      {children}
+                                    </h1>
+                                  );
+                                },
+                                h2({ children }) {
+                                  return (
+                                    <h2 className="text-3xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100">
+                                      {children}
+                                    </h2>
+                                  );
+                                },
+                                h3({ children }) {
+                                  return (
+                                    <h3 className="text-2xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-200">
+                                      {children}
+                                    </h3>
+                                  );
+                                },
+                                h4({ children }) {
+                                  return (
+                                    <h4 className="text-xl font-semibold mb-2 mt-4 text-gray-800 dark:text-gray-200">
+                                      {children}
+                                    </h4>
+                                  );
+                                },
+                                p({ children }) {
+                                  return (
+                                    <p className="mb-4 leading-7 text-gray-700 dark:text-gray-300">
+                                      {children}
+                                    </p>
+                                  );
+                                },
+                                a({ href, children }) {
+                                  return (
+                                    <a 
+                                      href={href} 
+                                      className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {children}
+                                    </a>
+                                  );
+                                },
+                                ul({ children }) {
+                                  return (
+                                    <ul className="my-4 ml-6 list-disc space-y-2">
+                                      {children}
+                                    </ul>
+                                  );
+                                },
+                                ol({ children }) {
+                                  return (
+                                    <ol className="my-4 ml-6 list-decimal space-y-2">
+                                      {children}
+                                    </ol>
+                                  );
+                                },
+                                li({ children }) {
+                                  return (
+                                    <li className="text-gray-700 dark:text-gray-300 leading-relaxed">
+                                      {children}
+                                    </li>
+                                  );
+                                },
+                                blockquote({ children }) {
+                                  return (
+                                    <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-4 italic bg-blue-50 dark:bg-blue-900/20 rounded-r">
+                                      {children}
+                                    </blockquote>
+                                  );
+                                },
                                 code({ node, inline, className, children, ...props }: any) {
                                   const match = /language-(\w+)/.exec(className || '');
                                   return !inline && match ? (
@@ -620,43 +713,95 @@ The ADPA system represents a significant advancement in document processing auto
                                       language={match[1]}
                                       PreTag="div"
                                       showLineNumbers={true}
-                                      customStyle={{ margin: '1rem 0', borderRadius: '8px' }}
+                                      customStyle={{ 
+                                        margin: '1.5rem 0', 
+                                        borderRadius: '8px',
+                                        padding: '1rem',
+                                        fontSize: '0.9rem'
+                                      }}
                                       {...props}
                                     >
                                       {String(children).replace(/\n$/, '')}
                                     </SyntaxHighlighter>
                                   ) : (
-                                    <code className={className} {...props}>
+                                    <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono text-red-600 dark:text-red-400" {...props}>
                                       {children}
                                     </code>
                                   );
                                 },
+                                pre({ children }) {
+                                  return (
+                                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
+                                      {children}
+                                    </pre>
+                                  );
+                                },
                                 table({ children }) {
                                   return (
-                                    <div className="overflow-x-auto">
-                                      <table className="min-w-full border-collapse border border-gray-300">
+                                    <div className="overflow-x-auto my-8 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
+                                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                         {children}
                                       </table>
                                     </div>
                                   );
                                 },
+                                thead({ children }) {
+                                  return (
+                                    <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750">
+                                      {children}
+                                    </thead>
+                                  );
+                                },
+                                tbody({ children }) {
+                                  return (
+                                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
+                                      {children}
+                                    </tbody>
+                                  );
+                                },
+                                tr({ children }) {
+                                  return (
+                                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors duration-150">
+                                      {children}
+                                    </tr>
+                                  );
+                                },
                                 th({ children }) {
                                   return (
-                                    <th className="border border-gray-300 px-4 py-2 bg-gray-50 font-semibold">
+                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider border-b-2 border-gray-300 dark:border-gray-600">
                                       {children}
                                     </th>
                                   );
                                 },
                                 td({ children }) {
                                   return (
-                                    <td className="border border-gray-300 px-4 py-2">
-                                      {children}
+                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300 align-top">
+                                      <div className="max-w-prose">
+                                        {children}
+                                      </div>
                                     </td>
+                                  );
+                                },
+                                hr() {
+                                  return <hr className="my-8 border-gray-200 dark:border-gray-700" />;
+                                },
+                                strong({ children }) {
+                                  return (
+                                    <strong className="font-semibold text-gray-900 dark:text-gray-100">
+                                      {children}
+                                    </strong>
+                                  );
+                                },
+                                em({ children }) {
+                                  return (
+                                    <em className="italic text-gray-800 dark:text-gray-200">
+                                      {children}
+                                    </em>
                                   );
                                 },
                               }}
                             >
-                              {document.content}
+                              {typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2)}
                             </ReactMarkdown>
                           </div>
                         ) : (
@@ -684,55 +829,91 @@ The ADPA system represents a significant advancement in document processing auto
                       <CardContent className="space-y-4">
                         <div className="flex items-center space-x-2">
                           <User className="h-4 w-4 text-muted-foreground" />
-                          <div>
+                          <div className="flex-1">
                             <p className="text-sm font-medium">Author</p>
-                            <p className="text-sm text-muted-foreground">{document.author}</p>
+                            <p className="text-sm text-muted-foreground">{document.author || 'Unknown'}</p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <div>
+                          <div className="flex-1">
                             <p className="text-sm font-medium">Created</p>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(document.created_at).toLocaleDateString()}
+                              {new Date(document.created_at).toLocaleDateString()} at {new Date(document.created_at).toLocaleTimeString()}
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
-                          <div>
+                          <div className="flex-1">
                             <p className="text-sm font-medium">Last Updated</p>
                             <p className="text-sm text-muted-foreground">
-                              {new Date(document.updated_at).toLocaleDateString()}
+                              {new Date(document.updated_at).toLocaleDateString()} at {new Date(document.updated_at).toLocaleTimeString()}
                             </p>
                           </div>
                         </div>
                         <Separator />
                         <div className="space-y-2">
-                          <p className="text-sm font-medium">Statistics</p>
-                          <div className="grid grid-cols-2 gap-2 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">Words:</span>
-                              <span className="ml-2 font-medium">{document.word_count}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Characters:</span>
-                              <span className="ml-2 font-medium">{document.character_count}</span>
-                            </div>
+                          <p className="text-sm font-medium">File Information</p>
+                          <div className="space-y-2 text-sm">
+                            {(document as any).version && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Version:</span>
+                                <span className="font-medium">v{(document as any).version}</span>
+                              </div>
+                            )}
+                            {(document as any).template_id && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Template:</span>
+                                <span className="font-medium text-xs">{(document as any).template_id.substring(0, 8)}...</span>
+                              </div>
+                            )}
+                            {(document as any).framework && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Framework:</span>
+                                <span className="font-medium">{(document as any).framework}</span>
+                              </div>
+                            )}
+                            {(document as any).status && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Status:</span>
+                                <Badge variant="outline" className="text-xs">
+                                  {(document as any).status}
+                                </Badge>
+                              </div>
+                            )}
                           </div>
                         </div>
                         <Separator />
                         <div className="space-y-2">
-                          <p className="text-sm font-medium">Tags</p>
-                          <div className="flex flex-wrap gap-1">
-                            {(document.tags || []).map((tag) => (
-                              <Badge key={tag} variant="outline" className="text-xs">
-                                <Tag className="h-3 w-3 mr-1" />
-                                {tag}
-                              </Badge>
-                            ))}
+                          <p className="text-sm font-medium">Content Statistics</p>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">Words:</span>
+                              <span className="ml-2 font-medium">{document.word_count || 0}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Characters:</span>
+                              <span className="ml-2 font-medium">{document.character_count || 0}</span>
+                            </div>
                           </div>
                         </div>
+                        {document.tags && document.tags.length > 0 && (
+                          <>
+                            <Separator />
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium">Tags</p>
+                              <div className="flex flex-wrap gap-1">
+                                {document.tags.map((tag) => (
+                                  <Badge key={tag} variant="outline" className="text-xs">
+                                    <Tag className="h-3 w-3 mr-1" />
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                     </AnimatedCard>
 

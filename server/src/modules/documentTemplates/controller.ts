@@ -208,7 +208,7 @@ export class DocumentTemplateController {
   const log = childLogger({ requestId: req.requestId })
     try {
       const page = Number(req.query.page || 1)
-      const limit = Math.min(Number(req.query.limit || 10), 100)
+      const limit = Math.min(Number(req.query.limit || 100), 200)
       const user = req.user!
 
       const result = await documentTemplateService.getDeletedTemplates(page, limit, user)

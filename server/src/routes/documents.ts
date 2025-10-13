@@ -363,13 +363,33 @@ router.post("/project/:projectId",
 
       const id = uuidv4()
 
+      // Convert content to Markdown string if it's an object
+      let contentString = content
+      if (typeof content === 'object' && content !== null) {
+        // Handle different content object formats
+        if (content.text) {
+          contentString = content.text
+        } else if (content.markdown) {
+          contentString = content.markdown
+        } else if (content.content) {
+          contentString = content.content
+        } else {
+          // If it's a complex object, stringify it as JSON
+          contentString = JSON.stringify(content, null, 2)
+        }
+      }
+
+      // Calculate word count and character count
+      const wordCount = contentString ? contentString.trim().split(/\s+/).filter(Boolean).length : 0
+      const characterCount = contentString ? contentString.length : 0
+
       const result = await pool.query(
         `
-        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by, word_count, character_count)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9)
         RETURNING *
       `,
-        [id, projectId, name, JSON.stringify(content), template_id, status, req.user?.id]
+        [id, projectId, name, contentString, template_id, status, req.user?.id, wordCount, characterCount]
       )
 
   log.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`)
@@ -467,6 +487,37 @@ router.put("/:id",
         metadataUpdate.tags = tags
       }
 
+      // Convert content to Markdown string if it's an object
+      let contentString = content
+      if (content && typeof content === 'object') {
+        // Handle different content object formats
+        if (content.text) {
+          contentString = content.text
+        } else if (content.markdown) {
+          contentString = content.markdown
+        } else if (content.content) {
+          contentString = content.content
+        } else {
+          // If it's a complex object, stringify it as JSON
+          contentString = JSON.stringify(content, null, 2)
+        }
+      }
+
+      // Calculate word count and character count if content is being updated
+      let wordCountUpdate = ""
+      let characterCountUpdate = ""
+      const params: any[] = [name, contentString, status, template_id, JSON.stringify(metadataUpdate), req.user?.id]
+      
+      if (contentString) {
+        const wordCount = contentString.trim().split(/\s+/).filter(Boolean).length
+        const characterCount = contentString.length
+        wordCountUpdate = `, word_count = $${params.length + 1}`
+        characterCountUpdate = `, character_count = $${params.length + 2}`
+        params.push(wordCount, characterCount)
+      }
+      
+      params.push(id)
+
       const result = await pool.query(
         `
         UPDATE documents 
@@ -478,18 +529,12 @@ router.put("/:id",
             updated_by = $6,
             updated_at = CURRENT_TIMESTAMP
             ${versionIncrement}
-        WHERE id = $7
+            ${wordCountUpdate}
+            ${characterCountUpdate}
+        WHERE id = $${params.length}
         RETURNING *
       `,
-        [
-          name, 
-          content ? JSON.stringify(content) : null, 
-          status, 
-          template_id,
-          JSON.stringify(metadataUpdate),
-          req.user?.id, 
-          id
-        ]
+        params
       )
 
       // Clear cache
