@@ -145,6 +145,9 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     name: "",
     template_id: "",
     prompt: "",
+    provider: "Groq AI",
+    model: "llama-3.1-8b-instant",
+    temperature: 0.7,
   })
 
   // Fetch project data
@@ -424,13 +427,18 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       
       const aiResponse = await apiClient.generateContent({
         prompt: generateForm.prompt,
-        provider: "openai",
+        provider: generateForm.provider || "Groq AI",
+        model: generateForm.model || "llama-3.1-8b-instant",
+        temperature: generateForm.temperature || 0.7,
         template_id: generateForm.template_id || undefined,
       })
 
+      // Extract Markdown content from response
+      const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
+
       await apiClient.createDocument(projectId, {
         name: generateForm.name,
-        content: aiResponse.result || aiResponse,
+        content: content,
         template_id: generateForm.template_id || undefined,
         status: "draft",
       })
@@ -441,6 +449,9 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         name: "",
         template_id: "",
         prompt: "",
+        provider: "Groq AI",
+        model: "llama-3.1-8b-instant",
+        temperature: 0.7,
       })
       await fetchDocuments()
     } catch (error) {

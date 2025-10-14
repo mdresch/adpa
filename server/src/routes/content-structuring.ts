@@ -4,6 +4,7 @@ import { authenticateToken } from "../middleware/auth"
 import { validate } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { contentStructuringService } from "../services/contentStructuringService"
+import { pool } from "../database/connection"
 
 const router = express.Router()
 
@@ -78,7 +79,7 @@ router.post("/replace-variables", authenticateToken, validate(replaceVariablesSc
         originalContent: content,
         processedContent,
         variablesUsed: Object.keys(variables),
-        replacementCount: this.countReplacements(content, processedContent)
+        replacementCount: countReplacements(content, processedContent)
       }
     })
   } catch (error) {
@@ -112,7 +113,7 @@ router.post("/optimize", authenticateToken, validate(optimizeStructureSchema), a
       data: {
         originalContent: content,
         optimizedContent,
-        improvements: this.calculateImprovements(content, optimizedContent)
+        improvements: calculateImprovements(content, optimizedContent)
       }
     })
   } catch (error) {
@@ -135,15 +136,64 @@ router.get("/variables/:projectId", authenticateToken, async (req, res) => {
 
     log.info("Getting available variables", { projectId, userId })
 
-    // Get project context to show available variables
-    const projectContext = await contentStructuringService['getProjectContext'](projectId)
-    const systemContext = contentStructuringService['getSystemContext']()
-    const userContext = contentStructuringService['getUserContext']()
+    // Get project data from database
+    const projectResult = await pool.query(
+      'SELECT name, description, framework, status FROM projects WHERE id = $1',
+      [projectId]
+    )
 
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Project not found"
+      })
+    }
+
+    const project = projectResult.rows[0]
+    
+    // Build available variables object
     const availableVariables = {
-      project: this.flattenObject(projectContext, 'project'),
-      system: this.flattenObject(systemContext, 'system'),
-      user: this.flattenObject(userContext, 'user')
+      project: {
+        'project.name': {
+          value: project.name,
+          type: 'string',
+          description: 'Project name'
+        },
+        'project.description': {
+          value: project.description,
+          type: 'string',
+          description: 'Project description'
+        },
+        'project.framework': {
+          value: project.framework,
+          type: 'string',
+          description: 'Project framework'
+        },
+        'project.status': {
+          value: project.status,
+          type: 'string',
+          description: 'Project status'
+        }
+      },
+      system: {
+        'system.date': {
+          value: new Date().toISOString(),
+          type: 'date',
+          description: 'Current date'
+        },
+        'system.year': {
+          value: new Date().getFullYear(),
+          type: 'number',
+          description: 'Current year'
+        }
+      },
+      user: {
+        'user.id': {
+          value: userId,
+          type: 'string',
+          description: 'User ID'
+        }
+      }
     }
 
     res.json({
@@ -173,7 +223,7 @@ router.post("/validate-variables", authenticateToken, async (req, res) => {
       userId 
     })
 
-    const validationResults = await this.validateVariables(variables)
+    const validationResults = await validateVariables(variables)
 
     res.json({
       success: true,
@@ -231,7 +281,7 @@ function flattenObject(obj: any, prefix: string): any {
     const fullKey = `${prefix}.${key}`
     
     if (value && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
-      Object.assign(flattened, this.flattenObject(value, fullKey))
+      Object.assign(flattened, flattenObject(value, fullKey))
     } else {
       flattened[fullKey] = {
         value,
@@ -255,7 +305,7 @@ async function validateVariables(variables: Record<string, any>): Promise<any> {
   }
 
   for (const [name, value] of Object.entries(variables)) {
-    const validation = this.validateSingleVariable(name, value)
+    const validation = validateSingleVariable(name, value)
     
     if (validation.isValid) {
       results.valid.push({ name, value, ...validation })
@@ -282,7 +332,7 @@ function validateSingleVariable(name: string, value: any): any {
   }
 
   // Type validation
-  const type = this.inferVariableType(name)
+  const type = inferVariableType(name)
   
   switch (type) {
     case 'text':
@@ -330,7 +380,7 @@ function validateSingleVariable(name: string, value: any): any {
 
   // Length validation
   if (typeof value === 'string') {
-    if (value.length === 0 && this.isVariableRequired(name)) {
+    if (value.length === 0 && isVariableRequired(name)) {
       result.isValid = false
       result.errors.push('Required variable cannot be empty')
     }

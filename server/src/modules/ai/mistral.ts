@@ -243,16 +243,14 @@ class MistralConnector {
   /**
    * Get available models for a provider
    */
-  async getAvailableModels(providerName?: string): Promise<string[]> {
-    // Mistral's available models
+  async getAvailableModels(providerName?: string): Promise<any[]> {
+    // Mistral's available models with metadata
     const defaultModels = [
-      'mistral-large-latest',
-      'mistral-medium-latest', 
-      'mistral-small-latest',
-      'mistral-tiny',
-      'codestral-latest',
-      'pixtral-12b-2409',
-      'pixtral-large-latest'
+      { id: 'mistral-large-latest', name: 'Mistral Large (Latest)', description: 'Most capable model', context_window: 128000, capabilities: ['text', 'function-calling'] },
+      { id: 'mistral-small-latest', name: 'Mistral Small (Latest)', description: 'Fast and cost-effective', context_window: 32000, capabilities: ['text'] },
+      { id: 'mistral-medium-latest', name: 'Mistral Medium (Latest)', description: 'Balanced performance', context_window: 32000, capabilities: ['text'] },
+      { id: 'open-mistral-7b', name: 'Open Mistral 7B', description: 'Open source model', context_window: 32000, capabilities: ['text'] },
+      { id: 'open-mixtral-8x7b', name: 'Open Mixtral 8x7B', description: 'Mixture of experts', context_window: 32000, capabilities: ['text'] },
     ]
 
     if (!providerName) {
@@ -262,38 +260,29 @@ class MistralConnector {
     try {
       const client = this.clients.get(providerName)
       if (!client) {
+        logger.warn(`No client found for provider: ${providerName}`)
         return defaultModels
       }
 
-      // Mistral AI doesn't have a models.list endpoint like OpenAI
-      // Test each model by trying to make a simple request
-      const availableModels: string[] = []
+      logger.info(`Calling Mistral API to list available models for ${providerName}...`)
       
-      for (const modelName of defaultModels) {
-        try {
-          // Try to make a simple request to test if the model is available using AI SDK
-          // generateText - temporarily disabled
-          // await generateText({
-          //   model: client(modelName),
-          //   messages: [{ role: 'user', content: 'test' }],
-          //   maxTokens: 1,
-          // })
-          // If no error is thrown, the model is available
-          availableModels.push(modelName)
-        } catch (error: any) {
-          // Check if it's a model not found error vs other errors
-          if (error.message && error.message.includes('model')) {
-            // Model is not available, skip it
-            logger.debug(`Model ${modelName} not available for provider ${providerName}`)
-          } else {
-            // Other error (auth, network, etc.) - assume model is available
-            availableModels.push(modelName)
-          }
-        }
+      // Try to list models via Mistral SDK
+      const response = await client.models.list()
+      
+      if (response.data && Array.isArray(response.data)) {
+        const models = response.data.map((model: any) => ({
+          id: model.id,
+          name: model.name || model.id,
+          description: model.description || '',
+          context_window: model.max_context_length || 32000,
+          capabilities: model.capabilities || ['text']
+        }))
+        
+        logger.info(`✅ Discovered ${models.length} Mistral models via API`)
+        return models.length > 0 ? models : defaultModels
       }
       
-      // If no models were found available, return defaults
-      return availableModels.length > 0 ? availableModels : defaultModels
+      return defaultModels
     } catch (error) {
       logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
       return defaultModels

@@ -241,17 +241,13 @@ class OpenAIConnector {
   /**
    * Get available models for OpenAI
    */
-  async getAvailableModels(providerName?: string): Promise<string[]> {
+  async getAvailableModels(providerName?: string): Promise<any[]> {
     const defaultModels = [
-      "gpt-4",
-      "gpt-4-turbo",
-      "gpt-4-turbo-preview",
-      "gpt-4-0125-preview",
-      "gpt-4-1106-preview",
-      "gpt-3.5-turbo",
-      "gpt-3.5-turbo-16k",
-      "gpt-3.5-turbo-1106",
-      "gpt-3.5-turbo-0125"
+      { id: 'gpt-4o', name: 'GPT-4o', description: 'Most capable multimodal model', context_window: 128000, capabilities: ['text', 'vision', 'function-calling'] },
+      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Fast and affordable', context_window: 128000, capabilities: ['text', 'vision', 'function-calling'] },
+      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Previous flagship model', context_window: 128000, capabilities: ['text', 'vision', 'function-calling'] },
+      { id: 'gpt-4', name: 'GPT-4', description: 'Original GPT-4', context_window: 8192, capabilities: ['text', 'function-calling'] },
+      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective', context_window: 16385, capabilities: ['text', 'function-calling'] },
     ]
 
     if (!providerName) {
@@ -271,14 +267,21 @@ class OpenAIConnector {
       }
 
       logger.info(`Found client for provider: ${providerName}, fetching models...`)
-      const models = await client.models.list()
-      const availableModels = models.data
-        .filter(model => model.id.startsWith("gpt-"))
-        .map(model => model.id)
-        .sort()
+      const response = await client.models.list()
       
-      logger.info(`Found ${availableModels.length} available models for ${providerName}: ${availableModels.join(', ')}`)
-      return availableModels
+      const models = response.data
+        .filter(model => model.id.startsWith("gpt-") || model.id.startsWith("o1-"))
+        .map(model => ({
+          id: model.id,
+          name: model.id.toUpperCase().replace(/-/g, ' '),
+          description: '',
+          context_window: (model as any).context_window || 128000,
+          capabilities: ['text']
+        }))
+        .sort((a, b) => a.id.localeCompare(b.id))
+      
+      logger.info(`✅ Discovered ${models.length} OpenAI models via API: ${models.map(m => m.id).join(', ')}`)
+      return models.length > 0 ? models : defaultModels
     } catch (error) {
       logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
       return defaultModels

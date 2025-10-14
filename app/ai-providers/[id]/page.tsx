@@ -45,6 +45,7 @@ interface ProviderDetails {
   type: string
   is_active: boolean
   models: string[]
+  default_model?: string
   configuration: any
   usage_stats?: any
   created_at: string
@@ -86,6 +87,13 @@ export default function AIProviderDetails() {
     result: any
     timestamp: string
   }>>([])
+  
+  // Model Discovery state
+  const [discovering, setDiscovering] = useState(false)
+  const [discoveredModels, setDiscoveredModels] = useState<any[]>([])
+  const [selectedModels, setSelectedModels] = useState<string[]>([])
+  const [syncingModels, setSyncingModels] = useState(false)
+  const [selectedDefaultModel, setSelectedDefaultModel] = useState<string | null>(null)
   
   // Collapsible state
   const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false)
@@ -163,6 +171,10 @@ export default function AIProviderDetails() {
     try {
       const providers = await apiClient.getAIProviders()
       const providerData = providers.find((p: any) => p.id === providerId)
+      
+      console.log('📥 Provider data from API:', providerData)
+      console.log('📊 Models in provider:', providerData?.models)
+      console.log('🎯 Default model:', providerData?.default_model)
       
       if (!providerData) {
         setError("Provider not found")
@@ -342,6 +354,99 @@ export default function AIProviderDetails() {
     } else {
       toast.error(`Connectivity Test completed with issues. ${passedTests}/${totalTests} tests passed`)
     }
+  }
+
+  // Discover available models from provider API
+  const discoverModels = async () => {
+    setDiscovering(true)
+    setDiscoveredModels([])
+    try {
+      const response = await apiClient.request(`/ai/providers/${providerId}/discover-models`)
+      setDiscoveredModels(response.discovered_models || [])
+      
+      // Pre-select all discovered models
+      const modelIds = (response.discovered_models || []).map((m: any) => m.id || m.name || m)
+      setSelectedModels(modelIds)
+      
+      // Pre-select current default or first model
+      setSelectedDefaultModel(response.current_default || modelIds[0] || null)
+      
+      toast.success(`Discovered ${response.discovered_models?.length || 0} models from ${response.provider?.name}`)
+    } catch (error: any) {
+      console.error('Model discovery error:', error)
+      toast.error(error.message || 'Failed to discover models')
+    } finally {
+      setDiscovering(false)
+    }
+  }
+  
+  // Sync selected models to database
+  const syncModels = async () => {
+    if (selectedModels.length === 0) {
+      toast.error('Please select at least one model to sync')
+      return
+    }
+    
+    if (!selectedDefaultModel) {
+      toast.error('Please select a default model')
+      return
+    }
+    
+    console.log('🔄 Syncing models:', {
+      selectedModels,
+      selectedDefaultModel,
+      providerId
+    })
+    
+    setSyncingModels(true)
+    try {
+      const response = await apiClient.request(`/ai/providers/${providerId}/sync-models`, {
+        method: 'POST',
+        body: JSON.stringify({
+          models: selectedModels,
+          default_model: selectedDefaultModel
+        })
+      })
+      
+      console.log('✅ Sync response:', response)
+      console.log('📦 Synced provider data:', response.provider)
+      
+      // Update provider state immediately with the response
+      if (response.provider) {
+        const providers = await apiClient.getAIProviders()
+        const updatedProvider = providers.find((p: any) => p.id === providerId)
+        
+        console.log('📥 Reloaded provider from API:', updatedProvider)
+        console.log('📊 Updated models count:', updatedProvider?.models?.length)
+        console.log('📋 Updated models list:', updatedProvider?.models)
+        console.log('🎯 Updated default model:', updatedProvider?.default_model)
+        
+        if (updatedProvider) {
+          setProvider(updatedProvider)
+        }
+      }
+      
+      toast.success(`Models synced successfully! ${selectedModels.length} models saved.`)
+      
+      // Clear discovery state
+      setDiscoveredModels([])
+      setSelectedModels([])
+      setSelectedDefaultModel(null)
+    } catch (error: any) {
+      console.error('Model sync error:', error)
+      toast.error(error.message || 'Failed to sync models')
+    } finally {
+      setSyncingModels(false)
+    }
+  }
+  
+  // Toggle model selection
+  const toggleModelSelection = (modelId: string) => {
+    setSelectedModels(prev => 
+      prev.includes(modelId) 
+        ? prev.filter(id => id !== modelId)
+        : [...prev, modelId]
+    )
   }
 
   if (loading) {
@@ -627,79 +732,77 @@ export default function AIProviderDetails() {
                 <TabsTrigger value="configuration">Configuration</TabsTrigger>
                 <TabsTrigger value="testing">Testing</TabsTrigger>
                 <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                <TabsTrigger value="discover">Model Discovery</TabsTrigger>
               </TabsList>
 
               <TabsContent value="models" className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold">Configured Models</h3>
-                  <Button onClick={() => setAddModelDialogOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Model
+                  <h3 className="text-lg font-semibold">Available Models</h3>
+                  <Button onClick={() => router.push(`#discover`)}>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Discover More Models
                   </Button>
                 </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {models.map((model) => (
-                    <Card key={model.id} className="hover:shadow-md transition-shadow">
+
+                {/* Show provider.models (from available_models column) */}
+                {provider?.models && provider.models.length > 0 ? (
+                  <div className="space-y-4">
+                    {/* Default Model Card */}
+                    <Card className="border-2 border-primary">
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
-                          <CardTitle className="text-lg">{model.name}</CardTitle>
-                          <div className="flex items-center space-x-1">
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => router.push(`/ai-providers/${providerId}/model/${model.id}`)}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              onClick={() => setDeleteModelDialogOpen(model.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                          <div className="flex items-center gap-2">
+                            <CardTitle className="text-lg">{provider.default_model || provider.models[0]}</CardTitle>
+                            <Badge variant="default">Default</Badge>
                           </div>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Badge variant={model.is_active ? "default" : "secondary"}>
-                            {model.is_active ? "Active" : "Inactive"}
-                          </Badge>
+                          <CheckCircle className="h-5 w-5 text-primary" />
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Context Window:</span>
-                            <span>{model.contextWindow?.toLocaleString() || 'Unknown'} tokens</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Max Tokens:</span>
-                            <span>{model.maxTokens?.toLocaleString() || 'Unknown'} tokens</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Temperature:</span>
-                            <span>{model.temperature || 0.7}</span>
-                          </div>
-                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          This is the default model used when no specific model is requested.
+                        </p>
                       </CardContent>
                     </Card>
-                  ))}
-                  
-                  {models.length === 0 && (
-                    <div className="col-span-full text-center py-12">
-                      <Zap className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold mb-2">No Models Configured</h3>
-                      <p className="text-muted-foreground mb-4">
-                        Add your first model to start using this AI provider.
-                      </p>
-                      <Button onClick={() => setAddModelDialogOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Add Model
-                      </Button>
+
+                    {/* Other Models */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {provider.models
+                        .filter(modelId => modelId !== provider.default_model)
+                        .map((modelId) => (
+                          <Card key={modelId} className="hover:shadow-md transition-shadow">
+                            <CardHeader className="pb-3">
+                              <CardTitle className="text-lg font-mono">{modelId}</CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <p className="text-xs text-muted-foreground">
+                                Available for use with {provider.name}
+                              </p>
+                            </CardContent>
+                          </Card>
+                        ))}
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Zap className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-semibold mb-2">No Models Configured</h3>
+                    <p className="text-muted-foreground mb-4">
+                      Use Model Discovery to find and sync available models from {provider?.name}.
+                    </p>
+                    <Button onClick={() => {
+                      const tabs = document.querySelector('[role="tablist"]')
+                      const discoverTab = Array.from(tabs?.querySelectorAll('[role="tab"]') || [])
+                        .find(tab => tab.textContent?.includes('Model Discovery'))
+                      if (discoverTab instanceof HTMLElement) {
+                        discoverTab.click()
+                      }
+                    }}>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Go to Model Discovery
+                    </Button>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="configuration" className="space-y-4">
@@ -1039,10 +1142,14 @@ export default function AIProviderDetails() {
                               }
 
                               // Update provider configuration
+                              // Extract API key from configData and send as separate top-level field
+                              const { apiKey: extractedApiKey, ...configWithoutApiKey } = configData
+                              
                               await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
                                 method: 'POST',
                                 body: JSON.stringify({
-                                  configuration: configData
+                                  api_key: extractedApiKey,  // Send API key as top-level field
+                                  configuration: configWithoutApiKey
                                 })
                               })
 
@@ -1259,6 +1366,217 @@ export default function AIProviderDetails() {
                   </CardContent>
                 </Card>
               </TabsContent>
+
+              <TabsContent value="discover" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Zap className="h-5 w-5" />
+                      Model Discovery
+                    </CardTitle>
+                    <CardDescription>
+                      Discover available models from {provider?.name}'s API and sync them to your database.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Current Configuration */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold">Current Configuration</h4>
+                      <div className="bg-muted p-4 rounded-lg space-y-2">
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Configured Models:</span>
+                          <Badge variant="secondary">{provider?.models?.length || 0} models</Badge>
+                        </div>
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Default Model:</span>
+                          <code className="text-xs bg-background px-2 py-1 rounded">
+                            {(provider as any)?.default_model || 'Not set'}
+                          </code>
+                        </div>
+                        {provider?.models && provider.models.length > 0 && (
+                          <div className="mt-3">
+                            <span className="text-xs text-muted-foreground">Current models:</span>
+                            <div className="flex flex-wrap gap-2 mt-2">
+                              {provider.models.map((model) => (
+                                <Badge key={model} variant="outline" className="text-xs">
+                                  {model}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Discovery Action */}
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-semibold">Discover Models</h4>
+                        <Button 
+                          onClick={discoverModels}
+                          disabled={discovering}
+                          variant="default"
+                        >
+                          {discovering ? (
+                            <>
+                              <Activity className="mr-2 h-4 w-4 animate-spin" />
+                              Discovering...
+                            </>
+                          ) : (
+                            <>
+                              <Zap className="mr-2 h-4 w-4" />
+                              Discover Models
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        Query {provider?.name}'s API to discover all available models.
+                      </p>
+                    </div>
+
+                    {/* Discovered Models */}
+                    {discoveredModels.length > 0 && (
+                      <div className="space-y-3 border-t pt-6">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-sm font-semibold">
+                            Discovered Models ({discoveredModels.length})
+                          </h4>
+                          <Badge variant="secondary">
+                            {selectedModels.length} selected
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                          {discoveredModels.map((model: any) => {
+                            const modelId = model.id || model.name || model
+                            const isSelected = selectedModels.includes(modelId)
+                            const isDefault = selectedDefaultModel === modelId
+
+                            return (
+                              <div
+                                key={modelId}
+                                className={`p-4 rounded-lg border-2 transition-all cursor-pointer ${
+                                  isSelected 
+                                    ? 'border-primary bg-primary/5' 
+                                    : 'border-border hover:border-primary/50'
+                                }`}
+                                onClick={() => toggleModelSelection(modelId)}
+                              >
+                                <div className="flex items-start justify-between gap-4">
+                                  <div className="flex-1 space-y-1">
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={isSelected}
+                                        onChange={() => toggleModelSelection(modelId)}
+                                        className="rounded"
+                                        onClick={(e) => e.stopPropagation()}
+                                      />
+                                      <code className="text-sm font-mono font-semibold">
+                                        {model.name || modelId}
+                                      </code>
+                                      {isDefault && (
+                                        <Badge variant="default" className="text-xs">
+                                          Default
+                                        </Badge>
+                                      )}
+                                    </div>
+
+                                    {model.description && (
+                                      <p className="text-xs text-muted-foreground ml-6">
+                                        {model.description}
+                                      </p>
+                                    )}
+
+                                    {(model.context_window || model.capabilities) && (
+                                      <div className="flex flex-wrap gap-2 ml-6 mt-2">
+                                        {model.context_window && (
+                                          <Badge variant="outline" className="text-xs">
+                                            {model.context_window.toLocaleString()} tokens
+                                          </Badge>
+                                        )}
+                                        {model.capabilities?.map((cap: string) => (
+                                          <Badge key={cap} variant="outline" className="text-xs">
+                                            {cap}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <Button
+                                    size="sm"
+                                    variant={isDefault ? "default" : "outline"}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      setSelectedDefaultModel(modelId)
+                                      if (!isSelected) {
+                                        toggleModelSelection(modelId)
+                                      }
+                                    }}
+                                    disabled={!isSelected && !isDefault}
+                                  >
+                                    {isDefault ? 'Default' : 'Set Default'}
+                                  </Button>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+
+                        {/* Sync Actions */}
+                        <div className="flex items-center justify-between pt-4 border-t">
+                          <div className="text-sm text-muted-foreground">
+                            Select models to sync and choose a default model
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => {
+                                setDiscoveredModels([])
+                                setSelectedModels([])
+                                setSelectedDefaultModel(null)
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={syncModels}
+                              disabled={syncingModels || selectedModels.length === 0 || !selectedDefaultModel}
+                            >
+                              {syncingModels ? (
+                                <>
+                                  <Activity className="mr-2 h-4 w-4 animate-spin" />
+                                  Syncing...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="mr-2 h-4 w-4" />
+                                  Sync to Database
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Help Text */}
+                    {discoveredModels.length === 0 && !discovering && (
+                      <div className="bg-muted/50 p-6 rounded-lg text-center space-y-2">
+                        <Zap className="h-8 w-8 mx-auto text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">
+                          Click "Discover Models" to query {provider?.name}'s API for available models.
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          This will fetch the latest model list directly from the provider.
+                        </p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
             </Tabs>
           </div>
         </main>
@@ -1407,6 +1725,42 @@ export default function AIProviderDetails() {
               disabled={!newModelForm.modelId || !newModelForm.modelName || addingModel}
             >
               {addingModel ? "Adding..." : "Add Model"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Model Dialog */}
+      <Dialog open={deleteModelDialogOpen !== null} onOpenChange={(open) => !open && setDeleteModelDialogOpen(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Model</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this model configuration? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {deleteModelDialogOpen && (
+            <div className="py-4">
+              <p className="text-sm">
+                You are about to delete the model configuration for:{" "}
+                <code className="font-mono font-semibold bg-muted px-2 py-1 rounded">
+                  {models.find(m => m.id === deleteModelDialogOpen)?.name || deleteModelDialogOpen}
+                </code>
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteModelDialogOpen(null)}>
+              Cancel
+            </Button>
+            <Button 
+              variant="destructive"
+              onClick={() => deleteModelDialogOpen && handleDeleteModel(deleteModelDialogOpen)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete Model
             </Button>
           </DialogFooter>
         </DialogContent>

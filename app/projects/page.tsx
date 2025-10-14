@@ -100,10 +100,24 @@ export default function Projects() {
     name: string
     template_id: string
     prompt: string
+    provider: string
+    model: string
+    temperature: number
   }>({
     name: "",
     template_id: "",
     prompt: "",
+    provider: "Groq AI",
+    model: "llama-3.1-8b-instant",
+    temperature: 0.7,
+  })
+  
+  // Generation progress tracking
+  const [generationProgress, setGenerationProgress] = useState({
+    step: 0,
+    totalSteps: 4,
+    message: '',
+    percentage: 0,
   })
 
   // Document upload state
@@ -398,20 +412,63 @@ export default function Projects() {
     try {
       setGeneratingDocument(true)
       
-      // Generate content using AI
+      // Step 1: Preparing context
+      setGenerationProgress({
+        step: 1,
+        totalSteps: 4,
+        message: 'Preparing project context...',
+        percentage: 25,
+      })
+      
+      // Small delay for visual feedback
+      await new Promise(resolve => setTimeout(resolve, 300))
+      
+      // Step 2: Generating content with AI
+      setGenerationProgress({
+        step: 2,
+        totalSteps: 4,
+        message: `Generating content with ${documentGenerationForm.provider}...`,
+        percentage: 50,
+      })
+      
+      // Generate content using AI Gateway
       const aiResponse = await apiClient.generateContent({
         prompt: documentGenerationForm.prompt,
-        provider: "openai", // Default provider
+        provider: documentGenerationForm.provider || "Groq AI",
+        model: documentGenerationForm.model || "llama-3.1-8b-instant",
+        temperature: documentGenerationForm.temperature || 0.7,
         template_id: documentGenerationForm.template_id || undefined,
+      })
+
+      // Extract Markdown content from response
+      const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
+      
+      // Step 3: Saving document
+      setGenerationProgress({
+        step: 3,
+        totalSteps: 4,
+        message: 'Content generated! Saving document...',
+        percentage: 75,
       })
 
       // Create document with generated content
       await apiClient.createDocument(selectedProjectForGeneration.id, {
         name: documentGenerationForm.name,
-        content: aiResponse.result || aiResponse,
+        content: content,
         template_id: documentGenerationForm.template_id || undefined,
         status: "draft",
       })
+      
+      // Step 4: Complete!
+      setGenerationProgress({
+        step: 4,
+        totalSteps: 4,
+        message: 'Document created successfully! ✓',
+        percentage: 100,
+      })
+      
+      // Small delay to show success message
+      await new Promise(resolve => setTimeout(resolve, 800))
 
       toast.success("Document generated successfully!")
       setGenerateDialogOpen(false)
@@ -420,10 +477,15 @@ export default function Projects() {
         name: "",
         template_id: "",
         prompt: "",
+        provider: "Groq AI",
+        model: "llama-3.1-8b-instant",
+        temperature: 0.7,
       })
+      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } catch (error) {
       console.error("Failed to generate document:", error)
       toast.error("Failed to generate document")
+      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
       setGeneratingDocument(false)
     }
@@ -977,6 +1039,27 @@ export default function Projects() {
                           required
                         />
                       </div>
+                      
+                      {/* Progress Indicator */}
+                      {generatingDocument && generationProgress.step > 0 && (
+                        <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium text-foreground">
+                              Step {generationProgress.step} of {generationProgress.totalSteps}
+                            </span>
+                            <span className="text-muted-foreground">
+                              {generationProgress.percentage}%
+                            </span>
+                          </div>
+                          <Progress value={generationProgress.percentage} className="h-2" />
+                          <div className="flex items-center space-x-2">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                            <span className="text-sm text-muted-foreground">
+                              {generationProgress.message}
+                            </span>
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <DialogFooter>
                       <Button

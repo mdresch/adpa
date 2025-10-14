@@ -13,6 +13,7 @@ import { validate, validateParams } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import Joi from "joi"
 import { v4 as uuidv4 } from "uuid"
+import { aiService } from "../services/aiService"
 
 const router = express.Router()
 
@@ -465,6 +466,12 @@ router.post("/providers/:id/configure",
       `
 
       const result = await pool.query(updateQuery, updateValues)
+
+      // Re-initialize providers if API key was updated
+      if (api_key) {
+        await aiService.initializeProviders()
+        log.info(`AI providers reinitialized after API key update`)
+      }
 
       log.info(`AI provider updated: ${provider.name} (${provider.provider_type}) by ${req.user?.email}`)
 
