@@ -383,16 +383,100 @@ router.post("/project/:projectId",
       const wordCount = contentString ? contentString.trim().split(/\s+/).filter(Boolean).length : 0
       const characterCount = contentString ? contentString.length : 0
 
+      // Fetch template metadata if template_id is provided
+      let templateMetadata: any = null
+      let templateVersion: string | null = null
+      let templateAuthor: string | null = null
+      let templateFramework: string | null = null
+      let templateCategory: string | null = null
+      let templateComplexity: string | null = null
+
+      if (template_id) {
+        try {
+          const templateResult = await pool.query(`
+            SELECT 
+              t.*,
+              u.name as author_name,
+              (t.content::jsonb -> 'metadata' ->> 'version') as version,
+              (t.content::jsonb -> 'metadata' ->> 'complexity') as complexity,
+              t.content::jsonb -> 'metadata' as metadata
+            FROM templates t
+            LEFT JOIN users u ON t.created_by = u.id
+            WHERE t.id = $1
+          `, [template_id])
+
+          if (templateResult.rows.length > 0) {
+            const template = templateResult.rows[0]
+            templateVersion = template.version || '1.0'
+            templateAuthor = template.author_name || 'System'
+            templateFramework = template.framework
+            templateCategory = template.category
+            templateComplexity = template.complexity || 'intermediate'
+            templateMetadata = {
+              template_id: template.id,
+              template_name: template.name,
+              version: templateVersion,
+              framework: templateFramework,
+              category: templateCategory,
+              complexity: templateComplexity,
+              author: templateAuthor,
+              description: template.description,
+              created_at: template.created_at,
+              updated_at: template.updated_at
+            }
+            
+            log.info('Template metadata captured:', templateMetadata)
+          }
+        } catch (error) {
+          log.warn('Failed to fetch template metadata:', error)
+        }
+      }
+
+      // Extract generation metadata from request if provided
+      const generationMetadata = req.body.generation_metadata || null
+
       const result = await pool.query(
         `
-        INSERT INTO documents (id, project_id, name, content, template_id, status, created_by, updated_by, word_count, character_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9)
+        INSERT INTO documents (
+          id, project_id, name, content, template_id, status, created_by, updated_by, 
+          word_count, character_count,
+          template_version, template_author, template_framework, template_category, 
+          template_complexity, template_metadata, generation_metadata
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         RETURNING *
       `,
-        [id, projectId, name, contentString, template_id, status, req.user?.id, wordCount, characterCount]
+        [
+          id, projectId, name, contentString, template_id, status, req.user?.id, 
+          wordCount, characterCount,
+          templateVersion, templateAuthor, templateFramework, templateCategory,
+          templateComplexity, templateMetadata ? JSON.stringify(templateMetadata) : null,
+          generationMetadata ? JSON.stringify(generationMetadata) : null
+        ]
       )
 
-  log.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`)
+      // Track template usage
+      if (template_id && result.rows[0]) {
+        try {
+          await pool.query(`
+            INSERT INTO template_usage (
+              template_id, document_id, user_id, project_id, 
+              used_at, word_count, success
+            )
+            VALUES ($1, $2, $3, $4, NOW(), $5, true)
+          `, [template_id, id, req.user?.id, projectId, wordCount])
+          
+          log.info('Template usage tracked')
+        } catch (error) {
+          log.warn('Failed to track template usage:', error)
+        }
+      }
+
+  log.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`, {
+    templateUsed: !!template_id,
+    templateVersion: templateVersion,
+    wordCount: wordCount
+  })
 
       return res.status(201).json({
         message: "Document created successfully",

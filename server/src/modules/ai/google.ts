@@ -235,16 +235,12 @@ class GoogleConnector {
   }
 
   /**
-   * Get available models for Google AI
+   * Get available models for Google AI by calling the real API
    */
-  async getAvailableModels(providerName?: string): Promise<string[]> {
+  async getAvailableModels(providerName?: string): Promise<any[]> {
     const defaultModels = [
-      "gemini-2.5-flash",
-      "gemini-1.5-pro",
-      "gemini-1.5-flash",
-      "gemini-1.0-pro",
-      "gemini-pro",
-      "gemini-pro-vision"
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient', context_window: 1000000, capabilities: ['text', 'vision'] },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable', context_window: 2000000, capabilities: ['text', 'vision'] },
     ]
 
     if (!providerName) {
@@ -254,29 +250,53 @@ class GoogleConnector {
     try {
       const client = this.clients.get(providerName)
       if (!client) {
+        logger.warn(`No client found for provider: ${providerName}`)
         return defaultModels
       }
 
-      // Google AI SDK doesn't expose a models.list method like OpenAI
-      // Test each model by trying to create a generative model instance
-      const availableModels: string[] = []
+      logger.info(`Calling Google API to list available models for ${providerName}...`)
       
-      for (const modelName of defaultModels) {
-        try {
-          // Try to create a generative model to test if it's available
-          const model = client.getGenerativeModel({ model: modelName })
-          // If no error is thrown, the model is available
-          availableModels.push(modelName)
-        } catch (error) {
-          // Model is not available, skip it
-          logger.debug(`Model ${modelName} not available for provider ${providerName}`)
-        }
+      // Call Google's REST API directly to list models
+      // The SDK doesn't have a listModels method, so we use fetch
+      const provider = this.providers.get(providerName)
+      if (!provider) {
+        return defaultModels
       }
       
-      // If no models were found available, return defaults
-      return availableModels.length > 0 ? availableModels : defaultModels
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=' + provider.config.apiKey
+      )
+      
+      if (!response.ok) {
+        throw new Error(`API responded with ${response.status}: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.models && Array.isArray(data.models)) {
+        const models = data.models
+          .filter((m: any) => 
+            m.supportedGenerationMethods?.includes('generateContent') &&
+            m.name.includes('gemini')
+          )
+          .map((m: any) => {
+            const modelId = m.name.replace('models/', '')
+            return {
+              id: modelId,
+              name: m.displayName || modelId,
+              description: m.description || '',
+              context_window: m.inputTokenLimit || 32000,
+              capabilities: m.supportedGenerationMethods || ['generateContent']
+            }
+          })
+        
+        logger.info(`✅ Discovered ${models.length} Google Gemini models via API`)
+        return models.length > 0 ? models : defaultModels
+      }
+      
+      return defaultModels
     } catch (error) {
-      logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
+      logger.error(`Failed to fetch models from Google API for ${providerName}:`, error)
       return defaultModels
     }
   }

@@ -13,6 +13,7 @@ import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
 import { initializeQueues } from "./services/queueService"
+import { aiService } from "./services/aiService"
 import jwt from "jsonwebtoken"
 import { pool } from "./database/connection"
 
@@ -42,13 +43,15 @@ import contextAiRoutes from "./routes/context-ai"
 // import aiProviderTestingRoutes from "./routes/ai-provider-testing"
 // import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
 import processFlowRoutes from "./routes/process-flow"
-// import aiModelsRoutes from "./routes/ai-models"
+import aiModelsRoutes from "./routes/ai-models"
 // import aiAnalyticsRoutes from "./routes/ai-analytics"
 import stakeholderRoutes from "./routes/stakeholders"
 import contentStructuringRoutes from "./routes/content-structuring"
 import compressionRoutes from "./routes/compression"
 import contextInjectionRoutes from "./routes/context-injection"
 import pipelineRoutes from "./routes/pipeline"
+import documentGenerationRoutes from "./routes/documentGeneration"
+import templateStatsRoutes from "./routes/template-stats"
 
 const app = express()
 const server = createServer(app)
@@ -97,6 +100,7 @@ console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
 app.use("/api/documents", documentRoutes)
+app.use("/api/documents", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/ai", aiRoutes)
 app.use("/api/analytics", analyticsRoutes)
@@ -109,6 +113,7 @@ app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
+app.use("/api/template-stats", templateStatsRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
 app.use("/api/adobe-pdf", adobePdfRoutes)
@@ -121,7 +126,7 @@ app.use("/api/context-ai", contextAiRoutes)
 // app.use("/api/ai-provider-testing", aiProviderTestingRoutes)
 // app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
 app.use("/api/process-flow", processFlowRoutes)
-// app.use("/api/ai-models", aiModelsRoutes)
+app.use("/api/ai-models", aiModelsRoutes)
 // app.use("/api/ai-analytics", aiAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
@@ -259,6 +264,19 @@ async function startServer() {
         typeof queueError === "object" && queueError !== null && "message" in queueError
           ? (queueError as { message?: string }).message
           : queueError
+      )
+    }
+
+    // Initialize AI providers
+    try {
+      await aiService.initializeProviders()
+      logger.info("AI providers initialized successfully")
+    } catch (aiError) {
+      logger.warn(
+        "AI provider initialization failed:",
+        typeof aiError === "object" && aiError !== null && "message" in aiError
+          ? (aiError as { message?: string }).message
+          : aiError
       )
     }
 

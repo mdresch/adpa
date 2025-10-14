@@ -119,7 +119,21 @@ export default function ProjectDetail() {
   const [documentName, setDocumentName] = useState("")
   const [documentDescription, setDocumentDescription] = useState("")
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
+  
+  // AI Provider selection for document generation
+  const [aiProviders, setAiProviders] = useState<any[]>([])
+  const [selectedProvider, setSelectedProvider] = useState("Groq AI")
+  const [selectedModel, setSelectedModel] = useState("llama-3.1-8b-instant")
+  const [aiTemperature, setAiTemperature] = useState(0.7)
   const [updating, setUpdating] = useState(false)
+  
+  // Generation progress tracking
+  const [generationProgress, setGenerationProgress] = useState({
+    step: 0,
+    totalSteps: 4,
+    message: '',
+    percentage: 0,
+  })
   const [stakeholderDialogOpen, setStakeholderDialogOpen] = useState(false)
   const [editingStakeholder, setEditingStakeholder] = useState<Stakeholder | null>(null)
   const [savingStakeholder, setSavingStakeholder] = useState(false)
@@ -273,66 +287,197 @@ export default function ProjectDetail() {
 
   // Returns template content based on selected template
   function getTemplateContent(templateId: string) {
-    switch (templateId) {
-      case "project-charter":
-        return { title: "Project Charter", sections: ["Purpose", "Objectives", "Stakeholders"] }
-      case "scope-statement":
-        return { title: "Scope Statement", sections: ["Scope", "Deliverables", "Exclusions"] }
-      case "wbs":
-        return { title: "Work Breakdown Structure", sections: ["Tasks", "Milestones"] }
-      case "risk-plan":
-        return { title: "Risk Management Plan", sections: ["Risks", "Mitigation", "Owners"] }
-      case "comm-plan":
-        return { title: "Communication Plan", sections: ["Audience", "Channels", "Frequency"] }
-      case "requirements-analysis":
-        return { title: "Requirements Analysis", sections: ["Business Requirements", "Functional Requirements"] }
-      case "stakeholder-analysis":
-        return { title: "Stakeholder Analysis", sections: ["Stakeholders", "Interests", "Influence"] }
-      case "business-case":
-        return { title: "Business Case", sections: ["Problem", "Solution", "Benefits"] }
-      case "solution-assessment":
-        return { title: "Solution Assessment", sections: ["Options", "Evaluation", "Recommendation"] }
-      case "data-governance":
-        return { title: "Data Governance Framework", sections: ["Policies", "Roles", "Processes"] }
-      case "data-quality":
-        return { title: "Data Quality Assessment", sections: ["Criteria", "Findings", "Recommendations"] }
-      case "data-architecture":
-        return { title: "Data Architecture", sections: ["Models", "Standards", "Tools"] }
-      default:
-        return { title: "Untitled Document", sections: [] }
+    // Find template from the loaded templates
+    const template = templates.find(t => t.id === templateId)
+    
+    if (template) {
+      // Extract detailed sections based on template name
+      let sections: string[] = []
+      const templateName = template.name.toLowerCase()
+      
+      if (templateName.includes('integration management')) {
+        sections = [
+          'Executive Summary (200+ words): Project overview with name/manager/sponsor/dates/budget, 3-5 key measurable objectives, integration approach, expected benefits and ROI',
+          'Project Charter (400+ words): Purpose and business justification, objectives table with success metrics, measurable success criteria, high-level requirements (functional/technical/performance/business), assumptions and constraints lists, key stakeholders table, initial risks',
+          'Project Management Plan (800+ words covering ALL 9 knowledge areas): 2.1 Scope Management (collection, definition, WBS, validation, control), 2.2 Schedule Management (activities, sequencing, estimation, milestones table), 2.3 Cost Management (estimation, budget table, baseline, EVM), 2.4 Quality Management (standards, QA/QC, metrics table), 2.5 Resource Management (team structure table, acquisition, development), 2.6 Communications Management (stakeholder matrix, channels, schedule, tools), 2.7 Risk Management (identification, analysis, response, top risks table), 2.8 Procurement Management (items, vendors, contracts), 2.9 Stakeholder Engagement (stakeholder matrix, strategies)',
+          'Integrated Change Control (300+ words): 7-step change control workflow, CCB structure with members table, change request form fields, impact assessment criteria (scope/schedule/cost/quality/risk/resources), approval criteria with 3 levels (PM/CCB/Sponsor thresholds)',
+          'Project Work Performance (300+ words): KPI table with at least 6 KPIs (SPI, CPI, defects, coverage, velocity, satisfaction) with targets and measurement methods, data collection sources and methods, performance reporting (weekly status, monthly dashboard), corrective action triggers and process',
+          'Integration Points (150+ words): System integrations (tools/APIs/platforms), Process integrations (workflows/handoffs)',
+          'Approval Signatures: Table with Role | Name | Signature | Date columns, Document version and review schedule'
+        ]
+      } else if (templateName.includes('scope')) {
+        sections = ['Scope Overview', 'Requirements Management', 'Scope Definition', 'WBS', 'Validation', 'Control']
+      } else if (templateName.includes('schedule')) {
+        sections = ['Schedule Overview', 'Activity Definition', 'Sequencing', 'Estimation', 'Development', 'Control']
+      } else if (templateName.includes('cost') || templateName.includes('budget')) {
+        sections = ['Cost Overview', 'Estimation Methods', 'Budget Baseline', 'Control Processes', 'Earned Value']
+      } else if (templateName.includes('quality')) {
+        sections = ['Quality Overview', 'Planning', 'Assurance', 'Control', 'Metrics', 'Improvement']
+      } else if (templateName.includes('resource')) {
+        sections = ['Resource Planning', 'Acquisition', 'Development', 'Management', 'Performance']
+      } else if (templateName.includes('communication')) {
+        sections = ['Communications Overview', 'Stakeholder Analysis', 'Channels & Methods', 'Schedule', 'Tools']
+      } else if (templateName.includes('risk')) {
+        sections = ['Risk Overview', 'Identification', 'Analysis', 'Response Planning', 'Monitoring & Control']
+      } else if (templateName.includes('procurement')) {
+        sections = ['Procurement Overview', 'Planning', 'Vendor Selection', 'Contract Management', 'Closeout']
+      } else if (templateName.includes('stakeholder')) {
+        sections = ['Stakeholder Identification', 'Analysis Matrix', 'Engagement Strategy', 'Management Plan']
+      } else if (templateName.includes('charter')) {
+        sections = ['Purpose & Justification', 'Objectives', 'Success Criteria', 'Requirements', 'Constraints']
+      } else if (templateName.includes('business case')) {
+        sections = ['Executive Summary', 'Problem Statement', 'Solution Options', 'Analysis', 'Recommendation']
+      } else {
+        sections = ['Overview', 'Objectives', 'Approach', 'Key Components', 'Implementation', 'Metrics']
+      }
+      
+      return { 
+        title: template.name,
+        sections: sections,
+        framework: template.framework || 'General'
+      }
     }
+    
+    return { title: documentName || "Document", sections: ['Overview', 'Details'], framework: 'General' }
   }
 
   // Create new document
   const handleCreateDocument = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    console.log('🚀 [1/10] handleCreateDocument called')
+    
     if (!documentName.trim()) {
+      console.error('❌ [VALIDATION] Document name is empty')
       toast.error("Document name is required")
       return
     }
+    console.log('✅ [2/10] Document name validated:', documentName)
 
     if (!selectedTemplate) {
+      console.error('❌ [VALIDATION] No template selected')
       toast.error("Please select a template")
       return
     }
+    console.log('✅ [3/10] Template validated:', selectedTemplate)
 
     try {
       setCreatingDocument(true)
+      console.log('✅ [4/10] Creating document flag set to true')
+      
+      // Step 1: Preparing context
+      setGenerationProgress({
+        step: 1,
+        totalSteps: 4,
+        message: 'Preparing project context...',
+        percentage: 25,
+      })
+      console.log('✅ [5/10] Progress indicator set to Step 1 (25%)')
 
-      // Build a helpful prompt for the AI using template + project context
+      // Build a comprehensive prompt for the AI using template + project context
       const templateContent = getTemplateContent(selectedTemplate)
-      const sections = Array.isArray(templateContent.sections) ? templateContent.sections.join(', ') : ''
+      const sections = Array.isArray(templateContent.sections) ? templateContent.sections : []
       const projectDesc = project?.description || 'No project description available.'
+      const projectName = project?.name || 'Unknown Project'
+      const framework = project?.framework || 'General'
+      
+      // Build detailed context
+      const teamContext = project?.team_members?.length 
+        ? `Team Members: ${project.team_members.join(', ')}` 
+        : 'Team composition to be determined'
+      const budgetContext = project?.budget 
+        ? `Budget: $${project.budget}` 
+        : 'Budget to be determined'
+      const timelineContext = project?.start_date && project?.end_date
+        ? `Timeline: ${project.start_date} to ${project.end_date}`
+        : 'Timeline to be determined'
+      
+      // Enhanced prompt with detailed instructions for comprehensive generation
+      const aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
 
-      const aiPrompt = `Generate a ${templateContent.title} for the project named "${project?.name || 'Unknown Project'}". ` +
-        `Project description: ${projectDesc}. Include the following sections: ${sections}. ` +
-        `Return the document body text only. Keep it professional and concise.`
+**Project Name**: ${projectName}
+**Framework**: ${framework}
+**Description**: ${projectDesc}
+${teamContext}
+${budgetContext}
+${timelineContext}
+
+**CRITICAL REQUIREMENTS - MUST FOLLOW:**
+1. ✅ Generate a COMPLETE, DETAILED document with ALL sections FULLY populated (minimum 2000 words total)
+2. ✅ Each section MUST meet its minimum word count requirement specified below
+3. ✅ Include SPECIFIC, ACTIONABLE content with realistic data - NO placeholders like "[Insert X]" or "TBD"
+4. ✅ Create at least 5-7 DETAILED TABLES with realistic data (objectives, KPIs, risks, stakeholders, budget, milestones, etc.)
+5. ✅ Use professional ${framework} terminology and demonstrate deep methodology knowledge
+6. ✅ Make this document EXECUTIVE-READY for immediate stakeholder presentation
+
+**REQUIRED SECTIONS WITH MINIMUM LENGTHS:**
+${sections.join('\n')}
+
+**DETAILED FORMATTING REQUIREMENTS:**
+📋 **Structure:**
+- Main title: # ${templateContent.title}
+- Section headers: ## for main sections (e.g., ## 1. Executive Summary)
+- Subsection headers: ### for subsections (e.g., ### 1.1 Project Overview)
+- Sub-subsection headers: #### for detailed items (e.g., #### 1.1.1 Background)
+
+📊 **Tables (MINIMUM 5 TABLES REQUIRED):**
+- Use Markdown table syntax: | Column 1 | Column 2 | Column 3 |
+- Include headers with proper alignment
+- Populate with realistic, project-specific data
+- Examples: Objectives table, KPI table, Risk register, Stakeholder matrix, Budget breakdown, Milestone schedule, CCB members, etc.
+
+📝 **Lists:**
+- Numbered lists (1. 2. 3.) for: processes, steps, workflows, sequences
+- Bullet lists (- or *) for: items, features, requirements, criteria
+- Nested lists for hierarchical information
+
+✨ **Emphasis:**
+- **Bold** for section labels, key terms, and important metrics
+- *Italic* for definitions and notes
+- \`Code\` for technical terms or system names
+
+📏 **Structure:**
+- Horizontal rules (---) between major sections for visual separation
+- Blank lines between paragraphs for readability
+- Proper indentation for nested content
+
+**CONTENT DEPTH REQUIREMENTS:**
+- Executive Summary: 200-300 words with project overview, objectives, benefits
+- Project Charter: 400-600 words with purpose, objectives table, requirements, constraints
+- Project Management Plan: 800-1200 words covering ALL 9 knowledge areas with detailed subsections
+- Each knowledge area subsection: 100-150 words minimum
+- Change Control: 300-400 words with 7-step process, CCB table, criteria
+- Performance Monitoring: 300-400 words with KPI table, reporting cadence
+- Integration Points: 150-200 words listing systems and processes
+- Approval section: Signature table with 4+ stakeholders
+
+**QUALITY STANDARDS:**
+✓ Professional tone suitable for executives and sponsors
+✓ Specific metrics and success criteria (e.g., "95% accuracy" not "high accuracy")
+✓ Realistic timelines and milestones
+✓ Concrete examples relevant to ${projectDesc}
+✓ Complete sentences and well-formed paragraphs
+✓ No generic boilerplate - tailor everything to ${projectName}
+
+**TABLES TO INCLUDE (with sample structure):**
+1. Objectives Table: | Objective | Description | Success Metric | Target Date |
+2. KPI Table: | KPI | Target | Measurement Method | Frequency | Owner |
+3. Risk Register: | Risk | Probability | Impact | Mitigation Strategy | Owner |
+4. Stakeholder Matrix: | Stakeholder | Role | Interest | Influence | Engagement Strategy |
+5. Budget Table: | Category | Estimated Cost | Notes |
+6. Milestone Schedule: | Milestone | Target Date | Dependencies | Status |
+7. CCB Members: | Name | Role | Responsibilities | Contact |
+
+Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This must be a production-ready, stakeholder-presentable document with NO placeholders, minimum 2000 words total, and comprehensive coverage of all sections:`
+
+      console.log('✅ [6/10] Prompt built. Length:', aiPrompt.length, 'chars')
+      console.log('📝 Prompt preview:', aiPrompt.substring(0, 200) + '...')
 
       // Enqueue AI generation job via jobs API
       let jobId: string | undefined
 
       try {
+        console.log('🔄 [7/10] Attempting to enqueue job...')
         const resp = await fetch('/api/jobs/ai-generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -348,16 +493,18 @@ export default function ProjectDetail() {
         if (resp.ok) {
           const body = await resp.json()
           jobId = body.jobId
+          console.log('✅ Job queued successfully:', jobId)
           toast.success('Document generation job queued — you can monitor it in Jobs')
         } else {
-          console.warn('Failed to enqueue job, falling back to direct generation', await resp.text())
+          console.warn('⚠️ Failed to enqueue job (status ' + resp.status + '), falling back to direct generation')
         }
       } catch (err) {
-        console.warn('Failed to enqueue job, falling back to direct generation', err)
+        console.warn('⚠️ Failed to enqueue job (exception), falling back to direct generation:', err)
       }
 
       // If we enqueued a job, just close dialog and refresh list (document will be created by worker)
       if (jobId) {
+        console.log('✅ Job queued, skipping direct generation')
         setDocumentName("")
         setDocumentDescription("")
         setSelectedTemplate("")
@@ -366,43 +513,144 @@ export default function ProjectDetail() {
         setCreatingDocument(false)
         return
       }
+      
+      console.log('🔄 [8/10] Job queue unavailable, proceeding with direct generation...')
 
-      // Fallback: synchronous generation via API client (legacy path)
+      // Fallback: synchronous generation via AI Gateway
+      // Step 2: Generating content with AI
+      setGenerationProgress({
+        step: 2,
+        totalSteps: 4,
+        message: `Generating content with ${selectedProvider}...`,
+        percentage: 50,
+      })
+      console.log('✅ [9/10] Progress indicator set to Step 2 (50%) - Starting AI generation')
+      
       let generatedText: string | undefined
+      let genResult: any = null  // Declare outside try block for metadata access later
+      
       try {
-        const genResult = await apiClient.generateDocument(aiPrompt, selectedTemplate)
+        const template = templates.find(t => t.id === selectedTemplate)
+        console.log('🤖 [AI-1/5] Starting AI generation...')
+        console.log('📊 Provider:', selectedProvider, '| Model:', selectedModel, '| Temp:', aiTemperature)
+        console.log('📋 Template:', template?.name || 'Unknown')
+        console.log('🔗 Project:', project?.name || 'Unknown')
+        
+        console.log('🌐 [AI-2/5] Calling apiClient.generateContent()...')
+        genResult = await apiClient.generateContent({
+          prompt: aiPrompt,
+          provider: selectedProvider,
+          model: selectedModel,
+          temperature: aiTemperature,
+          template_id: selectedTemplate,
+          // Additional context for metadata tracking
+          project_id: projectId,
+          project_name: project?.name || 'Unknown Project',
+          template_name: template?.name || 'Unknown Template',
+          framework: project?.framework || template?.framework || 'General'
+        })
+        
+        console.log('✅ [AI-3/5] API call completed. Response:', genResult)
+        
+        // Extract content from AI response
+        console.log('🔍 [AI-4/5] Extracting content from response...')
         if (genResult?.result?.content) generatedText = genResult.result.content
-        else if (genResult?.result?.choices?.[0]?.message?.content) generatedText = genResult.result.choices[0].message.content
+        else if (genResult?.result?.text) generatedText = genResult.result.text
         else if (genResult?.content) generatedText = genResult.content
+        else if (genResult?.text) generatedText = genResult.text
         else if (typeof genResult === 'string') generatedText = genResult
         else generatedText = JSON.stringify(genResult)
+        
+        console.log('✅ [AI-5/5] Content extracted! Length:', generatedText?.length || 0, 'chars')
+        console.log('📝 Content preview:', generatedText?.substring(0, 100) + '...')
+        
+        // Log comprehensive metadata if available
+        if (genResult?.metadata) {
+          console.log('📊 Generation Metadata:', genResult.metadata)
+        }
+        if (genResult?.quality) {
+          console.log('✨ Quality Metrics:', genResult.quality)
+        }
+        
+        // Step 3: Content generated successfully
+        console.log('✅ [10/10] Setting progress to Step 3 (75%) - Saving document...')
+        setGenerationProgress({
+          step: 3,
+          totalSteps: 4,
+          message: 'Content generated! Saving document...',
+          percentage: 75,
+        })
       } catch (aiError) {
-        console.warn('AI generation failed, falling back to template content', aiError)
+        console.error('❌ [AI-ERROR] AI generation failed:', aiError)
+        toast.error('AI generation failed. Please try again.')
+        setCreatingDocument(false)
+        setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+        return
       }
 
+      // Extract metadata and quality from AI response
+      const generationMetadata = genResult?.metadata || null
+      const qualityMetrics = genResult?.quality || null
+      console.log('📊 [SAVE-1/6] Metadata extracted:', { hasMetadata: !!generationMetadata, hasQuality: !!qualityMetrics })
+      
       const documentData = {
         name: documentName,
-        content: generatedText ? { text: generatedText } : templateContent,
+        content: generatedText || "# Document content not generated",
         template_id: selectedTemplate,
         status: 'draft' as const,
+        generation_metadata: generationMetadata ? {
+          ...generationMetadata,
+          quality: qualityMetrics
+        } : null
       }
+      console.log('📄 [SAVE-2/6] Document data prepared:', {
+        name: documentData.name,
+        contentLength: documentData.content.length,
+        templateId: documentData.template_id,
+        hasMetadata: !!documentData.generation_metadata
+      })
 
-      await apiClient.createDocument(projectId, documentData)
+      console.log('🌐 [SAVE-3/6] Calling apiClient.createDocument()...')
+      const createResult = await apiClient.createDocument(projectId, documentData)
+      console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.document?.id || 'unknown')
+      
+      // Step 4: Complete!
+      console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
+      setGenerationProgress({
+        step: 4,
+        totalSteps: 4,
+        message: 'Document created successfully! ✓',
+        percentage: 100,
+      })
+
+      // Small delay to show success message
+      await new Promise(resolve => setTimeout(resolve, 800))
 
       toast.success("Document created successfully!")
+      console.log('✅ [SAVE-6/6] Success toast displayed')
 
       // Reset form
+      console.log('🔄 [CLEANUP-1/3] Resetting form state...')
       setDocumentName("")
       setDocumentDescription("")
       setSelectedTemplate("")
       setCreateDialogOpen(false)
+      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
 
       // Refresh documents list
+      console.log('🔄 [CLEANUP-2/3] Refreshing documents list...')
       await fetchDocuments()
+      console.log('✅ [CLEANUP-3/3] All done! Document generation complete!')
     } catch (error) {
-      console.error("Failed to create document:", error)
+      console.error("❌ [ERROR] Failed to create document:", error)
+      console.error("❌ [ERROR] Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
       toast.error("Failed to create document")
+      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
+      console.log('🏁 [FINALLY] Resetting creatingDocument flag')
       setCreatingDocument(false)
     }
   }
@@ -444,6 +692,18 @@ export default function ProjectDetail() {
     } finally {
       setLoadingTemplates(false)
       console.log('🔵 fetchTemplatesForUpload completed')
+    }
+  }
+
+  // Fetch AI providers for document generation
+  const fetchAIProviders = async () => {
+    try {
+      const providers = await apiClient.getAIProviders()
+      setAiProviders(providers || [])
+      console.log('📊 AI Providers loaded:', providers?.length || 0)
+    } catch (error) {
+      console.error("Failed to fetch AI providers:", error)
+      setAiProviders([])
     }
   }
 
@@ -1066,7 +1326,13 @@ export default function ProjectDetail() {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Project
                 </Button>
-                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <Dialog open={createDialogOpen} onOpenChange={(open) => {
+                  setCreateDialogOpen(open)
+                  if (open) {
+                    fetchTemplatesForUpload()
+                    fetchAIProviders()
+                  }
+                }}>
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="h-4 w-4 mr-2" />
@@ -1093,24 +1359,15 @@ export default function ProjectDetail() {
                             required
                           >
                             <option value="">Choose a template</option>
-                            <optgroup label="PMBOK 7 Templates">
-                              <option value="project-charter">Project Charter</option>
-                              <option value="scope-statement">Project Scope Statement</option>
-                              <option value="wbs">Work Breakdown Structure</option>
-                              <option value="risk-plan">Risk Management Plan</option>
-                              <option value="comm-plan">Communication Plan</option>
-                            </optgroup>
-                            <optgroup label="BABOK v3 Templates">
-                              <option value="requirements-analysis">Requirements Analysis</option>
-                              <option value="stakeholder-analysis">Stakeholder Analysis</option>
-                              <option value="business-case">Business Case</option>
-                              <option value="solution-assessment">Solution Assessment</option>
-                            </optgroup>
-                            <optgroup label="DMBOK 2.0 Templates">
-                              <option value="data-governance">Data Governance Framework</option>
-                              <option value="data-quality">Data Quality Assessment</option>
-                              <option value="data-architecture">Data Architecture</option>
-                            </optgroup>
+                            {loadingTemplates ? (
+                              <option disabled>Loading templates...</option>
+                            ) : (
+                              templates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.name} ({template.framework})
+                                </option>
+                              ))
+                            )}
                           </select>
                         </div>
                         <div>
@@ -1134,11 +1391,87 @@ export default function ProjectDetail() {
                             onChange={(e) => setDocumentDescription(e.target.value)}
                           />
                         </div>
+                        <div>
+                          <Label htmlFor="ai-provider">AI Provider</Label>
+                          <select
+                            id="ai-provider"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                            value={selectedProvider}
+                            onChange={(e) => {
+                              const provider = aiProviders.find(p => p.name === e.target.value)
+                              setSelectedProvider(e.target.value)
+                              if (provider && provider.models && provider.models.length > 0) {
+                                setSelectedModel(provider.models[0])
+                              }
+                            }}
+                          >
+                            {aiProviders.filter(p => p.is_active).map((provider) => (
+                              <option key={provider.id} value={provider.name}>
+                                {provider.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="ai-model">Model</Label>
+                          <select
+                            id="ai-model"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                          >
+                            {aiProviders
+                              .find(p => p.name === selectedProvider)
+                              ?.models?.map((model: string) => (
+                                <option key={model} value={model}>
+                                  {model}
+                                </option>
+                              )) || <option value="">No models available</option>
+                            }
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="ai-temperature">Temperature: {aiTemperature}</Label>
+                          <input
+                            id="ai-temperature"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={aiTemperature}
+                            onChange={(e) => setAiTemperature(parseFloat(e.target.value))}
+                            className="w-full mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Lower = more focused, Higher = more creative
+                          </p>
+                        </div>
+                        
+                        {/* Progress Indicator */}
+                        {creatingDocument && generationProgress.step > 0 && (
+                          <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium text-foreground">
+                                Step {generationProgress.step} of {generationProgress.totalSteps}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {generationProgress.percentage}%
+                              </span>
+                            </div>
+                            <Progress value={generationProgress.percentage} className="h-2" />
+                            <div className="flex items-center space-x-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                              <span className="text-sm text-muted-foreground">
+                                {generationProgress.message}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <DialogFooter>
                         <Button type="submit" disabled={creatingDocument}>
                           {creatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          {creatingDocument ? "Creating..." : "Generate Document"}
+                          {creatingDocument ? "Generating..." : "Generate Document"}
                         </Button>
                       </DialogFooter>
                     </form>

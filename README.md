@@ -6,24 +6,6 @@ A comprehensive enterprise-grade platform for AI-powered document generation, ma
 
 **⚠️ CRITICAL: This project MUST be run using Docker containers. Never run services locally or modify configurations for local development.**
 
-- ✅ **Use Docker**: `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
-- ❌ **Don't run locally**: Never use `npm run dev` or modify configs for localhost
-  - Note: The frontend development image uses pnpm to install dependencies. The
-    Docker images and compose commands rely on pnpm shims being available in
-    the image. If you must run the frontend on your host (not recommended),
-    install dependencies with pnpm:
-
-    ```bash
-    # install with pnpm (preferred if you plan to run the frontend locally)
-    pnpm install
-    pnpm run dev
-    ```
-- 🔍 **Validate setup**: Run `validate-docker.bat` before committing changes
-
-**Breaking Docker setup will require significant time to fix. Always validate with `validate-docker.bat` before commits.**
-
-📖 **[Complete Docker Guide](DOCKER_README.md)** | 🛠️ **[Validation Script](validate-docker.bat)**
-
 ---
 
 ## Description

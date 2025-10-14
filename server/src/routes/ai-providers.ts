@@ -8,6 +8,7 @@ import express from 'express'
 import { pool } from '../database/connection'
 import { logger, childLogger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
+import { aiService } from '../services/aiService'
 
 const router = express.Router()
 
@@ -169,6 +170,9 @@ router.post('/:name/configure', async (req, res) => {
     updateParams.push(name)
 
     const result = await pool.query(updateQuery, updateParams)
+
+    // Re-initialize providers to pick up the new API key
+    await aiService.initializeProviders()
 
     log.info(`AI provider configured: ${name}`)
 

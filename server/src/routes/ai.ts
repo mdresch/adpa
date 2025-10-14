@@ -11,6 +11,12 @@ import { v4 as uuidv4 } from "uuid"
 import { openaiConnector } from "../modules/ai/openai"
 import { googleConnector } from "../modules/ai/google"
 import { mistralConnector } from "../modules/ai/mistral"
+import { 
+  calculateDocumentMetadata, 
+  analyzeDocumentQuality, 
+  formatMetadataForDisplay,
+  logGenerationMetadata 
+} from "../utils/documentMetadata"
 
 const router = express.Router()
 
@@ -21,48 +27,51 @@ router.post("/generate",
   validate(schemas.aiGenerate),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
+    const generationStart = new Date()
+    
     try {
+      log.info('🚀 [BACKEND-1/10] AI generation request received')
       const { prompt, provider, model, temperature, max_tokens, template_id, variables } = req.body
+      log.info('📊 [BACKEND-2/10] Request params:', {
+        provider,
+        model,
+        temperature,
+        promptLength: prompt?.length || 0,
+        templateId: template_id,
+        hasVariables: !!variables
+      })
 
       // Check if provider exists and is active
+      log.info('🔍 [BACKEND-3/10] Checking if provider exists and is active...')
       const providerCheck = await pool.query(
         "SELECT id, name, provider_type FROM ai_providers WHERE name = $1 AND is_active = true",
         [provider]
       )
 
       if (providerCheck.rows.length === 0) {
+        log.error('❌ [BACKEND] Provider not found or inactive:', provider)
         return res.status(400).json({ error: "Provider not found or inactive" })
       }
+      log.info('✅ [BACKEND-4/10] Provider validated:', providerCheck.rows[0].name)
 
-      // For long-running requests, use job queue
-      if (prompt.length > 2000 || max_tokens > 2000) {
-        const jobId = uuidv4()
-        
-        await addJob("ai-generate", {
-          jobId,
-          userId: req.user?.id,
-          prompt,
-          provider,
-          model,
-          temperature,
-          max_tokens,
-          template_id,
-          variables,
-        })
-
-        return res.status(202).json({
-          message: "AI generation job queued",
-          jobId,
-          status: "queued",
-        })
+      // For extremely long requests (>20K chars or >10K tokens), we could use job queue
+      // But for now, use direct generation for all requests (Redis queueing is optional)
+      // This allows comprehensive prompts up to 20,000 characters
+      if (prompt.length > 20000 || (max_tokens && max_tokens > 10000)) {
+        log.info('🔄 [BACKEND-5/10] Extremely long request detected, but using direct generation (job queue disabled)')
+        // Job queueing temporarily disabled - proceed to direct generation
+      } else {
+        log.info('🔄 [BACKEND-5/10] Standard/long request, using direct generation')
       }
 
       // For quick requests, process immediately
       // If client requested context-aware generation or provided contextual identifiers, use ContextAwareAIService
       const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
+      log.info('🔀 [BACKEND-6/10] Generation mode:', useContext ? 'Context-Aware' : 'Direct')
 
       let result
       if (useContext) {
+        log.info('🎯 [BACKEND-7/10] Starting context-aware generation...')
         result = await ContextAwareAIService.generateWithContext({
           prompt,
           provider,
@@ -77,7 +86,9 @@ router.post("/generate",
           include_integrations: req.body.include_integrations,
           custom_context: req.body.custom_context,
         })
+        log.info('✅ [BACKEND-8/10] Context-aware generation completed')
       } else {
+        log.info('🤖 [BACKEND-7/10] Starting direct AI generation...')
         result = await aiService.generate({
           prompt,
           provider,
@@ -87,14 +98,80 @@ router.post("/generate",
           template_id,
           variables,
         })
+        log.info('✅ [BACKEND-8/10] Direct generation completed')
       }
+      
+      log.info('📊 [BACKEND-9/10] Generation result:', {
+        hasContent: !!(result.content || result.text),
+        contentLength: (result.content || result.text || '').length,
+        hasUsage: !!result.usage,
+        tokens: result.usage?.total_tokens || result.usage?.totalTokens || 0
+      })
 
   // Update usage stats
       if (result.usage) {
         await aiService.updateUsageStats(provider, result.usage)
       }
 
-  // Log the generation
+      // Calculate comprehensive metadata
+      const generationEnd = new Date()
+      const content = result.content || result.text || ''
+      
+      const metadata = calculateDocumentMetadata(
+        content,
+        result,
+        generationStart,
+        generationEnd,
+        {
+          provider,
+          model: model || result.model || 'unknown',
+          temperature: temperature || 0.7,
+          templateId: template_id,
+          templateName: req.body.template_name,
+          framework: req.body.framework,
+          projectId: req.body.project_id || 'unknown',
+          projectName: req.body.project_name || 'Unknown Project',
+          userId: req.user?.id || 'unknown',
+          userName: req.user?.name || 'Unknown User',
+          promptLength: prompt.length
+        }
+      )
+      
+      // Analyze quality
+      const quality = analyzeDocumentQuality(content, metadata)
+      
+      // Format for display
+      const formattedMetadata = formatMetadataForDisplay(metadata, quality)
+      
+      // Log comprehensive metadata
+      logGenerationMetadata(metadata, quality)
+
+      // Track template usage with comprehensive metrics if template was used
+      if (template_id && req.body.document_id) {
+        try {
+          await pool.query(`
+            UPDATE template_usage
+            SET 
+              generation_time_ms = $1,
+              quality_score = $2,
+              ai_provider = $3,
+              ai_model = $4,
+              token_count = $5
+            WHERE document_id = $6
+          `, [
+            metadata.processingTimeMs,
+            quality.overallQuality,
+            provider,
+            model || result.model,
+            metadata.totalTokens,
+            req.body.document_id
+          ])
+        } catch (error) {
+          logger.warn('Failed to update template usage metrics:', error)
+        }
+      }
+
+  // Log the generation to audit logs
       await pool.query(
         `
         INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
@@ -105,15 +182,29 @@ router.post("/generate",
           provider,
           model: result.model,
           usage: result.usage,
+          metadata: formattedMetadata,
+          quality_score: quality.overallQuality,
+          template_id: template_id
         })]
       )
+
+      log.info('✅ [BACKEND-10/10] Metadata calculated and logged')
+      log.info('🎉 [BACKEND-10/10] Sending response to client')
 
       res.json({
         message: "Content generated successfully",
         result,
+        metadata: formattedMetadata,
+        quality: quality
       })
+      
+      log.info('✅ [BACKEND] AI generation COMPLETE! Document ready.')
     } catch (error) {
-      log.error("AI generation error:", error)
+      log.error("❌ [BACKEND-ERROR] AI generation failed:", error)
+      log.error("❌ [BACKEND-ERROR] Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
       res.status(500).json({ 
         error: "AI generation failed",
         details: error instanceof Error ? error.message : "Unknown error"
@@ -379,12 +470,22 @@ router.post("/providers/:name/configure",
 
       // Check if provider exists
       const existingProvider = await pool.query(
-        "SELECT id FROM ai_providers WHERE name = $1",
+        "SELECT id, provider_type FROM ai_providers WHERE name = $1",
         [name]
       )
 
       let result
       if (existingProvider.rows.length > 0) {
+        const providerType = existingProvider.rows[0].provider_type
+        
+        // Enhance configuration with provider-specific settings
+        const enhancedConfiguration = { ...configuration }
+        if (providerType === 'groq' && !enhancedConfiguration.baseURL) {
+          enhancedConfiguration.baseURL = 'https://api.groq.com/openai/v1'
+        } else if (providerType === 'azure' && !enhancedConfiguration.endpoint) {
+          enhancedConfiguration.endpoint = configuration.endpoint
+        }
+        
         // Update existing provider
         result = await pool.query(
           `
@@ -393,7 +494,7 @@ router.post("/providers/:name/configure",
           WHERE name = $4
           RETURNING name, provider_type, is_active, created_at, updated_at
         `,
-          [encryptedApiKey, JSON.stringify(configuration), is_active, name]
+          [encryptedApiKey, JSON.stringify(enhancedConfiguration), is_active, name]
         )
       } else {
         return res.status(404).json({ error: "Provider not found. Create provider first." })
@@ -423,7 +524,7 @@ router.post("/providers",
   requirePermission("ai.configure"),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).required(),
-    provider_type: Joi.string().valid("openai", "google", "azure", "mistral", "ollama").required(),
+    provider_type: Joi.string().valid("openai", "google", "azure", "mistral", "groq", "ollama").required(),
     api_key: Joi.string().required(),
     configuration: Joi.object().default({}),
     is_active: Joi.boolean().default(true),
@@ -464,8 +565,8 @@ router.post("/providers",
       // Encrypt API key
       const encryptedApiKey = Buffer.from(api_key).toString("base64")
 
-      // Create enhanced configuration with model parameters
-      const enhancedConfiguration = {
+      // Create enhanced configuration with model parameters and provider-specific settings
+      const enhancedConfiguration: any = {
         ...configuration,
         modelParameters: {
           contextWindow,
@@ -475,6 +576,13 @@ router.post("/providers",
           frequencyPenalty,
           presencePenalty
         }
+      }
+
+      // Add provider-specific baseURL configurations
+      if (provider_type === 'groq' && !enhancedConfiguration.baseURL) {
+        enhancedConfiguration.baseURL = 'https://api.groq.com/openai/v1'
+      } else if (provider_type === 'azure' && !enhancedConfiguration.endpoint) {
+        enhancedConfiguration.endpoint = configuration.endpoint || 'https://YOUR-RESOURCE.openai.azure.com'
       }
 
       const id = uuidv4()
@@ -867,6 +975,154 @@ router.get(
       const log = childLogger({ requestId: (req as any).requestId })
       log.error("Get Google AI models error:", error)
       res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+/**
+ * GET /api/ai/providers/:id/discover-models
+ * Discover available models from provider's API
+ */
+router.get(
+  "/providers/:id/discover-models",
+  authenticateToken,
+  requirePermission("ai.configure"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      
+      // Get provider details from database
+      const providerResult = await pool.query(
+        "SELECT id, name, provider_type, api_key_encrypted, available_models, default_model FROM ai_providers WHERE id = $1",
+        [id]
+      )
+      
+      if (providerResult.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found" })
+      }
+      
+      const provider = providerResult.rows[0]
+      
+      if (!provider.api_key_encrypted || provider.api_key_encrypted.includes('your-')) {
+        return res.status(400).json({ 
+          error: "No valid API key configured",
+          message: "Please configure a valid API key before discovering models"
+        })
+      }
+      
+      log.info(`Discovering models for provider: ${provider.name} (${provider.provider_type})`)
+      
+      let discoveredModels: any[] = []
+      
+      try {
+        switch (provider.provider_type) {
+          case 'openai':
+            await openaiConnector.initializeProviders()
+            discoveredModels = await openaiConnector.getAvailableModels(provider.name)
+            break
+          case 'google':
+            await googleConnector.initializeProviders()
+            discoveredModels = await googleConnector.getAvailableModels(provider.name)
+            break
+          case 'mistral':
+            await mistralConnector.initializeProviders()
+            discoveredModels = await mistralConnector.getAvailableModels(provider.name)
+            break
+          case 'groq':
+          case 'anthropic':
+          case 'azure':
+            return res.status(501).json({
+              error: "Model discovery not yet implemented for this provider",
+              message: `Automatic model discovery for ${provider.provider_type} is not yet available. Please configure models manually.`,
+              current_models: provider.available_models || []
+            })
+          default:
+            return res.status(400).json({ error: "Unknown provider type" })
+        }
+        
+        log.info(`Discovered ${discoveredModels.length} models for ${provider.name}`)
+        
+        res.json({
+          provider: {
+            id: provider.id,
+            name: provider.name,
+            type: provider.provider_type
+          },
+          current_models: provider.available_models || [],
+          current_default: provider.default_model,
+          discovered_models: discoveredModels,
+          timestamp: new Date().toISOString()
+        })
+        
+      } catch (apiError: any) {
+        log.error(`Failed to discover models from ${provider.provider_type}:`, apiError)
+        res.status(500).json({
+          error: "Failed to discover models from provider API",
+          message: apiError.message || "Unknown error",
+          current_models: provider.available_models || []
+        })
+      }
+      
+    } catch (error: any) {
+      log.error("Error discovering models:", error)
+      res.status(500).json({ 
+        error: "Failed to discover models",
+        message: error.message 
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/ai/providers/:id/sync-models
+ * Sync discovered models to the database
+ */
+router.post(
+  "/providers/:id/sync-models",
+  authenticateToken,
+  requirePermission("ai.configure"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      const { models, default_model } = req.body
+      
+      if (!Array.isArray(models) || models.length === 0) {
+        return res.status(400).json({ error: "Invalid models array" })
+      }
+      
+      // Update the provider with the new models
+      const result = await pool.query(
+        `UPDATE ai_providers 
+         SET available_models = $1::jsonb,
+             default_model = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3
+         RETURNING id, name, available_models, default_model`,
+        [JSON.stringify(models), default_model || models[0], id]
+      )
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found" })
+      }
+      
+      // Reinitialize providers to pick up the new models
+      await aiService.initializeProviders()
+      
+      log.info(`Synced ${models.length} models for provider: ${result.rows[0].name}`)
+      
+      res.json({
+        message: "Models synced successfully",
+        provider: result.rows[0]
+      })
+      
+    } catch (error: any) {
+      log.error("Error syncing models:", error)
+      res.status(500).json({ 
+        error: "Failed to sync models",
+        message: error.message 
+      })
     }
   }
 )

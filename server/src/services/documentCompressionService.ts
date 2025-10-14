@@ -100,38 +100,74 @@ class DocumentCompressionService {
     try {
       // Use AI to evaluate quality metrics
       const evaluationPrompt = `
+        You are a document quality evaluator. You MUST respond with ONLY valid JSON - no explanations, no refusals, no commentary.
+        
         Evaluate the quality of this compressed document compared to the original.
         
         Original Content Length: ${originalContent.length} characters
         Compressed Content Length: ${compressedContent.length} characters
         Compression Ratio: ${(compressedContent.length / originalContent.length * 100).toFixed(1)}%
         
-        Please rate each metric from 0.0 to 1.0:
+        Rate each metric from 0.0 to 1.0. Respond with ONLY this JSON object (no markdown, no code blocks):
         
-        1. Coherence (0.0-1.0): How well does the compressed content flow and make sense?
-        2. Completeness (0.0-1.0): How much of the important information is retained?
-        3. Relevance (0.0-1.0): How relevant is the retained content to the original purpose?
-        4. Readability (0.0-1.0): How easy is the compressed content to read and understand?
-        
-        Respond in JSON format:
         {
           "coherence": 0.85,
           "completeness": 0.78,
           "relevance": 0.92,
           "readability": 0.88
         }
+        
+        Replace the values above with your ratings. RESPOND WITH ONLY THE JSON OBJECT.
       `
+      
+      // Get the first active AI provider from database
+      const providerResult = await pool.query(
+        "SELECT name FROM ai_providers WHERE is_active = true ORDER BY priority ASC NULLS LAST, name ASC LIMIT 1"
+      )
+      
+      if (providerResult.rows.length === 0) {
+        logger.warn('No active AI providers available for quality metrics, skipping')
+        return {
+          qualityScore: 0.8,
+          readabilityScore: 0.8,
+          coherenceScore: 0.8,
+          completenessScore: 0.8,
+          compressionEfficiency: compressionRatio
+        }
+      }
+      
+      const activeProvider = providerResult.rows[0].name
       
       const aiRequest = {
         prompt: evaluationPrompt,
-        provider: "Google AI Studio",
-        model: 'gemini-pro',
+        provider: activeProvider,
+        model: 'gemini-2.5-flash',
         temperature: 0.1,
         max_tokens: 200
       }
       
       const aiResponse = await aiService.generate(aiRequest)
-      const metrics = JSON.parse(aiResponse.content.trim())
+      
+      // Strip markdown code blocks if present (AI sometimes wraps JSON in ```json ... ```)
+      let jsonContent = aiResponse.content.trim()
+      if (jsonContent.startsWith('```')) {
+        // Remove opening ```json or ``` and closing ```
+        jsonContent = jsonContent.replace(/^```(?:json)?\s*\n/, '').replace(/\n```\s*$/, '')
+      }
+      
+      // Check if AI refused to provide metrics (starts with text instead of JSON)
+      if (!jsonContent.startsWith('{')) {
+        logger.warn('AI refused to provide quality metrics, using defaults. Response:', jsonContent.substring(0, 100))
+        return {
+          coherence: 0.85,
+          completeness: 0.85,
+          relevance: 0.85,
+          readability: 0.85,
+          overall: 0.85
+        }
+      }
+      
+      const metrics = JSON.parse(jsonContent)
       
       // Calculate overall score (weighted average)
       const overall = (
@@ -149,8 +185,8 @@ class DocumentCompressionService {
         overall
       }
     } catch (error) {
-      logger.error('Quality metrics calculation failed:', error)
-      // Return default metrics
+      logger.warn('Quality metrics calculation failed, using default values:', error instanceof Error ? error.message : String(error))
+      // Return default metrics - don't throw, just use reasonable defaults
       return {
         coherence: 0.7,
         completeness: 0.7,
@@ -238,13 +274,21 @@ class DocumentCompressionService {
       // Create a detailed summarization prompt
       const summarizationPrompt = this.createSummarizationPrompt(content, targetCharacters, options)
 
-      // Use Google AI provider specifically (we know it's working)
-      const activeProvider = "Google AI Studio"
+      // Get the first active AI provider from database
+      const providerResult = await pool.query(
+        "SELECT name FROM ai_providers WHERE is_active = true ORDER BY priority ASC NULLS LAST, name ASC LIMIT 1"
+      )
+      
+      if (providerResult.rows.length === 0) {
+        throw new Error('No active AI providers available for document summarization')
+      }
+      
+      const activeProvider = providerResult.rows[0].name
       
       const aiRequest = {
         prompt: summarizationPrompt,
         provider: activeProvider,
-        model: 'gemini-pro', // Use Google AI model instead of OpenAI model
+        model: 'gemini-2.5-flash', // Use Google AI model (fast and efficient)
         temperature: 0.3, // Lower temperature for more consistent summarization
         max_tokens: targetTokens + 100 // Add buffer for prompt tokens
       }
@@ -548,13 +592,18 @@ class DocumentCompressionService {
 
     // Add template context for focused summarization
     if (options.templateContext) {
+      // Convert template content to string if it's JSONB
+      const templateContentStr = typeof options.templateContext.content === 'string' 
+        ? options.templateContext.content 
+        : JSON.stringify(options.templateContext.content)
+      
       prompt += `\n\nTEMPLATE CONTEXT FOR FOCUSED SUMMARIZATION:
 The document you are summarizing will be used to generate a "${options.templateContext.name}" document.
 
 Template Description: ${options.templateContext.description}
 
 Template Structure Preview:
-${options.templateContext.content.substring(0, 1000)}${options.templateContext.content.length > 1000 ? '...' : ''}`
+${templateContentStr.substring(0, 1000)}${templateContentStr.length > 1000 ? '...' : ''}`
 
       // Add system prompt if available
       if (options.templateContext.system_prompt) {
