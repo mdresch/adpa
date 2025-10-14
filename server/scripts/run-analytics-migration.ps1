@@ -4,11 +4,30 @@
 Write-Host "📊 Running Analytics Migration..." -ForegroundColor Cyan
 Write-Host ""
 
-# Check if DATABASE_URL is set
-if (-not $env:DATABASE_URL) {
-    Write-Host "❌ ERROR: DATABASE_URL environment variable not set" -ForegroundColor Red
-    Write-Host "Please run: " -ForegroundColor Yellow
+# Load .env file if it exists
+$envFile = Join-Path $PSScriptRoot ".." ".env"
+if (Test-Path $envFile) {
+    Get-Content $envFile | ForEach-Object {
+        if ($_ -match '^([^=]+)=(.*)$') {
+            $key = $matches[1].Trim()
+            $value = $matches[2].Trim()
+            [Environment]::SetEnvironmentVariable($key, $value, "Process")
+        }
+    }
+    Write-Host "✅ Loaded .env file" -ForegroundColor Green
+}
+
+# Check if DATABASE_URL or POSTGRES_URL is set
+$dbUrl = $env:DATABASE_URL
+if (-not $dbUrl) {
+    $dbUrl = $env:POSTGRES_URL
+}
+
+if (-not $dbUrl) {
+    Write-Host "❌ ERROR: DATABASE_URL or POSTGRES_URL environment variable not set" -ForegroundColor Red
+    Write-Host "Please set one of:" -ForegroundColor Yellow
     Write-Host "  `$env:DATABASE_URL = 'your-database-url'" -ForegroundColor Yellow
+    Write-Host "  `$env:POSTGRES_URL = 'your-database-url'" -ForegroundColor Yellow
     exit 1
 }
 
@@ -26,9 +45,11 @@ Write-Host ""
 
 # Run the migration using psql
 Write-Host "🔄 Executing migration..." -ForegroundColor Yellow
+Write-Host "📡 Database: $($dbUrl.Substring(0, [Math]::Min(50, $dbUrl.Length)))..." -ForegroundColor Gray
+Write-Host ""
 
 try {
-    psql $env:DATABASE_URL -f $migrationFile
+    psql $dbUrl -f $migrationFile
     
     if ($LASTEXITCODE -eq 0) {
         Write-Host ""
