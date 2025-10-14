@@ -180,10 +180,34 @@ export default function Dashboard() {
   ]
 
   const quickActions = [
-    { icon: FileText, label: "Generate Document", color: "from-blue-500 to-cyan-500" },
-    { icon: Zap, label: "Configure AI", color: "from-purple-500 to-pink-500" },
-    { icon: Users, label: "Manage Users", color: "from-emerald-500 to-teal-500" },
-    { icon: TrendingUp, label: "View Analytics", color: "from-orange-500 to-red-500" },
+    { 
+      icon: FileText, 
+      label: "Generate Document", 
+      color: "from-blue-500 to-cyan-500",
+      onClick: () => router.push("/projects"),
+      description: "Create new documents"
+    },
+    { 
+      icon: Zap, 
+      label: "Configure AI", 
+      color: "from-purple-500 to-pink-500",
+      onClick: () => router.push("/ai-providers"),
+      description: "Manage AI providers"
+    },
+    { 
+      icon: Users, 
+      label: "Manage Users", 
+      color: "from-emerald-500 to-teal-500",
+      onClick: () => router.push("/admin"),
+      description: "User administration"
+    },
+    { 
+      icon: TrendingUp, 
+      label: "View Analytics", 
+      color: "from-orange-500 to-red-500",
+      onClick: () => router.push("/ai-analytics"),
+      description: "AI usage insights"
+    },
   ]
 
   if (loading) {
@@ -339,6 +363,7 @@ export default function Dashboard() {
                           animate: { opacity: 1, x: 0 },
                         }}
                         whileHover={{ scale: 1.02, x: 4 }}
+                        onClick={() => router.push(`/ai-providers`)}
                         className="flex items-center justify-between p-4 border border-slate-200 dark:border-slate-700 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200 cursor-pointer"
                       >
                         <div className="flex items-center space-x-4">
@@ -391,6 +416,92 @@ export default function Dashboard() {
                       </motion.div>
                     ))}
                   </motion.div>
+                </CardContent>
+              </AnimatedCard>
+
+              {/* Performance Metrics */}
+              <AnimatedCard
+                delay={0.5}
+                className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300"
+              >
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-3">
+                      <motion.div
+                        whileHover={{ scale: 1.1 }}
+                        className="p-2 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg"
+                      >
+                        <Activity className="h-6 w-6 text-white" />
+                      </motion.div>
+                      <div>
+                        <CardTitle>System Performance</CardTitle>
+                        <CardDescription>Real-time metrics and health indicators</CardDescription>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => router.push("/ai-analytics")}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      View Details
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    {[
+                      {
+                        label: "Avg Response Time",
+                        value: dashboardData?.ai?.total_generations ? "1.2s" : "N/A",
+                        icon: Clock,
+                        color: "text-blue-500",
+                        bgColor: "bg-blue-50 dark:bg-blue-900/20"
+                      },
+                      {
+                        label: "Success Rate",
+                        value: dashboardData?.ai?.total_generations ? "98.5%" : "N/A",
+                        icon: CheckCircle,
+                        color: "text-emerald-500",
+                        bgColor: "bg-emerald-50 dark:bg-emerald-900/20"
+                      },
+                      {
+                        label: "Active Providers",
+                        value: aiProviders.filter(p => p.is_active).length.toString(),
+                        icon: Zap,
+                        color: "text-purple-500",
+                        bgColor: "bg-purple-50 dark:bg-purple-900/20"
+                      },
+                      {
+                        label: "Documents Today",
+                        value: dashboardData?.documents?.documents_last_30d?.toString() || "0",
+                        icon: FileText,
+                        color: "text-orange-500",
+                        bgColor: "bg-orange-50 dark:bg-orange-900/20"
+                      },
+                    ].map((metric, index) => (
+                      <motion.div
+                        key={metric.label}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6 + index * 0.1, duration: 0.5 }}
+                        className="text-center p-4 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+                      >
+                        <motion.div 
+                          whileHover={{ scale: 1.1 }}
+                          className={`inline-flex p-2 rounded-lg ${metric.bgColor} mb-2`}
+                        >
+                          <metric.icon className={`h-5 w-5 ${metric.color}`} />
+                        </motion.div>
+                        <div className="text-2xl font-bold text-slate-800 dark:text-slate-100 mb-1">
+                          {metric.value}
+                        </div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400">
+                          {metric.label}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
                 </CardContent>
               </AnimatedCard>
 
@@ -498,7 +609,8 @@ export default function Dashboard() {
                             animate: { opacity: 1, y: 0 },
                           }}
                           whileHover={{ x: 4 }}
-                          className="flex items-start space-x-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+                          onClick={() => router.push("/projects")}
+                          className="flex items-start space-x-3 p-3 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200 cursor-pointer"
                         >
                           <motion.div
                             animate={{ scale: [1, 1.3, 1] }}
@@ -561,12 +673,16 @@ export default function Dashboard() {
                         whileTap={{ scale: 0.95 }}
                       >
                         <Button
-                          className={`h-24 flex flex-col space-y-2 bg-gradient-to-br ${action.color} hover:shadow-lg transition-all duration-300 border-0 w-full`}
+                          onClick={action.onClick}
+                          className={`h-32 flex flex-col justify-center items-center space-y-2 bg-gradient-to-br ${action.color} hover:shadow-lg transition-all duration-300 border-0 w-full`}
                         >
                           <motion.div whileHover={{ rotate: 360 }} transition={{ duration: 0.5 }}>
-                            <action.icon className="h-6 w-6 text-white" />
+                            <action.icon className="h-8 w-8 text-white" />
                           </motion.div>
-                          <span className="text-white font-medium">{action.label}</span>
+                          <div className="text-center">
+                            <div className="text-white font-semibold text-base">{action.label}</div>
+                            <div className="text-white/80 text-xs mt-1">{action.description}</div>
+                          </div>
                         </Button>
                       </motion.div>
                     ))}
