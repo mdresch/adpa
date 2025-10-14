@@ -42,6 +42,16 @@ import {
   MoreHorizontal,
   Eye,
   Loader2,
+  TrendingUp,
+  Target,
+  BarChart3,
+  PieChart as PieChartIcon,
+  Filter,
+  Grid,
+  List,
+  Zap,
+  XCircle,
+  RefreshCw,
 } from "lucide-react"
 import {
   Dialog,
@@ -55,6 +65,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
 interface Document {
   id: string
@@ -2016,7 +2027,55 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
-                {/* Search */}
+                {/* Document Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
+                          <p className="text-2xl font-bold">{documents.length}</p>
+                        </div>
+                        <FileText className="h-8 w-8 text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Draft</p>
+                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'draft').length}</p>
+                        </div>
+                        <Edit className="h-8 w-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Published</p>
+                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'published').length}</p>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-emerald-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">In Review</p>
+                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'review').length}</p>
+                        </div>
+                        <Clock className="h-8 w-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Search & Actions */}
                 <div className="flex items-center space-x-4">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -2027,9 +2086,17 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                       className="pl-10"
                     />
                   </div>
+                  <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Generate Document
+                      </Button>
+                    </DialogTrigger>
+                  </Dialog>
                   <Button variant="outline" onClick={handleUploadDocumentClick}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Upload Document
+                    <Download className="h-4 w-4 mr-2" />
+                    Upload
                   </Button>
                 </div>
 
@@ -2175,6 +2242,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
+                {/* Key Metrics */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -2233,19 +2301,307 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                     </CardContent>
                   </Card>
                 </div>
+
+                {/* Charts and Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Document Status Distribution */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <PieChartIcon className="h-5 w-5 text-primary" />
+                        Document Status Distribution
+                      </CardTitle>
+                      <CardDescription>Breakdown of document statuses</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Draft', value: documents.filter(d => d.status === 'draft').length, fill: '#f97316' },
+                              { name: 'Review', value: documents.filter(d => d.status === 'review').length, fill: '#a855f7' },
+                              { name: 'Published', value: documents.filter(d => d.status === 'published').length, fill: '#10b981' },
+                              { name: 'Archived', value: documents.filter(d => d.status === 'archived').length, fill: '#6b7280' },
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={(entry) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
+                            outerRadius={80}
+                            dataKey="value"
+                          >
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Project Health */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-primary" />
+                        Project Health Indicators
+                      </CardTitle>
+                      <CardDescription>Key project metrics at a glance</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Schedule Performance</span>
+                          <Badge variant={progress >= 80 ? "default" : progress >= 50 ? "secondary" : "destructive"}>
+                            {progress >= 80 ? "On Track" : progress >= 50 ? "At Risk" : "Behind"}
+                          </Badge>
+                        </div>
+                        <Progress value={progress} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Documentation Complete</span>
+                          <Badge variant={documents.filter(d => d.status === 'published').length >= 5 ? "default" : "secondary"}>
+                            {documents.filter(d => d.status === 'published').length} Published
+                          </Badge>
+                        </div>
+                        <Progress value={(documents.filter(d => d.status === 'published').length / Math.max(documents.length, 1)) * 100} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Team Engagement</span>
+                          <Badge variant="default">{project.team_members?.length || 0} Members</Badge>
+                        </div>
+                        <Progress value={Math.min((project.team_members?.length || 0) * 20, 100)} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Stakeholder Coverage</span>
+                          <Badge variant={stakeholders.length >= 3 ? "default" : "secondary"}>
+                            {stakeholders.length} Stakeholders
+                          </Badge>
+                        </div>
+                        <Progress value={Math.min(stakeholders.length * 20, 100)} className="h-2" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Project Details */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-primary" />
+                        Project Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Framework</p>
+                          <p className="text-sm font-semibold">{project.framework || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Priority</p>
+                          <Badge variant={project.priority === 'high' ? 'destructive' : project.priority === 'medium' ? 'secondary' : 'outline'}>
+                            {project.priority?.toUpperCase() || 'MEDIUM'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Status</p>
+                          <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
+                            {project.status?.toUpperCase() || 'ACTIVE'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Created</p>
+                          <p className="text-sm">{new Date(project.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      {project.description && (
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
+                          <p className="text-sm">{project.description}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Team Members */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-primary" />
+                        Team Members
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {project.team_members && project.team_members.length > 0 ? (
+                        <div className="space-y-2">
+                          {project.team_members.map((member, index) => (
+                            <div key={index} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Users className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">{member}</p>
+                                <p className="text-xs text-muted-foreground">Team Member</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-4">No team members assigned</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
 
               <TabsContent value="stakeholders" className="space-y-4">
+                {/* Stakeholder Summary Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Total Stakeholders</p>
+                          <p className="text-2xl font-bold">{stakeholders.length}</p>
+                        </div>
+                        <Users className="h-8 w-8 text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">High Influence</p>
+                          <p className="text-2xl font-bold">{stakeholders.filter(s => s.influence_level === 'high').length}</p>
+                        </div>
+                        <Zap className="h-8 w-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Internal</p>
+                          <p className="text-2xl font-bold">{stakeholders.filter(s => s.stakeholder_type === 'internal').length}</p>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-emerald-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Primary</p>
+                          <p className="text-2xl font-bold">{stakeholders.filter(s => s.stakeholder_category === 'primary').length}</p>
+                        </div>
+                        <Target className="h-8 w-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-2xl font-bold">Project Stakeholders</h2>
-                    <p className="text-muted-foreground">Manage stakeholders and their PMBOK parameters</p>
+                    <h2 className="text-2xl font-bold">Stakeholder Management</h2>
+                    <p className="text-muted-foreground">Analyze and engage with project stakeholders</p>
                   </div>
                   <Button onClick={handleAddStakeholder}>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Stakeholder
                   </Button>
                 </div>
+
+                {/* Power/Interest Matrix */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                      Power/Interest Matrix
+                    </CardTitle>
+                    <CardDescription>Stakeholder positioning based on influence and interest levels</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+                      {/* High Interest, High Power - Manage Closely */}
+                      <div className="p-4 border-2 border-red-300 bg-red-50 dark:bg-red-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                          <h4 className="font-semibold text-red-900 dark:text-red-100">Manage Closely</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">High Interest • High Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'high').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'high').map(s => (
+                              <Badge key={s.id} variant="destructive" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Low Interest, High Power - Keep Satisfied */}
+                      <div className="p-4 border-2 border-yellow-300 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <CheckCircle className="h-5 w-5 text-yellow-600" />
+                          <h4 className="font-semibold text-yellow-900 dark:text-yellow-100">Keep Satisfied</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">Low Interest • High Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'high').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'high').map(s => (
+                              <Badge key={s.id} variant="secondary" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* High Interest, Low Power - Keep Informed */}
+                      <div className="p-4 border-2 border-blue-300 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Activity className="h-5 w-5 text-blue-600" />
+                          <h4 className="font-semibold text-blue-900 dark:text-blue-100">Keep Informed</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">High Interest • Low Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'low').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'low').map(s => (
+                              <Badge key={s.id} variant="default" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Low Interest, Low Power - Monitor */}
+                      <div className="p-4 border-2 border-gray-300 bg-gray-50 dark:bg-gray-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Eye className="h-5 w-5 text-gray-600" />
+                          <h4 className="font-semibold text-gray-900 dark:text-gray-100">Monitor</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">Low Interest • Low Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'low').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'low').map(s => (
+                              <Badge key={s.id} variant="outline" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
 
                 {/* Loading state for stakeholders */}
                 {stakeholdersLoading ? (
@@ -2378,47 +2734,289 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
               </TabsContent>
 
               <TabsContent value="timeline" className="space-y-4">
+                {/* Timeline Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Duration</p>
+                          <p className="text-2xl font-bold">
+                            {project.start_date && project.end_date
+                              ? `${Math.ceil((new Date(project.end_date).getTime() - new Date(project.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30))} mo`
+                              : 'N/A'}
+                          </p>
+                        </div>
+                        <Clock className="h-8 w-8 text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Days Elapsed</p>
+                          <p className="text-2xl font-bold">
+                            {project.start_date
+                              ? Math.ceil((Date.now() - new Date(project.start_date).getTime()) / (1000 * 60 * 60 * 24))
+                              : 'N/A'}
+                          </p>
+                        </div>
+                        <Activity className="h-8 w-8 text-emerald-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Days Remaining</p>
+                          <p className="text-2xl font-bold">
+                            {project.end_date
+                              ? Math.max(0, Math.ceil((new Date(project.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                              : 'N/A'}
+                          </p>
+                        </div>
+                        <Calendar className="h-8 w-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Status</p>
+                          <Badge className="mt-1" variant={project.status === 'active' ? 'default' : 'secondary'}>
+                            {project.status?.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Project Phases */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Project Timeline</CardTitle>
-                    <CardDescription>Key milestones and deadlines</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                      Project Phases
+                    </CardTitle>
+                    <CardDescription>Key project lifecycle stages</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {project.start_date && (
-                        <div className="flex items-center space-x-4">
-                          <Calendar className="h-5 w-5 text-primary" />
-                          <div>
-                            <p className="font-medium">Project Start</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(project.start_date).toLocaleDateString()}
-                            </p>
+                      {[
+                        { phase: 'Initiation', status: 'completed', progress: 100, color: 'emerald' },
+                        { phase: 'Planning', status: progress >= 25 ? 'completed' : 'in-progress', progress: Math.min(progress * 4, 100), color: 'blue' },
+                        { phase: 'Execution', status: progress >= 50 ? 'in-progress' : 'pending', progress: Math.max(0, (progress - 25) * 4), color: 'purple' },
+                        { phase: 'Monitoring & Control', status: progress >= 75 ? 'in-progress' : 'pending', progress: Math.max(0, (progress - 50) * 2), color: 'orange' },
+                        { phase: 'Closure', status: progress >= 95 ? 'in-progress' : 'pending', progress: Math.max(0, (progress - 90) * 10), color: 'red' },
+                      ].map((phaseData, index) => (
+                        <div key={index} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                phaseData.status === 'completed' ? 'bg-emerald-100 dark:bg-emerald-900/20' :
+                                phaseData.status === 'in-progress' ? 'bg-blue-100 dark:bg-blue-900/20' :
+                                'bg-gray-100 dark:bg-gray-900/20'
+                              }`}>
+                                {phaseData.status === 'completed' ? (
+                                  <CheckCircle className="h-5 w-5 text-emerald-600" />
+                                ) : phaseData.status === 'in-progress' ? (
+                                  <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+                                ) : (
+                                  <Clock className="h-5 w-5 text-gray-400" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-semibold">{phaseData.phase}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {phaseData.status === 'completed' ? 'Completed' : 
+                                   phaseData.status === 'in-progress' ? 'In Progress' : 
+                                   'Not Started'}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge variant={
+                              phaseData.status === 'completed' ? 'default' :
+                              phaseData.status === 'in-progress' ? 'secondary' :
+                              'outline'
+                            }>
+                              {Math.round(phaseData.progress)}%
+                            </Badge>
                           </div>
+                          <Progress value={phaseData.progress} className="h-2" />
                         </div>
-                      )}
-                      
-                      <div className="flex items-center space-x-4">
-                        <Calendar className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="font-medium">Current Phase: {project.status}</p>
-                          <p className="text-sm text-muted-foreground">In progress</p>
-                        </div>
-                      </div>
-                      
-                      {project.end_date && (
-                        <div className="flex items-center space-x-4">
-                          <Calendar className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">Project End</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(project.end_date).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Key Milestones */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-primary" />
+                        Key Milestones
+                      </CardTitle>
+                      <CardDescription>Important project checkpoints</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {project.start_date && (
+                          <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/20 flex items-center justify-center shrink-0">
+                              <CheckCircle className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Project Kickoff</p>
+                                <Badge variant="default">Complete</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(project.start_date).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center shrink-0">
+                            <Activity className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-semibold">Current Phase</p>
+                              <Badge variant="secondary">Active</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground capitalize">{project.status || 'In Progress'}</p>
+                          </div>
+                        </div>
+
+                        {documents.filter(d => d.status === 'published').length > 0 && (
+                          <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center shrink-0">
+                              <FileText className="h-5 w-5 text-purple-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Documentation Milestone</p>
+                                <Badge variant="default">Complete</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {documents.filter(d => d.status === 'published').length} document(s) published
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {project.end_date && (
+                          <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center shrink-0">
+                              <Calendar className="h-5 w-5 text-orange-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Project Completion</p>
+                                <Badge variant="outline">Scheduled</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(project.end_date).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Timeline Visualization */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        Project Timeline
+                      </CardTitle>
+                      <CardDescription>Visual project timeline</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative">
+                        {/* Timeline Bar */}
+                        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-white drop-shadow-md">
+                              {progress}% Complete
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Timeline Labels */}
+                        <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                          <span>
+                            {project.start_date 
+                              ? new Date(project.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                              : 'Start'}
+                          </span>
+                          <span>
+                            {project.end_date 
+                              ? new Date(project.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                              : 'End'}
+                          </span>
+                        </div>
+
+                        {/* Key Dates */}
+                        <div className="mt-6 space-y-3">
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Project Start</span>
+                            <span className="text-sm text-muted-foreground">
+                              {project.start_date 
+                                ? new Date(project.start_date).toLocaleDateString()
+                                : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Today</span>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date().toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Target End</span>
+                            <span className="text-sm text-muted-foreground">
+                              {project.end_date 
+                                ? new Date(project.end_date).toLocaleDateString()
+                                : 'Not set'}
+                            </span>
+                          </div>
+                          
+                          {project.start_date && project.end_date && (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-primary/10">
+                              <span className="text-sm font-medium">Time Remaining</span>
+                              <span className="text-sm font-semibold text-primary">
+                                {Math.max(0, Math.ceil((new Date(project.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
             </Tabs>
           </div>
