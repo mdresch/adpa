@@ -1,8 +1,7 @@
 "use client"
 
 import React, { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { useParams } from "next/navigation"
+import { useRouter, useParams } from "next/navigation"
 import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -196,18 +195,62 @@ export default function ModelDetails() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await apiClient.updateModelConfiguration(providerId, modelId, {
-        modelName: formState.name,
-        is_active: formState.is_active,
-        contextWindow: formState.contextWindow,
-        maxTokens: formState.maxTokens,
-        temperature: formState.temperature,
-        topP: formState.topP,
-        frequencyPenalty: formState.frequencyPenalty,
-        presencePenalty: formState.presencePenalty
-      })
+      // For models from discovery (not in DB), update the provider configuration
+      // For models in DB, update the model configuration
+      const decodedModelId = decodeURIComponent(modelId)
       
-      toast.success("Model configuration saved successfully")
+      try {
+        // Try to update model configuration (if it exists in DB)
+        await apiClient.updateModelConfiguration(providerId, decodedModelId, {
+          modelName: formState.name,
+          is_active: formState.is_active,
+          contextWindow: formState.contextWindow,
+          maxTokens: formState.maxTokens,
+          temperature: formState.temperature,
+          topP: formState.topP,
+          frequencyPenalty: formState.frequencyPenalty,
+          presencePenalty: formState.presencePenalty
+        })
+        
+        toast.success("Model configuration saved successfully")
+      } catch (dbError: any) {
+        // Model not in DB - this is a discovery model
+        // Update provider configuration instead with model metadata
+        console.log('Model not in DB, updating provider configuration with model preferences')
+        
+        const providers = await apiClient.getAIProviders()
+        const provider = providers.find((p: any) => p.id === providerId)
+        
+        if (provider) {
+          // Store model preferences in provider configuration
+          const modelPreferences = {
+            ...(provider.configuration?.model_preferences || {}),
+            [decodedModelId]: {
+              contextWindow: formState.contextWindow,
+              maxTokens: formState.maxTokens,
+              temperature: formState.temperature,
+              topP: formState.topP,
+              frequencyPenalty: formState.frequencyPenalty,
+              presencePenalty: formState.presencePenalty
+            }
+          }
+          
+          await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
+            method: 'POST',
+            body: JSON.stringify({
+              configuration: {
+                ...provider.configuration,
+                model_preferences: modelPreferences
+              }
+            })
+          })
+          
+          toast.success("Model preferences saved to provider configuration")
+        } else {
+          throw new Error('Provider not found')
+        }
+      }
+      
       await loadModelDetails()
     } catch (err: any) {
       console.error(err)
@@ -217,20 +260,6 @@ export default function ModelDetails() {
     }
   }
 
-  const handleReset = () => {
-    if (model) {
-      setFormState({
-        name: model.name,
-        contextWindow: model.contextWindow,
-        maxTokens: model.maxTokens,
-        temperature: model.temperature,
-        topP: model.topP,
-        frequencyPenalty: model.frequencyPenalty,
-        presencePenalty: model.presencePenalty,
-        is_active: model.is_active
-      })
-    }
-  }
 
   // Define available test types
   const testTypes = [
@@ -468,9 +497,6 @@ export default function ModelDetails() {
     toast.success(`All tests completed! ${passedTests}/${allResults.length} tests passed`)
   }
 
-  const handleTestModel = async () => {
-    await runTestSuite('connectivity')
-  }
 
   // Helper function for troubleshooting guidance
   const getTroubleshootingGuidance = (testType: string, testId: string, error?: string): string => {
@@ -626,14 +652,6 @@ export default function ModelDetails() {
                 </div>
               </div>
               <div className="flex items-center space-x-2">
-                <Button variant="outline" onClick={handleReset}>
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Reset
-                </Button>
-                <Button variant="outline" onClick={handleTestModel}>
-                  <TestTube className="h-4 w-4 mr-2" />
-                  Test Model
-                </Button>
                 <Button onClick={handleSave} disabled={saving}>
                   <Save className="h-4 w-4 mr-2" />
                   {saving ? "Saving..." : "Save Changes"}
@@ -900,11 +918,17 @@ export default function ModelDetails() {
                         <div className="flex items-center space-x-2">
                           <Button 
                             variant="outline" 
-                            onClick={handleTestModel}
-                            disabled={testing}
+                            onClick={() => {
+                              const tabs = document.querySelector('[role="tablist"]')
+                              const testingTab = Array.from(tabs?.querySelectorAll('[role="tab"]') || [])
+                                .find(tab => tab.textContent?.includes('Testing'))
+                              if (testingTab instanceof HTMLElement) {
+                                testingTab.click()
+                              }
+                            }}
                           >
                             <TestTube className="h-4 w-4 mr-2" />
-                            Quick Test
+                            Go to Testing
                           </Button>
                           <Button 
                             onClick={runAllTests}

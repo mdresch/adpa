@@ -103,6 +103,8 @@ export default function ProjectDocumentViewer() {
   const [showVersions, setShowVersions] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [newComment, setNewComment] = useState("")
+  const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
+  const [activeSection, setActiveSection] = useState<string>("")
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -353,7 +355,79 @@ The ADPA system represents a significant advancement in document processing auto
     }
 
     loadDocument()
+    
+    // Extract TOC when document loads
+    if (mockDocument.content) {
+      extractTableOfContents(mockDocument.content)
+    }
   }, [projectId, documentId])
+
+  // Extract table of contents from markdown
+  const extractTableOfContents = (content: string) => {
+    const headings: Array<{ id: string; text: string; level: number }> = []
+    const lines = (typeof content === 'string' ? content : '').split('\n')
+    
+    lines.forEach((line, index) => {
+      const h1Match = line.match(/^#\s+(.+)$/)
+      const h2Match = line.match(/^##\s+(.+)$/)
+      const h3Match = line.match(/^###\s+(.+)$/)
+      
+      if (h1Match) {
+        const text = h1Match[1]
+        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        headings.push({ id, text, level: 1 })
+      } else if (h2Match) {
+        const text = h2Match[1]
+        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        headings.push({ id, text, level: 2 })
+      } else if (h3Match) {
+        const text = h3Match[1]
+        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        headings.push({ id, text, level: 3 })
+      }
+    })
+    
+    setTableOfContents(headings)
+  }
+
+  // Smooth scroll to section
+  const scrollToSection = (sectionId: string) => {
+    const element = document.getElementById(sectionId)
+    if (element) {
+      const yOffset = -100
+      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset
+      
+      window.scrollTo({ 
+        top: y, 
+        behavior: 'smooth'
+      })
+      setActiveSection(sectionId)
+    }
+  }
+
+  // Scroll spy for active section tracking
+  useEffect(() => {
+    if (isEditing || tableOfContents.length === 0) return
+
+    const handleScroll = () => {
+      const scrollPosition = window.scrollY + 150
+      
+      for (let i = tableOfContents.length - 1; i >= 0; i--) {
+        const heading = tableOfContents[i]
+        const element = document.getElementById(heading.id)
+        
+        if (element && element.offsetTop <= scrollPosition) {
+          setActiveSection(heading.id)
+          break
+        }
+      }
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+    
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [tableOfContents, isEditing])
 
   const exportToPDF = () => {
     if (!document) return
@@ -528,7 +602,7 @@ The ADPA system represents a significant advancement in document processing auto
   }
 
   return (
-    <div className="min-h-screen bg-background flex">
+    <div className="min-h-screen bg-background flex" style={{ scrollBehavior: 'smooth' }}>
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
@@ -631,29 +705,37 @@ The ADPA system represents a significant advancement in document processing auto
                               remarkPlugins={[remarkGfm]}
                               components={{
                                 h1({ children }) {
+                                  const text = String(children)
+                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
-                                    <h1 className="text-4xl font-bold mb-6 mt-8 pb-2 border-b border-gray-200 dark:border-gray-700">
+                                    <h1 id={id} className="text-4xl font-bold mb-6 mt-8 pb-2 border-b border-gray-200 dark:border-gray-700 scroll-mt-24">
                                       {children}
                                     </h1>
                                   );
                                 },
                                 h2({ children }) {
+                                  const text = String(children)
+                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
-                                    <h2 className="text-3xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100">
+                                    <h2 id={id} className="text-3xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-24">
                                       {children}
                                     </h2>
                                   );
                                 },
                                 h3({ children }) {
+                                  const text = String(children)
+                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
-                                    <h3 className="text-2xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-200">
+                                    <h3 id={id} className="text-2xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-200 scroll-mt-24">
                                       {children}
                                     </h3>
                                   );
                                 },
                                 h4({ children }) {
+                                  const text = String(children)
+                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
-                                    <h4 className="text-xl font-semibold mb-2 mt-4 text-gray-800 dark:text-gray-200">
+                                    <h4 id={id} className="text-xl font-semibold mb-2 mt-4 text-gray-800 dark:text-gray-200 scroll-mt-24">
                                       {children}
                                     </h4>
                                   );
@@ -808,8 +890,9 @@ The ADPA system represents a significant advancement in document processing auto
                           <textarea
                             value={editedContent}
                             onChange={(e) => setEditedContent(e.target.value)}
-                            className="w-full h-96 p-4 border rounded-lg font-mono text-sm"
-                            placeholder="Edit document content..."
+                            className="w-full min-h-[600px] max-h-[800px] p-6 border-2 rounded-lg font-mono text-sm resize-y focus:ring-2 focus:ring-primary focus:border-primary transition-all"
+                            placeholder="Edit document content in Markdown format..."
+                            style={{ height: 'calc(100vh - 400px)' }}
                           />
                         )}
                       </CardContent>
@@ -818,6 +901,42 @@ The ADPA system represents a significant advancement in document processing auto
 
                   {/* Sidebar */}
                   <div className="space-y-6">
+                    {/* Table of Contents */}
+                    {!isEditing && tableOfContents.length > 0 && (
+                      <AnimatedCard>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <FileText className="h-5 w-5" />
+                            <span>Table of Contents</span>
+                          </CardTitle>
+                          <CardDescription>
+                            Click to jump to section
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <nav className="space-y-1">
+                            {tableOfContents.map((heading) => (
+                              <button
+                                key={heading.id}
+                                onClick={() => scrollToSection(heading.id)}
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
+                                  activeSection === heading.id
+                                    ? 'bg-primary text-primary-foreground font-medium'
+                                    : 'hover:bg-muted text-muted-foreground hover:text-foreground'
+                                } ${
+                                  heading.level === 1 ? 'font-semibold' :
+                                  heading.level === 2 ? 'ml-3' :
+                                  'ml-6 text-xs'
+                                }`}
+                              >
+                                {heading.text}
+                              </button>
+                            ))}
+                          </nav>
+                        </CardContent>
+                      </AnimatedCard>
+                    )}
+
                     {/* Document Information */}
                     <AnimatedCard>
                       <CardHeader>
