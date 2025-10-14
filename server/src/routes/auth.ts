@@ -7,6 +7,7 @@ import { logger, childLogger } from "../utils/logger"
 // Static module-level logger for module-load events
 const staticLog = childLogger({ component: "authRoutes" })
 import { authenticateToken } from "../middleware/auth"
+import { trackActivity } from "../middleware/analyticsMiddleware"
 
 // Extend Express Request type to include 'user'
 declare global {
@@ -169,6 +170,9 @@ router.post("/login", async (req, res) => {
 
   log.info(`User logged in: ${email}`)
 
+    // Track login activity
+    trackActivity.login(user.id, token.substring(0, 20)) // Use token prefix as session ID
+
     return res.json({
       message: "Login successful",
       user: {
@@ -203,6 +207,22 @@ router.get("/me", authenticateToken, async (req, res) => {
   } catch (error) {
     log.error("Get user error:", error)
     return res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+// Logout
+router.post("/logout", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    // Track logout activity
+    if (req.user?.id) {
+      trackActivity.logout(req.user.id)
+    }
+
+    res.json({ message: "Logged out successfully" })
+  } catch (error) {
+    log.error("Logout error:", error)
+    res.status(500).json({ error: "Internal server error" })
   }
 })
 
