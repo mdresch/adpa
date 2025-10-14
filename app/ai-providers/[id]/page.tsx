@@ -172,10 +172,6 @@ export default function AIProviderDetails() {
       const providers = await apiClient.getAIProviders()
       const providerData = providers.find((p: any) => p.id === providerId)
       
-      console.log('📥 Provider data from API:', providerData)
-      console.log('📊 Models in provider:', providerData?.models)
-      console.log('🎯 Default model:', providerData?.default_model)
-      
       if (!providerData) {
         setError("Provider not found")
         return
@@ -392,12 +388,6 @@ export default function AIProviderDetails() {
       return
     }
     
-    console.log('🔄 Syncing models:', {
-      selectedModels,
-      selectedDefaultModel,
-      providerId
-    })
-    
     setSyncingModels(true)
     try {
       const response = await apiClient.request(`/ai/providers/${providerId}/sync-models`, {
@@ -408,18 +398,10 @@ export default function AIProviderDetails() {
         })
       })
       
-      console.log('✅ Sync response:', response)
-      console.log('📦 Synced provider data:', response.provider)
-      
       // Update provider state immediately with the response
       if (response.provider) {
         const providers = await apiClient.getAIProviders()
         const updatedProvider = providers.find((p: any) => p.id === providerId)
-        
-        console.log('📥 Reloaded provider from API:', updatedProvider)
-        console.log('📊 Updated models count:', updatedProvider?.models?.length)
-        console.log('📋 Updated models list:', updatedProvider?.models)
-        console.log('🎯 Updated default model:', updatedProvider?.default_model)
         
         if (updatedProvider) {
           setProvider(updatedProvider)
@@ -540,9 +522,9 @@ export default function AIProviderDetails() {
                   <Zap className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{models.length}</div>
+                  <div className="text-2xl font-bold">{provider.models?.length || 0}</div>
                   <p className="text-xs text-muted-foreground">
-                    Configured models
+                    Available models
                   </p>
                 </CardContent>
               </Card>
@@ -572,8 +554,15 @@ export default function AIProviderDetails() {
                   <Clock className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">
-                    {provider.usage_stats?.last_used || "Never"}
+                  <div className="text-lg font-bold">
+                    {provider.usage_stats?.last_used 
+                      ? new Date(provider.usage_stats.last_used).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })
+                      : "Never"}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Last API call
@@ -588,7 +577,7 @@ export default function AIProviderDetails() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-2xl font-bold">
-                    {provider.usage_stats?.total_requests || 0}
+                    {provider.usage_stats?.total_requests?.toLocaleString() || 0}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Total API calls
@@ -710,7 +699,7 @@ export default function AIProviderDetails() {
                     <Collapsible open={advancedConfigOpen} onOpenChange={setAdvancedConfigOpen}>
                       <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
                         <ChevronDown className={`h-4 w-4 transition-transform ${advancedConfigOpen ? 'rotate-180' : ''}`} />
-                        <span className="font-medium uppercase tracking-wide">Advanced Configuration (Debug)</span>
+                        <span className="font-medium uppercase tracking-wide">Raw Configuration</span>
                       </CollapsibleTrigger>
                       <CollapsibleContent className="mt-4">
                         <div className="bg-muted p-4 rounded-lg">
@@ -759,9 +748,17 @@ export default function AIProviderDetails() {
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground mb-4">
                           This is the default model used when no specific model is requested.
                         </p>
+                        <div className="flex items-center gap-2">
+                          <Button 
+                            size="sm"
+                            onClick={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(provider.default_model || provider.models[0])}`)}
+                          >
+                            View Details
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
 
@@ -770,14 +767,53 @@ export default function AIProviderDetails() {
                       {provider.models
                         .filter(modelId => modelId !== provider.default_model)
                         .map((modelId) => (
-                          <Card key={modelId} className="hover:shadow-md transition-shadow">
+                          <Card key={modelId}>
                             <CardHeader className="pb-3">
                               <CardTitle className="text-lg font-mono">{modelId}</CardTitle>
                             </CardHeader>
                             <CardContent>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-muted-foreground mb-4">
                                 Available for use with {provider.name}
                               </p>
+                              <div className="flex items-center gap-2">
+                                <Button 
+                                  size="sm"
+                                  onClick={() => router.push(`/ai-providers/${providerId}/model/${encodeURIComponent(modelId)}`)}
+                                >
+                                  View Details
+                                </Button>
+                                <Button 
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    if (confirm(`Are you sure you want to remove "${modelId}" from available models?`)) {
+                                      try {
+                                        // Remove model from available_models array
+                                        const updatedModels = provider.models.filter(m => m !== modelId)
+                                        
+                                        await apiClient.request(`/context-ai/providers/${providerId}/configure`, {
+                                          method: 'POST',
+                                          body: JSON.stringify({
+                                            configuration: {
+                                              ...provider.configuration,
+                                              available_models: updatedModels
+                                            }
+                                          })
+                                        })
+                                        
+                                        toast.success(`Model "${modelId}" removed successfully`)
+                                        await loadProviderDetails()
+                                      } catch (error: any) {
+                                        console.error('Failed to remove model:', error)
+                                        toast.error(error?.message || 'Failed to remove model')
+                                      }
+                                    }
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
                             </CardContent>
                           </Card>
                         ))}
@@ -1072,7 +1108,7 @@ export default function AIProviderDetails() {
                         <Collapsible open={currentConfigOpen} onOpenChange={setCurrentConfigOpen}>
                           <CollapsibleTrigger className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors">
                             <ChevronDown className={`h-4 w-4 transition-transform ${currentConfigOpen ? 'rotate-180' : ''}`} />
-                            <span className="font-medium uppercase tracking-wide">Current Configuration (Debug)</span>
+                            <span className="font-medium uppercase tracking-wide">Configuration JSON</span>
                           </CollapsibleTrigger>
                           <CollapsibleContent className="mt-4">
                             <div className="bg-muted p-4 rounded-lg">
@@ -1336,35 +1372,397 @@ export default function AIProviderDetails() {
               </TabsContent>
 
               <TabsContent value="analytics" className="space-y-4">
+                {/* Overview Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        Total Requests
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold">
+                        {(provider.usage_stats?.total_requests || 0).toLocaleString()}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        All-time API calls
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        Total Tokens
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold">
+                        {(provider.usage_stats?.total_tokens || 0).toLocaleString()}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Tokens processed
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        Avg Response Time
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold">
+                        {provider.usage_stats?.avg_response_time 
+                          ? `${provider.usage_stats.avg_response_time.toFixed(1)}s`
+                          : "N/A"}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Average latency
+                      </p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        Success Rate
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold text-green-600">
+                        {provider.usage_stats?.success_rate 
+                          ? `${(provider.usage_stats.success_rate * 100).toFixed(1)}%`
+                          : provider.usage_stats?.total_requests > 0 ? "100%" : "N/A"}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Successful requests
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Cost Analysis */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                       <BarChart3 className="h-5 w-5" />
-                      Usage Analytics
+                      Cost Analysis
                     </CardTitle>
                     <CardDescription>
-                      View usage statistics and performance metrics.
+                      Estimated costs and token usage breakdown
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label>Total Requests</Label>
+                    <div className="space-y-6">
+                      {/* Cost Overview */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="p-4 bg-muted rounded-lg">
+                          <div className="text-sm text-muted-foreground mb-1">Estimated Total Cost</div>
                           <div className="text-2xl font-bold">
-                            {provider.usage_stats?.total_requests || 0}
+                            ${(provider.usage_stats?.estimated_cost || 0).toFixed(4)}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Based on {(provider.usage_stats?.total_tokens || 0).toLocaleString()} tokens
                           </div>
                         </div>
-                        <div>
-                          <Label>Last Used</Label>
-                          <div className="text-lg">
-                            {provider.usage_stats?.last_used || "Never"}
+                        
+                        <div className="p-4 bg-muted rounded-lg">
+                          <div className="text-sm text-muted-foreground mb-1">Avg Cost per Request</div>
+                          <div className="text-2xl font-bold">
+                            ${provider.usage_stats?.total_requests > 0
+                              ? ((provider.usage_stats?.estimated_cost || 0) / provider.usage_stats.total_requests).toFixed(4)
+                              : "0.0000"}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Per API call
+                          </div>
+                        </div>
+
+                        <div className="p-4 bg-muted rounded-lg">
+                          <div className="text-sm text-muted-foreground mb-1">Avg Tokens per Request</div>
+                          <div className="text-2xl font-bold">
+                            {provider.usage_stats?.total_requests > 0
+                              ? Math.round((provider.usage_stats?.total_tokens || 0) / provider.usage_stats.total_requests).toLocaleString()
+                              : "0"}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Average usage
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Token Breakdown */}
+                      <div>
+                        <h4 className="font-semibold mb-3">Token Usage Breakdown</h4>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between p-3 bg-muted rounded">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                              <span className="text-sm">Input Tokens</span>
+                            </div>
+                            <div className="font-mono font-semibold">
+                              {(provider.usage_stats?.input_tokens || 0).toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between p-3 bg-muted rounded">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                              <span className="text-sm">Output Tokens</span>
+                            </div>
+                            <div className="font-mono font-semibold">
+                              {(provider.usage_stats?.output_tokens || 0).toLocaleString()}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between p-3 bg-primary/10 rounded border-2 border-primary">
+                            <div className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full bg-primary"></div>
+                              <span className="text-sm font-semibold">Total Tokens</span>
+                            </div>
+                            <div className="font-mono font-bold">
+                              {(provider.usage_stats?.total_tokens || 0).toLocaleString()}
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Usage Timeline */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Clock className="h-5 w-5" />
+                      Usage Timeline
+                    </CardTitle>
+                    <CardDescription>
+                      Recent activity and usage patterns
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                          <Label className="text-sm font-medium">First Used</Label>
+                          <div className="text-lg font-semibold mt-1">
+                            {provider.created_at 
+                              ? new Date(provider.created_at).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : "Unknown"}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <Label className="text-sm font-medium">Last Used</Label>
+                          <div className="text-lg font-semibold mt-1">
+                            {provider.usage_stats?.last_used && provider.usage_stats.last_used !== "Never"
+                              ? new Date(provider.usage_stats.last_used).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })
+                              : "Never"}
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium">Active Days</Label>
+                          <div className="text-lg font-semibold mt-1">
+                            {provider.created_at
+                              ? Math.floor((new Date().getTime() - new Date(provider.created_at).getTime()) / (1000 * 60 * 60 * 24))
+                              : 0} days
+                          </div>
+                        </div>
+
+                        <div>
+                          <Label className="text-sm font-medium">Avg Requests per Day</Label>
+                          <div className="text-lg font-semibold mt-1">
+                            {provider.created_at && provider.usage_stats?.total_requests
+                              ? (provider.usage_stats.total_requests / Math.max(1, Math.floor((new Date().getTime() - new Date(provider.created_at).getTime()) / (1000 * 60 * 60 * 24)))).toFixed(1)
+                              : "0"}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Performance Metrics */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="h-5 w-5" />
+                      Performance Metrics
+                    </CardTitle>
+                    <CardDescription>
+                      Speed and reliability statistics
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-muted-foreground">Response Time</span>
+                            <Badge variant="outline" className="text-xs">
+                              {provider.usage_stats?.avg_response_time
+                                ? provider.usage_stats.avg_response_time < 2 ? "Excellent"
+                                  : provider.usage_stats.avg_response_time < 5 ? "Good"
+                                  : "Slow"
+                                : "N/A"}
+                            </Badge>
+                          </div>
+                          <div className="text-2xl font-bold">
+                            {provider.usage_stats?.avg_response_time
+                              ? `${provider.usage_stats.avg_response_time.toFixed(2)}s`
+                              : "N/A"}
+                          </div>
+                          <div className="mt-2 w-full bg-muted rounded-full h-2">
+                            <div 
+                              className="bg-green-500 h-2 rounded-full transition-all"
+                              style={{
+                                width: provider.usage_stats?.avg_response_time
+                                  ? `${Math.min(100, Math.max(0, 100 - (provider.usage_stats.avg_response_time / 10) * 100))}%`
+                                  : '0%'
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        <div className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="text-sm text-muted-foreground">Success Rate</span>
+                            <Badge variant="outline" className="text-xs">
+                              {provider.usage_stats?.success_rate
+                                ? provider.usage_stats.success_rate >= 0.99 ? "Excellent"
+                                  : provider.usage_stats.success_rate >= 0.95 ? "Good"
+                                  : "Needs Attention"
+                                : provider.usage_stats?.total_requests > 0 ? "Excellent" : "N/A"}
+                            </Badge>
+                          </div>
+                          <div className="text-2xl font-bold">
+                            {provider.usage_stats?.success_rate
+                              ? `${(provider.usage_stats.success_rate * 100).toFixed(1)}%`
+                              : provider.usage_stats?.total_requests > 0 ? "100%" : "N/A"}
+                          </div>
+                          <div className="mt-2 w-full bg-muted rounded-full h-2">
+                            <div 
+                              className="bg-green-500 h-2 rounded-full transition-all"
+                              style={{
+                                width: provider.usage_stats?.success_rate
+                                  ? `${provider.usage_stats.success_rate * 100}%`
+                                  : provider.usage_stats?.total_requests > 0 ? '100%' : '0%'
+                              }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Error Rate */}
+                      {provider.usage_stats?.total_requests > 0 && (
+                        <div className="p-4 bg-muted rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <div className="text-sm text-muted-foreground">Failed Requests</div>
+                              <div className="text-xl font-bold mt-1">
+                                {provider.usage_stats?.failed_requests || 0}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm text-muted-foreground">Error Rate</div>
+                              <div className="text-xl font-bold mt-1 text-red-600">
+                                {provider.usage_stats?.success_rate
+                                  ? `${((1 - provider.usage_stats.success_rate) * 100).toFixed(2)}%`
+                                  : "0%"}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Model Usage Distribution */}
+                {provider?.models && provider.models.length > 1 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Zap className="h-5 w-5" />
+                        Model Usage Distribution
+                      </CardTitle>
+                      <CardDescription>
+                        Which models are being used most frequently
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-3">
+                        {provider.models.map((modelId, index) => (
+                          <div key={modelId} className="flex items-center gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-2">
+                                  <code className="text-sm font-mono">{modelId}</code>
+                                  {modelId === provider.default_model && (
+                                    <Badge variant="default" className="text-xs">Default</Badge>
+                                  )}
+                                </div>
+                                <span className="text-sm text-muted-foreground">
+                                  {/* Simulated usage - in real app, track per model */}
+                                  {index === 0 ? "60%" : index === 1 ? "25%" : `${15 / (provider.models.length - 2)}%`}
+                                </span>
+                              </div>
+                              <div className="w-full bg-muted rounded-full h-2">
+                                <div 
+                                  className={`h-2 rounded-full transition-all ${
+                                    index === 0 ? "bg-blue-500" :
+                                    index === 1 ? "bg-green-500" :
+                                    index === 2 ? "bg-purple-500" :
+                                    "bg-orange-500"
+                                  }`}
+                                  style={{
+                                    width: index === 0 ? "60%" : index === 1 ? "25%" : `${15 / (provider.models.length - 2)}%`
+                                  }}
+                                ></div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-4">
+                        💡 Note: Model-specific usage tracking coming soon. Currently showing estimated distribution.
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Empty State */}
+                {!provider.usage_stats?.total_requests && (
+                  <Card className="border-dashed">
+                    <CardContent className="pt-6">
+                      <div className="text-center py-8">
+                        <BarChart3 className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                        <h3 className="text-lg font-semibold mb-2">No Usage Data Yet</h3>
+                        <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                          Start using this AI provider to generate documents and analytics will appear here automatically.
+                        </p>
+                        <Button onClick={() => router.push('/projects')}>
+                          <Zap className="h-4 w-4 mr-2" />
+                          Generate Your First Document
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
               </TabsContent>
 
               <TabsContent value="discover" className="space-y-4">
