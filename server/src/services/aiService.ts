@@ -126,7 +126,7 @@ class AIService {
         prompt: processedPrompt,
         temperature: request.temperature || 0.7,
         maxTokens: request.max_tokens || 2000,
-      })
+      } as any)
 
       logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
       logger.info('📊 [AI-SERVICE] Tokens used:', result.usage.totalTokens)
@@ -189,24 +189,40 @@ class AIService {
     return `${providerType}/${modelId}`
   }
 
-  async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any }>> {
+  async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any; usage_stats?: any; default_model?: string; created_at?: string; updated_at?: string }>> {
     try {
       logger.info("Getting available providers from database")
       const result = await pool.query(
-        "SELECT id, name, provider_type, configuration, is_active FROM ai_providers ORDER BY name"
+        `SELECT 
+          id, name, provider_type, configuration, is_active, 
+          usage_stats, available_models, default_model,
+          created_at, updated_at
+        FROM ai_providers 
+        ORDER BY name`
       )
 
       logger.info(`Found ${result.rows.length} providers in database`)
       const providers = []
 
       for (const provider of result.rows) {
+        // Use available_models from database if exists, otherwise fall back to hardcoded list
+        const availableModels = provider.available_models || this.getModelsForProvider(provider.provider_type)
+        
         providers.push({
           id: provider.id,
           name: provider.name,
           type: provider.provider_type,
-          models: this.getModelsForProvider(provider.provider_type),
+          models: availableModels,
           is_active: provider.is_active,
           configuration: provider.configuration,
+          usage_stats: provider.usage_stats || {
+            total_requests: 0,
+            total_tokens: 0,
+            last_used: null
+          },
+          default_model: provider.default_model || (availableModels.length > 0 ? availableModels[0] : null),
+          created_at: provider.created_at,
+          updated_at: provider.updated_at
         })
       }
 
