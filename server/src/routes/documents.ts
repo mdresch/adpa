@@ -7,6 +7,7 @@ import { validate, validateParams, schemas } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
+import { trackActivity } from "../middleware/analyticsMiddleware"
 
 const router = express.Router()
 

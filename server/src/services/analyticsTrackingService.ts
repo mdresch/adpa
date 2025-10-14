@@ -5,7 +5,12 @@
  * for analytics and reporting purposes.
  */
 
-import { query } from '../db';
+import { pool } from '../database/connection';
+
+// Helper to execute queries
+const query = async (text: string, params?: any[]) => {
+  return pool.query(text, params);
+};
 
 interface AIUsageLog {
   providerId?: string;
