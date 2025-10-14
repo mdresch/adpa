@@ -392,7 +392,7 @@ The ADPA system represents a significant advancement in document processing auto
 
   // Smooth scroll to section
   const scrollToSection = (sectionId: string) => {
-    const element = document.getElementById(sectionId)
+    const element = window.document.getElementById(sectionId)
     if (element) {
       const yOffset = -100
       const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset
@@ -414,7 +414,7 @@ The ADPA system represents a significant advancement in document processing auto
       
       for (let i = tableOfContents.length - 1; i >= 0; i--) {
         const heading = tableOfContents[i]
-        const element = document.getElementById(heading.id)
+        const element = window.document.getElementById(heading.id)
         
         if (element && element.offsetTop <= scrollPosition) {
           setActiveSection(heading.id)
