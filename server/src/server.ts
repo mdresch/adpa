@@ -78,6 +78,11 @@ app.use(requestIdMiddleware)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
+// Analytics tracking middleware (tracks all API requests automatically)
+import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
+app.use(analyticsMiddleware)
+logger.info("📊 Analytics tracking middleware enabled")
+
 // Health check
 app.get("/health", (req, res) => {
   res.json({
