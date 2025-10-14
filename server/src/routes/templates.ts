@@ -6,6 +6,8 @@ import { validate, validateParams, validateQuery, schemas } from "../middleware/
 import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
+import { trackActivity } from "../middleware/analyticsMiddleware"
+import TemplateAnalyticsService from "../services/templateAnalyticsService"
 
 const router = express.Router()
 
@@ -153,6 +155,11 @@ router.get("/:id",
       // Cache the template
       await cache.set(cacheKey, template, 3600) // 1 hour
 
+      // Track template view
+      if (req.user?.id) {
+        trackActivity.viewTemplate(req.user.id, id)
+      }
+
       res.json({ template })
     } catch (error) {
       log.error("Get template error:", error)
@@ -195,6 +202,34 @@ router.post("/",
       )
 
   log.info(`Template created: ${name} by ${req.user?.email}`)
+
+      // Track template creation
+      if (req.user?.id) {
+        trackActivity.createTemplate(
+          req.user.id,
+          id,
+          {
+            name,
+            framework,
+            category,
+            is_public,
+            variable_count: variables?.length || 0
+          }
+        )
+
+        // Create initial version
+        try {
+          await TemplateAnalyticsService.createVersion({
+            template_id: id,
+            version_number: '1.0.0',
+            change_type: 'created',
+            change_summary: 'Initial template creation',
+            created_by: req.user.id
+          })
+        } catch (error) {
+          log.warn('Failed to create initial version:', error)
+        }
+      }
 
       res.status(201).json({
         message: "Template created successfully",
@@ -287,6 +322,48 @@ router.put("/:id",
 
   log.info(`Template updated: ${id} by ${req.user?.email}`)
 
+      // Track template update
+      if (req.user?.id && result.rows[0]) {
+        trackActivity.updateTemplate(
+          req.user.id,
+          id,
+          {
+            name,
+            framework,
+            category,
+            content_updated: !!content
+          }
+        )
+
+        // Create new version if significant changes
+        if (content || system_prompt || template_paragraphs) {
+          try {
+            // Get current version to increment
+            const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
+            const currentVersion = versions[0]?.version_number || '1.0.0'
+            const [major, minor, patch] = currentVersion.split('.').map(Number)
+            
+            // Increment patch version for updates
+            const newVersion = `${major}.${minor}.${patch + 1}`
+
+            await TemplateAnalyticsService.createVersion({
+              template_id: id,
+              version_number: newVersion,
+              change_type: 'updated',
+              change_summary: 'Template updated',
+              change_details: {
+                content_changed: !!content,
+                system_prompt_changed: !!system_prompt,
+                paragraphs_changed: !!template_paragraphs
+              },
+              created_by: req.user.id
+            })
+          } catch (error) {
+            log.warn('Failed to create version:', error)
+          }
+        }
+      }
+
       res.json({
         message: "Template updated successfully",
         template: result.rows[0],
@@ -345,6 +422,11 @@ router.delete("/:id",
   await cache.del(`template:${id}`)
 
   log.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
+
+      // Track template deletion
+      if (req.user?.id) {
+        trackActivity.deleteTemplate(req.user.id, id)
+      }
 
   res.json({ message: "Template deleted (soft) successfully" })
     } catch (error) {

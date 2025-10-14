@@ -227,6 +227,64 @@ export const trackActivity = {
       metadata,
     });
   },
+
+  /**
+   * Track template view
+   */
+  viewTemplate: (userId: string, templateId: string) => {
+    AnalyticsTrackingService.trackUserActivity({
+      userId,
+      activityType: 'view_template',
+      activityCategory: 'template',
+      entityType: 'template',
+      entityId: templateId,
+      description: 'Viewed template',
+    });
+  },
+
+  /**
+   * Track template creation
+   */
+  createTemplate: (userId: string, templateId: string, metadata?: any) => {
+    AnalyticsTrackingService.trackUserActivity({
+      userId,
+      activityType: 'create_template',
+      activityCategory: 'template',
+      entityType: 'template',
+      entityId: templateId,
+      description: 'Created template',
+      metadata,
+    });
+  },
+
+  /**
+   * Track template update
+   */
+  updateTemplate: (userId: string, templateId: string, metadata?: any) => {
+    AnalyticsTrackingService.trackUserActivity({
+      userId,
+      activityType: 'update_template',
+      activityCategory: 'template',
+      entityType: 'template',
+      entityId: templateId,
+      description: 'Updated template',
+      metadata,
+    });
+  },
+
+  /**
+   * Track template deletion
+   */
+  deleteTemplate: (userId: string, templateId: string) => {
+    AnalyticsTrackingService.trackUserActivity({
+      userId,
+      activityType: 'delete_template',
+      activityCategory: 'template',
+      entityType: 'template',
+      entityId: templateId,
+      description: 'Deleted template',
+    });
+  },
 };
 
 export default analyticsMiddleware;
