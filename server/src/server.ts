@@ -32,6 +32,7 @@ import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
 import templateRoutes from "./routes/templates"
+import templateAnalyticsRoutes from "./routes/template-analytics"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
 import adobePdfRoutes from "./routes/adobe-pdf"
@@ -120,6 +121,7 @@ app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
+app.use("/api/template-analytics", templateAnalyticsRoutes)
 app.use("/api/template-stats", templateStatsRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
