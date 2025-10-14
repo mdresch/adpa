@@ -333,6 +333,15 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     // Cache the document
     await cache.set(cacheKey, document, 1800) // 30 minutes
 
+    // Track document view
+    if (req.user?.id) {
+      trackActivity.viewDocument(
+        req.user.id,
+        document.id,
+        document.project_id
+      )
+    }
+
     return res.json({ document })
   } catch (error) {
     log.error("Get document error:", error)
@@ -478,6 +487,31 @@ router.post("/project/:projectId",
     templateVersion: templateVersion,
     wordCount: wordCount
   })
+
+      // Track document creation
+      if (req.user?.id) {
+        trackActivity.createDocument(
+          req.user.id,
+          id,
+          projectId,
+          {
+            template_id,
+            template_name: templateMetadata?.template_name,
+            word_count: wordCount,
+            character_count: characterCount,
+            status
+          }
+        )
+
+        // Track template usage
+        if (template_id) {
+          trackActivity.useTemplate(req.user.id, template_id, {
+            document_id: id,
+            project_id: projectId,
+            word_count: wordCount
+          })
+        }
+      }
 
       return res.status(201).json({
         message: "Document created successfully",
@@ -626,6 +660,15 @@ router.put("/:id",
       await cache.del(`document:${id}`)
 
   log.info(`Document updated: ${id} by ${req.user?.email}`)
+
+      // Track document edit
+      if (req.user?.id && result.rows[0]) {
+        trackActivity.editDocument(
+          req.user.id,
+          id,
+          result.rows[0].project_id
+        )
+      }
 
       return res.json({
         message: "Document updated successfully",

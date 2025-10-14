@@ -3,6 +3,7 @@ import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
+import { trackActivity } from "../middleware/analyticsMiddleware"
 
 const router = express.Router()
 
@@ -133,6 +134,11 @@ router.get("/:id", authenticateToken, async (req, res) => {
       documents: documentsResult.rows,
     }
 
+    // Track project view
+    if (req.user?.id) {
+      trackActivity.viewProject(req.user.id, id)
+    }
+
     res.json({ project })
   } catch (error) {
     log.error("Get project error:", error)
@@ -183,6 +189,20 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
     )
 
   log.info(`Project created: ${name} by ${req.user?.email}`)
+
+    // Track project creation
+    if (req.user?.id) {
+      trackActivity.createProject(
+        req.user.id,
+        id,
+        {
+          name,
+          framework,
+          priority,
+          team_members: team_members.length
+        }
+      )
+    }
 
     res.status(201).json({
       message: "Project created successfully",
