@@ -54,6 +54,7 @@ import contextInjectionRoutes from "./routes/context-injection"
 import pipelineRoutes from "./routes/pipeline"
 import documentGenerationRoutes from "./routes/documentGeneration"
 import templateStatsRoutes from "./routes/template-stats"
+import settingsRoutes from "./routes/settings"
 
 const app = express()
 const server = createServer(app)
@@ -138,6 +139,7 @@ app.use("/api/process-flow", processFlowRoutes)
 app.use("/api/ai-models", aiModelsRoutes)
 // app.use("/api/ai-analytics", aiAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
+app.use("/api/settings", settingsRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
 app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)
