@@ -7,16 +7,40 @@ const redisConnectionMethods = [
 ]
 
 const createRedisConfig = (host: string) => {
+  // If REDIS_URL is provided (e.g., from Upstash), use it directly
+  if (process.env.REDIS_URL) {
+    const config: any = {
+      url: process.env.REDIS_URL,
+      socket: {
+        connectTimeout: 10000, // 10 seconds
+        lazyConnect: true,
+      }
+    }
+    
+    // Enable TLS for Upstash and other cloud providers
+    if (process.env.REDIS_TLS === "true" || process.env.REDIS_URL.includes('upstash.io')) {
+      config.socket.tls = true
+      config.socket.rejectUnauthorized = false // For self-signed certificates
+    }
+    
+    logger.info("Redis config (from REDIS_URL):", { 
+      url: config.url.replace(/:[^:@]+@/, ':***@'), // Hide password in logs
+      tls: !!config.socket.tls 
+    })
+    return config
+  }
+  
+  // Fallback: build URL from parts (for local development)
   const config = {
     url: `redis://${host}:${process.env.REDIS_PORT || "6379"}`,
     password: process.env.REDIS_PASSWORD,
     database: Number.parseInt(process.env.REDIS_DB || "0"),
     socket: {
-      connectTimeout: 30000, // 30 seconds per attempt
+      connectTimeout: 10000,
       lazyConnect: true,
     }
   }
-  logger.info("Redis config:", { url: config.url, hasPassword: !!config.password, database: config.database })
+  logger.info("Redis config (built from parts):", { url: config.url, hasPassword: !!config.password })
   return config
 }
 
