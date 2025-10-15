@@ -1,0 +1,19 @@
+[variables]
+NIXPACKS_NODEJS_VERSION = "20"
+
+[phases.setup]
+nixPkgs = ["nodejs_20"]
+
+[phases.install]
+cmds = ["cd server && npm install"]
+
+[phases.build]
+cmds = []
+
+[start]
+cmd = "cd server && npm start"
+
+[staticAssets]
+"server" = "/"
+
+

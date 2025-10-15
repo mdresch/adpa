@@ -85,13 +85,13 @@ server/src/routes/user-rules.ts
 docs/user-rules-preferences.md
 
 # Process flow and ECS (experimental)
-server/src/routes/process-flow.ts
+# server/src/routes/process-flow.ts  # NOW ENABLED FOR PRODUCTION
 server/src/routes/ecs-ai.ts
-server/src/services/processFlowService.ts
+# server/src/services/processFlowService.ts  # NOW ENABLED FOR PRODUCTION
 server/src/services/ecsAIService.ts
 
 # AI models and configurations (experimental)
-server/src/routes/ai-models.ts
+# server/src/routes/ai-models.ts  # NOW ENABLED FOR PRODUCTION
 server/src/routes/azure-ai-foundry.ts
 
 # Frontend experimental pages

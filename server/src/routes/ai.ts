@@ -696,9 +696,29 @@ router.get("/history",
   }
 )
 
-// Get OpenAI provider statistics
+// Get OpenAI provider statistics (all providers)
 router.get(
-  "/openai/stats/:name?",
+  "/openai/stats",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const stats = await aiService.getOpenAIProviderStats(undefined)
+      
+      if (!stats) {
+        return res.status(404).json({ error: "Stats unavailable" })
+      }
+
+      res.json({ stats })
+    } catch (error) {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get OpenAI stats error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get OpenAI provider statistics (specific provider)
+router.get(
+  "/openai/stats/:name",
   async (req: express.Request, res: express.Response) => {
     try {
       const { name } = req.params
@@ -892,9 +912,29 @@ router.post(
   }
 )
 
-// Get Google AI provider statistics
+// Get Google AI provider statistics (all providers)
 router.get(
-  "/google/stats/:name?",
+  "/google/stats",
+  async (req: express.Request, res: express.Response) => {
+    try {
+      const stats = await aiService.getGoogleAIProviderStats(undefined)
+      
+      if (!stats) {
+        return res.status(404).json({ error: "Stats unavailable" })
+      }
+
+      res.json({ stats })
+    } catch (error) {
+      const log = childLogger({ requestId: (req as any).requestId })
+      log.error("Get Google AI stats error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get Google AI provider statistics (specific provider)
+router.get(
+  "/google/stats/:name",
   async (req: express.Request, res: express.Response) => {
     try {
       const { name } = req.params
