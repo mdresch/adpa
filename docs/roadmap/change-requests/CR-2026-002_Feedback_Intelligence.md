@@ -350,7 +350,7 @@ Please approve:
 **Prepared By:**
 - Name: ADPA Product Team
 - Role: Product Manager
-- Date: October 15, 2024
+- Date: October 15, 2025
 
 **Reviewed By:**
 
@@ -462,5 +462,5 @@ Week 4:  3.9 ★★★★☆  (↑ improving!)
 
 ---
 
-**Next Step:** Present to Quality Leadership and CFO for approval decision by November 15, 2024.
+**Next Step:** Present to Quality Leadership and CFO for approval decision by November 15, 2025.
 

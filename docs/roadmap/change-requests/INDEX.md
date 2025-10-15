@@ -756,7 +756,7 @@ Lightweight resource allocation tracking with overallocation detection, integrat
 
 ---
 
-**Last Updated:** October 15, 2024  
+**Last Updated:** October 15, 2025  
 **Next Review:** (TBD - schedule sponsor meeting)
 
 ---

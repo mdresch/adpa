@@ -334,7 +334,7 @@ Please approve:
 **Prepared By:**
 - Name: ADPA Product Team
 - Role: Product Manager
-- Date: October 15, 2024
+- Date: October 15, 2025
 
 **Reviewed By:**
 
@@ -380,5 +380,5 @@ See: `docs/roadmap/FUTURE_IMPROVEMENTS.md` Section 10.2-10.4
 
 ---
 
-**Next Step:** Present to executive sponsor for approval decision by November 1, 2024.
+**Next Step:** Present to executive sponsor for approval decision by November 1, 2025.
 
