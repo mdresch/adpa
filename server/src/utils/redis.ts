@@ -112,10 +112,22 @@ export async function connectRedis() {
         logger.info(`Redis connection established successfully via ${method.description}`)
         return
       } catch (error) {
-        logger.warn(`Redis connection attempt ${attempt} failed via ${method.description}:`, error)
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        const errorStack = error instanceof Error ? error.stack : undefined
+        console.error(`❌ Redis connection attempt ${attempt} failed via ${method.description}`)
+        console.error(`   Error: ${errorMessage}`)
+        if (errorStack) {
+          console.error(`   Stack: ${errorStack.split('\n').slice(0, 3).join('\n')}`)
+        }
+        logger.warn(`Redis connection attempt ${attempt} failed via ${method.description}:`, errorMessage)
+        
+        // Clean up failed client
+        try {
+          await testClient.disconnect().catch(() => {})
+        } catch {}
         
         if (attempt < maxRetriesPerMethod) {
-          logger.info(`Retrying Redis connection in ${retryDelay}ms...`)
+          console.log(`🔄 Retrying Redis connection in ${retryDelay}ms...`)
           await new Promise(resolve => setTimeout(resolve, retryDelay))
         }
       }
