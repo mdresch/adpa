@@ -1,6 +1,6 @@
 # ADPA Strategic Change Requests - Index
 
-**Last Updated:** October 15, 2024  
+**Last Updated:** October 15, 2025  
 **Status:** All CRs pending sponsor review  
 **Total Investment Requested:** $1.1M over 24 months  
 **Expected 3-Year ROI:** 250-500%
