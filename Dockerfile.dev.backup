@@ -1,0 +1,36 @@
+# Development Dockerfile for ADPA Frontend
+FROM node:18-alpine
+
+# Install pnpm using corepack (recommended method)
+RUN corepack enable
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package.json pnpm-lock.yaml ./
+
+# Install dependencies
+RUN pnpm install --no-frozen-lockfile
+
+# Copy source code
+COPY . .
+
+# Create non-root user for production-like setup
+RUN addgroup -g 1001 -S nodejs
+RUN adduser -S adpa -u 1001
+
+# Change ownership of app directory
+RUN chown -R adpa:nodejs /app
+
+# Create .next directory and give it proper permissions for development
+RUN mkdir -p /app/.next && chown -R adpa:nodejs /app/.next
+
+# Switch to non-root user
+USER adpa
+
+# Expose port
+EXPOSE 3000
+
+# Default command for development
+CMD ["pnpm", "run", "dev"]

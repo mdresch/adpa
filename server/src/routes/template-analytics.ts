@@ -1,0 +1,303 @@
+/**
+ * Template Analytics Routes
+ * 
+ * API endpoints for template version control, quality metrics, and maintenance tracking
+ */
+
+import express from 'express';
+import { authenticateToken, requirePermission } from '../middleware/auth';
+import { childLogger } from '../utils/logger';
+import TemplateAnalyticsService from '../services/templateAnalyticsService';
+
+const router = express.Router();
+
+// Get template version history
+router.get('/:id/versions', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+    const { limit = 20 } = req.query;
+
+    const versions = await TemplateAnalyticsService.getVersionHistory(
+      id,
+      Number(limit)
+    );
+
+    res.json({ versions });
+  } catch (error) {
+    log.error('Get template versions error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get specific version
+router.get('/versions/:versionId', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { versionId } = req.params;
+
+    const version = await TemplateAnalyticsService.getVersion(versionId);
+
+    if (!version) {
+      return res.status(404).json({ error: 'Version not found' });
+    }
+
+    res.json({ version });
+  } catch (error) {
+    log.error('Get version error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get template quality metrics
+router.get('/:id/metrics', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+    const { period = 'all_time' } = req.query;
+
+    const metrics = await TemplateAnalyticsService.getQualityMetrics(
+      id,
+      period as string
+    );
+
+    if (!metrics) {
+      // Calculate if not exists
+      await TemplateAnalyticsService.calculateQualityMetrics(id);
+      const newMetrics = await TemplateAnalyticsService.getQualityMetrics(id);
+      return res.json({ metrics: newMetrics });
+    }
+
+    res.json({ metrics });
+  } catch (error) {
+    log.error('Get template metrics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Recalculate quality metrics
+router.post('/:id/metrics/calculate', authenticateToken, requirePermission('templates.update'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+    const { period = 'all_time', period_start, period_end } = req.body;
+
+    await TemplateAnalyticsService.calculateQualityMetrics(
+      id,
+      period,
+      period_start ? new Date(period_start) : undefined,
+      period_end ? new Date(period_end) : undefined
+    );
+
+    const metrics = await TemplateAnalyticsService.getQualityMetrics(id, period);
+
+    res.json({ metrics });
+  } catch (error) {
+    log.error('Calculate metrics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get template performance summary
+router.get('/:id/performance', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+
+    const performance = await TemplateAnalyticsService.getPerformanceSummary(id);
+
+    if (!performance) {
+      return res.status(404).json({ error: 'Performance data not found' });
+    }
+
+    res.json({ performance });
+  } catch (error) {
+    log.error('Get performance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get template trends
+router.get('/:id/trends', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+    const { days = 30 } = req.query;
+
+    const trends = await TemplateAnalyticsService.getTemplateTrends(
+      id,
+      Number(days)
+    );
+
+    res.json({ trends });
+  } catch (error) {
+    log.error('Get template trends error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get maintenance log
+router.get('/:id/maintenance', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+    const { limit = 20 } = req.query;
+
+    const maintenanceLog = await TemplateAnalyticsService.getMaintenanceLog(
+      id,
+      Number(limit)
+    );
+
+    res.json({ maintenance_log: maintenanceLog });
+  } catch (error) {
+    log.error('Get maintenance log error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create maintenance action
+router.post('/:id/maintenance', authenticateToken, requirePermission('templates.update'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { id } = req.params;
+    const { action_type, priority, reason, description, assigned_to } = req.body;
+
+    const maintenanceId = await TemplateAnalyticsService.createMaintenanceAction({
+      template_id: id,
+      action_type,
+      action_status: 'pending',
+      priority,
+      reason,
+      description,
+      assigned_to,
+      performed_by: req.user?.id
+    });
+
+    res.status(201).json({ 
+      message: 'Maintenance action created',
+      maintenance_id: maintenanceId 
+    });
+  } catch (error) {
+    log.error('Create maintenance action error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update maintenance action
+router.put('/maintenance/:maintenanceId', authenticateToken, requirePermission('templates.update'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { maintenanceId } = req.params;
+    const { status, description } = req.body;
+
+    await TemplateAnalyticsService.updateMaintenanceStatus(
+      maintenanceId,
+      status,
+      description
+    );
+
+    res.json({ message: 'Maintenance action updated' });
+  } catch (error) {
+    log.error('Update maintenance action error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get top performing templates
+router.get('/analytics/top', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { limit = 10, framework, category } = req.query;
+
+    const templates = await TemplateAnalyticsService.getTopTemplates(
+      Number(limit),
+      framework as string | undefined,
+      category as string | undefined
+    );
+
+    res.json({ templates });
+  } catch (error) {
+    log.error('Get top templates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get templates needing maintenance
+router.get('/analytics/maintenance-needed', authenticateToken, requirePermission('templates.read'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { min_priority = 'medium' } = req.query;
+
+    const templates = await TemplateAnalyticsService.getTemplatesNeedingMaintenance(
+      min_priority as string
+    );
+
+    res.json({ templates });
+  } catch (error) {
+    log.error('Get templates needing maintenance error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Compare two templates
+router.get('/analytics/compare', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { template_a, template_b } = req.query;
+
+    if (!template_a || !template_b) {
+      return res.status(400).json({ error: 'Both template_a and template_b are required' });
+    }
+
+    const comparison = await TemplateAnalyticsService.compareTemplates(
+      template_a as string,
+      template_b as string
+    );
+
+    if (!comparison) {
+      return res.status(404).json({ error: 'Comparison failed - templates not found or no metrics available' });
+    }
+
+    res.json({ comparison });
+  } catch (error) {
+    log.error('Compare templates error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get analytics dashboard
+router.get('/analytics/dashboard', authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { framework } = req.query;
+
+    const dashboard = await TemplateAnalyticsService.getDashboard(
+      framework as string | undefined
+    );
+
+    if (!dashboard) {
+      return res.status(500).json({ error: 'Failed to load dashboard data' });
+    }
+
+    res.json(dashboard);
+  } catch (error) {
+    log.error('Get analytics dashboard error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Refresh analytics views
+router.post('/analytics/refresh', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    await TemplateAnalyticsService.refreshAnalyticsViews();
+
+    res.json({ message: 'Analytics views refreshed successfully' });
+  } catch (error) {
+    log.error('Refresh analytics views error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+export default router;
+

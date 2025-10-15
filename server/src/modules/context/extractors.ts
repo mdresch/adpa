@@ -26,10 +26,10 @@ export class ProjectContextExtractor {
         SELECT p.*, u.name as owner_name
         FROM projects p
         LEFT JOIN users u ON p.owner_id = u.id
-        WHERE p.id = $1 AND (
-          p.owner_id = $2 OR 
-          $2 = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
-          EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        WHERE p.id = $1::uuid AND (
+          p.owner_id = $2::uuid OR 
+          $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
+          EXISTS (SELECT 1 FROM users WHERE id = $2::uuid AND role = 'admin')
         )
       `, [projectId, userId])
 
@@ -68,7 +68,7 @@ export class ProjectContextExtractor {
         SELECT p.*, u.name as owner_name
         FROM projects p
         LEFT JOIN users u ON p.owner_id = u.id
-        WHERE (p.owner_id = $1 OR $1 = ANY(SELECT jsonb_array_elements_text(p.team_members)))
+        WHERE (p.owner_id = $1::uuid OR $1::text = ANY(SELECT jsonb_array_elements_text(p.team_members)))
         ORDER BY p.updated_at DESC
         LIMIT 10
       `, [userId])
@@ -105,10 +105,10 @@ export class DocumentContextExtractor {
         SELECT d.*
         FROM documents d
         JOIN projects p ON d.project_id = p.id
-        WHERE d.id = $1 AND (
-          p.owner_id = $2 OR 
-          $2 = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
-          EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        WHERE d.id = $1::uuid AND (
+          p.owner_id = $2::uuid OR 
+          $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
+          EXISTS (SELECT 1 FROM users WHERE id = $2::uuid AND role = 'admin')
         )
       `, [documentId, userId])
 
@@ -162,10 +162,10 @@ export class DocumentContextExtractor {
         SELECT d.*
         FROM documents d
         JOIN projects p ON d.project_id = p.id
-        WHERE d.project_id = $1 AND (
-          p.owner_id = $2 OR 
-          $2 = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
-          EXISTS (SELECT 1 FROM users WHERE id = $2 AND role = 'admin')
+        WHERE d.project_id = $1::uuid AND (
+          p.owner_id = $2::uuid OR 
+          $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
+          EXISTS (SELECT 1 FROM users WHERE id = $2::uuid AND role = 'admin')
         )
         ORDER BY d.updated_at DESC
         LIMIT 20
@@ -222,9 +222,9 @@ export class DocumentContextExtractor {
         FROM documents d
         JOIN projects p ON d.project_id = p.id
         WHERE d.id IN (${placeholders}) AND (
-          p.owner_id = $1 OR 
-          $1 = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
-          EXISTS (SELECT 1 FROM users WHERE id = $1 AND role = 'admin')
+          p.owner_id = $1::uuid OR 
+          $1::text = ANY(SELECT jsonb_array_elements_text(p.team_members)) OR
+          EXISTS (SELECT 1 FROM users WHERE id = $1::uuid AND role = 'admin')
         )
         ORDER BY d.updated_at DESC
       `, [userId, ...documentIds])
@@ -363,7 +363,7 @@ export class TemplateContextExtractor {
       const result = await pool.query(`
         SELECT *
         FROM templates
-        WHERE id = $1 AND (is_public = true OR created_by = $2)
+        WHERE id = $1::uuid AND (is_public = true OR created_by = $2::uuid)
       `, [templateId, userId])
 
       if (result.rows.length === 0) {
@@ -396,7 +396,7 @@ export class TemplateContextExtractor {
       const result = await pool.query(`
         SELECT *
         FROM templates
-        WHERE framework = $1 AND (is_public = true OR created_by = $2)
+        WHERE framework = $1 AND (is_public = true OR created_by = $2::uuid)
         ORDER BY usage_count DESC, updated_at DESC
         LIMIT 10
       `, [framework, userId])
@@ -428,7 +428,7 @@ export class UserContextExtractor {
       const result = await pool.query(`
         SELECT id, name, email, role, permissions, avatar_url
         FROM users
-        WHERE id = $1
+        WHERE id = $1::uuid
       `, [userId])
 
       if (result.rows.length === 0) {
@@ -460,7 +460,7 @@ export class IntegrationContextExtractor {
       const result = await pool.query(`
         SELECT id, name, type, configuration, is_active, last_sync, sync_status
         FROM integrations
-        WHERE is_active = true AND created_by = $1
+        WHERE is_active = true AND created_by = $1::uuid
         ORDER BY last_sync DESC
         LIMIT 5
       `, [userId])

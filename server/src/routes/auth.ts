@@ -7,6 +7,7 @@ import { logger, childLogger } from "../utils/logger"
 // Static module-level logger for module-load events
 const staticLog = childLogger({ component: "authRoutes" })
 import { authenticateToken } from "../middleware/auth"
+import { trackActivity } from "../middleware/analyticsMiddleware"
 
 // Extend Express Request type to include 'user'
 declare global {
@@ -27,6 +28,41 @@ const router = express.Router()
 
 staticLog.info("🔧 Auth routes module loaded")
 
+// Default permissions for new users
+const DEFAULT_USER_PERMISSIONS = {
+  'projects.create': true,
+  'projects.read': true,
+  'projects.update': true,
+  'projects.delete': true,
+  'documents.create': true,
+  'documents.read': true,
+  'documents.update': true,
+  'documents.delete': true,
+  'templates.create': true,
+  'templates.read': true,
+  'templates.update': true,
+  'templates.delete': true,
+  'stakeholders.create': true,
+  'stakeholders.read': true,
+  'stakeholders.update': true,
+  'stakeholders.delete': true,
+}
+
+const ADMIN_PERMISSIONS = {
+  'admin': true,
+  ...DEFAULT_USER_PERMISSIONS,
+  'users.create': true,
+  'users.read': true,
+  'users.update': true,
+  'users.delete': true,
+  'settings.read': true,
+  'settings.update': true,
+  'integrations.create': true,
+  'integrations.read': true,
+  'integrations.update': true,
+  'integrations.delete': true,
+}
+
 // Register
 router.post("/register", async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
@@ -43,12 +79,15 @@ router.post("/register", async (req, res) => {
     const saltRounds = 12
     const passwordHash = await bcrypt.hash(password, saltRounds)
 
+    // Set permissions based on role
+    const permissions = role === 'admin' ? ADMIN_PERMISSIONS : DEFAULT_USER_PERMISSIONS
+
     // Create user
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, name, role) 
-       VALUES ($1, $2, $3, $4) 
-       RETURNING id, email, name, role, created_at`,
-      [email, passwordHash, name, role],
+      `INSERT INTO users (email, password_hash, name, role, permissions) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING id, email, name, role, permissions, created_at`,
+      [email, passwordHash, name, role, JSON.stringify(permissions)],
     )
 
     if (!result.rows || result.rows.length === 0) {
@@ -72,6 +111,7 @@ router.post("/register", async (req, res) => {
         email: user.email,
         name: user.name,
         role: user.role,
+        permissions: user.permissions,
       },
       token,
     })
@@ -130,6 +170,9 @@ router.post("/login", async (req, res) => {
 
   log.info(`User logged in: ${email}`)
 
+    // Track login activity
+    trackActivity.login(user.id, token.substring(0, 20)) // Use token prefix as session ID
+
     return res.json({
       message: "Login successful",
       user: {
@@ -164,6 +207,22 @@ router.get("/me", authenticateToken, async (req, res) => {
   } catch (error) {
     log.error("Get user error:", error)
     return res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+// Logout
+router.post("/logout", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    // Track logout activity
+    if (req.user?.id) {
+      trackActivity.logout(req.user.id)
+    }
+
+    res.json({ message: "Logged out successfully" })
+  } catch (error) {
+    log.error("Logout error:", error)
+    res.status(500).json({ error: "Internal server error" })
   }
 })
 

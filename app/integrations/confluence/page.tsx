@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -30,7 +30,7 @@ import {
   RotateCcw,
   ArrowDownToLine,
   ArrowUpFromLine,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
@@ -78,22 +78,58 @@ export default function ConfluenceIntegrationPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
   
-  const [integration, setIntegration] = useState<any>(null)
+  const [integration, setIntegration] = useState<{
+    id: string
+    type: string
+    configuration: {
+      base_url?: string
+      target_space_key?: string
+    }
+    status: string
+    is_active?: boolean
+  } | null>(null)
   const [spaces, setSpaces] = useState<ConfluenceSpace[]>([])
   const [searchResults, setSearchResults] = useState<ConfluencePage[]>([])
-  const [documents, setDocuments] = useState<any[]>([])
+  const [documents, setDocuments] = useState<Array<{
+    id: string
+    title: string
+    name?: string
+    space: string
+    created: string
+    updated: string
+    updated_at?: string
+    status: string
+    project_name?: string
+    framework?: string
+  }>>([])
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const [testing, setTesting] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSpace, setSelectedSpace] = useState("")
-  const [activeTab, setActiveTab] = useState("overview")
+  const [activeTab, setActiveTab] = useState<"overview" | "spaces" | "search" | "documents" | "sync">("overview")
   const [showExportDialog, setShowExportDialog] = useState(false)
-  const [selectedDocument, setSelectedDocument] = useState<any>(null)
+  const [selectedDocument, setSelectedDocument] = useState<{
+    id: string
+    title: string
+    name?: string
+    space: string
+    created: string
+    updated: string
+    updated_at?: string
+    status: string
+    project_name?: string
+    framework?: string
+  } | null>(null)
   const [exporting, setExporting] = useState(false)
 
   // Configuration state
-  const [config, setConfig] = useState({
+  const [config, setConfig] = useState<{
+    baseUrl: string
+    username: string
+    apiToken: string
+    targetSpaceKey: string
+  }>({
     baseUrl: "",
     username: "",
     apiToken: "",
@@ -587,7 +623,7 @@ export default function ConfluenceIntegrationPage() {
                               id="baseUrl"
                               placeholder="https://your-domain.atlassian.net"
                               value={config.baseUrl}
-                              onChange={(e) => setConfig({ ...config, baseUrl: e.target.value })}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, baseUrl: e.target.value })}
                             />
                           </div>
                           <div className="space-y-2">
@@ -596,7 +632,7 @@ export default function ConfluenceIntegrationPage() {
                               id="username"
                               placeholder="your-email@company.com"
                               value={config.username}
-                              onChange={(e) => setConfig({ ...config, username: e.target.value })}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, username: e.target.value })}
                             />
                           </div>
                         </div>
@@ -608,7 +644,7 @@ export default function ConfluenceIntegrationPage() {
                             type="password"
                             placeholder="Your Confluence API token"
                             value={config.apiToken}
-                            onChange={(e) => setConfig({ ...config, apiToken: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, apiToken: e.target.value })}
                           />
                         </div>
 
@@ -618,7 +654,7 @@ export default function ConfluenceIntegrationPage() {
                             id="targetSpace"
                             placeholder="SPACE"
                             value={config.targetSpaceKey}
-                            onChange={(e) => setConfig({ ...config, targetSpaceKey: e.target.value })}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setConfig({ ...config, targetSpaceKey: e.target.value })}
                           />
                         </div>
 
@@ -728,7 +764,7 @@ export default function ConfluenceIntegrationPage() {
                           <Input
                             placeholder="Search Confluence content..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value)}
                             onKeyPress={(e) => e.key === "Enter" && searchContent()}
                           />
                           <Select value={selectedSpace} onValueChange={setSelectedSpace}>

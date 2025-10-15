@@ -1,13 +1,16 @@
-import OpenAI from "openai"
-import { GoogleGenerativeAI } from "@google/generative-ai"
+/**
+ * AI Service - AI Gateway Integration
+ * Uses Vercel AI SDK and AI Gateway for unified multi-provider access
+ * Version: 3.0 - AI Gateway Only
+ */
+
+import { generateText } from "ai"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
-import { openaiConnector, OpenAIRequest } from "../modules/ai/openai"
-import { googleConnector, GoogleRequest } from "../modules/ai/google"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure"
+  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic"
   apiKey: string
   configuration?: any
 }
@@ -20,6 +23,7 @@ export interface AIGenerateRequest {
   max_tokens?: number
   template_id?: string
   variables?: Record<string, any>
+  system_prompt?: string
 }
 
 export interface AIGenerateResponse {
@@ -35,218 +39,238 @@ export interface AIGenerateResponse {
 }
 
 class AIService {
-  private providers: Map<string, any> = new Map()
+  private gatewayApiKey: string
+
+  constructor() {
+    // Use AI Gateway API key from environment
+    this.gatewayApiKey = process.env.AI_GATEWAY_API_KEY || ""
+    if (!this.gatewayApiKey) {
+      logger.warn("AI_GATEWAY_API_KEY not set in environment. AI features will not work.")
+    } else {
+      logger.info("AI Gateway initialized with API key")
+    }
+  }
 
   async initializeProviders() {
     try {
-      // Initialize OpenAI connector first
-      await openaiConnector.initializeProviders()
-
-      // Initialize Google AI connector
-      await googleConnector.initializeProviders()
-
+      // With AI Gateway, we don't need to initialize individual provider clients
+      // Just verify we have active providers in the database
       const result = await pool.query(
-        "SELECT name, provider_type, api_key_encrypted, configuration FROM ai_providers WHERE is_active = true"
+        "SELECT COUNT(*) as count FROM ai_providers WHERE is_active = true"
       )
-
-      for (const provider of result.rows) {
-        // Skip OpenAI and Google providers as they're handled by their respective connectors
-        if (provider.provider_type === 'openai' || provider.provider_type === 'google') {
-          continue
-        }
-
-        await this.addProvider({
-          name: provider.name,
-          type: provider.provider_type,
-          apiKey: this.decryptApiKey(provider.api_key_encrypted),
-          configuration: provider.configuration,
-        })
-      }
-
-      logger.info(`Initialized ${this.providers.size} legacy AI providers + OpenAI connector + Google AI connector`)
+      
+      const count = parseInt(result.rows[0]?.count || '0')
+      logger.info(`AI Gateway ready. ${count} provider(s) configured in database`)
     } catch (error) {
-      logger.error("Failed to initialize AI providers:", error)
+      logger.error("Failed to check AI providers:", error)
     }
   }
 
+  // AI Gateway doesn't require provider-specific initialization
+  // This method is kept for compatibility but does nothing
   async addProvider(provider: AIProvider) {
-    try {
-      switch (provider.type) {
-        case "openai":
-          this.providers.set(provider.name, new OpenAI({
-            apiKey: provider.apiKey,
-            ...provider.configuration,
-          }))
-          break
-
-        case "google":
-          // Legacy google provider stored in providers map for direct usage
-          this.providers.set(provider.name, new GoogleGenerativeAI(provider.apiKey))
-          break
-
-        case "azure":
-          this.providers.set(provider.name, new OpenAI({
-            apiKey: provider.apiKey,
-            baseURL: provider.configuration?.endpoint,
-            defaultQuery: { "api-version": provider.configuration?.apiVersion || "2023-12-01-preview" },
-            defaultHeaders: {
-              "api-key": provider.apiKey,
-            },
-          }))
-          break
-
-        default:
-          throw new Error(`Unsupported provider type: ${provider.type}`)
-      }
-
-      logger.info(`Added AI provider: ${provider.name} (${provider.type})`)
-    } catch (error) {
-      logger.error(`Failed to add AI provider ${provider.name}:`, error)
-      throw error
-    }
+    logger.info(`Provider ${provider.name} (${provider.type}) registered in database`)
   }
 
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
+    logger.info('🚀 [AI-SERVICE-1/8] Generate method called')
+    logger.info('📊 [AI-SERVICE] Request:', {
+      provider: request.provider,
+      model: request.model,
+      temperature: request.temperature,
+      promptLength: request.prompt.length
+    })
+    
+    if (!this.gatewayApiKey) {
+      logger.error('❌ [AI-SERVICE] No API key configured')
+      throw new Error("AI Gateway API key not configured. Please set AI_GATEWAY_API_KEY in environment.")
+    }
+    logger.info('✅ [AI-SERVICE-2/8] API key validated')
+
     // Process template if provided
     let processedPrompt = request.prompt
     if (request.template_id && request.variables) {
+      logger.info('🔄 [AI-SERVICE-3/8] Processing template variables...')
       processedPrompt = await this.processTemplate(request.template_id, request.variables, request.prompt)
+    } else {
+      logger.info('✅ [AI-SERVICE-3/8] No template processing needed')
     }
 
     try {
-      // Get provider type from database
+      // Get provider type from database to build the model ID
+      logger.info('🔍 [AI-SERVICE-4/8] Looking up provider type...')
       const providerResult = await pool.query(
-        "SELECT provider_type, configuration FROM ai_providers WHERE name = $1",
+        "SELECT provider_type, configuration FROM ai_providers WHERE name = $1 AND is_active = true",
         [request.provider]
       )
 
       if (providerResult.rows.length === 0) {
-        throw new Error(`Provider configuration not found: ${request.provider}`)
+        logger.error('❌ [AI-SERVICE] Provider not found:', request.provider)
+        throw new Error(`Provider not found or inactive: ${request.provider}`)
       }
 
       const providerType = providerResult.rows[0].provider_type
-      const providerConfig = providerResult.rows[0].configuration
+      logger.info('✅ [AI-SERVICE-5/8] Provider type:', providerType)
+      
+      // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
+      const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
+      
+      logger.info('🌐 [AI-SERVICE-6/8] AI Gateway generation starting:', gatewayModelId)
+      logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
+      logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
+      
+      // Use AI Gateway unified API (Vercel AI SDK)
+      logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
+      const result = await generateText({
+        model: gatewayModelId,
+        prompt: processedPrompt,
+        temperature: request.temperature || 0.7,
+        maxTokens: request.max_tokens || 2000,
+      } as any)
 
-      switch (providerType) {
-        case "openai":
-        case "azure":
-          // Use the new OpenAI connector with failover and rate limiting
-          const openaiRequest: OpenAIRequest = {
-            model: request.model || "gpt-3.5-turbo",
-            messages: [{ role: "user", content: processedPrompt }],
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-          }
-          
-          const openaiResponse = await openaiConnector.generateCompletion(openaiRequest, request.provider)
-          
-          return {
-            content: openaiResponse.choices[0]?.message?.content || "",
-            provider: openaiResponse.provider,
-            model: openaiResponse.model,
-            usage: openaiResponse.usage,
-            metadata: openaiResponse.metadata,
-          }
+      logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
+      logger.info('📊 [AI-SERVICE] Tokens used:', result.usage.totalTokens)
+      logger.info('📝 [AI-SERVICE] Content length:', result.text.length, 'chars')
 
-        case "google":
-          // Use the new Google AI connector with failover and rate limiting
-          const googleRequest: GoogleRequest = {
-            model: request.model || "gemini-pro",
-            messages: [{ role: "user", content: processedPrompt }],
-            temperature: request.temperature,
-            max_tokens: request.max_tokens,
-          }
-          
-          const googleResponse = await googleConnector.generateCompletion(googleRequest, request.provider)
-          
-          return {
-            content: googleResponse.choices[0]?.message?.content || "",
-            provider: googleResponse.provider,
-            model: googleResponse.model,
-            usage: googleResponse.usage,
-            metadata: googleResponse.metadata,
-          }
+      // Update usage stats
+      await this.updateUsageStats(request.provider, {
+        total_tokens: result.usage.totalTokens,
+      })
 
-        default:
-          throw new Error(`Unsupported provider type: ${providerType}`)
+      logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+
+      return {
+        content: result.text,
+        provider: request.provider,
+        model: request.model || gatewayModelId,
+        usage: {
+          prompt_tokens: (result.usage as any).promptTokens || 0,
+          completion_tokens: (result.usage as any).completionTokens || 0,
+          total_tokens: result.usage.totalTokens,
+        },
       }
     } catch (error) {
-      logger.error(`AI generation failed for provider ${request.provider}:`, error)
+      logger.error(`❌ [AI-SERVICE-ERROR] AI generation failed for provider ${request.provider}:`, error)
+      logger.error(`❌ [AI-SERVICE-ERROR] Error details:`, {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
       throw error
     }
   }
 
-  private async generateOpenAI(
-    client: OpenAI,
-    prompt: string,
-    request: AIGenerateRequest,
-    providerType: string
-  ): Promise<AIGenerateResponse> {
-    const response = await client.chat.completions.create({
-      model: request.model || "gpt-3.5-turbo",
-      messages: [{ role: "user", content: prompt }],
-      temperature: request.temperature || 0.7,
-      max_tokens: request.max_tokens || 1000,
-    })
-
-    const choice = response.choices[0]
-    if (!choice?.message?.content) {
-      throw new Error("No content generated")
+  // Map provider type and model to AI Gateway format
+  private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
+    const defaultModels: Record<string, string> = {
+      'openai': 'gpt-4o',
+      'google': 'gemini-2.5-flash',
+      'groq': 'llama-3.3-70b-versatile',
+      'mistral': 'mistral-large-latest',
+      'anthropic': 'claude-sonnet-4',
+      'azure': 'gpt-4',
     }
 
-    return {
-      content: choice.message.content,
-      provider: request.provider,
-      model: response.model,
-      usage: response.usage ? {
-        prompt_tokens: response.usage.prompt_tokens,
-        completion_tokens: response.usage.completion_tokens,
-        total_tokens: response.usage.total_tokens,
-      } : undefined,
-      metadata: {
-        finish_reason: choice.finish_reason,
-        provider_type: providerType,
-      },
+    let modelId = model || defaultModels[providerType] || 'gpt-4o'
+    
+    // Handle deprecated Groq models
+    const groqModelMapping: Record<string, string> = {
+      'gemma2-9b-it': 'llama3-8b-8192',  // Decommissioned, use llama3 instead
+      'gemma-7b-it': 'llama3-8b-8192',
+      'llama-3.2-90b-text-preview': 'llama-3.3-70b-versatile',
+      'llama2-70b-4096': 'llama3-70b-8192',
+    }
+    
+    if (providerType === 'groq' && groqModelMapping[modelId]) {
+      logger.info(`Mapping deprecated Groq model ${modelId} -> ${groqModelMapping[modelId]}`)
+      modelId = groqModelMapping[modelId]
+    }
+    
+    // Format: 'provider/model'
+    return `${providerType}/${modelId}`
+  }
+
+  async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any; usage_stats?: any; default_model?: string; created_at?: string; updated_at?: string }>> {
+    try {
+      logger.info("Getting available providers from database")
+      const result = await pool.query(
+        `SELECT 
+          id, name, provider_type, configuration, is_active, 
+          usage_stats, available_models, default_model,
+          created_at, updated_at
+        FROM ai_providers 
+        ORDER BY name`
+      )
+
+      logger.info(`Found ${result.rows.length} providers in database`)
+      const providers = []
+
+      for (const provider of result.rows) {
+        // Use available_models from database if exists, otherwise fall back to hardcoded list
+        const availableModels = provider.available_models || this.getModelsForProvider(provider.provider_type)
+        
+        providers.push({
+          id: provider.id,
+          name: provider.name,
+          type: provider.provider_type,
+          models: availableModels,
+          is_active: provider.is_active,
+          configuration: provider.configuration,
+          usage_stats: provider.usage_stats || {
+            total_requests: 0,
+            total_tokens: 0,
+            last_used: null
+          },
+          default_model: provider.default_model || (availableModels.length > 0 ? availableModels[0] : null),
+          created_at: provider.created_at,
+          updated_at: provider.updated_at
+        })
+      }
+
+      logger.info(`Returning ${providers.length} providers`)
+      return providers
+    } catch (error) {
+      logger.error("Failed to get available providers:", error)
+      return []
     }
   }
 
-  private async generateGoogle(
-    client: GoogleGenerativeAI,
-    prompt: string,
-    request: AIGenerateRequest
-  ): Promise<AIGenerateResponse> {
-    const model = client.getGenerativeModel({ 
-      model: request.model || "gemini-pro",
-      generationConfig: {
-        temperature: request.temperature || 0.7,
-        maxOutputTokens: request.max_tokens || 1000,
-      },
-    })
-
-    const result = await model.generateContent(prompt)
-    const response = await result.response
-    const content = response.text()
-
-    if (!content) {
-      throw new Error("No content generated")
+  private getModelsForProvider(providerType: string): string[] {
+    switch (providerType) {
+      case "openai":
+        return ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "gpt-5"]
+      case "google":
+        return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-pro", "gemini-pro-vision"]
+      case "azure":
+        return ["gpt-4", "gpt-35-turbo", "gpt-4-32k"]
+      case "groq":
+        // AI Gateway supported Groq models
+        return ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768"]
+      case "mistral":
+        return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
+      case "anthropic":
+        return ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-sonnet-4"]
+      default:
+        return []
     }
+  }
 
-    // Extract usage metadata from the correct location
-    const usageMetadata = (response as any)?.usageMetadata
-
-    return {
-      content,
-      provider: request.provider,
-      model: request.model || "gemini-pro",
-      usage: usageMetadata ? {
-        prompt_tokens: usageMetadata.promptTokenCount || 0,
-        completion_tokens: usageMetadata.candidatesTokenCount || 0,
-        total_tokens: usageMetadata.totalTokenCount || 0,
-      } : undefined,
-      metadata: {
-        provider_type: "google",
-        safety_ratings: response.candidates?.[0]?.safetyRatings,
-      },
+  async updateUsageStats(provider: string, usage: any) {
+    try {
+      await pool.query(
+        `
+        UPDATE ai_providers 
+        SET usage_stats = jsonb_set(
+          COALESCE(usage_stats, '{}'),
+          '{total_tokens}',
+          (COALESCE((usage_stats->>'total_tokens')::int, 0) + $2)::text::jsonb
+        ),
+        updated_at = CURRENT_TIMESTAMP
+        WHERE name = $1
+      `,
+        [provider, usage.total_tokens || 0]
+      )
+    } catch (error) {
+      logger.error(`Failed to update usage stats for ${provider}:`, error)
     }
   }
 
@@ -282,147 +306,7 @@ class AIService {
       return basePrompt
     }
   }
-
-  private decryptApiKey(encryptedKey: string): string {
-    // TODO: Implement proper encryption/decryption
-    // For now, assume keys are base64 encoded
-    try {
-      return Buffer.from(encryptedKey, "base64").toString("utf-8")
-    } catch {
-      return encryptedKey // Fallback to plain text
-    }
-  }
-
-  async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[] }>> {
-    try {
-      const result = await pool.query(
-        "SELECT name, provider_type, configuration FROM ai_providers WHERE is_active = true"
-      )
-
-      const providers = []
-
-      for (const provider of result.rows) {
-        if (provider.provider_type === 'openai') {
-          // Get models from OpenAI connector
-          const models = await openaiConnector.getAvailableModels(provider.name)
-          providers.push({
-            name: provider.name,
-            type: provider.provider_type,
-            models: models,
-          })
-        } else if (provider.provider_type === 'google') {
-          // Get models from Google AI connector
-          const models = await googleConnector.getAvailableModels(provider.name)
-          providers.push({
-            name: provider.name,
-            type: provider.provider_type,
-            models: models,
-          })
-        } else {
-          // Use legacy method for other providers
-          providers.push({
-            name: provider.name,
-            type: provider.provider_type,
-            models: this.getModelsForProvider(provider.provider_type),
-          })
-        }
-      }
-
-      return providers
-    } catch (error) {
-      logger.error("Failed to get available providers:", error)
-      return []
-    }
-  }
-
-  private getModelsForProvider(providerType: string): string[] {
-    switch (providerType) {
-      case "openai":
-        return ["gpt-4", "gpt-4-turbo", "gpt-3.5-turbo", "gpt-3.5-turbo-16k"]
-      case "google":
-        return ["gemini-pro", "gemini-pro-vision"]
-      case "azure":
-        return ["gpt-4", "gpt-35-turbo", "gpt-4-32k"]
-      default:
-        return []
-    }
-  }
-
-  async updateUsageStats(provider: string, usage: any) {
-    try {
-      await pool.query(
-        `
-        UPDATE ai_providers 
-        SET usage_stats = jsonb_set(
-          COALESCE(usage_stats, '{}'),
-          '{total_tokens}',
-          (COALESCE((usage_stats->>'total_tokens')::int, 0) + $2)::text::jsonb
-        ),
-        updated_at = CURRENT_TIMESTAMP
-        WHERE name = $1
-      `,
-        [provider, usage.total_tokens || 0]
-      )
-    } catch (error) {
-      logger.error(`Failed to update usage stats for ${provider}:`, error)
-    }
-  }
-
-  /**
-   * Get OpenAI provider statistics including rate limits and usage
-   */
-  async getOpenAIProviderStats(providerName?: string) {
-    try {
-      if (providerName) {
-        return openaiConnector.getProviderStats(providerName)
-      } else {
-        return openaiConnector.getAllProviderStats()
-      }
-    } catch (error) {
-      logger.error("Failed to get OpenAI provider stats:", error)
-      return null
-    }
-  }
-
-  /**
-   * Test connection to a specific OpenAI provider
-   */
-  async testOpenAIConnection(providerName: string): Promise<boolean> {
-    try {
-      return await openaiConnector.testConnection(providerName)
-    } catch (error) {
-      logger.error(`Failed to test OpenAI connection for ${providerName}:`, error)
-      return false
-    }
-  }
-
-  /**
-   * Get Google AI provider statistics including rate limits and usage
-   */
-  async getGoogleAIProviderStats(providerName?: string) {
-    try {
-      if (providerName) {
-        return googleConnector.getProviderStats(providerName)
-      } else {
-        return googleConnector.getAllProviderStats()
-      }
-    } catch (error) {
-      logger.error("Failed to get Google AI provider stats:", error)
-      return null
-    }
-  }
-
-  /**
-   * Test connection to a specific Google AI provider
-   */
-  async testGoogleAIConnection(providerName: string): Promise<boolean> {
-    try {
-      return await googleConnector.testConnection(providerName)
-    } catch (error) {
-      logger.error(`Failed to test Google AI connection for ${providerName}:`, error)
-      return false
-    }
-  }
 }
 
+export { AIService }
 export const aiService = new AIService()

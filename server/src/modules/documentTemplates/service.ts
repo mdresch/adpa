@@ -22,8 +22,10 @@ export class DocumentTemplateService {
    * Get paginated list of templates
    */
   async getTemplates(query: TemplateListQuery, user: AuthenticatedUser): Promise<TemplateListResponse> {
-    const { page = 1, limit = 10, framework, category, search, is_public } = query
+    const { page = 1, limit = 100, framework, category, search, is_public } = query
     const offset = (Number(page) - 1) * Number(limit)
+
+    logger.info(`📊 getTemplates called: page=${page}, limit=${limit}, framework=${framework || 'none'}, user=${user.email}`)
 
     let sqlQuery = `
       SELECT t.*, u.name as created_by_name
@@ -65,6 +67,8 @@ export class DocumentTemplateService {
 
     const result = await pool.query(sqlQuery, params)
 
+    logger.info(`📋 Found ${result.rows.length} templates in query result`)
+
     // Count total matching templates
     let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1) AND t.deleted_at IS NULL"
     const countParams = [user.id]
@@ -96,6 +100,8 @@ export class DocumentTemplateService {
 
     const countResult = await pool.query(countQuery, countParams)
     const total = Number.parseInt(countResult.rows[0].count)
+
+    logger.info(`📊 Returning ${result.rows.length} templates out of ${total} total (limit=${limit})`)
 
     return {
       templates: result.rows,
@@ -145,13 +151,28 @@ export class DocumentTemplateService {
    * Create new template
    */
   async createTemplate(data: CreateTemplateRequest, user: AuthenticatedUser): Promise<DocumentTemplate> {
-    const { name, description, framework, category, content, variables = [], is_public = false } = data
+    const { 
+      name, 
+      description, 
+      framework, 
+      category, 
+      content, 
+      variables = [], 
+      is_public = false, 
+      system_prompt, 
+      context_injection_config,
+      prompt_build_up,
+      template_paragraphs 
+    } = data
     const id = uuidv4()
 
     const result = await pool.query(
       `
-      INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO templates (
+        id, name, description, framework, category, content, variables, is_public, 
+        created_by, system_prompt, context_injection_config, prompt_build_up, template_paragraphs
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       RETURNING *
     `,
       [
@@ -164,6 +185,10 @@ export class DocumentTemplateService {
         JSON.stringify(variables),
         is_public,
         user.id,
+        system_prompt || null,
+        context_injection_config ? JSON.stringify(context_injection_config) : null,
+        prompt_build_up ? JSON.stringify(prompt_build_up) : null,
+        template_paragraphs ? JSON.stringify(template_paragraphs) : null,
       ]
     )
 
@@ -176,7 +201,19 @@ export class DocumentTemplateService {
    * Update template
    */
   async updateTemplate(id: string, data: UpdateTemplateRequest, user: AuthenticatedUser): Promise<DocumentTemplate | null> {
-    const { name, description, framework, category, content, variables, is_public } = data
+    const { 
+      name, 
+      description, 
+      framework, 
+      category, 
+      content, 
+      variables, 
+      is_public, 
+      system_prompt, 
+      context_injection_config,
+      prompt_build_up,
+      template_paragraphs 
+    } = data
 
     // Check if template exists and user has permission
     const templateCheck = await pool.query(
@@ -204,8 +241,12 @@ export class DocumentTemplateService {
           content = COALESCE($5, content),
           variables = COALESCE($6, variables),
           is_public = COALESCE($7, is_public),
+          system_prompt = COALESCE($8, system_prompt),
+          context_injection_config = COALESCE($9, context_injection_config),
+          prompt_build_up = COALESCE($10, prompt_build_up),
+          template_paragraphs = COALESCE($11, template_paragraphs),
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $8
+      WHERE id = $12
       RETURNING *
     `,
       [
@@ -216,6 +257,10 @@ export class DocumentTemplateService {
         content ? JSON.stringify(content) : null,
         variables ? JSON.stringify(variables) : null,
         is_public,
+        system_prompt || null,
+        context_injection_config ? JSON.stringify(context_injection_config) : null,
+        prompt_build_up ? JSON.stringify(prompt_build_up) : null,
+        template_paragraphs ? JSON.stringify(template_paragraphs) : null,
         id,
       ]
     )
@@ -346,7 +391,7 @@ export class DocumentTemplateService {
   /**
    * Get deleted templates (trash)
    */
-  async getDeletedTemplates(page: number = 1, limit: number = 10, user: AuthenticatedUser): Promise<TemplateListResponse> {
+  async getDeletedTemplates(page: number = 1, limit: number = 100, user: AuthenticatedUser): Promise<TemplateListResponse> {
     const offset = (page - 1) * limit
 
     // If user is admin, allow viewing all deleted templates; otherwise restrict to templates deleted by the current user

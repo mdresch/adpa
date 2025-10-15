@@ -144,8 +144,8 @@ export class AdobePDFService {
                 mimeType: PDFServicesSDK.MimeType.HTML
               }),
               params: {
-                documentLanguage: options?.documentLanguage || 'en-US',
-                includeTaggedPDF: options?.includeTaggedPDF || false
+                documentLanguage: options?.documentLanguage || 'en-US'
+                // includeTaggedPDF: options?.includeTaggedPDF || false // Not available in this version
               }
             })
 
@@ -244,8 +244,8 @@ export class AdobePDFService {
           mimeType: PDFServicesSDK.MimeType.DOCX
         }),
         params: {
-          documentLanguage: options?.documentLanguage || 'en-US',
-          includeTaggedPDF: options?.includeTaggedPDF || false
+          documentLanguage: options?.documentLanguage || 'en-US'
+          // includeTaggedPDF: options?.includeTaggedPDF || false // Not available in this version
         }
       })
 
@@ -395,11 +395,11 @@ export class AdobePDFService {
 
     // Configure permissions
   const pdfPermissions = new (PDFServicesSDK as any).Permissions()
-  if (permissions?.print !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.PRINT_LOW_QUALITY)
-  if (permissions?.editContent !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.EDIT_DOCUMENT_ASSEMBLY)
-  if (permissions?.editAnnotations !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.EDIT_ANNOTATIONS)
-  if (permissions?.fillAndSign !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.FILL_AND_SIGN_FORM_FIELDS)
-  if (permissions?.extract !== false) pdfPermissions.addPermission(PDFServicesSDK.Permissions.Permission.COPY_CONTENT)
+  if (permissions?.print !== false) pdfPermissions.addPermission((PDFServicesSDK.Permissions as any).Permission.PRINT_LOW_QUALITY)
+  if (permissions?.editContent !== false) pdfPermissions.addPermission((PDFServicesSDK.Permissions as any).Permission.EDIT_DOCUMENT_ASSEMBLY)
+  if (permissions?.editAnnotations !== false) pdfPermissions.addPermission((PDFServicesSDK.Permissions as any).Permission.EDIT_ANNOTATIONS)
+  if (permissions?.fillAndSign !== false) pdfPermissions.addPermission((PDFServicesSDK.Permissions as any).Permission.FILL_AND_SIGN_FORM_FIELDS)
+  if (permissions?.extract !== false) pdfPermissions.addPermission((PDFServicesSDK.Permissions as any).Permission.COPY_CONTENT)
 
     const job = new PDFServicesSDK.ProtectPDFJob({
         inputAsset: await this.pdfServices.upload({

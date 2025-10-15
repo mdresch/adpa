@@ -6,6 +6,8 @@ import { validate, validateParams, validateQuery, schemas } from "../middleware/
 import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
+import { trackActivity } from "../middleware/analyticsMiddleware"
+import TemplateAnalyticsService from "../services/templateAnalyticsService"
 
 const router = express.Router()
 
@@ -14,8 +16,8 @@ router.get("/",
   authenticateToken,
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
-    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").optional(),
+    limit: Joi.number().integer().min(1).max(200).default(100),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "BABOK v3", "PMBOK", "PMBOK 7", "DMBOK", "DMBOK 2.0").optional(),
     category: Joi.string().max(100).optional(),
     search: Joi.string().max(100).optional(),
     is_public: Joi.boolean().optional(),
@@ -23,8 +25,10 @@ router.get("/",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { page = 1, limit = 10, framework, category, search, is_public } = req.query
+      const { page = 1, limit = 100, framework, category, search, is_public } = req.query
       const offset = (Number(page) - 1) * Number(limit)
+      
+      log.info(`Fetching templates: page=${page}, limit=${limit}, framework=${framework || 'all'}`)
 
       let query = `
         SELECT t.*, u.name as created_by_name
@@ -98,6 +102,8 @@ router.get("/",
       const countResult = await pool.query(countQuery, countParams)
       const total = Number.parseInt(countResult.rows[0].count)
 
+      log.info(`Returning ${result.rows.length} templates out of ${total} total`)
+
       res.json({
         templates: result.rows,
         pagination: {
@@ -149,6 +155,11 @@ router.get("/:id",
       // Cache the template
       await cache.set(cacheKey, template, 3600) // 1 hour
 
+      // Track template view
+      if (req.user?.id) {
+        trackActivity.viewTemplate(req.user.id, id)
+      }
+
       res.json({ template })
     } catch (error) {
       log.error("Get template error:", error)
@@ -165,14 +176,14 @@ router.post("/",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { name, description, framework, category, content, variables, is_public } = req.body
+      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs } = req.body
 
       const id = uuidv4()
 
       const result = await pool.query(
         `
-        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by, system_prompt, template_paragraphs)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
       `,
         [
@@ -185,10 +196,40 @@ router.post("/",
           JSON.stringify(variables),
           is_public,
           req.user?.id,
+          system_prompt || null,
+          template_paragraphs ? JSON.stringify(template_paragraphs) : null,
         ]
       )
 
   log.info(`Template created: ${name} by ${req.user?.email}`)
+
+      // Track template creation
+      if (req.user?.id) {
+        trackActivity.createTemplate(
+          req.user.id,
+          id,
+          {
+            name,
+            framework,
+            category,
+            is_public,
+            variable_count: variables?.length || 0
+          }
+        )
+
+        // Create initial version
+        try {
+          await TemplateAnalyticsService.createVersion({
+            template_id: id,
+            version_number: '1.0.0',
+            change_type: 'created',
+            change_summary: 'Initial template creation',
+            created_by: req.user.id
+          })
+        } catch (error) {
+          log.warn('Failed to create initial version:', error)
+        }
+      }
 
       res.status(201).json({
         message: "Template created successfully",
@@ -214,12 +255,21 @@ router.put("/:id",
     content: Joi.object().optional(),
     variables: Joi.array().optional(),
     is_public: Joi.boolean().optional(),
+    system_prompt: Joi.string().max(5000).optional(),
+    template_paragraphs: Joi.array().items(Joi.object({
+      section_name: Joi.string().required(),
+      section_type: Joi.string().valid("header", "paragraph", "list", "table", "code_block", "summary", "conclusion").required(),
+      description: Joi.string().required(),
+      required: Joi.boolean().default(true),
+      order: Joi.number().integer().min(1).required(),
+      prompt_guidance: Joi.string().max(1000).optional(),
+    })).optional(),
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      const { name, description, framework, category, content, variables, is_public } = req.body
+      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs } = req.body
 
       // Check if template exists and user has permission
       const templateCheck = await pool.query(
@@ -247,8 +297,10 @@ router.put("/:id",
             content = COALESCE($5, content),
             variables = COALESCE($6, variables),
             is_public = COALESCE($7, is_public),
+            system_prompt = COALESCE($8, system_prompt),
+            template_paragraphs = COALESCE($9, template_paragraphs),
             updated_at = CURRENT_TIMESTAMP
-        WHERE id = $8
+        WHERE id = $10
         RETURNING *
       `,
         [
@@ -259,6 +311,8 @@ router.put("/:id",
           content ? JSON.stringify(content) : null,
           variables ? JSON.stringify(variables) : null,
           is_public,
+          system_prompt || null,
+          template_paragraphs ? JSON.stringify(template_paragraphs) : null,
           id,
         ]
       )
@@ -267,6 +321,48 @@ router.put("/:id",
       await cache.del(`template:${id}`)
 
   log.info(`Template updated: ${id} by ${req.user?.email}`)
+
+      // Track template update
+      if (req.user?.id && result.rows[0]) {
+        trackActivity.updateTemplate(
+          req.user.id,
+          id,
+          {
+            name,
+            framework,
+            category,
+            content_updated: !!content
+          }
+        )
+
+        // Create new version if significant changes
+        if (content || system_prompt || template_paragraphs) {
+          try {
+            // Get current version to increment
+            const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
+            const currentVersion = versions[0]?.version_number || '1.0.0'
+            const [major, minor, patch] = currentVersion.split('.').map(Number)
+            
+            // Increment patch version for updates
+            const newVersion = `${major}.${minor}.${patch + 1}`
+
+            await TemplateAnalyticsService.createVersion({
+              template_id: id,
+              version_number: newVersion,
+              change_type: 'updated',
+              change_summary: 'Template updated',
+              change_details: {
+                content_changed: !!content,
+                system_prompt_changed: !!system_prompt,
+                paragraphs_changed: !!template_paragraphs
+              },
+              created_by: req.user.id
+            })
+          } catch (error) {
+            log.warn('Failed to create version:', error)
+          }
+        }
+      }
 
       res.json({
         message: "Template updated successfully",
@@ -326,6 +422,11 @@ router.delete("/:id",
   await cache.del(`template:${id}`)
 
   log.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
+
+      // Track template deletion
+      if (req.user?.id) {
+        trackActivity.deleteTemplate(req.user.id, id)
+      }
 
   res.json({ message: "Template deleted (soft) successfully" })
     } catch (error) {

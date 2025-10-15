@@ -1,13 +1,16 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
-server/node_modules
-server/logs
+node_modules/
+**/node_modules/
+server/node_modules/
+server/logs/
 
 # next.js
-/.next/
-/out/
+.next/
+**/.next/
+out/
+**/out/
 
 # production
 /build
@@ -29,3 +32,83 @@ yarn-error.log*
 next-env.d.ts
 .env.dev.local
 .env.development.local
+
+# IDE and editor files
+.cursor/
+.vscode/
+.idea/
+
+# Package manager stores
+.pnpm-store/
+
+# Test files and temporary files
+__tests__/
+test-*.json
+test-*.js
+test-*.css
+cookies.txt
+
+# Generated documents (keep structure but ignore content)
+generated-documents/**/*.md
+!generated-documents/README.md
+
+# Temporary and development files
+restart-*.ps1
+restart-*.bat
+*.tmp
+*.temp
+
+# Database migration files (keep structure but ignore content)
+server/src/database/migrations/*.sql
+
+# Quantum and simulation modules (experimental)
+server/src/modules/quantum/
+server/src/modules/ecs/
+
+# AI provider testing and analytics (experimental)
+server/src/routes/ai-provider-testing.ts
+server/src/routes/ai-analytics.ts
+server/src/routes/quantum-stability.ts
+server/src/routes/speed-of-light.ts
+server/src/routes/monte-carlo-proof.ts
+
+# Azure and validation modules (experimental)
+server/src/modules/ai/AzureAIFoundryConfig.ts
+server/src/modules/ai/AIProviderTestSuite.ts
+lib/azure-validation.ts
+hooks/use-azure-validation.ts
+components/validation-feedback.tsx
+
+# User rules and preferences (experimental)
+lib/user-rules-engine.ts
+server/src/routes/user-rules.ts
+docs/user-rules-preferences.md
+
+# Process flow and ECS (experimental)
+# server/src/routes/process-flow.ts  # NOW ENABLED FOR PRODUCTION
+server/src/routes/ecs-ai.ts
+# server/src/services/processFlowService.ts  # NOW ENABLED FOR PRODUCTION
+server/src/services/ecsAIService.ts
+
+# AI models and configurations (experimental)
+# server/src/routes/ai-models.ts  # NOW ENABLED FOR PRODUCTION
+server/src/routes/azure-ai-foundry.ts
+
+# Frontend experimental pages
+app/ai-analytics/
+app/ecs-ai/
+app/process-flow/
+
+# UI components and styles (experimental)
+# components/ui/icons-shim.tsx  # NOW ENABLED FOR PRODUCTION
+components/ui/sidebar.css
+styles/basic.css
+# tailwind.config.js  # NOW ENABLED FOR PRODUCTION
+
+# Global types and utilities (experimental)
+global.d.ts
+server/src/utils/error.ts
+types/
+
+# AI provider details pages (experimental)
+app/ai-providers/[id]/

@@ -13,6 +13,7 @@ import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
 import { initializeQueues } from "./services/queueService"
+import { aiService } from "./services/aiService"
 import jwt from "jsonwebtoken"
 import { pool } from "./database/connection"
 
@@ -22,6 +23,7 @@ import projectRoutes from "./routes/projects"
 import documentRoutes from "./routes/documents"
 import userRoutes from "./routes/users"
 import aiRoutes from "./routes/ai"
+import aiProvidersRoutes from "./routes/ai-providers"
 import analyticsRoutes from "./routes/analytics"
 import jobRoutes from "./routes/jobs"
 import securityRoutes from "./routes/security"
@@ -30,9 +32,28 @@ import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
 import templateRoutes from "./routes/templates"
+import templateAnalyticsRoutes from "./routes/template-analytics"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
 import { documentGeneratorRoutes } from "./modules/documentGenerator"
 import adobePdfRoutes from "./routes/adobe-pdf"
+import { createDocumentFormatRoutes } from "./routes/document-formats"
+import contextAiRoutes from "./routes/context-ai"
+// import ecsAiRoutes from "./routes/ecs-ai"
+// import quantumStabilityRoutes from "./routes/quantum-stability"
+// import speedOfLightRoutes from "./routes/speed-of-light"
+// import monteCarloProofRoutes from "./routes/monte-carlo-proof"
+// import aiProviderTestingRoutes from "./routes/ai-provider-testing"
+// import azureAIFoundryRoutes from "./routes/azure-ai-foundry"
+import processFlowRoutes from "./routes/process-flow"
+import aiModelsRoutes from "./routes/ai-models"
+// import aiAnalyticsRoutes from "./routes/ai-analytics"
+import stakeholderRoutes from "./routes/stakeholders"
+import contentStructuringRoutes from "./routes/content-structuring"
+import compressionRoutes from "./routes/compression"
+import contextInjectionRoutes from "./routes/context-injection"
+import pipelineRoutes from "./routes/pipeline"
+import documentGenerationRoutes from "./routes/documentGeneration"
+import templateStatsRoutes from "./routes/template-stats"
 
 const app = express()
 const server = createServer(app)
@@ -58,6 +79,11 @@ app.use(requestIdMiddleware)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
+// Analytics tracking middleware (tracks all API requests automatically)
+import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
+app.use(analyticsMiddleware)
+logger.info("📊 Analytics tracking middleware enabled")
+
 // Health check
 app.get("/health", (req, res) => {
   res.json({
@@ -81,8 +107,10 @@ console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
 app.use("/api/documents", documentRoutes)
+app.use("/api/documents", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/ai", aiRoutes)
+app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
 app.use("/api/security", securityRoutes)
@@ -93,9 +121,27 @@ app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
 app.use("/api/templates", templateRoutes)
+app.use("/api/template-analytics", templateAnalyticsRoutes)
+app.use("/api/template-stats", templateStatsRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
 app.use("/api/adobe-pdf", adobePdfRoutes)
+app.use("/api/documents", createDocumentFormatRoutes(pool))
+app.use("/api/context-ai", contextAiRoutes)
+// app.use("/api/ecs-ai", ecsAiRoutes)
+// app.use("/api/quantum-stability", quantumStabilityRoutes)
+// app.use("/api/speed-of-light", speedOfLightRoutes)
+// app.use("/api/monte-carlo-proof", monteCarloProofRoutes)
+// app.use("/api/ai-provider-testing", aiProviderTestingRoutes)
+// app.use("/api/azure-ai-foundry", azureAIFoundryRoutes)
+app.use("/api/process-flow", processFlowRoutes)
+app.use("/api/ai-models", aiModelsRoutes)
+// app.use("/api/ai-analytics", aiAnalyticsRoutes)
+app.use("/api/stakeholders", stakeholderRoutes)
+app.use("/api/content-structuring", contentStructuringRoutes)
+app.use("/api/compression", compressionRoutes)
+app.use("/api/context-injection", contextInjectionRoutes)
+app.use("/api/pipeline", pipelineRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
@@ -193,24 +239,28 @@ app.use(errorHandler)
 // Start server
 async function startServer() {
   try {
+    console.log("🚀 Starting server initialization...")
+    
     // Try to connect to database, but don't fail if it's not available
     try {
+      console.log("📊 Connecting to database...")
       await connectDatabase()
-      logger.info("Database connected successfully")
+      console.log("✅ Database connected successfully")
     } catch (dbError) {
-      logger.warn(
-        "Database connection failed, starting server without database:",
+      console.warn(
+        "⚠️  Database connection failed, starting server without database:",
         typeof dbError === "object" && dbError !== null && "message" in dbError ? (dbError as { message?: string }).message : dbError
       )
     }
 
     // Try to connect to Redis, but don't fail if it's not available
     try {
+      console.log("💾 Connecting to Redis...")
       await connectRedis()
-      logger.info("Redis connected successfully")
+      console.log("✅ Redis connected successfully")
     } catch (redisError) {
-      logger.warn(
-        "Redis connection failed, starting server without Redis:",
+      console.warn(
+        "⚠️  Redis connection failed, starting server without Redis:",
         typeof redisError === "object" && redisError !== null && "message" in redisError
           ? (redisError as { message?: string }).message
           : redisError
@@ -219,24 +269,40 @@ async function startServer() {
 
     // Try to initialize job queues, but don't fail if it's not available
     try {
+      console.log("🔄 Initializing job queues...")
       await initializeQueues()
-      logger.info("Job queues initialized successfully")
+      console.log("✅ Job queues initialized successfully")
     } catch (queueError) {
-      logger.warn(
-        "Job queue initialization failed:",
+      console.warn(
+        "⚠️  Job queue initialization failed:",
         typeof queueError === "object" && queueError !== null && "message" in queueError
           ? (queueError as { message?: string }).message
           : queueError
       )
     }
 
-    server.listen(PORT, () => {
-      logger.info(`Server running on port ${PORT}`)
-      logger.info(`Environment: ${process.env.NODE_ENV || "development"}`)
-      logger.info("SharePoint test endpoint available at /api/integrations/sharepoint/test")
+    // Initialize AI providers
+    try {
+      console.log("🤖 Initializing AI providers...")
+      await aiService.initializeProviders()
+      console.log("✅ AI providers initialized successfully")
+    } catch (aiError) {
+      console.warn(
+        "⚠️  AI provider initialization failed:",
+        typeof aiError === "object" && aiError !== null && "message" in aiError
+          ? (aiError as { message?: string }).message
+          : aiError
+      )
+    }
+
+    console.log(`🌐 Starting server on port ${PORT} at 0.0.0.0...`)
+    server.listen(PORT, "0.0.0.0", () => {
+      console.log(`✅ Server running on port ${PORT}`)
+      console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
+      console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
     })
   } catch (error) {
-    logger.error("Failed to start server:", error)
+    console.error("❌ Failed to start server:", error)
     process.exit(1)
   }
 }

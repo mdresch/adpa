@@ -9,6 +9,7 @@ import { RouteProgress } from "@/components/route-progress"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { WebSocketProvider } from "@/contexts/WebSocketContext"
 import RoomStatusList from "@/components/room-status-list"
+import { Analytics } from "@vercel/analytics/next"
 
 export const metadata: Metadata = {
   title: "ADPA Admin Portal",
@@ -40,6 +41,7 @@ export default function RootLayout({
             </WebSocketProvider>
           </AuthProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   )

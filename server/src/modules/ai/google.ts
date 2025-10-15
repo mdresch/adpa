@@ -79,7 +79,8 @@ class GoogleConnector {
   private failoverQueue: string[] = []
 
   constructor() {
-    this.initializeProviders()
+    // Don't initialize providers in constructor to avoid startup crashes
+    // Providers will be initialized when needed
   }
 
   /**
@@ -99,40 +100,45 @@ class GoogleConnector {
       `)
 
       for (const row of result.rows) {
-        const config: GoogleConfig = {
-          apiKey: this.decryptApiKey(row.api_key_encrypted),
-          ...row.configuration
-        }
-
-        const rateLimits = row.rate_limits || {}
-        const usageStats = row.usage_stats || {}
-
-        const provider: GoogleProvider = {
-          id: row.id,
-          name: row.name,
-          config,
-          isActive: row.is_active,
-          priority: row.priority,
-          rateLimits: {
-            requestsPerMinute: rateLimits.requestsPerMinute || 60, // Google's default limits
-            tokensPerMinute: rateLimits.tokensPerMinute || 32000,
-            requestsPerDay: rateLimits.requestsPerDay || 1500,
-          },
-          currentUsage: {
-            requestsThisMinute: usageStats.requestsThisMinute || 0,
-            tokensThisMinute: usageStats.tokensThisMinute || 0,
-            requestsToday: usageStats.requestsToday || 0,
-            lastReset: new Date(usageStats.lastReset || Date.now()),
+        try {
+          const config: GoogleConfig = {
+            apiKey: this.decryptApiKey(row.api_key_encrypted),
+            ...row.configuration
           }
-        }
 
-        await this.addProvider(provider)
+          const rateLimits = row.rate_limits || {}
+          const usageStats = row.usage_stats || {}
+
+          const provider: GoogleProvider = {
+            id: row.id,
+            name: row.name,
+            config,
+            isActive: row.is_active,
+            priority: row.priority,
+            rateLimits: {
+              requestsPerMinute: rateLimits.requestsPerMinute || 60, // Google's default limits
+              tokensPerMinute: rateLimits.tokensPerMinute || 32000,
+              requestsPerDay: rateLimits.requestsPerDay || 1500,
+            },
+            currentUsage: {
+              requestsThisMinute: usageStats.requestsThisMinute || 0,
+              tokensThisMinute: usageStats.tokensThisMinute || 0,
+              requestsToday: usageStats.requestsToday || 0,
+              lastReset: new Date(usageStats.lastReset || Date.now()),
+            }
+          }
+
+          await this.addProvider(provider)
+        } catch (providerError) {
+          logger.warn(`Failed to initialize Google AI provider '${row.name}', skipping:`, providerError)
+          continue
+        }
       }
 
       logger.info(`Initialized ${this.providers.size} Google AI providers`)
     } catch (error) {
       logger.error("Failed to initialize Google AI providers:", error)
-      throw error
+      // Don't throw error to prevent server crash - just log and continue
     }
   }
 
@@ -143,7 +149,8 @@ class GoogleConnector {
     try {
       // Validate API key. If validation fails, mark provider inactive and continue
       try {
-        await this.validateApiKey(provider.config.apiKey)
+        const modelName = (provider.config as any).model || "gemini-2.5-flash"
+        await this.validateApiKey(provider.config.apiKey, modelName)
       } catch (validationError) {
         logger.error(`Google API key validation failed for provider ${provider.name}:`, validationError)
         // register provider but mark as inactive so system can continue
@@ -228,15 +235,12 @@ class GoogleConnector {
   }
 
   /**
-   * Get available models for Google AI
+   * Get available models for Google AI by calling the real API
    */
-  async getAvailableModels(providerName?: string): Promise<string[]> {
+  async getAvailableModels(providerName?: string): Promise<any[]> {
     const defaultModels = [
-      "gemini-pro",
-      "gemini-pro-vision",
-      "gemini-1.5-pro",
-      "gemini-1.5-flash",
-      "gemini-1.0-pro"
+      { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and efficient', context_window: 1000000, capabilities: ['text', 'vision'] },
+      { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Most capable', context_window: 2000000, capabilities: ['text', 'vision'] },
     ]
 
     if (!providerName) {
@@ -246,14 +250,53 @@ class GoogleConnector {
     try {
       const client = this.clients.get(providerName)
       if (!client) {
+        logger.warn(`No client found for provider: ${providerName}`)
         return defaultModels
       }
 
-      // Google AI SDK doesn't expose a models.list method like OpenAI
-      // Return the known available models
+      logger.info(`Calling Google API to list available models for ${providerName}...`)
+      
+      // Call Google's REST API directly to list models
+      // The SDK doesn't have a listModels method, so we use fetch
+      const provider = this.providers.get(providerName)
+      if (!provider) {
+        return defaultModels
+      }
+      
+      const response = await fetch(
+        'https://generativelanguage.googleapis.com/v1beta/models?key=' + provider.config.apiKey
+      )
+      
+      if (!response.ok) {
+        throw new Error(`API responded with ${response.status}: ${response.statusText}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.models && Array.isArray(data.models)) {
+        const models = data.models
+          .filter((m: any) => 
+            m.supportedGenerationMethods?.includes('generateContent') &&
+            m.name.includes('gemini')
+          )
+          .map((m: any) => {
+            const modelId = m.name.replace('models/', '')
+            return {
+              id: modelId,
+              name: m.displayName || modelId,
+              description: m.description || '',
+              context_window: m.inputTokenLimit || 32000,
+              capabilities: m.supportedGenerationMethods || ['generateContent']
+            }
+          })
+        
+        logger.info(`✅ Discovered ${models.length} Google Gemini models via API`)
+        return models.length > 0 ? models : defaultModels
+      }
+      
       return defaultModels
     } catch (error) {
-      logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
+      logger.error(`Failed to fetch models from Google API for ${providerName}:`, error)
       return defaultModels
     }
   }
@@ -268,8 +311,12 @@ class GoogleConnector {
         throw new Error(`Provider ${providerName} not found`)
       }
 
+      // Get the provider to access its model configuration
+      const provider = this.providers.get(providerName)
+      const modelName = (provider?.config as any)?.model || "gemini-2.5-flash"
+
       // Make a simple API call to test connection
-      const model = client.getGenerativeModel({ model: "gemini-pro" })
+      const model = client.getGenerativeModel({ model: modelName })
       await model.generateContent("Test connection")
       return true
     } catch (error) {
@@ -294,14 +341,14 @@ class GoogleConnector {
 
   // Private helper methods
 
-  private async validateApiKey(apiKey: string): Promise<void> {
+  private async validateApiKey(apiKey: string, modelName: string = "gemini-2.5-flash"): Promise<void> {
     if (!apiKey || typeof apiKey !== 'string' || apiKey.trim().length === 0) {
       throw new Error("Invalid Google AI API key format")
     }
 
     try {
       const testClient = new GoogleGenerativeAI(apiKey)
-      const model = testClient.getGenerativeModel({ model: "gemini-pro" })
+      const model = testClient.getGenerativeModel({ model: modelName })
       await model.generateContent("Test")
     } catch (error) {
       throw new Error(`API key validation failed: ${error}`)
@@ -370,7 +417,7 @@ class GoogleConnector {
       // Convert messages to a single prompt for Google AI
       const prompt = this.convertMessagesToPrompt(request.messages)
       
-      const modelName = request.model || "gemini-pro"
+      const modelName = request.model || (provider.config as any).model || "gemini-2.5-flash"
       const model = client.getGenerativeModel({ 
         model: modelName,
         generationConfig: {

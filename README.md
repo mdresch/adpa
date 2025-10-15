@@ -6,24 +6,6 @@ A comprehensive enterprise-grade platform for AI-powered document generation, ma
 
 **⚠️ CRITICAL: This project MUST be run using Docker containers. Never run services locally or modify configurations for local development.**
 
-- ✅ **Use Docker**: `docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d`
-- ❌ **Don't run locally**: Never use `npm run dev` or modify configs for localhost
-  - Note: The frontend development image uses pnpm to install dependencies. The
-    Docker images and compose commands rely on pnpm shims being available in
-    the image. If you must run the frontend on your host (not recommended),
-    install dependencies with pnpm:
-
-    ```bash
-    # install with pnpm (preferred if you plan to run the frontend locally)
-    pnpm install
-    pnpm run dev
-    ```
-- 🔍 **Validate setup**: Run `validate-docker.bat` before committing changes
-
-**Breaking Docker setup will require significant time to fix. Always validate with `validate-docker.bat` before commits.**
-
-📖 **[Complete Docker Guide](DOCKER_README.md)** | 🛠️ **[Validation Script](validate-docker.bat)**
-
 ---
 
 ## Description
@@ -46,6 +28,7 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
 - DMBOK 2.0 data management frameworks
 - 100+ pre-built professional templates
 - Multiple output formats (Markdown, PDF, JSON)
+- Comprehensive validation and quality assurance
 
 ### 🔗 **Enterprise Integrations**
 - **Confluence**: OAuth2 authentication, page publishing, metadata synchronization
@@ -183,6 +166,78 @@ adpa sync confluence --project-id 123
 # Export documents
 adpa export --format pdf --output ./exports/
 ```
+
+## Document Generation and Validation
+
+### Generating Documents
+
+The ADPA Framework provides powerful document generation capabilities with built-in validation:
+
+#### Via Web Admin Portal
+1. Navigate to the **Documents** section
+2. Click **Generate New Document**
+3. Select a template (PMBOK, BABOK, or DMBOK)
+4. Provide required context and variables
+5. Choose output format (Markdown, PDF, DOCX, HTML)
+6. Click **Generate** - validation runs automatically
+
+#### Via REST API
+```bash
+# Generate a document
+curl -X POST http://localhost:5000/api/document-generator/generate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "template_id": "uuid-here",
+    "data": {
+      "projectName": "My Project",
+      "description": "Project description"
+    },
+    "output_format": "pdf"
+  }'
+
+# Validate document data before generation
+curl -X POST http://localhost:5000/api/document-generator/validate \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -d '{
+    "template_id": "uuid-here",
+    "data": { ... }
+  }'
+```
+
+### Document Validation
+
+All generated documents undergo comprehensive validation:
+
+- **Schema Validation**: Joi-based validation of all inputs
+- **Template Validation**: Ensures templates meet framework standards
+- **Variable Validation**: Checks all required variables are provided
+- **Content Validation**: Validates content quality and completeness
+- **Security Validation**: Prevents injection attacks and path traversal
+- **Format Validation**: Ensures output meets format specifications
+
+See [Generated Documents](generated-documents/README.md) for detailed validation documentation.
+
+### Building Documentation
+
+Generated documents are stored in the `generated-documents/` directory with organized structure:
+
+```
+generated-documents/
+├── README.md                    # This file with validation info
+├── pmbok/                       # PMBOK documents
+├── babok/                       # BABOK documents
+├── dmbok/                       # DMBOK documents
+├── project-charter/             # Project charters
+├── management-plans/            # Management plans
+├── quality-assurance/           # QA documentation
+└── ...                          # Other categories
+```
+
+For comprehensive documentation generation details, see:
+- [Document Generator Module](server/src/modules/documentGenerator/README.md)
+- [Generated Documents Guide](generated-documents/README.md)
 
 ## Configuration
 

@@ -2,9 +2,13 @@ import dotenv from "dotenv"
 dotenv.config()
 
 import { readFileSync } from "fs"
-import { join } from "path"
+import { join, dirname } from "path"
+import { fileURLToPath } from "url"
 import { pool } from "./connection"
 import { logger } from "../utils/logger"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 async function runMigrations() {
   try {
@@ -137,6 +141,78 @@ async function runMigrations() {
       }
     } catch (error) {
       logger.warn("Templates soft-delete migration failed (may already be applied):", error)
+    }
+
+    // Run stakeholders migration
+    try {
+      const stakeholdersMigrationPath = join(__dirname, "migrations", "007_stakeholders.sql")
+      const stakeholdersMigration = readFileSync(stakeholdersMigrationPath, "utf-8")
+
+      const stakeholdersMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["007_stakeholders"]
+      )
+
+      if (stakeholdersMigrationCheck.rows.length === 0) {
+        await pool.query(stakeholdersMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["007_stakeholders"]
+        )
+        logger.info("Stakeholders migration completed")
+      } else {
+        logger.info("Stakeholders migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Stakeholders migration failed (may already be applied):", error)
+    }
+
+    // Run template AI enhancements migration
+    try {
+      const aiEnhancementsMigrationPath = join(__dirname, "..", "..", "migrations", "add_template_ai_enhancements.sql")
+      const aiEnhancementsMigration = readFileSync(aiEnhancementsMigrationPath, "utf-8")
+
+      const aiEnhancementsMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_template_ai_enhancements"]
+      )
+
+      if (aiEnhancementsMigrationCheck.rows.length === 0) {
+        await pool.query(aiEnhancementsMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_template_ai_enhancements"]
+        )
+        logger.info("Template AI enhancements migration completed")
+      } else {
+        logger.info("Template AI enhancements migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Template AI enhancements migration failed (may already be applied):", error)
+    }
+
+    // Run template paragraphs migration
+    try {
+      const templateParagraphsMigrationPath = join(__dirname, "..", "..", "migrations", "add_template_paragraphs.sql")
+      const templateParagraphsMigration = readFileSync(templateParagraphsMigrationPath, "utf-8")
+
+      const templateParagraphsMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["add_template_paragraphs"]
+      )
+
+      if (templateParagraphsMigrationCheck.rows.length === 0) {
+        await pool.query(templateParagraphsMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["add_template_paragraphs"]
+        )
+        logger.info("Template paragraphs migration completed")
+      } else {
+        logger.info("Template paragraphs migration already applied")
+      }
+    } catch (error) {
+      logger.warn("Template paragraphs migration failed (may already be applied):", error)
     }
 
     logger.info("Database migrations completed successfully")

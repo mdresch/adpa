@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { apiClient, Project } from "@/lib/api"
+import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from "sonner"
@@ -42,6 +42,16 @@ import {
   MoreHorizontal,
   Eye,
   Loader2,
+  TrendingUp,
+  Target,
+  BarChart3,
+  PieChart as PieChartIcon,
+  Filter,
+  Grid,
+  List,
+  Zap,
+  XCircle,
+  RefreshCw,
 } from "lucide-react"
 import {
   Dialog,
@@ -55,6 +65,7 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
 interface Document {
   id: string
@@ -70,6 +81,26 @@ interface Document {
   updated_at: string
 }
 
+interface Stakeholder {
+  id: string
+  project_id: string
+  name?: string
+  role: string
+  department?: string
+  email: string
+  phone?: string
+  interest_level: 'high' | 'medium' | 'low'
+  influence_level: 'high' | 'medium' | 'low'
+  engagement_approach: 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'
+  communication_frequency: 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'
+  stakeholder_type: 'internal' | 'external'
+  stakeholder_category: 'primary' | 'secondary'
+  expectations?: string
+  potential_impact?: string
+  created_at: string
+  updated_at: string
+}
+
 export default function ProjectDetail() {
   const params = useParams()
   const projectId = params.id as string
@@ -77,19 +108,75 @@ export default function ProjectDetail() {
 
   const [project, setProject] = useState<Project | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
+  const [stakeholders, setStakeholders] = useState<Stakeholder[]>([])
   const [loading, setLoading] = useState(true)
   const [documentsLoading, setDocumentsLoading] = useState(true)
+  const [stakeholdersLoading, setStakeholdersLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [documentsPagination, setDocumentsPagination] = useState<{
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    pages: 0,
+  })
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [creatingDocument, setCreatingDocument] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState("")
   const [documentName, setDocumentName] = useState("")
   const [documentDescription, setDocumentDescription] = useState("")
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
+  
+  // AI Provider selection for document generation
+  const [aiProviders, setAiProviders] = useState<any[]>([])
+  const [selectedProvider, setSelectedProvider] = useState("Groq AI")
+  const [selectedModel, setSelectedModel] = useState("llama-3.1-8b-instant")
+  const [aiTemperature, setAiTemperature] = useState(0.7)
   const [updating, setUpdating] = useState(false)
   
+  // Generation progress tracking
+  const [generationProgress, setGenerationProgress] = useState({
+    step: 0,
+    totalSteps: 4,
+    message: '',
+    percentage: 0,
+  })
+  const [stakeholderDialogOpen, setStakeholderDialogOpen] = useState(false)
+  const [editingStakeholder, setEditingStakeholder] = useState<Stakeholder | null>(null)
+  const [savingStakeholder, setSavingStakeholder] = useState(false)
+  
+  // Document upload state
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
+  const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [uploadForm, setUploadForm] = useState<{
+    name: string
+    file: File | null
+    template_id: string
+  }>({
+    name: "",
+    file: null,
+    template_id: "",
+  })
+  
   // Edit form state
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState<{
+    name: string
+    description: string
+    framework: string
+    status: string
+    priority: string
+    start_date: string
+    end_date: string
+    budget: string
+    manager: string
+    team_members: string[]
+  }>({
     name: "",
     description: "",
     framework: "",
@@ -99,7 +186,38 @@ export default function ProjectDetail() {
     end_date: "",
     budget: "",
     manager: "",
-    team_members: [] as string[]
+    team_members: []
+  })
+
+  // Stakeholder form state
+  const [stakeholderForm, setStakeholderForm] = useState<{
+    name: string
+    role: string
+    department: string
+    email: string
+    phone: string
+    interest_level: 'high' | 'medium' | 'low'
+    influence_level: 'high' | 'medium' | 'low'
+    engagement_approach: 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'
+    communication_frequency: 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'
+    stakeholder_type: 'internal' | 'external'
+    stakeholder_category: 'primary' | 'secondary'
+    expectations: string
+    potential_impact: string
+  }>({
+    name: "",
+    role: "",
+    department: "",
+    email: "",
+    phone: "",
+    interest_level: "medium",
+    influence_level: "medium",
+    engagement_approach: "keep_informed",
+    communication_frequency: "weekly",
+    stakeholder_type: "internal",
+    stakeholder_category: "primary",
+    expectations: "",
+    potential_impact: ""
   })
 
   // Fetch project data
@@ -109,8 +227,8 @@ export default function ProjectDetail() {
       const projectData = await apiClient.getProject(projectId)
       setProject(projectData)
       
-      // Also fetch documents for this project
-      await fetchDocuments()
+      // Also fetch documents and stakeholders for this project
+      await Promise.all([fetchDocuments(), fetchStakeholders()])
     } catch (error) {
       console.error("Failed to fetch project:", error)
       toast.error("Failed to load project")
@@ -141,8 +259,19 @@ export default function ProjectDetail() {
   const fetchDocuments = async () => {
     try {
       setDocumentsLoading(true)
-      const documentsData = await apiClient.getProjectDocuments(projectId)
+      const params = {
+        page: documentsPagination.page,
+        limit: documentsPagination.limit,
+        search: searchTerm || undefined,
+      }
+      const documentsData = await apiClient.getProjectDocuments(projectId, params)
       setDocuments(documentsData.documents || [])
+      setDocumentsPagination(documentsData.pagination || {
+        page: 1,
+        limit: 10,
+        total: 0,
+        pages: 0,
+      })
     } catch (error) {
       console.error("Failed to fetch documents:", error)
       // Don't show error toast for documents, just use empty array
@@ -152,68 +281,214 @@ export default function ProjectDetail() {
     }
   }
 
+  // Fetch stakeholders separately
+  const fetchStakeholders = async () => {
+    try {
+      setStakeholdersLoading(true)
+      const stakeholdersData = await apiClient.getProjectStakeholders(projectId)
+      setStakeholders(Array.isArray(stakeholdersData.stakeholders) ? stakeholdersData.stakeholders : [])
+    } catch (error) {
+      console.error("Failed to fetch stakeholders:", error)
+      // Fallback to empty array if API fails
+      setStakeholders([])
+    } finally {
+      setStakeholdersLoading(false)
+    }
+  }
+
   // Returns template content based on selected template
   function getTemplateContent(templateId: string) {
-    switch (templateId) {
-      case "project-charter":
-        return { title: "Project Charter", sections: ["Purpose", "Objectives", "Stakeholders"] }
-      case "scope-statement":
-        return { title: "Scope Statement", sections: ["Scope", "Deliverables", "Exclusions"] }
-      case "wbs":
-        return { title: "Work Breakdown Structure", sections: ["Tasks", "Milestones"] }
-      case "risk-plan":
-        return { title: "Risk Management Plan", sections: ["Risks", "Mitigation", "Owners"] }
-      case "comm-plan":
-        return { title: "Communication Plan", sections: ["Audience", "Channels", "Frequency"] }
-      case "requirements-analysis":
-        return { title: "Requirements Analysis", sections: ["Business Requirements", "Functional Requirements"] }
-      case "stakeholder-analysis":
-        return { title: "Stakeholder Analysis", sections: ["Stakeholders", "Interests", "Influence"] }
-      case "business-case":
-        return { title: "Business Case", sections: ["Problem", "Solution", "Benefits"] }
-      case "solution-assessment":
-        return { title: "Solution Assessment", sections: ["Options", "Evaluation", "Recommendation"] }
-      case "data-governance":
-        return { title: "Data Governance Framework", sections: ["Policies", "Roles", "Processes"] }
-      case "data-quality":
-        return { title: "Data Quality Assessment", sections: ["Criteria", "Findings", "Recommendations"] }
-      case "data-architecture":
-        return { title: "Data Architecture", sections: ["Models", "Standards", "Tools"] }
-      default:
-        return { title: "Untitled Document", sections: [] }
+    // Find template from the loaded templates
+    const template = templates.find(t => t.id === templateId)
+    
+    if (template) {
+      // Extract detailed sections based on template name
+      let sections: string[] = []
+      const templateName = template.name.toLowerCase()
+      
+      if (templateName.includes('integration management')) {
+        sections = [
+          'Executive Summary (200+ words): Project overview with name/manager/sponsor/dates/budget, 3-5 key measurable objectives, integration approach, expected benefits and ROI',
+          'Project Charter (400+ words): Purpose and business justification, objectives table with success metrics, measurable success criteria, high-level requirements (functional/technical/performance/business), assumptions and constraints lists, key stakeholders table, initial risks',
+          'Project Management Plan (800+ words covering ALL 9 knowledge areas): 2.1 Scope Management (collection, definition, WBS, validation, control), 2.2 Schedule Management (activities, sequencing, estimation, milestones table), 2.3 Cost Management (estimation, budget table, baseline, EVM), 2.4 Quality Management (standards, QA/QC, metrics table), 2.5 Resource Management (team structure table, acquisition, development), 2.6 Communications Management (stakeholder matrix, channels, schedule, tools), 2.7 Risk Management (identification, analysis, response, top risks table), 2.8 Procurement Management (items, vendors, contracts), 2.9 Stakeholder Engagement (stakeholder matrix, strategies)',
+          'Integrated Change Control (300+ words): 7-step change control workflow, CCB structure with members table, change request form fields, impact assessment criteria (scope/schedule/cost/quality/risk/resources), approval criteria with 3 levels (PM/CCB/Sponsor thresholds)',
+          'Project Work Performance (300+ words): KPI table with at least 6 KPIs (SPI, CPI, defects, coverage, velocity, satisfaction) with targets and measurement methods, data collection sources and methods, performance reporting (weekly status, monthly dashboard), corrective action triggers and process',
+          'Integration Points (150+ words): System integrations (tools/APIs/platforms), Process integrations (workflows/handoffs)',
+          'Approval Signatures: Table with Role | Name | Signature | Date columns, Document version and review schedule'
+        ]
+      } else if (templateName.includes('scope')) {
+        sections = ['Scope Overview', 'Requirements Management', 'Scope Definition', 'WBS', 'Validation', 'Control']
+      } else if (templateName.includes('schedule')) {
+        sections = ['Schedule Overview', 'Activity Definition', 'Sequencing', 'Estimation', 'Development', 'Control']
+      } else if (templateName.includes('cost') || templateName.includes('budget')) {
+        sections = ['Cost Overview', 'Estimation Methods', 'Budget Baseline', 'Control Processes', 'Earned Value']
+      } else if (templateName.includes('quality')) {
+        sections = ['Quality Overview', 'Planning', 'Assurance', 'Control', 'Metrics', 'Improvement']
+      } else if (templateName.includes('resource')) {
+        sections = ['Resource Planning', 'Acquisition', 'Development', 'Management', 'Performance']
+      } else if (templateName.includes('communication')) {
+        sections = ['Communications Overview', 'Stakeholder Analysis', 'Channels & Methods', 'Schedule', 'Tools']
+      } else if (templateName.includes('risk')) {
+        sections = ['Risk Overview', 'Identification', 'Analysis', 'Response Planning', 'Monitoring & Control']
+      } else if (templateName.includes('procurement')) {
+        sections = ['Procurement Overview', 'Planning', 'Vendor Selection', 'Contract Management', 'Closeout']
+      } else if (templateName.includes('stakeholder')) {
+        sections = ['Stakeholder Identification', 'Analysis Matrix', 'Engagement Strategy', 'Management Plan']
+      } else if (templateName.includes('charter')) {
+        sections = ['Purpose & Justification', 'Objectives', 'Success Criteria', 'Requirements', 'Constraints']
+      } else if (templateName.includes('business case')) {
+        sections = ['Executive Summary', 'Problem Statement', 'Solution Options', 'Analysis', 'Recommendation']
+      } else {
+        sections = ['Overview', 'Objectives', 'Approach', 'Key Components', 'Implementation', 'Metrics']
+      }
+      
+      return { 
+        title: template.name,
+        sections: sections,
+        framework: template.framework || 'General'
+      }
     }
+    
+    return { title: documentName || "Document", sections: ['Overview', 'Details'], framework: 'General' }
   }
 
   // Create new document
   const handleCreateDocument = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    console.log('🚀 [1/10] handleCreateDocument called')
+    
     if (!documentName.trim()) {
+      console.error('❌ [VALIDATION] Document name is empty')
       toast.error("Document name is required")
       return
     }
+    console.log('✅ [2/10] Document name validated:', documentName)
 
     if (!selectedTemplate) {
+      console.error('❌ [VALIDATION] No template selected')
       toast.error("Please select a template")
       return
     }
+    console.log('✅ [3/10] Template validated:', selectedTemplate)
 
     try {
       setCreatingDocument(true)
+      console.log('✅ [4/10] Creating document flag set to true')
+      
+      // Step 1: Preparing context
+      setGenerationProgress({
+        step: 1,
+        totalSteps: 4,
+        message: 'Preparing project context...',
+        percentage: 25,
+      })
+      console.log('✅ [5/10] Progress indicator set to Step 1 (25%)')
 
-      // Build a helpful prompt for the AI using template + project context
+      // Build a comprehensive prompt for the AI using template + project context
       const templateContent = getTemplateContent(selectedTemplate)
-      const sections = Array.isArray(templateContent.sections) ? templateContent.sections.join(', ') : ''
+      const sections = Array.isArray(templateContent.sections) ? templateContent.sections : []
       const projectDesc = project?.description || 'No project description available.'
+      const projectName = project?.name || 'Unknown Project'
+      const framework = project?.framework || 'General'
+      
+      // Build detailed context
+      const teamContext = project?.team_members?.length 
+        ? `Team Members: ${project.team_members.join(', ')}` 
+        : 'Team composition to be determined'
+      const budgetContext = project?.budget 
+        ? `Budget: $${project.budget}` 
+        : 'Budget to be determined'
+      const timelineContext = project?.start_date && project?.end_date
+        ? `Timeline: ${project.start_date} to ${project.end_date}`
+        : 'Timeline to be determined'
+      
+      // Enhanced prompt with detailed instructions for comprehensive generation
+      const aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
 
-      const aiPrompt = `Generate a ${templateContent.title} for the project named "${project?.name || 'Unknown Project'}". ` +
-        `Project description: ${projectDesc}. Include the following sections: ${sections}. ` +
-        `Return the document body text only. Keep it professional and concise.`
+**Project Name**: ${projectName}
+**Framework**: ${framework}
+**Description**: ${projectDesc}
+${teamContext}
+${budgetContext}
+${timelineContext}
+
+**CRITICAL REQUIREMENTS - MUST FOLLOW:**
+1. ✅ Generate a COMPLETE, DETAILED document with ALL sections FULLY populated (minimum 2000 words total)
+2. ✅ Each section MUST meet its minimum word count requirement specified below
+3. ✅ Include SPECIFIC, ACTIONABLE content with realistic data - NO placeholders like "[Insert X]" or "TBD"
+4. ✅ Create at least 5-7 DETAILED TABLES with realistic data (objectives, KPIs, risks, stakeholders, budget, milestones, etc.)
+5. ✅ Use professional ${framework} terminology and demonstrate deep methodology knowledge
+6. ✅ Make this document EXECUTIVE-READY for immediate stakeholder presentation
+
+**REQUIRED SECTIONS WITH MINIMUM LENGTHS:**
+${sections.join('\n')}
+
+**DETAILED FORMATTING REQUIREMENTS:**
+📋 **Structure:**
+- Main title: # ${templateContent.title}
+- Section headers: ## for main sections (e.g., ## 1. Executive Summary)
+- Subsection headers: ### for subsections (e.g., ### 1.1 Project Overview)
+- Sub-subsection headers: #### for detailed items (e.g., #### 1.1.1 Background)
+
+📊 **Tables (MINIMUM 5 TABLES REQUIRED):**
+- Use Markdown table syntax: | Column 1 | Column 2 | Column 3 |
+- Include headers with proper alignment
+- Populate with realistic, project-specific data
+- Examples: Objectives table, KPI table, Risk register, Stakeholder matrix, Budget breakdown, Milestone schedule, CCB members, etc.
+
+📝 **Lists:**
+- Numbered lists (1. 2. 3.) for: processes, steps, workflows, sequences
+- Bullet lists (- or *) for: items, features, requirements, criteria
+- Nested lists for hierarchical information
+
+✨ **Emphasis:**
+- **Bold** for section labels, key terms, and important metrics
+- *Italic* for definitions and notes
+- \`Code\` for technical terms or system names
+
+📏 **Structure:**
+- Horizontal rules (---) between major sections for visual separation
+- Blank lines between paragraphs for readability
+- Proper indentation for nested content
+
+**CONTENT DEPTH REQUIREMENTS:**
+- Executive Summary: 200-300 words with project overview, objectives, benefits
+- Project Charter: 400-600 words with purpose, objectives table, requirements, constraints
+- Project Management Plan: 800-1200 words covering ALL 9 knowledge areas with detailed subsections
+- Each knowledge area subsection: 100-150 words minimum
+- Change Control: 300-400 words with 7-step process, CCB table, criteria
+- Performance Monitoring: 300-400 words with KPI table, reporting cadence
+- Integration Points: 150-200 words listing systems and processes
+- Approval section: Signature table with 4+ stakeholders
+
+**QUALITY STANDARDS:**
+✓ Professional tone suitable for executives and sponsors
+✓ Specific metrics and success criteria (e.g., "95% accuracy" not "high accuracy")
+✓ Realistic timelines and milestones
+✓ Concrete examples relevant to ${projectDesc}
+✓ Complete sentences and well-formed paragraphs
+✓ No generic boilerplate - tailor everything to ${projectName}
+
+**TABLES TO INCLUDE (with sample structure):**
+1. Objectives Table: | Objective | Description | Success Metric | Target Date |
+2. KPI Table: | KPI | Target | Measurement Method | Frequency | Owner |
+3. Risk Register: | Risk | Probability | Impact | Mitigation Strategy | Owner |
+4. Stakeholder Matrix: | Stakeholder | Role | Interest | Influence | Engagement Strategy |
+5. Budget Table: | Category | Estimated Cost | Notes |
+6. Milestone Schedule: | Milestone | Target Date | Dependencies | Status |
+7. CCB Members: | Name | Role | Responsibilities | Contact |
+
+Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This must be a production-ready, stakeholder-presentable document with NO placeholders, minimum 2000 words total, and comprehensive coverage of all sections:`
+
+      console.log('✅ [6/10] Prompt built. Length:', aiPrompt.length, 'chars')
+      console.log('📝 Prompt preview:', aiPrompt.substring(0, 200) + '...')
 
       // Enqueue AI generation job via jobs API
       let jobId: string | undefined
 
       try {
+        console.log('🔄 [7/10] Attempting to enqueue job...')
         const resp = await fetch('/api/jobs/ai-generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -229,16 +504,18 @@ export default function ProjectDetail() {
         if (resp.ok) {
           const body = await resp.json()
           jobId = body.jobId
+          console.log('✅ Job queued successfully:', jobId)
           toast.success('Document generation job queued — you can monitor it in Jobs')
         } else {
-          console.warn('Failed to enqueue job, falling back to direct generation', await resp.text())
+          console.warn('⚠️ Failed to enqueue job (status ' + resp.status + '), falling back to direct generation')
         }
       } catch (err) {
-        console.warn('Failed to enqueue job, falling back to direct generation', err)
+        console.warn('⚠️ Failed to enqueue job (exception), falling back to direct generation:', err)
       }
 
       // If we enqueued a job, just close dialog and refresh list (document will be created by worker)
       if (jobId) {
+        console.log('✅ Job queued, skipping direct generation')
         setDocumentName("")
         setDocumentDescription("")
         setSelectedTemplate("")
@@ -247,43 +524,144 @@ export default function ProjectDetail() {
         setCreatingDocument(false)
         return
       }
+      
+      console.log('🔄 [8/10] Job queue unavailable, proceeding with direct generation...')
 
-      // Fallback: synchronous generation via API client (legacy path)
+      // Fallback: synchronous generation via AI Gateway
+      // Step 2: Generating content with AI
+      setGenerationProgress({
+        step: 2,
+        totalSteps: 4,
+        message: `Generating content with ${selectedProvider}...`,
+        percentage: 50,
+      })
+      console.log('✅ [9/10] Progress indicator set to Step 2 (50%) - Starting AI generation')
+      
       let generatedText: string | undefined
+      let genResult: any = null  // Declare outside try block for metadata access later
+      
       try {
-        const genResult = await apiClient.generateDocument(aiPrompt, selectedTemplate)
+        const template = templates.find(t => t.id === selectedTemplate)
+        console.log('🤖 [AI-1/5] Starting AI generation...')
+        console.log('📊 Provider:', selectedProvider, '| Model:', selectedModel, '| Temp:', aiTemperature)
+        console.log('📋 Template:', template?.name || 'Unknown')
+        console.log('🔗 Project:', project?.name || 'Unknown')
+        
+        console.log('🌐 [AI-2/5] Calling apiClient.generateContent()...')
+        genResult = await apiClient.generateContent({
+          prompt: aiPrompt,
+          provider: selectedProvider,
+          model: selectedModel,
+          temperature: aiTemperature,
+          template_id: selectedTemplate,
+          // Additional context for metadata tracking
+          project_id: projectId,
+          project_name: project?.name || 'Unknown Project',
+          template_name: template?.name || 'Unknown Template',
+          framework: project?.framework || template?.framework || 'General'
+        })
+        
+        console.log('✅ [AI-3/5] API call completed. Response:', genResult)
+        
+        // Extract content from AI response
+        console.log('🔍 [AI-4/5] Extracting content from response...')
         if (genResult?.result?.content) generatedText = genResult.result.content
-        else if (genResult?.result?.choices?.[0]?.message?.content) generatedText = genResult.result.choices[0].message.content
+        else if (genResult?.result?.text) generatedText = genResult.result.text
         else if (genResult?.content) generatedText = genResult.content
+        else if (genResult?.text) generatedText = genResult.text
         else if (typeof genResult === 'string') generatedText = genResult
         else generatedText = JSON.stringify(genResult)
+        
+        console.log('✅ [AI-5/5] Content extracted! Length:', generatedText?.length || 0, 'chars')
+        console.log('📝 Content preview:', generatedText?.substring(0, 100) + '...')
+        
+        // Log comprehensive metadata if available
+        if (genResult?.metadata) {
+          console.log('📊 Generation Metadata:', genResult.metadata)
+        }
+        if (genResult?.quality) {
+          console.log('✨ Quality Metrics:', genResult.quality)
+        }
+        
+        // Step 3: Content generated successfully
+        console.log('✅ [10/10] Setting progress to Step 3 (75%) - Saving document...')
+        setGenerationProgress({
+          step: 3,
+          totalSteps: 4,
+          message: 'Content generated! Saving document...',
+          percentage: 75,
+        })
       } catch (aiError) {
-        console.warn('AI generation failed, falling back to template content', aiError)
+        console.error('❌ [AI-ERROR] AI generation failed:', aiError)
+        toast.error('AI generation failed. Please try again.')
+        setCreatingDocument(false)
+        setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+        return
       }
 
+      // Extract metadata and quality from AI response
+      const generationMetadata = genResult?.metadata || null
+      const qualityMetrics = genResult?.quality || null
+      console.log('📊 [SAVE-1/6] Metadata extracted:', { hasMetadata: !!generationMetadata, hasQuality: !!qualityMetrics })
+      
       const documentData = {
         name: documentName,
-        content: generatedText ? { text: generatedText } : templateContent,
+        content: generatedText || "# Document content not generated",
         template_id: selectedTemplate,
         status: 'draft' as const,
+        generation_metadata: generationMetadata ? {
+          ...generationMetadata,
+          quality: qualityMetrics
+        } : null
       }
+      console.log('📄 [SAVE-2/6] Document data prepared:', {
+        name: documentData.name,
+        contentLength: documentData.content.length,
+        templateId: documentData.template_id,
+        hasMetadata: !!documentData.generation_metadata
+      })
 
-      await apiClient.createDocument(projectId, documentData)
+      console.log('🌐 [SAVE-3/6] Calling apiClient.createDocument()...')
+      const createResult = await apiClient.createDocument(projectId, documentData)
+      console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.document?.id || 'unknown')
+      
+      // Step 4: Complete!
+      console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
+      setGenerationProgress({
+        step: 4,
+        totalSteps: 4,
+        message: 'Document created successfully! ✓',
+        percentage: 100,
+      })
+
+      // Small delay to show success message
+      await new Promise(resolve => setTimeout(resolve, 800))
 
       toast.success("Document created successfully!")
+      console.log('✅ [SAVE-6/6] Success toast displayed')
 
       // Reset form
+      console.log('🔄 [CLEANUP-1/3] Resetting form state...')
       setDocumentName("")
       setDocumentDescription("")
       setSelectedTemplate("")
       setCreateDialogOpen(false)
+      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
 
       // Refresh documents list
+      console.log('🔄 [CLEANUP-2/3] Refreshing documents list...')
       await fetchDocuments()
+      console.log('✅ [CLEANUP-3/3] All done! Document generation complete!')
     } catch (error) {
-      console.error("Failed to create document:", error)
+      console.error("❌ [ERROR] Failed to create document:", error)
+      console.error("❌ [ERROR] Error details:", {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
       toast.error("Failed to create document")
+      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
+      console.log('🏁 [FINALLY] Resetting creatingDocument flag')
       setCreatingDocument(false)
     }
   }
@@ -304,28 +682,127 @@ export default function ProjectDetail() {
     }
   }
 
-  // Upload document
-  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
+  // Fetch templates for upload (fetch ALL templates, not just project framework)
+  const fetchTemplatesForUpload = async () => {
+    console.log('🔵 fetchTemplatesForUpload starting...')
+    try {
+      setLoadingTemplates(true)
+      console.log('🔵 Calling apiClient.getTemplates with limit=100')
+      const response = await apiClient.getTemplates({ 
+        limit: 100  // Increased limit to get more templates
+      })
+      console.log('📊 Templates API response:', response)
+      console.log('📊 Templates loaded for upload:', response.templates?.length || 0, 'templates')
+      console.log('📊 Template names:', response.templates?.map(t => t.name) || [])
+      setTemplates(Array.isArray(response.templates) ? response.templates : [])
+      console.log('📊 Templates state set:', Array.isArray(response.templates) ? response.templates.length : 0)
+    } catch (error) {
+      console.error("❌ Failed to fetch templates:", error)
+      toast.error("Failed to load templates")
+      setTemplates([])
+    } finally {
+      setLoadingTemplates(false)
+      console.log('🔵 fetchTemplatesForUpload completed')
+    }
+  }
+
+  // Fetch AI providers for document generation
+  const fetchAIProviders = async () => {
+    try {
+      const providers = await apiClient.getAIProviders()
+      setAiProviders(providers || [])
+      console.log('📊 AI Providers loaded:', providers?.length || 0)
+    } catch (error) {
+      console.error("Failed to fetch AI providers:", error)
+      setAiProviders([])
+    }
+  }
+
+  // Handle upload document button click
+  const handleUploadDocumentClick = () => {
+    console.log('🔵 Upload Document clicked - opening dialog and fetching templates...')
+    setUploadForm({
+      name: "",
+      file: null,
+      template_id: "",
+    })
+    setUploadDialogOpen(true)
+    fetchTemplatesForUpload()
+    console.log('🔵 fetchTemplatesForUpload() called')
+  }
+
+  // Upload document handler
+  const handleUploadDocumentSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!uploadForm.name || !uploadForm.file || !uploadForm.template_id) {
+      toast.error("Please fill in all required fields including template selection")
+      return
+    }
 
     try {
-      // For now, we'll create a document with the file content
-      // In a real implementation, you'd upload the file to storage first
-      const content = await file.text()
+      setUploadingDocument(true)
+      
+      // Handle file content
+      let content: any
+      if (uploadForm.file.type === 'text/plain' || 
+          uploadForm.file.type === 'application/json' ||
+          uploadForm.file.name.endsWith('.txt') ||
+          uploadForm.file.name.endsWith('.md')) {
+        // Handle text files - wrap in object as expected by backend
+        const textContent = await uploadForm.file.text()
+        content = {
+          text: textContent,
+          fileName: uploadForm.file.name,
+          fileType: uploadForm.file.type,
+          uploadedAt: new Date().toISOString()
+        }
+      } else {
+        content = {
+          fileName: uploadForm.file.name,
+          fileSize: uploadForm.file.size,
+          fileType: uploadForm.file.type,
+          uploadedAt: new Date().toISOString(),
+          note: "Binary file uploaded - content stored separately"
+        }
+      }
       
       await apiClient.createDocument(projectId, {
-        name: file.name,
-        content: { text: content },
+        name: uploadForm.name,
+        content: content,
+        template_id: uploadForm.template_id,
         status: "draft"
       })
       
       toast.success("Document uploaded successfully!")
+      setUploadDialogOpen(false)
+      setUploadForm({
+        name: "",
+        file: null,
+        template_id: "",
+      })
       await fetchDocuments()
     } catch (error) {
       console.error("Failed to upload document:", error)
       toast.error("Failed to upload document")
+    } finally {
+      setUploadingDocument(false)
     }
+  }
+
+  // Legacy upload handler (for backward compatibility)
+  const handleDocumentUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    // Show template selection dialog instead of direct upload
+    setUploadForm({
+      name: file.name,
+      file: file,
+      template_id: "",
+    })
+    setUploadDialogOpen(true)
+    fetchTemplatesForUpload()
   }
 
   // Edit document (redirect to editor)
@@ -341,7 +818,7 @@ export default function ProjectDetail() {
       // Create a blob with the document content
       const content = typeof docData.content === 'string' 
         ? docData.content 
-        : JSON.stringify(docData.content)
+        : docData.content ? JSON.stringify(docData.content) : 'No content available'
       
       const blob = new Blob([content], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
@@ -367,10 +844,22 @@ export default function ProjectDetail() {
     if (!project) return
     
     // Format dates for input fields (YYYY-MM-DD)
-    const formatDateForInput = (dateString?: string) => {
+    const formatDateForInput = (dateString?: string | null) => {
       if (!dateString) return ""
-      const date = new Date(dateString)
-      return date.toISOString().split('T')[0]
+      try {
+        // Handle different date formats that might come from the database
+        const date = new Date(dateString)
+        if (isNaN(date.getTime())) return ""
+        
+        // Ensure we get the date in local timezone for the input
+        const year = date.getFullYear()
+        const month = String(date.getMonth() + 1).padStart(2, '0')
+        const day = String(date.getDate()).padStart(2, '0')
+        return `${year}-${month}-${day}`
+      } catch (error) {
+        console.warn("Error formatting date:", dateString, error)
+        return ""
+      }
     }
     
     // Extract manager from team_members (assuming first member is manager)
@@ -398,7 +887,23 @@ export default function ProjectDetail() {
     e.preventDefault()
     
     if (!editForm.name || !editForm.framework) {
-      toast.error("Please fill in required fields")
+      toast.error("Please fill in required fields (Name and Framework)")
+      return
+    }
+
+    // Validate dates if provided
+    if (editForm.start_date && editForm.end_date) {
+      const startDate = new Date(editForm.start_date)
+      const endDate = new Date(editForm.end_date)
+      if (endDate <= startDate) {
+        toast.error("End date must be after start date")
+        return
+      }
+    }
+
+    // Validate budget if provided
+    if (editForm.budget && isNaN(parseFloat(editForm.budget))) {
+      toast.error("Please enter a valid budget amount")
       return
     }
 
@@ -430,7 +935,7 @@ export default function ProjectDetail() {
       await fetchProject()
     } catch (error) {
       console.error("Failed to update project:", error)
-      toast.error("Failed to update project")
+      toast.error("Failed to update project. Please try again.")
     } finally {
       setUpdating(false)
     }
@@ -440,19 +945,147 @@ export default function ProjectDetail() {
   const handleAddTeamMember = () => {
     const memberName = prompt("Enter team member name:")
     if (memberName && memberName.trim()) {
+      const trimmedName = memberName.trim()
+      // Check if member already exists
+      if (editForm.team_members.includes(trimmedName)) {
+        toast.error("Team member already exists")
+        return
+      }
       setEditForm(prev => ({
         ...prev,
-        team_members: [...prev.team_members, memberName.trim()]
+        team_members: [...prev.team_members, trimmedName]
       }))
+      toast.success("Team member added successfully")
     }
   }
 
   // Remove team member
   const handleRemoveTeamMember = (index: number) => {
+    const memberName = editForm.team_members[index]
     setEditForm(prev => ({
       ...prev,
       team_members: prev.team_members.filter((_, i) => i !== index)
     }))
+    toast.success(`Removed ${memberName} from team`)
+  }
+
+  // Handle opening new stakeholder dialog
+  const handleAddStakeholder = () => {
+    setEditingStakeholder(null)
+    setStakeholderForm({
+      name: "",
+      role: "",
+      department: "",
+      email: "",
+      phone: "",
+      interest_level: "medium",
+      influence_level: "medium",
+      engagement_approach: "keep_informed",
+      communication_frequency: "weekly",
+      stakeholder_type: "internal",
+      stakeholder_category: "primary",
+      expectations: "",
+      potential_impact: ""
+    })
+    setStakeholderDialogOpen(true)
+  }
+
+  // Handle closing stakeholder dialog
+  const handleCloseStakeholderDialog = (open: boolean) => {
+    setStakeholderDialogOpen(open)
+    if (!open) {
+      // Reset form when dialog closes
+      setEditingStakeholder(null)
+      setStakeholderForm({
+        name: "",
+        role: "",
+        department: "",
+        email: "",
+        phone: "",
+        interest_level: "medium",
+        influence_level: "medium",
+        engagement_approach: "keep_informed",
+        communication_frequency: "weekly",
+        stakeholder_type: "internal",
+        stakeholder_category: "primary",
+        expectations: "",
+        potential_impact: ""
+      })
+    }
+  }
+
+  // Handle opening edit stakeholder dialog
+  const handleEditStakeholder = (stakeholder: Stakeholder) => {
+    setEditingStakeholder(stakeholder)
+    setStakeholderForm({
+      name: stakeholder.name,
+      role: stakeholder.role,
+      department: stakeholder.department,
+      email: stakeholder.email,
+      phone: stakeholder.phone || "",
+      interest_level: stakeholder.interest_level,
+      influence_level: stakeholder.influence_level,
+      engagement_approach: stakeholder.engagement_approach,
+      communication_frequency: stakeholder.communication_frequency,
+      stakeholder_type: stakeholder.stakeholder_type,
+      stakeholder_category: stakeholder.stakeholder_category,
+      expectations: stakeholder.expectations,
+      potential_impact: stakeholder.potential_impact
+    })
+    setStakeholderDialogOpen(true)
+  }
+
+  // Save stakeholder (create or update)
+  const handleSaveStakeholder = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!stakeholderForm.role || !stakeholderForm.email) {
+      toast.error("Please fill in required fields (Role, Email)")
+      return
+    }
+
+    try {
+      setSavingStakeholder(true)
+      
+      if (editingStakeholder) {
+        // Update existing stakeholder
+        await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
+        toast.success("Stakeholder updated successfully!")
+      } else {
+        // Create new stakeholder
+        await apiClient.createStakeholder({
+          project_id: projectId,
+          ...stakeholderForm
+        })
+        toast.success("Stakeholder added successfully!")
+      }
+      
+      handleCloseStakeholderDialog(false)
+      // Refresh stakeholders list
+      await fetchStakeholders()
+    } catch (error) {
+      console.error("Failed to save stakeholder:", error)
+      toast.error("Failed to save stakeholder")
+    } finally {
+      setSavingStakeholder(false)
+    }
+  }
+
+  // Delete stakeholder
+  const handleDeleteStakeholder = async (stakeholderId: string) => {
+    if (!confirm("Are you sure you want to delete this stakeholder? This action cannot be undone.")) {
+      return
+    }
+    
+    try {
+      await apiClient.deleteStakeholder(stakeholderId)
+      toast.success("Stakeholder deleted successfully!")
+      // Refresh stakeholders list
+      await fetchStakeholders()
+    } catch (error) {
+      console.error("Failed to delete stakeholder:", error)
+      toast.error("Failed to delete stakeholder")
+    }
   }
 
   useEffect(() => {
@@ -461,13 +1094,20 @@ export default function ProjectDetail() {
     }
   }, [projectId, isAuthenticated])
 
+  // Fetch documents when pagination or search changes
+  useEffect(() => {
+    if (isAuthenticated && projectId) {
+      fetchDocuments()
+    }
+  }, [documentsPagination.page, searchTerm])
+
   // Listen for document creation events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
-    const handleDocumentCreated = (data: any) => {
+    const handleDocumentCreated = (data: { document?: { project_id: string; name: string } }) => {
       try {
         const doc = data?.document
-        if (doc && String(doc.project_id) === String(projectId)) {
+        if (doc && doc.project_id && doc.name && String(doc.project_id) === String(projectId)) {
           toast.success(`New document created: ${doc.name}`)
           fetchDocuments()
         }
@@ -483,10 +1123,8 @@ export default function ProjectDetail() {
     }
   }, [projectId, on, off])
 
-  const filteredDocuments = documents.filter(
-    (doc) =>
-      doc.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  // Documents are now filtered server-side, so we use them directly
+  const displayDocuments = documents
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -511,6 +1149,80 @@ export default function ProjectDetail() {
         return "outline"
       default:
         return "secondary"
+    }
+  }
+
+  // Helper functions for stakeholder display
+  const getInterestLevelColor = (level: string) => {
+    switch (level) {
+      case "high":
+        return "destructive"
+      case "medium":
+        return "secondary"
+      case "low":
+        return "outline"
+      default:
+        return "secondary"
+    }
+  }
+
+  const getInfluenceLevelColor = (level: string) => {
+    switch (level) {
+      case "high":
+        return "default"
+      case "medium":
+        return "secondary"
+      case "low":
+        return "outline"
+      default:
+        return "secondary"
+    }
+  }
+
+  const getEngagementApproachColor = (approach: string) => {
+    switch (approach) {
+      case "manage_closely":
+        return "default"
+      case "keep_satisfied":
+        return "secondary"
+      case "keep_informed":
+        return "outline"
+      case "monitor":
+        return "destructive"
+      default:
+        return "secondary"
+    }
+  }
+
+  const formatEngagementApproach = (approach: string) => {
+    switch (approach) {
+      case "manage_closely":
+        return "Manage Closely"
+      case "keep_satisfied":
+        return "Keep Satisfied"
+      case "keep_informed":
+        return "Keep Informed"
+      case "monitor":
+        return "Monitor"
+      default:
+        return approach
+    }
+  }
+
+  const formatCommunicationFrequency = (frequency: string) => {
+    switch (frequency) {
+      case "daily":
+        return "Daily"
+      case "weekly":
+        return "Weekly"
+      case "bi_weekly":
+        return "Bi-weekly"
+      case "monthly":
+        return "Monthly"
+      case "as_needed":
+        return "As Needed"
+      default:
+        return frequency
     }
   }
 
@@ -581,7 +1293,7 @@ export default function ProjectDetail() {
   const progress = getProjectProgress()
 
   // Determine project manager and other members for Team tab ordering
-  const managerName = (project as any).owner_id || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : undefined)
+  const managerName = (project as any).owner_name || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : 'Not assigned')
   const otherMembers = project.team_members ? project.team_members.filter((m) => m !== managerName) : []
 
   return (
@@ -625,7 +1337,13 @@ export default function ProjectDetail() {
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Project
                 </Button>
-                <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                <Dialog open={createDialogOpen} onOpenChange={(open) => {
+                  setCreateDialogOpen(open)
+                  if (open) {
+                    fetchTemplatesForUpload()
+                    fetchAIProviders()
+                  }
+                }}>
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="h-4 w-4 mr-2" />
@@ -652,24 +1370,15 @@ export default function ProjectDetail() {
                             required
                           >
                             <option value="">Choose a template</option>
-                            <optgroup label="PMBOK 7 Templates">
-                              <option value="project-charter">Project Charter</option>
-                              <option value="scope-statement">Project Scope Statement</option>
-                              <option value="wbs">Work Breakdown Structure</option>
-                              <option value="risk-plan">Risk Management Plan</option>
-                              <option value="comm-plan">Communication Plan</option>
-                            </optgroup>
-                            <optgroup label="BABOK v3 Templates">
-                              <option value="requirements-analysis">Requirements Analysis</option>
-                              <option value="stakeholder-analysis">Stakeholder Analysis</option>
-                              <option value="business-case">Business Case</option>
-                              <option value="solution-assessment">Solution Assessment</option>
-                            </optgroup>
-                            <optgroup label="DMBOK 2.0 Templates">
-                              <option value="data-governance">Data Governance Framework</option>
-                              <option value="data-quality">Data Quality Assessment</option>
-                              <option value="data-architecture">Data Architecture</option>
-                            </optgroup>
+                            {loadingTemplates ? (
+                              <option disabled>Loading templates...</option>
+                            ) : (
+                              templates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.name} ({template.framework})
+                                </option>
+                              ))
+                            )}
                           </select>
                         </div>
                         <div>
@@ -693,11 +1402,87 @@ export default function ProjectDetail() {
                             onChange={(e) => setDocumentDescription(e.target.value)}
                           />
                         </div>
+                        <div>
+                          <Label htmlFor="ai-provider">AI Provider</Label>
+                          <select
+                            id="ai-provider"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                            value={selectedProvider}
+                            onChange={(e) => {
+                              const provider = aiProviders.find(p => p.name === e.target.value)
+                              setSelectedProvider(e.target.value)
+                              if (provider && provider.models && provider.models.length > 0) {
+                                setSelectedModel(provider.models[0])
+                              }
+                            }}
+                          >
+                            {aiProviders.filter(p => p.is_active).map((provider) => (
+                              <option key={provider.id} value={provider.name}>
+                                {provider.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="ai-model">Model</Label>
+                          <select
+                            id="ai-model"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                          >
+                            {aiProviders
+                              .find(p => p.name === selectedProvider)
+                              ?.models?.map((model: string) => (
+                                <option key={model} value={model}>
+                                  {model}
+                                </option>
+                              )) || <option value="">No models available</option>
+                            }
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="ai-temperature">Temperature: {aiTemperature}</Label>
+                          <input
+                            id="ai-temperature"
+                            type="range"
+                            min="0"
+                            max="1"
+                            step="0.1"
+                            value={aiTemperature}
+                            onChange={(e) => setAiTemperature(parseFloat(e.target.value))}
+                            className="w-full mt-1"
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Lower = more focused, Higher = more creative
+                          </p>
+                        </div>
+                        
+                        {/* Progress Indicator */}
+                        {creatingDocument && generationProgress.step > 0 && (
+                          <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="font-medium text-foreground">
+                                Step {generationProgress.step} of {generationProgress.totalSteps}
+                              </span>
+                              <span className="text-muted-foreground">
+                                {generationProgress.percentage}%
+                              </span>
+                            </div>
+                            <Progress value={generationProgress.percentage} className="h-2" />
+                            <div className="flex items-center space-x-2">
+                              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                              <span className="text-sm text-muted-foreground">
+                                {generationProgress.message}
+                              </span>
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <DialogFooter>
                         <Button type="submit" disabled={creatingDocument}>
                           {creatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          {creatingDocument ? "Creating..." : "Generate Document"}
+                          {creatingDocument ? "Generating..." : "Generate Document"}
                         </Button>
                       </DialogFooter>
                     </form>
@@ -898,6 +1683,338 @@ export default function ProjectDetail() {
                     </form>
                   </DialogContent>
                 </Dialog>
+
+                {/* Stakeholder Dialog */}
+                <Dialog open={stakeholderDialogOpen} onOpenChange={handleCloseStakeholderDialog}>
+                  <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+                    <form onSubmit={handleSaveStakeholder}>
+                      <DialogHeader>
+                        <DialogTitle>
+                          {editingStakeholder ? 'Edit Stakeholder' : 'Add New Stakeholder'}
+                        </DialogTitle>
+                        <DialogDescription>
+                          {editingStakeholder 
+                            ? 'Update stakeholder information and PMBOK parameters.'
+                            : 'Add a new stakeholder with their PMBOK management parameters. You can create placeholders for roles that need to be recruited by leaving the name field blank.'
+                          }
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-6 py-4">
+                        {/* Basic Information */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="stakeholder-role" className="text-sm font-semibold">
+                              Role *
+                            </Label>
+                            <Input 
+                              id="stakeholder-role" 
+                              placeholder="Enter role/title (e.g., Project Manager, Business Analyst)" 
+                              className="mt-2"
+                              value={stakeholderForm.role}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, role: e.target.value}))}
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="stakeholder-name" className="text-sm font-semibold">
+                              Name (Optional)
+                            </Label>
+                            <Input 
+                              id="stakeholder-name" 
+                              placeholder="Enter stakeholder name (leave blank if to be recruited)" 
+                              className="mt-2"
+                              value={stakeholderForm.name}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, name: e.target.value}))}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="stakeholder-department" className="text-sm font-semibold">
+                              Department
+                            </Label>
+                            <Input 
+                              id="stakeholder-department" 
+                              placeholder="Enter department" 
+                              className="mt-2"
+                              value={stakeholderForm.department}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, department: e.target.value}))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="stakeholder-email" className="text-sm font-semibold">
+                              Email *
+                            </Label>
+                            <Input 
+                              id="stakeholder-email" 
+                              type="email"
+                              placeholder="Enter email address" 
+                              className="mt-2"
+                              value={stakeholderForm.email}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, email: e.target.value}))}
+                              required
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="stakeholder-phone" className="text-sm font-semibold">
+                              Phone
+                            </Label>
+                            <Input 
+                              id="stakeholder-phone" 
+                              placeholder="Enter phone number" 
+                              className="mt-2"
+                              value={stakeholderForm.phone}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, phone: e.target.value}))}
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="stakeholder-type" className="text-sm font-semibold">
+                              Stakeholder Type
+                            </Label>
+                            <select
+                              id="stakeholder-type"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={stakeholderForm.stakeholder_type}
+                              onChange={(e) => setStakeholderForm(prev => ({...prev, stakeholder_type: e.target.value as 'internal' | 'external'}))}
+                            >
+                              <option value="internal">Internal</option>
+                              <option value="external">External</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* PMBOK Parameters */}
+                        <div className="border-t pt-4">
+                          <h3 className="text-lg font-semibold mb-4">PMBOK Stakeholder Parameters</h3>
+                          
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="interest-level" className="text-sm font-semibold">
+                                Interest Level
+                              </Label>
+                              <select
+                                id="interest-level"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.interest_level}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, interest_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                              >
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="influence-level" className="text-sm font-semibold">
+                                Influence Level
+                              </Label>
+                              <select
+                                id="influence-level"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.influence_level}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, influence_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                              >
+                                <option value="high">High</option>
+                                <option value="medium">Medium</option>
+                                <option value="low">Low</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                              <Label htmlFor="engagement-approach" className="text-sm font-semibold">
+                                Engagement Approach
+                              </Label>
+                              <select
+                                id="engagement-approach"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.engagement_approach}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, engagement_approach: e.target.value as 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'}))}
+                              >
+                                <option value="manage_closely">Manage Closely</option>
+                                <option value="keep_satisfied">Keep Satisfied</option>
+                                <option value="keep_informed">Keep Informed</option>
+                                <option value="monitor">Monitor</option>
+                              </select>
+                            </div>
+                            <div>
+                              <Label htmlFor="communication-frequency" className="text-sm font-semibold">
+                                Communication Frequency
+                              </Label>
+                              <select
+                                id="communication-frequency"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.communication_frequency}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, communication_frequency: e.target.value as 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'}))}
+                              >
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="bi_weekly">Bi-weekly</option>
+                                <option value="monthly">Monthly</option>
+                                <option value="as_needed">As Needed</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                              <Label htmlFor="stakeholder-category" className="text-sm font-semibold">
+                                Stakeholder Category
+                              </Label>
+                              <select
+                                id="stakeholder-category"
+                                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                                value={stakeholderForm.stakeholder_category}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, stakeholder_category: e.target.value as 'primary' | 'secondary'}))}
+                              >
+                                <option value="primary">Primary</option>
+                                <option value="secondary">Secondary</option>
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expectations and Impact */}
+                        <div className="border-t pt-4">
+                          <h3 className="text-lg font-semibold mb-4">Stakeholder Analysis</h3>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <Label htmlFor="expectations" className="text-sm font-semibold">
+                                Expectations
+                              </Label>
+                              <Textarea
+                                id="expectations"
+                                placeholder="Describe what this stakeholder expects from the project"
+                                className="mt-2"
+                                value={stakeholderForm.expectations}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, expectations: e.target.value}))}
+                                rows={3}
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="potential-impact" className="text-sm font-semibold">
+                                Potential Impact on Project
+                              </Label>
+                              <Textarea
+                                id="potential-impact"
+                                placeholder="Describe how this stakeholder can impact the project"
+                                className="mt-2"
+                                value={stakeholderForm.potential_impact}
+                                onChange={(e) => setStakeholderForm(prev => ({...prev, potential_impact: e.target.value}))}
+                                rows={3}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => handleCloseStakeholderDialog(false)}>
+                          Cancel
+                        </Button>
+                        <Button type="submit" disabled={savingStakeholder}>
+                          {savingStakeholder && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          {savingStakeholder ? "Saving..." : (editingStakeholder ? "Update Stakeholder" : "Add Stakeholder")}
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Upload Document Dialog */}
+                <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+                  <DialogContent className="sm:max-w-[600px]">
+                    <form onSubmit={handleUploadDocumentSubmit}>
+                      <DialogHeader>
+                        <DialogTitle>Upload Document</DialogTitle>
+                        <DialogDescription>
+                          Upload a document to {project?.name}. Select a template to ensure proper metadata tagging.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-6 py-4">
+                        <div>
+                          <Label htmlFor="upload-doc-name" className="text-sm font-semibold">
+                            Document Name *
+                          </Label>
+                          <Input
+                            id="upload-doc-name"
+                            placeholder="Enter document name"
+                            value={uploadForm.name}
+                            onChange={(e) => setUploadForm({...uploadForm, name: e.target.value})}
+                            className="mt-2"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="upload-template-select" className="text-sm font-semibold">
+                            Template *
+                          </Label>
+                          <select 
+                            id="upload-template-select"
+                            title="Select a template for metadata tagging"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                            value={uploadForm.template_id}
+                            onChange={(e) => setUploadForm({...uploadForm, template_id: e.target.value})}
+                            required
+                          >
+                            <option value="">Select a template (required)</option>
+                            {loadingTemplates ? (
+                              <option disabled>Loading templates...</option>
+                            ) : (
+                              templates.map((template) => (
+                                <option key={template.id} value={template.id}>
+                                  {template.name} ({template.framework})
+                                </option>
+                              ))
+                            )}
+                          </select>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Template selection is required to ensure proper document metadata and review compliance
+                          </p>
+                        </div>
+                        <div>
+                          <Label htmlFor="file-upload" className="text-sm font-semibold">
+                            File *
+                          </Label>
+                          <Input
+                            id="file-upload"
+                            type="file"
+                            accept=".pdf,.doc,.docx,.txt,.md"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0] || null
+                              setUploadForm({...uploadForm, file})
+                            }}
+                            className="mt-2"
+                            required
+                          />
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Supported formats: PDF, DOC, DOCX, TXT, MD
+                          </p>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setUploadDialogOpen(false)}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="submit"
+                          disabled={uploadingDocument}
+                        >
+                          {uploadingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                          Upload Document
+                        </Button>
+                      </DialogFooter>
+                    </form>
+                  </DialogContent>
+                </Dialog>
               </div>
             </div>
 
@@ -905,12 +2022,60 @@ export default function ProjectDetail() {
               <TabsList>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="team">Team</TabsTrigger>
+                <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
-                {/* Search */}
+                {/* Document Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
+                          <p className="text-2xl font-bold">{documents.length}</p>
+                        </div>
+                        <FileText className="h-8 w-8 text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Draft</p>
+                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'draft').length}</p>
+                        </div>
+                        <Edit className="h-8 w-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Published</p>
+                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'published').length}</p>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-emerald-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">In Review</p>
+                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'review').length}</p>
+                        </div>
+                        <Clock className="h-8 w-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Search & Actions */}
                 <div className="flex items-center space-x-4">
                   <div className="relative flex-1 max-w-md">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
@@ -921,18 +2086,18 @@ export default function ProjectDetail() {
                       className="pl-10"
                     />
                   </div>
-                  <Button variant="outline" onClick={() => document.getElementById('document-upload')?.click()}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Upload Document
+                  <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Plus className="h-4 w-4 mr-2" />
+                        Generate Document
+                      </Button>
+                    </DialogTrigger>
+                  </Dialog>
+                  <Button variant="outline" onClick={handleUploadDocumentClick}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Upload
                   </Button>
-                  <input
-                    id="document-upload"
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt"
-                    className="hidden"
-                    onChange={handleDocumentUpload}
-                    title="Upload document"
-                  />
                 </div>
 
                 {/* Loading state for documents */}
@@ -943,7 +2108,7 @@ export default function ProjectDetail() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {filteredDocuments.map((doc) => (
+                    {displayDocuments.map((doc) => (
                       <Card key={doc.id} className="hover:shadow-sm transition-shadow">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
@@ -952,7 +2117,7 @@ export default function ProjectDetail() {
                               <div className="flex-1">
                                 <div className="flex items-center space-x-2">
                                   <Link
-                                    href={`/projects/${projectId}/documents/${doc.id}`}
+                                    href={`/projects/${projectId}/documents/${doc.id}/view`}
                                     className="font-semibold hover:text-primary transition-colors"
                                   >
                                     {doc.name}
@@ -973,6 +2138,11 @@ export default function ProjectDetail() {
                             <div className="flex items-center space-x-2">
                               <Button variant="ghost" size="sm" asChild>
                                 <Link href={`/projects/${projectId}/documents/${doc.id}`}>
+                                  <Edit className="h-4 w-4" />
+                                </Link>
+                              </Button>
+                              <Button variant="ghost" size="sm" asChild>
+                                <Link href={`/projects/${projectId}/documents/${doc.id}/view`}>
                                   <Eye className="h-4 w-4" />
                                 </Link>
                               </Button>
@@ -988,7 +2158,13 @@ export default function ProjectDetail() {
                                 <DropdownMenuContent align="end">
                                   <DropdownMenuItem onClick={() => handleEditDocument(doc.id)}>
                                     <Edit className="h-4 w-4 mr-2" />
-                                    Edit
+                                    Edit in Text Editor
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem asChild>
+                                    <Link href={`/projects/${projectId}/documents/${doc.id}/view`}>
+                                      <Eye className="h-4 w-4 mr-2" />
+                                      View in Rich Editor
+                                    </Link>
                                   </DropdownMenuItem>
                                   <DropdownMenuItem onClick={() => handleDownloadDocument(doc.id)}>
                                     <Download className="h-4 w-4 mr-2" />
@@ -1009,7 +2185,7 @@ export default function ProjectDetail() {
                       </Card>
                     ))}
                     
-                    {filteredDocuments.length === 0 && (
+                    {displayDocuments.length === 0 && (
                       <div className="text-center py-8">
                         <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                         <h3 className="text-lg font-semibold mb-2">No documents found</h3>
@@ -1031,12 +2207,43 @@ export default function ProjectDetail() {
                         )}
                       </div>
                     )}
+
+                    {/* Pagination Controls */}
+                    {displayDocuments.length > 0 && documentsPagination.pages > 1 && (
+                      <div className="flex items-center justify-between pt-4 border-t">
+                        <div className="text-sm text-muted-foreground">
+                          Showing {((documentsPagination.page - 1) * documentsPagination.limit) + 1} to {Math.min(documentsPagination.page * documentsPagination.limit, documentsPagination.total)} of {documentsPagination.total} documents
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDocumentsPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                            disabled={documentsPagination.page <= 1}
+                          >
+                            Previous
+                          </Button>
+                          <span className="text-sm text-muted-foreground">
+                            Page {documentsPagination.page} of {documentsPagination.pages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setDocumentsPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                            disabled={documentsPagination.page >= documentsPagination.pages}
+                          >
+                            Next
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Key Metrics */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                   <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                       <CardTitle className="text-sm font-medium">Progress</CardTitle>
@@ -1054,8 +2261,21 @@ export default function ProjectDetail() {
                       <DollarSign className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{project.budget || 'Not set'}</div>
+                      <div className="text-2xl font-bold">
+                        {project.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
+                      </div>
                       <p className="text-xs text-muted-foreground">Total allocated</p>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium">Manager</CardTitle>
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-lg font-bold">{managerName || 'Not assigned'}</div>
+                      <p className="text-xs text-muted-foreground">Project manager</p>
                     </CardContent>
                   </Card>
 
@@ -1081,100 +2301,722 @@ export default function ProjectDetail() {
                     </CardContent>
                   </Card>
                 </div>
-              </TabsContent>
 
-              <TabsContent value="team" className="space-y-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Project Team</CardTitle>
-                    <CardDescription>Team members and their roles</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Show manager first if available */}
-                      {managerName && (
-                        <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/5">
-                          <div className="flex items-center space-x-3">
-                            <Skeleton className="w-10 h-10 rounded-full" />
-                            <div>
-                              <p className="font-medium">{managerName}</p>
-                              <p className="text-sm text-muted-foreground">Project Manager</p>
-                            </div>
-                          </div>
-                          <Badge variant="secondary">Manager</Badge>
+                {/* Charts and Analytics */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Document Status Distribution */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <PieChartIcon className="h-5 w-5 text-primary" />
+                        Document Status Distribution
+                      </CardTitle>
+                      <CardDescription>Breakdown of document statuses</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={300}>
+                        <PieChart>
+                          <Pie
+                            data={[
+                              { name: 'Draft', value: documents.filter(d => d.status === 'draft').length, fill: '#f97316' },
+                              { name: 'Review', value: documents.filter(d => d.status === 'review').length, fill: '#a855f7' },
+                              { name: 'Published', value: documents.filter(d => d.status === 'published').length, fill: '#10b981' },
+                              { name: 'Archived', value: documents.filter(d => d.status === 'archived').length, fill: '#6b7280' },
+                            ]}
+                            cx="50%"
+                            cy="50%"
+                            labelLine={false}
+                            label={(entry) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
+                            outerRadius={80}
+                            dataKey="value"
+                          >
+                          </Pie>
+                          <Tooltip />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* Project Health */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-primary" />
+                        Project Health Indicators
+                      </CardTitle>
+                      <CardDescription>Key project metrics at a glance</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Schedule Performance</span>
+                          <Badge variant={progress >= 80 ? "default" : progress >= 50 ? "secondary" : "destructive"}>
+                            {progress >= 80 ? "On Track" : progress >= 50 ? "At Risk" : "Behind"}
+                          </Badge>
+                        </div>
+                        <Progress value={progress} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Documentation Complete</span>
+                          <Badge variant={documents.filter(d => d.status === 'published').length >= 5 ? "default" : "secondary"}>
+                            {documents.filter(d => d.status === 'published').length} Published
+                          </Badge>
+                        </div>
+                        <Progress value={(documents.filter(d => d.status === 'published').length / Math.max(documents.length, 1)) * 100} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Team Engagement</span>
+                          <Badge variant="default">{project.team_members?.length || 0} Members</Badge>
+                        </div>
+                        <Progress value={Math.min((project.team_members?.length || 0) * 20, 100)} className="h-2" />
+                      </div>
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Stakeholder Coverage</span>
+                          <Badge variant={stakeholders.length >= 3 ? "default" : "secondary"}>
+                            {stakeholders.length} Stakeholders
+                          </Badge>
+                        </div>
+                        <Progress value={Math.min(stakeholders.length * 20, 100)} className="h-2" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Project Details */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-primary" />
+                        Project Information
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Framework</p>
+                          <p className="text-sm font-semibold">{project.framework || 'Not specified'}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Priority</p>
+                          <Badge variant={project.priority === 'high' ? 'destructive' : project.priority === 'medium' ? 'secondary' : 'outline'}>
+                            {project.priority?.toUpperCase() || 'MEDIUM'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Status</p>
+                          <Badge variant={project.status === 'active' ? 'default' : 'secondary'}>
+                            {project.status?.toUpperCase() || 'ACTIVE'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Created</p>
+                          <p className="text-sm">{new Date(project.created_at).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      {project.description && (
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground mb-2">Description</p>
+                          <p className="text-sm">{project.description}</p>
                         </div>
                       )}
+                    </CardContent>
+                  </Card>
 
-                      {/* Then show other members */}
-                      {otherMembers.length > 0 ? (
-                        otherMembers.map((member, index) => (
-                          <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                            <div className="flex items-center space-x-3">
-                              <Skeleton className="w-10 h-10 rounded-full" />
+                  {/* Team Members */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5 text-primary" />
+                        Team Members
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {project.team_members && project.team_members.length > 0 ? (
+                        <div className="space-y-2">
+                          {project.team_members.map((member, index) => (
+                            <div key={index} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <Users className="h-4 w-4 text-primary" />
+                              </div>
                               <div>
-                                <p className="font-medium">{member}</p>
-                                <p className="text-sm text-muted-foreground">Team Member</p>
+                                <p className="text-sm font-medium">{member}</p>
+                                <p className="text-xs text-muted-foreground">Team Member</p>
                               </div>
                             </div>
-                            <Badge variant="outline">Member</Badge>
-                          </div>
-                        ))
+                          ))}
+                        </div>
                       ) : (
-                        !managerName && (
-                          <div className="text-center py-8">
-                            <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="text-lg font-semibold mb-2">No team members</h3>
-                            <p className="text-muted-foreground">Add team members to get started</p>
-                          </div>
-                        )
+                        <p className="text-sm text-muted-foreground text-center py-4">No team members assigned</p>
                       )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="stakeholders" className="space-y-4">
+                {/* Stakeholder Summary Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Total Stakeholders</p>
+                          <p className="text-2xl font-bold">{stakeholders.length}</p>
+                        </div>
+                        <Users className="h-8 w-8 text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">High Influence</p>
+                          <p className="text-2xl font-bold">{stakeholders.filter(s => s.influence_level === 'high').length}</p>
+                        </div>
+                        <Zap className="h-8 w-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Internal</p>
+                          <p className="text-2xl font-bold">{stakeholders.filter(s => s.stakeholder_type === 'internal').length}</p>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-emerald-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Primary</p>
+                          <p className="text-2xl font-bold">{stakeholders.filter(s => s.stakeholder_category === 'primary').length}</p>
+                        </div>
+                        <Target className="h-8 w-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-2xl font-bold">Stakeholder Management</h2>
+                    <p className="text-muted-foreground">Analyze and engage with project stakeholders</p>
+                  </div>
+                  <Button onClick={handleAddStakeholder}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Stakeholder
+                  </Button>
+                </div>
+
+                {/* Power/Interest Matrix */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                      Power/Interest Matrix
+                    </CardTitle>
+                    <CardDescription>Stakeholder positioning based on influence and interest levels</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-2 gap-4 p-4 border rounded-lg">
+                      {/* High Interest, High Power - Manage Closely */}
+                      <div className="p-4 border-2 border-red-300 bg-red-50 dark:bg-red-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                          <h4 className="font-semibold text-red-900 dark:text-red-100">Manage Closely</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">High Interest • High Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'high').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'high').map(s => (
+                              <Badge key={s.id} variant="destructive" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Low Interest, High Power - Keep Satisfied */}
+                      <div className="p-4 border-2 border-yellow-300 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <CheckCircle className="h-5 w-5 text-yellow-600" />
+                          <h4 className="font-semibold text-yellow-900 dark:text-yellow-100">Keep Satisfied</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">Low Interest • High Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'high').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'high').map(s => (
+                              <Badge key={s.id} variant="secondary" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* High Interest, Low Power - Keep Informed */}
+                      <div className="p-4 border-2 border-blue-300 bg-blue-50 dark:bg-blue-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Activity className="h-5 w-5 text-blue-600" />
+                          <h4 className="font-semibold text-blue-900 dark:text-blue-100">Keep Informed</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">High Interest • Low Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'low').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'high' && s.influence_level === 'low').map(s => (
+                              <Badge key={s.id} variant="default" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Low Interest, Low Power - Monitor */}
+                      <div className="p-4 border-2 border-gray-300 bg-gray-50 dark:bg-gray-900/10 rounded-lg">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Eye className="h-5 w-5 text-gray-600" />
+                          <h4 className="font-semibold text-gray-900 dark:text-gray-100">Monitor</h4>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">Low Interest • Low Influence</p>
+                        <div className="space-y-1">
+                          {stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'low').length > 0 ? (
+                            stakeholders.filter(s => s.interest_level === 'low' && s.influence_level === 'low').map(s => (
+                              <Badge key={s.id} variant="outline" className="mr-1 mb-1">{s.role}</Badge>
+                            ))
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No stakeholders</p>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Loading state for stakeholders */}
+                {stakeholdersLoading ? (
+                  <div className="flex justify-center items-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <span className="ml-2">Loading stakeholders...</span>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {stakeholders.length > 0 ? (
+                      stakeholders.map((stakeholder) => (
+                        <Card key={stakeholder.id} className="hover:shadow-sm transition-shadow">
+                          <CardContent className="p-6">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 space-y-4">
+                                {/* Header with role as primary identifier */}
+                                <div className="flex items-center space-x-4">
+                                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                                    <Users className="h-6 w-6 text-primary" />
+                                  </div>
+                                  <div>
+                                    <h3 className="text-lg font-semibold">{stakeholder.role}</h3>
+                                    <p className="text-muted-foreground">
+                                      {stakeholder.name ? `${stakeholder.name} • ` : ''}{stakeholder.department}
+                                    </p>
+                                    <div className="flex items-center space-x-2 mt-1">
+                                      <Badge variant={stakeholder.stakeholder_type === 'internal' ? 'default' : 'secondary'}>
+                                        {stakeholder.stakeholder_type === 'internal' ? 'Internal' : 'External'}
+                                      </Badge>
+                                      <Badge variant={stakeholder.stakeholder_category === 'primary' ? 'default' : 'outline'}>
+                                        {stakeholder.stakeholder_category === 'primary' ? 'Primary' : 'Secondary'}
+                                      </Badge>
+                                      {!stakeholder.name && (
+                                        <Badge variant="outline" className="text-orange-600 border-orange-600">
+                                          To Be Recruited
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Contact Information */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Email</p>
+                                    <p className="text-sm">{stakeholder.email}</p>
+                                  </div>
+                                  {stakeholder.phone && (
+                                    <div>
+                                      <p className="text-sm font-medium text-muted-foreground">Phone</p>
+                                      <p className="text-sm">{stakeholder.phone}</p>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* PMBOK Parameters */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Interest Level</p>
+                                    <Badge variant={getInterestLevelColor(stakeholder.interest_level)}>
+                                      {stakeholder.interest_level.charAt(0).toUpperCase() + stakeholder.interest_level.slice(1)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Influence Level</p>
+                                    <Badge variant={getInfluenceLevelColor(stakeholder.influence_level)}>
+                                      {stakeholder.influence_level.charAt(0).toUpperCase() + stakeholder.influence_level.slice(1)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Engagement Approach</p>
+                                    <Badge variant={getEngagementApproachColor(stakeholder.engagement_approach)}>
+                                      {formatEngagementApproach(stakeholder.engagement_approach)}
+                                    </Badge>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Communication</p>
+                                    <Badge variant="outline">
+                                      {formatCommunicationFrequency(stakeholder.communication_frequency)}
+                                    </Badge>
+                                  </div>
+                                </div>
+
+                                {/* Expectations and Impact */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Expectations</p>
+                                    <p className="text-sm">{stakeholder.expectations || 'Not specified'}</p>
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-muted-foreground">Potential Impact</p>
+                                    <p className="text-sm">{stakeholder.potential_impact || 'Not specified'}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Actions */}
+                              <div className="flex items-center space-x-2">
+                                <Button variant="ghost" size="sm" onClick={() => handleEditStakeholder(stakeholder)}>
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  onClick={() => handleDeleteStakeholder(stakeholder.id)}
+                                  className="text-destructive hover:text-destructive"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <Users className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                        <h3 className="text-lg font-semibold mb-2">No stakeholders found</h3>
+                        <p className="text-muted-foreground mb-4">
+                          Start by adding stakeholders or creating placeholders for roles that need to be recruited
+                        </p>
+                        <Button onClick={handleAddStakeholder}>
+                          <Plus className="h-4 w-4 mr-2" />
+                          Add First Stakeholder
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="timeline" className="space-y-4">
+                {/* Timeline Stats */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Duration</p>
+                          <p className="text-2xl font-bold">
+                            {project.start_date && project.end_date
+                              ? `${Math.ceil((new Date(project.end_date).getTime() - new Date(project.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30))} mo`
+                              : 'N/A'}
+                          </p>
+                        </div>
+                        <Clock className="h-8 w-8 text-blue-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Days Elapsed</p>
+                          <p className="text-2xl font-bold">
+                            {project.start_date
+                              ? Math.ceil((Date.now() - new Date(project.start_date).getTime()) / (1000 * 60 * 60 * 24))
+                              : 'N/A'}
+                          </p>
+                        </div>
+                        <Activity className="h-8 w-8 text-emerald-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Days Remaining</p>
+                          <p className="text-2xl font-bold">
+                            {project.end_date
+                              ? Math.max(0, Math.ceil((new Date(project.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+                              : 'N/A'}
+                          </p>
+                        </div>
+                        <Calendar className="h-8 w-8 text-orange-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Status</p>
+                          <Badge className="mt-1" variant={project.status === 'active' ? 'default' : 'secondary'}>
+                            {project.status?.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <CheckCircle className="h-8 w-8 text-purple-500" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Project Phases */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Project Timeline</CardTitle>
-                    <CardDescription>Key milestones and deadlines</CardDescription>
+                    <CardTitle className="flex items-center gap-2">
+                      <BarChart3 className="h-5 w-5 text-primary" />
+                      Project Phases
+                    </CardTitle>
+                    <CardDescription>Key project lifecycle stages</CardDescription>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-4">
-                      {project.start_date && (
-                        <div className="flex items-center space-x-4">
-                          <Calendar className="h-5 w-5 text-primary" />
-                          <div>
-                            <p className="font-medium">Project Start</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(project.start_date).toLocaleDateString()}
-                            </p>
+                      {[
+                        { phase: 'Initiation', status: 'completed', progress: 100, color: 'emerald' },
+                        { phase: 'Planning', status: progress >= 25 ? 'completed' : 'in-progress', progress: Math.min(progress * 4, 100), color: 'blue' },
+                        { phase: 'Execution', status: progress >= 50 ? 'in-progress' : 'pending', progress: Math.max(0, (progress - 25) * 4), color: 'purple' },
+                        { phase: 'Monitoring & Control', status: progress >= 75 ? 'in-progress' : 'pending', progress: Math.max(0, (progress - 50) * 2), color: 'orange' },
+                        { phase: 'Closure', status: progress >= 95 ? 'in-progress' : 'pending', progress: Math.max(0, (progress - 90) * 10), color: 'red' },
+                      ].map((phaseData, index) => (
+                        <div key={index} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                                phaseData.status === 'completed' ? 'bg-emerald-100 dark:bg-emerald-900/20' :
+                                phaseData.status === 'in-progress' ? 'bg-blue-100 dark:bg-blue-900/20' :
+                                'bg-gray-100 dark:bg-gray-900/20'
+                              }`}>
+                                {phaseData.status === 'completed' ? (
+                                  <CheckCircle className="h-5 w-5 text-emerald-600" />
+                                ) : phaseData.status === 'in-progress' ? (
+                                  <RefreshCw className="h-5 w-5 text-blue-600 animate-spin" />
+                                ) : (
+                                  <Clock className="h-5 w-5 text-gray-400" />
+                                )}
+                              </div>
+                              <div>
+                                <p className="font-semibold">{phaseData.phase}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {phaseData.status === 'completed' ? 'Completed' : 
+                                   phaseData.status === 'in-progress' ? 'In Progress' : 
+                                   'Not Started'}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge variant={
+                              phaseData.status === 'completed' ? 'default' :
+                              phaseData.status === 'in-progress' ? 'secondary' :
+                              'outline'
+                            }>
+                              {Math.round(phaseData.progress)}%
+                            </Badge>
                           </div>
+                          <Progress value={phaseData.progress} className="h-2" />
                         </div>
-                      )}
-                      
-                      <div className="flex items-center space-x-4">
-                        <Calendar className="h-5 w-5 text-primary" />
-                        <div>
-                          <p className="font-medium">Current Phase: {project.status}</p>
-                          <p className="text-sm text-muted-foreground">In progress</p>
-                        </div>
-                      </div>
-                      
-                      {project.end_date && (
-                        <div className="flex items-center space-x-4">
-                          <Calendar className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium">Project End</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(project.end_date).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   </CardContent>
                 </Card>
+
+                {/* Key Milestones */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-primary" />
+                        Key Milestones
+                      </CardTitle>
+                      <CardDescription>Important project checkpoints</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {project.start_date && (
+                          <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/20 flex items-center justify-center shrink-0">
+                              <CheckCircle className="h-5 w-5 text-emerald-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Project Kickoff</p>
+                                <Badge variant="default">Complete</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(project.start_date).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                          <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 flex items-center justify-center shrink-0">
+                            <Activity className="h-5 w-5 text-blue-600" />
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-1">
+                              <p className="font-semibold">Current Phase</p>
+                              <Badge variant="secondary">Active</Badge>
+                            </div>
+                            <p className="text-sm text-muted-foreground capitalize">{project.status || 'In Progress'}</p>
+                          </div>
+                        </div>
+
+                        {documents.filter(d => d.status === 'published').length > 0 && (
+                          <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 dark:bg-purple-900/20 flex items-center justify-center shrink-0">
+                              <FileText className="h-5 w-5 text-purple-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Documentation Milestone</p>
+                                <Badge variant="default">Complete</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {documents.filter(d => d.status === 'published').length} document(s) published
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {project.end_date && (
+                          <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
+                            <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center shrink-0">
+                              <Calendar className="h-5 w-5 text-orange-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Project Completion</p>
+                                <Badge variant="outline">Scheduled</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(project.end_date).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Timeline Visualization */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        Project Timeline
+                      </CardTitle>
+                      <CardDescription>Visual project timeline</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative">
+                        {/* Timeline Bar */}
+                        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-white drop-shadow-md">
+                              {progress}% Complete
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Timeline Labels */}
+                        <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                          <span>
+                            {project.start_date 
+                              ? new Date(project.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                              : 'Start'}
+                          </span>
+                          <span>
+                            {project.end_date 
+                              ? new Date(project.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                              : 'End'}
+                          </span>
+                        </div>
+
+                        {/* Key Dates */}
+                        <div className="mt-6 space-y-3">
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Project Start</span>
+                            <span className="text-sm text-muted-foreground">
+                              {project.start_date 
+                                ? new Date(project.start_date).toLocaleDateString()
+                                : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Today</span>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date().toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Target End</span>
+                            <span className="text-sm text-muted-foreground">
+                              {project.end_date 
+                                ? new Date(project.end_date).toLocaleDateString()
+                                : 'Not set'}
+                            </span>
+                          </div>
+                          
+                          {project.start_date && project.end_date && (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-primary/10">
+                              <span className="text-sm font-medium">Time Remaining</span>
+                              <span className="text-sm font-semibold text-primary">
+                                {Math.max(0, Math.ceil((new Date(project.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
               </TabsContent>
             </Tabs>
           </div>

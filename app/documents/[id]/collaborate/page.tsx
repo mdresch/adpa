@@ -15,14 +15,13 @@ import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
 import { motion } from "framer-motion"
 import {
-  Users,
-  MessageCircle,
+  User,
+  MessageSquare,
   Save,
   Share,
   Eye,
   Edit,
   Clock,
-  User,
   Send,
   FileText,
   History,
@@ -33,7 +32,7 @@ import {
   CheckCircle,
   Wifi,
   WifiOff,
-} from "lucide-react"
+} from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
@@ -68,13 +67,24 @@ interface DocumentVersion {
   changes_summary: string
 }
 
+interface Document {
+  id: string
+  title: string
+  content: string
+  author: string
+  created_at: string
+  updated_at: string
+  framework: string
+  status: string
+}
+
 export default function DocumentCollaborationPage() {
   const { user } = useAuth()
   const { isConnected, socket } = useWebSocket()
   const params = useParams()
   const documentId = params.id as string
   
-  const [document, setDocument] = useState<any>(null)
+  const [document, setDocument] = useState<Document | null>(null)
   const [content, setContent] = useState("")
   const [collaborators, setCollaborators] = useState<CollaborationUser[]>([])
   const [comments, setComments] = useState<Comment[]>([])
@@ -87,8 +97,8 @@ export default function DocumentCollaborationPage() {
   const [showComments, setShowComments] = useState(true)
   const [showVersions, setShowVersions] = useState(false)
   
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const saveTimeoutRef = useRef<NodeJS.Timeout>()
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Mock data for demonstration
   const mockCollaborators: CollaborationUser[] = [
@@ -178,11 +188,11 @@ export default function DocumentCollaborationPage() {
     }
   }, [socket, isConnected, documentId, user?.id])
 
-  const fetchDocument = async () => {
+  const fetchDocument = async (): Promise<void> => {
     try {
       setLoading(true)
       // Mock document data
-      const mockDocument = {
+      const mockDocument: Document = {
         id: documentId,
         title: "Enterprise Security Architecture",
         content: `# Enterprise Security Architecture
@@ -240,7 +250,7 @@ Phase 4: Application Security Integration (Q4 2024)
     }
   }
 
-  const handleDocumentUpdate = (data: any) => {
+  const handleDocumentUpdate = (data: { content: string; author: string }) => {
     setContent(data.content)
     toast.info(`Document updated by ${data.author}`)
   }
@@ -265,7 +275,7 @@ Phase 4: Application Security Integration (Q4 2024)
     toast.info(`New comment from ${comment.user.name}`)
   }
 
-  const handleContentChange = (newContent: string) => {
+  const handleContentChange = (newContent: string): void => {
     setContent(newContent)
     
     // Auto-save after 2 seconds of inactivity
@@ -287,11 +297,11 @@ Phase 4: Application Security Integration (Q4 2024)
     }
   }
 
-  const saveDocument = async (contentToSave?: string) => {
+  const saveDocument = async (contentToSave?: string): Promise<void> => {
     try {
       setSaving(true)
       // Mock save - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 500))
+      await new Promise<void>(resolve => setTimeout(resolve, 500))
       toast.success("Document saved")
     } catch (error) {
       console.error("Failed to save document:", error)
@@ -301,7 +311,7 @@ Phase 4: Application Security Integration (Q4 2024)
     }
   }
 
-  const addComment = () => {
+  const addComment = (): void => {
     if (!newComment.trim()) return
 
     const comment: Comment = {
@@ -331,7 +341,7 @@ Phase 4: Application Security Integration (Q4 2024)
     toast.success("Comment added")
   }
 
-  const formatTimeAgo = (dateString: string) => {
+  const formatTimeAgo = (dateString: string): string => {
     const now = new Date()
     const date = new Date(dateString)
     const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60))
@@ -385,11 +395,11 @@ Phase 4: Application Security Integration (Q4 2024)
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="h-4 w-4" />
-                          Last updated {formatTimeAgo(document?.updated_at)}
+                          Last updated {document?.updated_at ? formatTimeAgo(document.updated_at) : "Unknown"}
                         </span>
-                        <Badge variant="outline">{document?.framework}</Badge>
+                        <Badge variant="outline">{document?.framework || "Unknown"}</Badge>
                         <Badge variant={document?.status === "published" ? "default" : "secondary"}>
-                          {document?.status}
+                          {document?.status || "Unknown"}
                         </Badge>
                       </div>
                     </div>
@@ -450,7 +460,7 @@ Phase 4: Application Security Integration (Q4 2024)
                   <Textarea
                     ref={textareaRef}
                     value={content}
-                    onChange={(e) => handleContentChange(e.target.value)}
+                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => handleContentChange(e.target.value)}
                     className="w-full h-full resize-none border-0 focus:ring-0 text-sm font-mono"
                     placeholder="Start writing..."
                   />
@@ -469,7 +479,7 @@ Phase 4: Application Security Integration (Q4 2024)
                         setShowVersions(false)
                       }}
                     >
-                      <MessageCircle className="h-4 w-4 mr-2" />
+                      <MessageSquare className="h-4 w-4 mr-2" />
                       Comments ({comments.length})
                     </Button>
                     <Button
@@ -495,7 +505,7 @@ Phase 4: Application Security Integration (Q4 2024)
                         <Textarea
                           placeholder="Write a comment..."
                           value={newComment}
-                          onChange={(e) => setNewComment(e.target.value)}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewComment(e.target.value)}
                           rows={3}
                         />
                         <Button onClick={addComment} size="sm" className="w-full">
@@ -550,7 +560,7 @@ Phase 4: Application Security Integration (Q4 2024)
                         <Card key={version.id} className="p-3">
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
-                              <Badge variant="outline">{version.id}</Badge>
+                              <Badge variant="outline">{version.id || "Unknown"}</Badge>
                               <span className="text-xs text-muted-foreground">
                                 {formatTimeAgo(version.created_at)}
                               </span>

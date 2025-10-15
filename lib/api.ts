@@ -1,8 +1,8 @@
 import { io, Socket } from "socket.io-client"
 
 // API Configuration
-const API_BASE_URL = "http://localhost:5000/api"
-const WS_URL = "http://localhost:5000"
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
 
 // Types
 export interface User {
@@ -26,6 +26,7 @@ export interface Project {
   status: string
   priority: string
   owner_id: string
+  owner_name?: string
   team_members: string[]
   start_date?: string
   end_date?: string
@@ -48,6 +49,28 @@ export interface Document {
   updated_at: string
 }
 
+export interface Stakeholder {
+  id: string
+  project_id: string
+  name?: string
+  role: string
+  department?: string
+  email: string
+  phone?: string
+  interest_level: 'high' | 'medium' | 'low'
+  influence_level: 'high' | 'medium' | 'low'
+  engagement_approach: 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'
+  communication_frequency: 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'
+  stakeholder_type: 'internal' | 'external'
+  stakeholder_category: 'primary' | 'secondary'
+  expectations?: string
+  potential_impact?: string
+  created_at: string
+  updated_at: string
+  created_by_name?: string
+  updated_by_name?: string
+}
+
 export interface Template {
   id: string
   name: string
@@ -61,6 +84,36 @@ export interface Template {
   created_by: string
   created_at: string
   updated_at: string
+  // AI Enhancement Fields
+  system_prompt?: string
+  context_injection_config?: {
+    enabled: boolean
+    sources: Array<{
+      type: string
+      source_id: string
+      source_name: string
+      parameters?: Record<string, any>
+      enabled: boolean
+      weight?: number
+    }>
+    injection_strategy: 'prepend' | 'append' | 'interleave' | 'structured'
+    max_context_length?: number
+    context_priority?: 'high' | 'medium' | 'low'
+  }
+  prompt_build_up?: {
+    enabled: boolean
+    stages: Array<{
+      stage_name: string
+      stage_type: string
+      prompt_template: string
+      variables: string[]
+      dependencies?: string[]
+      order: number
+      enabled: boolean
+    }>
+    final_format: 'markdown' | 'structured_json' | 'plain_text' | 'html'
+    include_metadata: boolean
+  }
 }
 
 export interface Job {
@@ -462,6 +515,51 @@ class ApiClient {
     await this.request(`/documents/${id}`, { method: "DELETE" })
   }
 
+  // Test feedback endpoint
+  async testFeedbackEndpoint(feedback: {
+    comment: string
+    rating: number
+    category: string
+  }): Promise<any> {
+    try {
+      console.log("API Client: Testing feedback endpoint with data:", feedback)
+      
+      const response = await this.request<any>(`/documents/test-feedback`, {
+        method: "POST",
+        body: JSON.stringify(feedback),
+      })
+      
+      console.log("API Client: Test response received:", response)
+      return response
+    } catch (error) {
+      console.error("API Client: Error testing feedback endpoint:", error)
+      throw error
+    }
+  }
+
+  // Submit feedback for a document
+  async submitDocumentFeedback(id: string, feedback: {
+    comment: string
+    rating: number
+    category: string
+  }): Promise<{ success: boolean; feedback: any; document: any }> {
+    try {
+      console.log("API Client: Submitting feedback to:", `/documents/${id}/feedback`)
+      console.log("API Client: Feedback data:", feedback)
+      
+      const response = await this.request<{ success: boolean; feedback: any; document: any }>(`/documents/${id}/feedback`, {
+        method: "POST",
+        body: JSON.stringify(feedback),
+      })
+      
+      console.log("API Client: Response received:", response)
+      return response
+    } catch (error) {
+      console.error("API Client: Error submitting feedback:", error)
+      throw error
+    }
+  }
+
   // Templates API
   async getTemplates(params?: {
     page?: number
@@ -546,6 +644,42 @@ class ApiClient {
   async getAIProviders(): Promise<any[]> {
     const response = await this.request<{ providers: any[] }>("/ai/providers")
     return response.providers
+  }
+
+  // AI Model Configuration API
+  async getProviderModels(providerId: string): Promise<{ models: any[], provider: any }> {
+    return await this.request(`/ai-models/providers/${providerId}/models`)
+  }
+
+  async getModelConfiguration(providerId: string, modelId: string): Promise<{ model: any }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`)
+  }
+
+  async createModelConfiguration(providerId: string, modelData: any): Promise<{ model: any, message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models`, {
+      method: "POST",
+      body: JSON.stringify(modelData)
+    })
+  }
+
+  async updateModelConfiguration(providerId: string, modelId: string, modelData: any): Promise<{ model: any, message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`, {
+      method: "PUT",
+      body: JSON.stringify(modelData)
+    })
+  }
+
+  async deleteModelConfiguration(providerId: string, modelId: string): Promise<{ message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`, {
+      method: "DELETE"
+    })
+  }
+
+  async testModelConfiguration(providerId: string, modelId: string, testData?: any): Promise<{ test: any, message: string }> {
+    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}/test`, {
+      method: "POST",
+      body: JSON.stringify(testData || {})
+    })
   }
 
   async generateContent(data: {
@@ -667,9 +801,94 @@ class ApiClient {
     return response
   }
 
+  // AI Analytics API
+  async getAIModelAnalytics(period: string = "30d"): Promise<any> {
+    const response = await this.request(`/ai-analytics/models?period=${period}`)
+    return response
+  }
+
+  async getAIProviderAnalytics(providerId: string, period: string = "30d"): Promise<any> {
+    const response = await this.request(`/ai-analytics/providers/${providerId}?period=${period}`)
+    return response
+  }
+
+  async getAITrends(period: string = "30d"): Promise<any> {
+    const response = await this.request(`/ai-analytics/trends?period=${period}`)
+    return response
+  }
+
   // Generic request method for custom API calls
   async makeRequest<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
     return this.request<T>(endpoint, options)
+  }
+
+  // Convenience methods
+  async get<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, { ...options, method: "GET" })
+  }
+
+  async post<T = any>(endpoint: string, body?: any, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, {
+      ...options,
+      method: "POST",
+      body: body ? JSON.stringify(body) : undefined
+    })
+  }
+
+  async put<T = any>(endpoint: string, body?: any, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, {
+      ...options,
+      method: "PUT",
+      body: body ? JSON.stringify(body) : undefined
+    })
+  }
+
+  async delete<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
+    return this.request<T>(endpoint, { ...options, method: "DELETE" })
+  }
+
+  // Stakeholder Management Methods
+  async getProjectStakeholders(projectId: string): Promise<{ stakeholders: Stakeholder[]; count: number }> {
+    return this.get<{ stakeholders: Stakeholder[]; count: number }>(`/stakeholders/project/${projectId}`)
+  }
+
+  async getStakeholder(stakeholderId: string): Promise<{ stakeholder: Stakeholder }> {
+    return this.get<{ stakeholder: Stakeholder }>(`/stakeholders/${stakeholderId}`)
+  }
+
+  async createStakeholder(stakeholderData: Omit<Stakeholder, 'id' | 'created_at' | 'updated_at' | 'created_by_name' | 'updated_by_name'>): Promise<{ message: string; stakeholder: Stakeholder }> {
+    return this.post<{ message: string; stakeholder: Stakeholder }>('/stakeholders', stakeholderData)
+  }
+
+  async updateStakeholder(stakeholderId: string, stakeholderData: Partial<Omit<Stakeholder, 'id' | 'project_id' | 'created_at' | 'updated_at' | 'created_by_name' | 'updated_by_name'>>): Promise<{ message: string; stakeholder: Stakeholder }> {
+    return this.put<{ message: string; stakeholder: Stakeholder }>(`/stakeholders/${stakeholderId}`, stakeholderData)
+  }
+
+  async deleteStakeholder(stakeholderId: string): Promise<{ message: string; deleted_stakeholder: { name: string; project_id: string } }> {
+    return this.delete<{ message: string; deleted_stakeholder: { name: string; project_id: string } }>(`/stakeholders/${stakeholderId}`)
+  }
+
+  async getStakeholderEngagementMatrix(projectId: string): Promise<{
+    stakeholders: Stakeholder[]
+    engagement_matrix: {
+      manage_closely: Stakeholder[]
+      keep_satisfied: Stakeholder[]
+      keep_informed: Stakeholder[]
+      monitor: Stakeholder[]
+    }
+    summary: {
+      total: number
+      high_interest_high_influence: number
+      high_interest_low_influence: number
+      low_interest_high_influence: number
+      low_interest_low_influence: number
+      internal: number
+      external: number
+      primary: number
+      secondary: number
+    }
+  }> {
+    return this.get(`/stakeholders/project/${projectId}/engagement-matrix`)
   }
 }
 

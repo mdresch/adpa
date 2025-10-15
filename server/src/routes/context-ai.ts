@@ -8,8 +8,12 @@ import express from "express"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { ContextPriority } from "../modules/context/types"
 import { pool } from "../database/connection"
+import { authenticateToken, requirePermission } from "../middleware/auth"
+import { validate, validateParams } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
+import Joi from "joi"
 import { v4 as uuidv4 } from "uuid"
+import { aiService } from "../services/aiService"
 
 const router = express.Router()
 
@@ -309,22 +313,27 @@ router.get("/providers", async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const result = await pool.query(`
-      SELECT name, provider_type, configuration, is_active
+      SELECT id, name, provider_type, configuration, is_active, priority, created_at, updated_at
       FROM ai_providers 
       WHERE is_active = true
       ORDER BY name
     `)
 
     const providers = result.rows.map(row => ({
+      id: row.id,
       name: row.name,
       type: row.provider_type,
       is_active: row.is_active,
+      priority: row.priority,
       supports_context: true, // All providers support context injection
       configuration: {
         // Only expose non-sensitive configuration
+        model: row.configuration?.model,
         models: row.configuration?.models || [],
         max_tokens: row.configuration?.max_tokens,
-        default_model: row.configuration?.default_model
+        default_model: row.configuration?.default_model,
+        endpoint: row.configuration?.endpoint,
+        priority: row.configuration?.priority
       }
     }))
 
@@ -334,6 +343,208 @@ router.get("/providers", async (req, res) => {
     log.error("Failed to get context-aware providers:", error)
     res.status(500).json({
       error: "Failed to get providers",
+      message: error.message
+    })
+  }
+})
+
+/**
+ * POST /api/context-ai/providers/:id/configure
+ * Update an existing AI provider configuration
+ */
+router.post("/providers/:id/configure", 
+  authenticateToken,
+  requirePermission("ai.configure"),
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  validate(Joi.object({
+    api_key: Joi.string().optional(),
+    configuration: Joi.object().optional(),
+    is_active: Joi.boolean().optional(),
+    // Model parameters
+    contextWindow: Joi.number().integer().min(1000).max(10000000).optional(),
+    maxTokens: Joi.number().integer().min(1).max(100000).optional(),
+    temperature: Joi.number().min(0).max(2).optional(),
+    topP: Joi.number().min(0).max(1).optional(),
+    frequencyPenalty: Joi.number().min(-2).max(2).optional(),
+    presencePenalty: Joi.number().min(-2).max(2).optional(),
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      const { id } = req.params
+      const { 
+        api_key, 
+        configuration, 
+        is_active,
+        contextWindow,
+        maxTokens,
+        temperature,
+        topP,
+        frequencyPenalty,
+        presencePenalty
+      } = req.body
+
+      // Check if provider exists
+      const existingProvider = await pool.query(
+        "SELECT id, name, provider_type FROM ai_providers WHERE id = $1",
+        [id]
+      )
+
+      if (existingProvider.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found" })
+      }
+
+      const provider = existingProvider.rows[0]
+      let updateFields: string[] = []
+      let updateValues: any[] = []
+      let paramCount = 1
+
+      // Update API key if provided
+      if (api_key) {
+        const encryptedApiKey = Buffer.from(api_key).toString("base64")
+        updateFields.push(`api_key_encrypted = $${paramCount}`)
+        updateValues.push(encryptedApiKey)
+        paramCount++
+      }
+
+      // Update configuration if provided
+      if (configuration || contextWindow || maxTokens || temperature || topP || frequencyPenalty || presencePenalty) {
+        // Get existing configuration
+        const existingConfig = await pool.query(
+          "SELECT configuration FROM ai_providers WHERE id = $1",
+          [id]
+        )
+        
+        let existingConfigObj = {}
+        if (existingConfig.rows.length > 0 && existingConfig.rows[0].configuration) {
+          const config = existingConfig.rows[0].configuration
+          // Check if configuration is already an object or needs to be parsed
+          existingConfigObj = typeof config === 'string' ? JSON.parse(config) : config
+        }
+
+        // Merge configurations
+        const updatedConfig = {
+          ...existingConfigObj,
+          ...configuration,
+          modelParameters: {
+            ...existingConfigObj.modelParameters,
+            ...(contextWindow && { contextWindow }),
+            ...(maxTokens && { maxTokens }),
+            ...(temperature && { temperature }),
+            ...(topP && { topP }),
+            ...(frequencyPenalty && { frequencyPenalty }),
+            ...(presencePenalty && { presencePenalty })
+          }
+        }
+
+        updateFields.push(`configuration = $${paramCount}`)
+        updateValues.push(JSON.stringify(updatedConfig))
+        paramCount++
+      }
+
+      // Update active status if provided
+      if (typeof is_active === 'boolean') {
+        updateFields.push(`is_active = $${paramCount}`)
+        updateValues.push(is_active)
+        paramCount++
+      }
+
+      // Always update the updated_at timestamp
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`)
+      updateValues.push(id)
+
+      if (updateFields.length === 1) { // Only updated_at
+        return res.status(400).json({ error: "No fields to update" })
+      }
+
+      const updateQuery = `
+        UPDATE ai_providers 
+        SET ${updateFields.join(', ')}
+        WHERE id = $${paramCount}
+        RETURNING id, name, provider_type, is_active, updated_at
+      `
+
+      const result = await pool.query(updateQuery, updateValues)
+
+      // Re-initialize providers if API key was updated
+      if (api_key) {
+        await aiService.initializeProviders()
+        log.info(`AI providers reinitialized after API key update`)
+      }
+
+      log.info(`AI provider updated: ${provider.name} (${provider.provider_type}) by ${req.user?.email}`)
+
+      res.json({
+        message: "Provider updated successfully",
+        provider: result.rows[0]
+      })
+
+    } catch (error) {
+      log.error("Failed to update AI provider:", error)
+      res.status(500).json({
+        error: "Failed to update provider",
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/context-ai/providers
+ * Create a new AI provider with context capabilities
+ */
+router.post("/providers", async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { name, provider_type, api_key, configuration } = req.body
+
+    // Validate required fields
+    if (!name || !provider_type || !api_key) {
+      return res.status(400).json({
+        error: "Missing required fields: name, provider_type, api_key"
+      })
+    }
+
+    // Check if provider name already exists
+    const existingProvider = await pool.query(
+      "SELECT id FROM ai_providers WHERE name = $1",
+      [name]
+    )
+
+    if (existingProvider.rows.length > 0) {
+      return res.status(400).json({ error: "Provider name already exists" })
+    }
+
+    // Encrypt API key
+    const encryptedApiKey = Buffer.from(api_key).toString("base64")
+
+    const id = uuidv4()
+
+    const result = await pool.query(`
+      INSERT INTO ai_providers (id, name, provider_type, api_key_encrypted, configuration, is_active)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING id, name, provider_type, is_active, created_at, updated_at
+    `, [
+      id, 
+      name, 
+      provider_type, 
+      encryptedApiKey, 
+      JSON.stringify(configuration || {}), 
+      true // Set as active by default
+    ])
+
+    log.info(`AI provider created: ${name} (${provider_type})`)
+
+    res.status(201).json({
+      message: "Provider created successfully",
+      provider: result.rows[0]
+    })
+
+  } catch (error) {
+    log.error("Failed to create AI provider:", error)
+    res.status(500).json({
+      error: "Failed to create provider",
       message: error.message
     })
   }

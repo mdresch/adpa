@@ -1,0 +1,11 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "adpa-project-charter": false
+    }
+  },
+  "github": {
+    "enabled": false,
+    "autoAlias": false
+  }
+}
