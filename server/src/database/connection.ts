@@ -1,12 +1,15 @@
 import dotenv from "dotenv"
-dotenv.config()
+// Only load .env if not in production (Railway injects env vars directly)
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config()
+}
 
 import { Pool } from "pg"
 import { logger } from "../utils/logger"
 
 // Hybrid connection approach: try hostnames first, then IP addresses
 const connectionMethods = [
-  { host: process.env.DB_HOST || "localhost", description: "Environment hostname" },
+  { host: process.env.DB_HOST || "localhost", description: `Environment hostname (${process.env.DB_HOST || 'localhost'})` },
   { host: "localhost", description: "Localhost fallback" },
   { host: "postgres", description: "PostgreSQL hostname (Docker)" },
   { host: "172.19.0.3", description: "PostgreSQL IP address (Docker)" }
