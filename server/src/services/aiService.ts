@@ -39,16 +39,8 @@ export interface AIGenerateResponse {
 }
 
 class AIService {
-  private gatewayApiKey: string
-
   constructor() {
-    // Use AI Gateway API key from environment
-    this.gatewayApiKey = process.env.AI_GATEWAY_API_KEY || ""
-    if (!this.gatewayApiKey) {
-      logger.warn("AI_GATEWAY_API_KEY not set in environment. AI features will not work.")
-    } else {
-      logger.info("AI Gateway initialized with API key")
-    }
+    logger.info("AI Service initialized - will fetch AI Gateway key from database")
   }
 
   async initializeProviders() {
@@ -81,11 +73,15 @@ class AIService {
       promptLength: request.prompt.length
     })
     
-    if (!this.gatewayApiKey) {
-      logger.error('❌ [AI-SERVICE] No API key configured')
-      throw new Error("AI Gateway API key not configured. Please set AI_GATEWAY_API_KEY in environment.")
+    // Fetch AI Gateway API key from database
+    const { getAIGatewayKey } = await import("../routes/settings")
+    const gatewayApiKey = await getAIGatewayKey()
+    
+    if (!gatewayApiKey) {
+      logger.error('❌ [AI-SERVICE] No AI Gateway API key configured')
+      throw new Error("AI Gateway API key not configured. Please configure it in Settings.")
     }
-    logger.info('✅ [AI-SERVICE-2/8] API key validated')
+    logger.info('✅ [AI-SERVICE-2/8] AI Gateway API key retrieved from database')
 
     // Process template if provided
     let processedPrompt = request.prompt
