@@ -100,10 +100,10 @@ app/ecs-ai/
 app/process-flow/
 
 # UI components and styles (experimental)
-components/ui/icons-shim.tsx
+# components/ui/icons-shim.tsx  # NOW ENABLED FOR PRODUCTION
 components/ui/sidebar.css
 styles/basic.css
-tailwind.config.js
+# tailwind.config.js  # NOW ENABLED FOR PRODUCTION
 
 # Global types and utilities (experimental)
 global.d.ts
