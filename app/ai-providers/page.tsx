@@ -45,7 +45,7 @@ const googleProviderStub = {
 
 export default function AIProviders() {
   // Use the same API base as the main API client
-  const apiBase = "http://localhost:5000"
+  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
   const apiUrl = (path: string) => `${apiBase}${path}`
 
   // Initialize API client with token
