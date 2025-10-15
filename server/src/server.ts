@@ -289,7 +289,7 @@ async function startServer() {
       )
     }
 
-    server.listen(PORT, () => {
+    server.listen(PORT, "0.0.0.0", () => {
       logger.info(`Server running on port ${PORT}`)
       logger.info(`Environment: ${process.env.NODE_ENV || "development"}`)
       logger.info("SharePoint test endpoint available at /api/integrations/sharepoint/test")
