@@ -21,7 +21,7 @@ const createPool = (host: string) => {
     password: process.env.DB_PASSWORD || "password",
     max: 20,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 60000, // 60 seconds per attempt
+    connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
     // SSL configuration for Neon and other cloud providers
     ssl: host.includes('neon.tech') || host.includes('azure') || process.env.DB_SSL === "true" 
       ? { rejectUnauthorized: false } 
@@ -29,15 +29,15 @@ const createPool = (host: string) => {
   })
 }
 
-let pool = createPool(connectionMethods[0].host) // Start with IP address
+let pool: Pool | null = null // Initialize lazily to prevent hanging on module load
 
 export async function connectDatabase() {
-  const maxRetriesPerMethod = 2
-  const retryDelay = 5000 // 5 seconds
+  const maxRetriesPerMethod = 1 // Reduced retries for Railway timeout
+  const retryDelay = 3000 // Reduced to 3 seconds
   
   // Try each connection method
   for (const method of connectionMethods) {
-    logger.info(`Trying database connection via ${method.description}: ${method.host}`)
+    console.log(`🔌 Trying database connection via ${method.description}: ${method.host}`)
     
     // Create a new pool for this connection method
     const testPool = createPool(method.host)
