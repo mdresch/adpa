@@ -2,7 +2,7 @@
 
 **CR ID:** CR-2026-001  
 **Version:** 1.0  
-**Date:** October 15, 2024  
+**Date:** October 15, 2025  
 **Status:** Draft (Pending Sponsor Review)
 
 ---
