@@ -2,10 +2,6 @@
 
 A comprehensive enterprise-grade platform for AI-powered document generation, management, and automation with seamless third-party integrations.
 
-## 🚨 IMPORTANT: Docker Development Environment Required
-
-**⚠️ CRITICAL: This project MUST be run using Docker containers. Never run services locally or modify configurations for local development.**
-
 ---
 
 ## Description
