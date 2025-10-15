@@ -239,24 +239,28 @@ app.use(errorHandler)
 // Start server
 async function startServer() {
   try {
+    console.log("🚀 Starting server initialization...")
+    
     // Try to connect to database, but don't fail if it's not available
     try {
+      console.log("📊 Connecting to database...")
       await connectDatabase()
-      logger.info("Database connected successfully")
+      console.log("✅ Database connected successfully")
     } catch (dbError) {
-      logger.warn(
-        "Database connection failed, starting server without database:",
+      console.warn(
+        "⚠️  Database connection failed, starting server without database:",
         typeof dbError === "object" && dbError !== null && "message" in dbError ? (dbError as { message?: string }).message : dbError
       )
     }
 
     // Try to connect to Redis, but don't fail if it's not available
     try {
+      console.log("💾 Connecting to Redis...")
       await connectRedis()
-      logger.info("Redis connected successfully")
+      console.log("✅ Redis connected successfully")
     } catch (redisError) {
-      logger.warn(
-        "Redis connection failed, starting server without Redis:",
+      console.warn(
+        "⚠️  Redis connection failed, starting server without Redis:",
         typeof redisError === "object" && redisError !== null && "message" in redisError
           ? (redisError as { message?: string }).message
           : redisError
@@ -265,11 +269,12 @@ async function startServer() {
 
     // Try to initialize job queues, but don't fail if it's not available
     try {
+      console.log("🔄 Initializing job queues...")
       await initializeQueues()
-      logger.info("Job queues initialized successfully")
+      console.log("✅ Job queues initialized successfully")
     } catch (queueError) {
-      logger.warn(
-        "Job queue initialization failed:",
+      console.warn(
+        "⚠️  Job queue initialization failed:",
         typeof queueError === "object" && queueError !== null && "message" in queueError
           ? (queueError as { message?: string }).message
           : queueError
@@ -278,24 +283,26 @@ async function startServer() {
 
     // Initialize AI providers
     try {
+      console.log("🤖 Initializing AI providers...")
       await aiService.initializeProviders()
-      logger.info("AI providers initialized successfully")
+      console.log("✅ AI providers initialized successfully")
     } catch (aiError) {
-      logger.warn(
-        "AI provider initialization failed:",
+      console.warn(
+        "⚠️  AI provider initialization failed:",
         typeof aiError === "object" && aiError !== null && "message" in aiError
           ? (aiError as { message?: string }).message
           : aiError
       )
     }
 
+    console.log(`🌐 Starting server on port ${PORT} at 0.0.0.0...`)
     server.listen(PORT, "0.0.0.0", () => {
-      logger.info(`Server running on port ${PORT}`)
-      logger.info(`Environment: ${process.env.NODE_ENV || "development"}`)
-      logger.info("SharePoint test endpoint available at /api/integrations/sharepoint/test")
+      console.log(`✅ Server running on port ${PORT}`)
+      console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
+      console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
     })
   } catch (error) {
-    logger.error("Failed to start server:", error)
+    console.error("❌ Failed to start server:", error)
     process.exit(1)
   }
 }
