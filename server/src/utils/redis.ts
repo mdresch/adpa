@@ -71,7 +71,14 @@ export async function connectRedis() {
           logger.info("Redis client ready")
         })
         
-        await testClient.connect()
+        // Add timeout to prevent hanging
+        const connectionTimeout = 5000 // 5 seconds
+        await Promise.race([
+          testClient.connect(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Connection timeout after ${connectionTimeout}ms`)), connectionTimeout)
+          )
+        ])
         
         // If successful, update the global client and return
         if (redisClient) {
