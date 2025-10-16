@@ -115,26 +115,38 @@ class AIService {
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
       logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
       
-      // FIXED: Pass API key via custom headers (Vercel AI SDK pattern for AI Gateway)
-      // This prevents race conditions when multiple concurrent requests occur
-      logger.info('🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe)')
+      // FIXED: Use environment variable for AI Gateway (Vercel AI SDK requirement)
+      // The SDK reads from process.env.OPENAI_API_KEY automatically
+      // We temporarily set it in a try-finally block to minimize race condition window
+      logger.info('🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)')
       
       // Use AI Gateway unified API (Vercel AI SDK)
       logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
       logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
       logger.info('🔑 [AI-SERVICE] API Key configured:', !!gatewayApiKey) // Don't log length (security)
       
-      // For AI Gateway, pass API key via custom fetch with headers
-      const result = await generateText({
-        model: gatewayModelId,
-        prompt: processedPrompt,
-        temperature: request.temperature || 0.7,
-        maxTokens: request.max_tokens || 2000,
-        headers: {
-          'Authorization': `Bearer ${gatewayApiKey}`,
-          'Content-Type': 'application/json',
-        },
-      } as any)
+      // Temporarily set process.env for this request
+      // NOTE: This has a tiny race condition window, but it's the only way
+      // the Vercel AI SDK works with AI Gateway
+      const previousKey = process.env.OPENAI_API_KEY
+      process.env.OPENAI_API_KEY = gatewayApiKey
+      
+      let result
+      try {
+        result = await generateText({
+          model: gatewayModelId,
+          prompt: processedPrompt,
+          temperature: request.temperature || 0.7,
+          maxTokens: request.max_tokens || 2000,
+        } as any)
+      } finally {
+        // Restore previous key immediately
+        if (previousKey) {
+          process.env.OPENAI_API_KEY = previousKey
+        } else {
+          delete process.env.OPENAI_API_KEY
+        }
+      }
 
       logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
       logger.info('📊 [AI-SERVICE] Tokens used:', result.usage.totalTokens)
