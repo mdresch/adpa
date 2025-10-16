@@ -308,6 +308,125 @@ export class ContextInjectionStage {
     this.initializeDefaultStrategies()
   }
 
+  /**
+   * Fetch project data from database and enrich context
+   */
+  private async enrichContextWithProjectData(projectId: string, context: ContextData): Promise<ContextData> {
+    try {
+      const projectResult = await pool.query(`
+        SELECT 
+          p.id,
+          p.name,
+          p.description,
+          p.status,
+          p.start_date,
+          p.end_date,
+          p.budget,
+          p.priority,
+          p.metadata,
+          p.created_at,
+          p.updated_at,
+          u.name as owner_name,
+          u.email as owner_email
+        FROM projects p
+        LEFT JOIN users u ON p.owner_id = u.id
+        WHERE p.id = $1
+      `, [projectId])
+
+      if (projectResult.rows.length > 0) {
+        const project = projectResult.rows[0]
+        
+        return {
+          ...context,
+          project_context: {
+            ...(context.project_context || {}),
+            project_id: project.id,
+            project_name: project.name,
+            project_description: project.description,
+            project_status: project.status,
+            start_date: project.start_date,
+            end_date: project.end_date,
+            budget: project.budget,
+            priority: project.priority,
+            owner: {
+              name: project.owner_name,
+              email: project.owner_email
+            },
+            metadata: project.metadata || {},
+            created_at: project.created_at,
+            updated_at: project.updated_at
+          }
+        }
+      }
+
+      return context
+    } catch (error) {
+      logger.error('Failed to fetch project data for context enrichment', { projectId, error: error.message })
+      return context // Return original context if fetch fails
+    }
+  }
+
+  /**
+   * Fetch stakeholder data from database and enrich context
+   */
+  private async enrichContextWithStakeholders(projectId: string, context: ContextData): Promise<ContextData> {
+    try {
+      const stakeholderResult = await pool.query(`
+        SELECT 
+          id,
+          project_id,
+          name,
+          role,
+          organization,
+          email,
+          phone,
+          interest_level,
+          influence_level,
+          engagement_strategy,
+          communication_preferences,
+          expectations,
+          concerns,
+          metadata,
+          created_at
+        FROM stakeholders
+        WHERE project_id = $1
+        ORDER BY influence_level DESC, interest_level DESC
+      `, [projectId])
+
+      if (stakeholderResult.rows.length > 0) {
+        return {
+          ...context,
+          stakeholder_context: {
+            ...(context.stakeholder_context || {}),
+            stakeholders: stakeholderResult.rows.map(s => ({
+              id: s.id,
+              name: s.name,
+              role: s.role,
+              organization: s.organization,
+              email: s.email,
+              phone: s.phone,
+              interest_level: s.interest_level,
+              influence_level: s.influence_level,
+              engagement_strategy: s.engagement_strategy,
+              communication_preferences: s.communication_preferences,
+              expectations: s.expectations,
+              concerns: s.concerns,
+              metadata: s.metadata || {}
+            })),
+            total_stakeholders: stakeholderResult.rows.length,
+            high_influence: stakeholderResult.rows.filter(s => s.influence_level === 'high').length,
+            high_interest: stakeholderResult.rows.filter(s => s.interest_level === 'high').length
+          }
+        }
+      }
+
+      return context
+    } catch (error) {
+      logger.error('Failed to fetch stakeholder data for context enrichment', { projectId, error: error.message })
+      return context // Return original context if fetch fails
+    }
+  }
+
   async execute(input: StageInput): Promise<StageOutput> {
     const startTime = Date.now()
 
@@ -340,21 +459,36 @@ export class ContextInjectionStage {
         throw new Error('Generated document not found in input data')
       }
 
+      // Enrich context with real project data from database
+      let enrichedContext = input.context
+      if (generatedDocument.project_id) {
+        logger.info('Enriching context with project data', { project_id: generatedDocument.project_id })
+        enrichedContext = await this.enrichContextWithProjectData(generatedDocument.project_id, enrichedContext)
+        
+        // Enrich with stakeholder data
+        if (config.enable_stakeholder_targeting) {
+          logger.info('Enriching context with stakeholder data', { project_id: generatedDocument.project_id })
+          enrichedContext = await this.enrichContextWithStakeholders(generatedDocument.project_id, enrichedContext)
+        }
+      }
+
       // Step 1: Analyze context and identify injection opportunities
       const injectionOpportunities = await this.analyzeInjectionOpportunities(
         generatedDocument,
-        input.context,
+        enrichedContext,
         config
       )
       logger.info('Injection opportunities identified', {
         opportunities: injectionOpportunities.length,
-        high_priority: injectionOpportunities.filter(o => o.priority >= 3).length
+        high_priority: injectionOpportunities.filter(o => o.priority >= 3).length,
+        project_data_available: !!enrichedContext.project_context,
+        stakeholder_data_available: !!enrichedContext.stakeholder_context
       })
 
       // Step 2: Select and execute injection strategies
       const injectionResults = await this.executeInjectionStrategies(
         generatedDocument,
-        input.context,
+        enrichedContext,
         injectionOpportunities,
         config
       )
@@ -367,7 +501,7 @@ export class ContextInjectionStage {
       const personalizationResult = await this.applyPersonalization(
         generatedDocument,
         injectionResults,
-        input.context,
+        enrichedContext,
         config
       )
       logger.info('Personalization applied', {
@@ -392,7 +526,7 @@ export class ContextInjectionStage {
         generatedDocument,
         injectionResults,
         personalizationResult,
-        input.context
+        enrichedContext
       )
 
       // Step 6: Assemble contextualized document
@@ -400,7 +534,7 @@ export class ContextInjectionStage {
         generatedDocument,
         injectionResults,
         personalizationResult,
-        input.context
+        enrichedContext
       )
 
       // Step 7: Calculate quality metrics

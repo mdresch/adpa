@@ -115,8 +115,15 @@ class AIService {
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
       logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
       
+      // Set AI Gateway API key as environment variable for Vercel AI SDK
+      process.env.AI_GATEWAY_API_KEY = gatewayApiKey
+      logger.info('🔑 [AI-SERVICE] AI Gateway API key configured for Vercel AI Gateway')
+      
       // Use AI Gateway unified API (Vercel AI SDK)
       logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
+      logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
+      logger.info('🔑 [AI-SERVICE] API Key set:', process.env.AI_GATEWAY_API_KEY ? 'Yes (length: ' + process.env.AI_GATEWAY_API_KEY.length + ')' : 'No')
+      
       const result = await generateText({
         model: gatewayModelId,
         prompt: processedPrompt,
@@ -159,7 +166,7 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.5-flash',
+      'google': 'gemini-2.5-flash',  // Updated to available model in Vercel AI Gateway
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-sonnet-4',
