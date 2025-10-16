@@ -46,8 +46,9 @@ async function initializeKEK(): Promise<string> {
     
     // Known insecure KEK for development convenience
     // Anyone can see this, but that's fine for local development
-    const DEV_INSECURE_KEK = 'dev-insecure-kek-for-local-development-only-' + '0'.repeat(32)
-    return DEV_INSECURE_KEK.substring(0, 64) // 64 hex chars = 32 bytes
+    // MUST be valid 64-character hex string (32 bytes when decoded)
+    const DEV_INSECURE_KEK = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+    return DEV_INSECURE_KEK // 64 hex chars = 32 bytes
   }
 }
 
