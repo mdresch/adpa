@@ -68,17 +68,17 @@ export async function connectDatabase() {
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 30000, // Increased to 30 seconds for Railway
     })
     
     try {
       const client = await Promise.race([
         testPool.connect(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 10000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 30000)) // Increased to 30s
       ]) as any
       await Promise.race([
         client.query("SELECT NOW()"),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 5000))
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 15000)) // Increased to 15s
       ])
       client.release()
       
