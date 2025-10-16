@@ -104,7 +104,7 @@ export interface ContextualizedDocument {
   document_id: string
   original_document: GeneratedDocument
   contextualized_content: ContextualizedContent
-  injection_points: InjectionPoint[]
+  injection_points: InsertionPoint[]
   context_sources_used: ContextSource[]
   personalization_applied: PersonalizationInfo
   metadata: ContextualizationMetadata
@@ -121,12 +121,16 @@ export interface ContextualizedContent {
 
 export interface ContextEnhancedSection {
   section_id: string
+  section_type?: string
   original_content: string
   enhanced_content: string
   context_injected: InjectedContext[]
+  injected_context?: any[]
   enhancement_type: string
   quality_improvement: number
-  stakeholder_relevance: number
+  stakeholder_relevance?: number
+  stakeholder_alignment?: number
+  methodology_compliance?: number
 }
 
 export interface InjectedContext {
@@ -150,19 +154,32 @@ export interface PersonalizationResult {
 }
 
 export interface PersonalizationModification {
+  modification_id?: string
   modification_type: string
   target_section: string
   original_content: string
   modified_content: string
-  rationale: string
-  impact_score: number
+  rationale?: string
+  personalization_reason?: string
+  stakeholder_id?: string
+  confidence_score?: number
+  impact_score?: number
+  impact_assessment?: string
 }
 
 export interface StakeholderTargeting {
+  stakeholder_id?: string
   stakeholder_type: string
+  stakeholder_role?: string
   content_adaptations: ContentAdaptation[]
   relevance_improvement: number
   engagement_potential: number
+  targeted_content?: string
+  personalization_applied?: any[]
+  engagement_optimization?: any[]
+  communication_style?: string
+  content_focus?: any[]
+  formatting_preferences?: any[]
 }
 
 export interface ContentAdaptation {
@@ -228,11 +245,17 @@ export interface StakeholderAnalysis {
 export interface StakeholderInfo {
   stakeholder_id: string
   stakeholder_type: string
+  name?: string
   role: string
-  influence_level: number
-  interest_level: number
+  department?: string
+  influence_level: number | string
+  interest_level: number | string
   information_needs: string[]
-  communication_preferences: string[]
+  communication_preferences: string[] | Record<string, any>
+  expertise_areas?: string[]
+  decision_authority?: string
+  preferences?: Record<string, any>
+  context?: string
 }
 
 export interface ContentAlignment {
@@ -1491,14 +1514,15 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
           Focus on word choice, sentence structure, and communication style.
         `
         
-        const response = await this.aiService.generateContent({
+        const response = await this.aiService.generate({
           prompt,
+          provider: 'openai',
           model: 'gpt-4',
           temperature: 0.3,
           max_tokens: 1000
         })
         
-        if (response.success && response.content) {
+        if (response && response.content) {
           modifications.push({
             modification_id: `tone_${stakeholder.stakeholder_id}_${Date.now()}`,
             modification_type: 'tone',
@@ -1545,14 +1569,15 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
           Provide the updated content with terminology replacements.
         `
         
-        const response = await this.aiService.generateContent({
+        const response = await this.aiService.generate({
           prompt,
+          provider: 'openai',
           model: 'gpt-4',
           temperature: 0.2,
           max_tokens: 2000
         })
         
-        if (response.success && response.content) {
+        if (response && response.content) {
           modifications.push({
             modification_id: `terminology_${Date.now()}`,
             modification_type: 'terminology',
@@ -1638,12 +1663,14 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const stakeholder of projectStakeholders) {
         stakeholders.push({
           stakeholder_id: stakeholder.id || `proj_${Date.now()}_${Math.random()}`,
+          stakeholder_type: 'project',
           name: stakeholder.name,
           role: stakeholder.role,
           department: stakeholder.department,
           influence_level: stakeholder.influence_level || 'medium',
           interest_level: stakeholder.interest_level || 'medium',
-          communication_preferences: stakeholder.communication_preferences || {},
+          information_needs: stakeholder.information_needs || [],
+          communication_preferences: stakeholder.communication_preferences || [],
           expertise_areas: stakeholder.expertise_areas || [],
           decision_authority: stakeholder.decision_authority || 'none',
           preferences: stakeholder.preferences || {},
@@ -1655,12 +1682,14 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const stakeholder of organizationStakeholders) {
         stakeholders.push({
           stakeholder_id: stakeholder.id || `org_${Date.now()}_${Math.random()}`,
+          stakeholder_type: 'organization',
           name: stakeholder.name,
           role: stakeholder.position || stakeholder.role,
           department: stakeholder.department,
           influence_level: stakeholder.seniority_level === 'executive' ? 'high' : 'medium',
           interest_level: 'medium',
-          communication_preferences: {},
+          information_needs: [],
+          communication_preferences: [],
           expertise_areas: stakeholder.expertise || [],
           decision_authority: stakeholder.decision_authority || 'limited',
           preferences: {},
@@ -1672,12 +1701,14 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const audience of documentStakeholders) {
         stakeholders.push({
           stakeholder_id: `doc_${Date.now()}_${Math.random()}`,
+          stakeholder_type: 'document',
           name: audience.name || audience.role,
           role: audience.role,
           department: audience.department || 'Unknown',
           influence_level: audience.priority === 'primary' ? 'high' : 'medium',
           interest_level: 'high',
-          communication_preferences: audience.preferences || {},
+          information_needs: [],
+          communication_preferences: audience.preferences || [],
           expertise_areas: audience.expertise_areas || [],
           decision_authority: audience.decision_authority || 'none',
           preferences: audience.preferences || {},
@@ -1732,11 +1763,12 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const result of injectionResults) {
         if (result.injected_context && result.injected_context.length > 0) {
           contextEnhancedSections.push({
-            section_id: result.section_id,
+            section_id: result.section_id || '',
             section_type: result.section_type || 'content',
             original_content: result.original_content || '',
             enhanced_content: result.enhanced_content || '',
-            injected_context: result.injected_context,
+            context_injected: [],
+            injected_context: result.injected_context || [],
             enhancement_type: result.strategy_type as InjectionType,
             quality_improvement: result.quality_score || 0,
             stakeholder_alignment: result.stakeholder_alignment || 0,
@@ -1765,7 +1797,7 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       return {
         raw_content: enhancedContent,
         structured_content: {
-          sections: document.content.sections || [],
+          sections: Array.isArray(document.content.sections) ? document.content.sections : [],
           metadata: document.metadata || {},
           formatting_rules: [],
           content_adaptations: []
@@ -1798,7 +1830,7 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
     }
   }
 
-  private extractInjectionPoints(results: InjectionStrategyResult[]): InjectionPoint[] {
+  private extractInjectionPoints(results: InjectionStrategyResult[]): InsertionPoint[] {
     return []
   }
 
@@ -1830,11 +1862,19 @@ interface InjectionStrategyResult {
   success: boolean
   injections_made: number
   injected_content: string
+  injected_context?: any[]
   injection_points: string[]
   quality_improvement: number
   processing_time_ms: number
   cost: number
   metadata: Record<string, any>
+  section_id?: string
+  section_type?: string
+  original_content?: string
+  enhanced_content?: string
+  quality_score?: number
+  stakeholder_alignment?: number
+  methodology_compliance?: number
 }
 
 interface StrategyPerformance {
@@ -1871,30 +1911,39 @@ interface ContextualizationMetadata {
 }
 
 interface StructuredContextualContent {
-  [key: string]: any
+  sections: any[]
+  metadata: Record<string, any>
+  formatting_rules: any[]
+  content_adaptations: any[]
 }
 
 interface MethodologyAlignedContent {
-  [key: string]: any
+  framework_alignment: string
+  compliance_score: number
+  methodology_enhancements: any[]
+  best_practices_applied: any[]
 }
 
 interface BusinessContextIntegration {
-  [key: string]: any
+  industry_context: string
+  organizational_context: string
+  project_context: string
+  regulatory_context: string
 }
 
 interface StakeholderSpecificContent {
-  [key: string]: any
+  stakeholder_id: string
+  stakeholder_role: string
+  targeted_content: string
+  personalization_applied: any[]
+  engagement_optimization: any[]
+  communication_style: string
+  content_focus: any[]
+  formatting_preferences: any[]
 }
 
 interface FormattingRule {
   rule_type: string
   rule_value: any
   applicable_elements: string[]
-}
-
-interface ContentAdaptation {
-  adaptation_type: string
-  description: string
-  implementation: string
-  expected_impact: number
 }
