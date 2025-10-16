@@ -104,7 +104,7 @@ export interface ContextualizedDocument {
   document_id: string
   original_document: GeneratedDocument
   contextualized_content: ContextualizedContent
-  injection_points: InjectionPoint[]
+  injection_points: InsertionPoint[]
   context_sources_used: ContextSource[]
   personalization_applied: PersonalizationInfo
   metadata: ContextualizationMetadata
@@ -121,12 +121,16 @@ export interface ContextualizedContent {
 
 export interface ContextEnhancedSection {
   section_id: string
+  section_type?: string
   original_content: string
   enhanced_content: string
   context_injected: InjectedContext[]
+  injected_context?: any[]
   enhancement_type: string
   quality_improvement: number
-  stakeholder_relevance: number
+  stakeholder_relevance?: number
+  stakeholder_alignment?: number
+  methodology_compliance?: number
 }
 
 export interface InjectedContext {
@@ -150,19 +154,32 @@ export interface PersonalizationResult {
 }
 
 export interface PersonalizationModification {
+  modification_id?: string
   modification_type: string
   target_section: string
   original_content: string
   modified_content: string
-  rationale: string
-  impact_score: number
+  rationale?: string
+  personalization_reason?: string
+  stakeholder_id?: string
+  confidence_score?: number
+  impact_score?: number
+  impact_assessment?: string
 }
 
 export interface StakeholderTargeting {
+  stakeholder_id?: string
   stakeholder_type: string
+  stakeholder_role?: string
   content_adaptations: ContentAdaptation[]
   relevance_improvement: number
   engagement_potential: number
+  targeted_content?: string
+  personalization_applied?: any[]
+  engagement_optimization?: any[]
+  communication_style?: string
+  content_focus?: any[]
+  formatting_preferences?: any[]
 }
 
 export interface ContentAdaptation {
@@ -228,11 +245,17 @@ export interface StakeholderAnalysis {
 export interface StakeholderInfo {
   stakeholder_id: string
   stakeholder_type: string
+  name?: string
   role: string
-  influence_level: number
-  interest_level: number
+  department?: string
+  influence_level: number | string
+  interest_level: number | string
   information_needs: string[]
-  communication_preferences: string[]
+  communication_preferences: string[] | Record<string, any>
+  expertise_areas?: string[]
+  decision_authority?: string
+  preferences?: Record<string, any>
+  context?: string
 }
 
 export interface ContentAlignment {
@@ -308,6 +331,139 @@ export class ContextInjectionStage {
     this.initializeDefaultStrategies()
   }
 
+  /**
+   * Fetch project data from database and enrich context
+   */
+  private async enrichContextWithProjectData(projectId: string, context: ContextData): Promise<ContextData> {
+    try {
+      const projectResult = await pool.query(`
+        SELECT 
+          p.id,
+          p.name,
+          p.description,
+          p.status,
+          p.start_date,
+          p.end_date,
+          p.budget,
+          p.priority,
+          p.metadata,
+          p.created_at,
+          p.updated_at,
+          u.name as owner_name,
+          u.email as owner_email
+        FROM projects p
+        LEFT JOIN users u ON p.owner_id = u.id
+        WHERE p.id = $1
+      `, [projectId])
+
+      if (projectResult.rows.length > 0) {
+        const project = projectResult.rows[0]
+        
+        return {
+          ...context,
+          project_context: {
+            ...(context.project_context || {}),
+            project_id: project.id,
+            project_name: project.name,
+            project_description: project.description,
+            project_status: project.status,
+            start_date: project.start_date,
+            end_date: project.end_date,
+            budget: project.budget,
+            priority: project.priority,
+            owner: {
+              name: project.owner_name,
+              email: project.owner_email
+            },
+            metadata: project.metadata || {},
+            created_at: project.created_at,
+            updated_at: project.updated_at
+          }
+        }
+      }
+
+      return context
+    } catch (error) {
+      logger.error('Failed to fetch project data for context enrichment', { 
+        projectId, 
+        error: error instanceof Error ? {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        } : error
+      })
+      return context // Return original context if fetch fails
+    }
+  }
+
+  /**
+   * Fetch stakeholder data from database and enrich context
+   */
+  private async enrichContextWithStakeholders(projectId: string, context: ContextData): Promise<ContextData> {
+    try {
+      const stakeholderResult = await pool.query(`
+        SELECT 
+          id,
+          project_id,
+          name,
+          role,
+          organization,
+          email,
+          phone,
+          interest_level,
+          influence_level,
+          engagement_strategy,
+          communication_preferences,
+          expectations,
+          concerns,
+          metadata,
+          created_at
+        FROM stakeholders
+        WHERE project_id = $1
+        ORDER BY influence_level DESC, interest_level DESC
+      `, [projectId])
+
+      if (stakeholderResult.rows.length > 0) {
+        return {
+          ...context,
+          stakeholder_context: {
+            ...(context.stakeholder_context || {}),
+            stakeholders: stakeholderResult.rows.map(s => ({
+              id: s.id,
+              name: s.name,
+              role: s.role,
+              organization: s.organization,
+              email: s.email,
+              phone: s.phone,
+              interest_level: s.interest_level,
+              influence_level: s.influence_level,
+              engagement_strategy: s.engagement_strategy,
+              communication_preferences: s.communication_preferences,
+              expectations: s.expectations,
+              concerns: s.concerns,
+              metadata: s.metadata || {}
+            })),
+            total_stakeholders: stakeholderResult.rows.length,
+            high_influence: stakeholderResult.rows.filter(s => s.influence_level === 'high').length,
+            high_interest: stakeholderResult.rows.filter(s => s.interest_level === 'high').length
+          }
+        }
+      }
+
+      return context
+    } catch (error) {
+      logger.error('Failed to fetch stakeholder data for context enrichment', { 
+        projectId, 
+        error: error instanceof Error ? {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        } : error
+      })
+      return context // Return original context if fetch fails
+    }
+  }
+
   async execute(input: StageInput): Promise<StageOutput> {
     const startTime = Date.now()
 
@@ -340,21 +496,36 @@ export class ContextInjectionStage {
         throw new Error('Generated document not found in input data')
       }
 
+      // Enrich context with real project data from database
+      let enrichedContext = input.context
+      if (generatedDocument.project_id) {
+        logger.info('Enriching context with project data', { project_id: generatedDocument.project_id })
+        enrichedContext = await this.enrichContextWithProjectData(generatedDocument.project_id, enrichedContext)
+        
+        // Enrich with stakeholder data
+        if (config.enable_stakeholder_targeting) {
+          logger.info('Enriching context with stakeholder data', { project_id: generatedDocument.project_id })
+          enrichedContext = await this.enrichContextWithStakeholders(generatedDocument.project_id, enrichedContext)
+        }
+      }
+
       // Step 1: Analyze context and identify injection opportunities
       const injectionOpportunities = await this.analyzeInjectionOpportunities(
         generatedDocument,
-        input.context,
+        enrichedContext,
         config
       )
       logger.info('Injection opportunities identified', {
         opportunities: injectionOpportunities.length,
-        high_priority: injectionOpportunities.filter(o => o.priority >= 3).length
+        high_priority: injectionOpportunities.filter(o => o.priority >= 3).length,
+        project_data_available: !!enrichedContext.project_context,
+        stakeholder_data_available: !!enrichedContext.stakeholder_context
       })
 
       // Step 2: Select and execute injection strategies
       const injectionResults = await this.executeInjectionStrategies(
         generatedDocument,
-        input.context,
+        enrichedContext,
         injectionOpportunities,
         config
       )
@@ -367,7 +538,7 @@ export class ContextInjectionStage {
       const personalizationResult = await this.applyPersonalization(
         generatedDocument,
         injectionResults,
-        input.context,
+        enrichedContext,
         config
       )
       logger.info('Personalization applied', {
@@ -392,7 +563,7 @@ export class ContextInjectionStage {
         generatedDocument,
         injectionResults,
         personalizationResult,
-        input.context
+        enrichedContext
       )
 
       // Step 6: Assemble contextualized document
@@ -400,7 +571,7 @@ export class ContextInjectionStage {
         generatedDocument,
         injectionResults,
         personalizationResult,
-        input.context
+        enrichedContext
       )
 
       // Step 7: Calculate quality metrics
@@ -551,7 +722,11 @@ export class ContextInjectionStage {
           logger.warn('Injection strategy failed', {
             strategy_id: strategy.strategy_id,
             opportunity_id: opportunity.opportunity_id,
-            error: error.message
+            error: error instanceof Error ? {
+              message: error.message,
+              stack: error.stack,
+              name: error.name
+            } : error
           })
         }
       }
@@ -1357,14 +1532,15 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
           Focus on word choice, sentence structure, and communication style.
         `
         
-        const response = await this.aiService.generateContent({
+        const response = await this.aiService.generate({
           prompt,
+          provider: 'openai',
           model: 'gpt-4',
           temperature: 0.3,
           max_tokens: 1000
         })
         
-        if (response.success && response.content) {
+        if (response && response.content) {
           modifications.push({
             modification_id: `tone_${stakeholder.stakeholder_id}_${Date.now()}`,
             modification_type: 'tone',
@@ -1411,14 +1587,15 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
           Provide the updated content with terminology replacements.
         `
         
-        const response = await this.aiService.generateContent({
+        const response = await this.aiService.generate({
           prompt,
+          provider: 'openai',
           model: 'gpt-4',
           temperature: 0.2,
           max_tokens: 2000
         })
         
-        if (response.success && response.content) {
+        if (response && response.content) {
           modifications.push({
             modification_id: `terminology_${Date.now()}`,
             modification_type: 'terminology',
@@ -1504,12 +1681,14 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const stakeholder of projectStakeholders) {
         stakeholders.push({
           stakeholder_id: stakeholder.id || `proj_${Date.now()}_${Math.random()}`,
+          stakeholder_type: 'project',
           name: stakeholder.name,
           role: stakeholder.role,
           department: stakeholder.department,
           influence_level: stakeholder.influence_level || 'medium',
           interest_level: stakeholder.interest_level || 'medium',
-          communication_preferences: stakeholder.communication_preferences || {},
+          information_needs: stakeholder.information_needs || [],
+          communication_preferences: stakeholder.communication_preferences || [],
           expertise_areas: stakeholder.expertise_areas || [],
           decision_authority: stakeholder.decision_authority || 'none',
           preferences: stakeholder.preferences || {},
@@ -1521,12 +1700,14 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const stakeholder of organizationStakeholders) {
         stakeholders.push({
           stakeholder_id: stakeholder.id || `org_${Date.now()}_${Math.random()}`,
+          stakeholder_type: 'organization',
           name: stakeholder.name,
           role: stakeholder.position || stakeholder.role,
           department: stakeholder.department,
           influence_level: stakeholder.seniority_level === 'executive' ? 'high' : 'medium',
           interest_level: 'medium',
-          communication_preferences: {},
+          information_needs: [],
+          communication_preferences: [],
           expertise_areas: stakeholder.expertise || [],
           decision_authority: stakeholder.decision_authority || 'limited',
           preferences: {},
@@ -1538,12 +1719,14 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const audience of documentStakeholders) {
         stakeholders.push({
           stakeholder_id: `doc_${Date.now()}_${Math.random()}`,
+          stakeholder_type: 'document',
           name: audience.name || audience.role,
           role: audience.role,
           department: audience.department || 'Unknown',
           influence_level: audience.priority === 'primary' ? 'high' : 'medium',
           interest_level: 'high',
-          communication_preferences: audience.preferences || {},
+          information_needs: [],
+          communication_preferences: audience.preferences || [],
           expertise_areas: audience.expertise_areas || [],
           decision_authority: audience.decision_authority || 'none',
           preferences: audience.preferences || {},
@@ -1598,11 +1781,12 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       for (const result of injectionResults) {
         if (result.injected_context && result.injected_context.length > 0) {
           contextEnhancedSections.push({
-            section_id: result.section_id,
+            section_id: result.section_id || '',
             section_type: result.section_type || 'content',
             original_content: result.original_content || '',
             enhanced_content: result.enhanced_content || '',
-            injected_context: result.injected_context,
+            context_injected: [],
+            injected_context: result.injected_context || [],
             enhancement_type: result.strategy_type as InjectionType,
             quality_improvement: result.quality_score || 0,
             stakeholder_alignment: result.stakeholder_alignment || 0,
@@ -1631,7 +1815,7 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
       return {
         raw_content: enhancedContent,
         structured_content: {
-          sections: document.content.sections || [],
+          sections: Array.isArray(document.content.sections) ? document.content.sections : [],
           metadata: document.metadata || {},
           formatting_rules: [],
           content_adaptations: []
@@ -1664,7 +1848,7 @@ Return the engagement-optimized content that maximizes stakeholder interest and 
     }
   }
 
-  private extractInjectionPoints(results: InjectionStrategyResult[]): InjectionPoint[] {
+  private extractInjectionPoints(results: InjectionStrategyResult[]): InsertionPoint[] {
     return []
   }
 
@@ -1696,11 +1880,19 @@ interface InjectionStrategyResult {
   success: boolean
   injections_made: number
   injected_content: string
+  injected_context?: any[]
   injection_points: string[]
   quality_improvement: number
   processing_time_ms: number
   cost: number
   metadata: Record<string, any>
+  section_id?: string
+  section_type?: string
+  original_content?: string
+  enhanced_content?: string
+  quality_score?: number
+  stakeholder_alignment?: number
+  methodology_compliance?: number
 }
 
 interface StrategyPerformance {
@@ -1737,30 +1929,39 @@ interface ContextualizationMetadata {
 }
 
 interface StructuredContextualContent {
-  [key: string]: any
+  sections: any[]
+  metadata: Record<string, any>
+  formatting_rules: any[]
+  content_adaptations: any[]
 }
 
 interface MethodologyAlignedContent {
-  [key: string]: any
+  framework_alignment: string
+  compliance_score: number
+  methodology_enhancements: any[]
+  best_practices_applied: any[]
 }
 
 interface BusinessContextIntegration {
-  [key: string]: any
+  industry_context: string
+  organizational_context: string
+  project_context: string
+  regulatory_context: string
 }
 
 interface StakeholderSpecificContent {
-  [key: string]: any
+  stakeholder_id: string
+  stakeholder_role: string
+  targeted_content: string
+  personalization_applied: any[]
+  engagement_optimization: any[]
+  communication_style: string
+  content_focus: any[]
+  formatting_preferences: any[]
 }
 
 interface FormattingRule {
   rule_type: string
   rule_value: any
   applicable_elements: string[]
-}
-
-interface ContentAdaptation {
-  adaptation_type: string
-  description: string
-  implementation: string
-  expected_impact: number
 }

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { apiClient } from "@/lib/api"
 import { Loader2, Save, Key, CheckCircle, AlertCircle } from "lucide-react"
 
 export default function SettingsPage() {
@@ -28,12 +29,9 @@ export default function SettingsPage() {
   const loadSettings = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/settings/ai-gateway')
-      if (response.ok) {
-        const data = await response.json()
-        setGatewayEnabled(data.enabled || false)
-        setCurrentKeyMasked(data.api_key_masked || "Not configured")
-      }
+      const data = await apiClient.get('/settings/ai-gateway')
+      setGatewayEnabled(data.enabled || false)
+      setCurrentKeyMasked(data.api_key_masked || "Not configured")
     } catch (error) {
       console.error('Failed to load settings:', error)
     } finally {
@@ -46,25 +44,17 @@ export default function SettingsPage() {
     setMessage(null)
     
     try {
-      const response = await fetch('/api/settings/ai-gateway', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          api_key: gatewayApiKey,
-          enabled: gatewayEnabled
-        })
+      await apiClient.post('/settings/ai-gateway', {
+        api_key: gatewayApiKey,
+        enabled: gatewayEnabled
       })
 
-      if (response.ok) {
-        setMessage({ type: 'success', text: 'AI Gateway settings saved successfully!' })
-        setGatewayApiKey("") // Clear input
-        await loadSettings() // Reload to show masked key
-      } else {
-        const error = await response.json()
-        setMessage({ type: 'error', text: error.error || 'Failed to save settings' })
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Network error. Please try again.' })
+      setMessage({ type: 'success', text: 'AI Gateway settings saved successfully!' })
+      setGatewayApiKey("") // Clear input
+      await loadSettings() // Reload to show masked key
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to save settings'
+      setMessage({ type: 'error', text: errorMessage })
     } finally {
       setSaving(false)
     }

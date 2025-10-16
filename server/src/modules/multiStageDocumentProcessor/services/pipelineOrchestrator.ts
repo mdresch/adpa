@@ -417,15 +417,9 @@ export class PipelineOrchestrator {
 
   // Stage execution methods (these would delegate to actual stage implementations)
   private async executeContextGatheringStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual ContextGatheringStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { context: 'gathered' },
-      quality_score: 0.9,
-      processing_time: 1000,
-      metadata: { stage: 'context_gathering' }
-    }
+    const { ContextGatheringStage } = await import('../stages/contextGatheringStage')
+    const stage = new ContextGatheringStage()
+    return await stage.execute(input)
   }
 
   private async executeTemplateProcessingStage(input: StageInput): Promise<StageOutput> {
@@ -435,51 +429,27 @@ export class PipelineOrchestrator {
   }
 
   private async executeAIGenerationStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual AIGenerationStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'generated' },
-      quality_score: 0.8,
-      processing_time: 5000,
-      metadata: { stage: 'ai_generation' }
-    }
+    const { AIGenerationStage } = await import('../stages/aiGenerationStage')
+    const stage = new AIGenerationStage()
+    return await stage.execute(input)
   }
 
   private async executeContextInjectionStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual ContextInjectionStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'contextualized' },
-      quality_score: 0.9,
-      processing_time: 2000,
-      metadata: { stage: 'context_injection' }
-    }
+    const { ContextInjectionStage } = await import('../stages/contextInjectionStage')
+    const stage = new ContextInjectionStage()
+    return await stage.execute(input)
   }
 
   private async executeQualityAssuranceStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual QualityAssuranceStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'quality_assessed' },
-      quality_score: 0.95,
-      processing_time: 3000,
-      metadata: { stage: 'quality_assurance' }
-    }
+    const { QualityAssuranceStage } = await import('../stages/qualityAssuranceStage')
+    const stage = new QualityAssuranceStage()
+    return await stage.execute(input)
   }
 
   private async executeOutputFormattingStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual OutputFormattingStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'formatted' },
-      quality_score: 0.9,
-      processing_time: 1000,
-      metadata: { stage: 'output_formatting' }
-    }
+    const { OutputFormattingStage } = await import('../stages/outputFormattingStage')
+    const stage = new OutputFormattingStage()
+    return await stage.execute(input)
   }
 
   private async updateJobProgress(jobId: string, progress: number, currentStage?: string): Promise<void> {

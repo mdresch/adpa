@@ -1,10 +1,12 @@
 /**
- * AI Service - AI Gateway Integration
- * Uses Vercel AI SDK and AI Gateway for unified multi-provider access
- * Version: 3.0 - AI Gateway Only
+ * AI Service - AI Gateway Integration with Direct Provider Fallback
+ * Primary: Vercel AI SDK and AI Gateway for unified multi-provider access
+ * Fallback: Direct provider SDKs when AI Gateway unavailable
+ * Version: 3.1 - AI Gateway + Direct Fallback
  */
 
 import { generateText } from "ai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 
@@ -115,15 +117,102 @@ class AIService {
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
       logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
       
+      // FIXED: Use environment variable for AI Gateway (Vercel AI SDK requirement)
+      // The SDK reads from process.env.OPENAI_API_KEY automatically
+      // We temporarily set it in a try-finally block to minimize race condition window
+      logger.info('🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)')
+      
       // Use AI Gateway unified API (Vercel AI SDK)
       logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
-      const result = await generateText({
-        model: gatewayModelId,
-        prompt: processedPrompt,
-        temperature: request.temperature || 0.7,
-        maxTokens: request.max_tokens || 2000,
-      } as any)
+      logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
+      logger.info('🔑 [AI-SERVICE] API Key configured:', !!gatewayApiKey) // Don't log length (security)
+      
+      // FIXED: Vercel AI SDK looks for AI_GATEWAY_API_KEY environment variable!
+      // Documentation: https://vercel.com/docs/ai-gateway
+      // Temporarily set process.env for this request
+      const previousKey = process.env.AI_GATEWAY_API_KEY
+      process.env.AI_GATEWAY_API_KEY = gatewayApiKey
+      
+      let result
+      let gatewaySuccess = false
+      
+      try {
+        result = await generateText({
+          model: gatewayModelId,
+          prompt: processedPrompt,
+          temperature: request.temperature || 0.7,
+          maxTokens: request.max_tokens || 2000,
+        } as any)
+        gatewaySuccess = true
+      } catch (gatewayError: any) {
+        logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
+        logger.warn('⚠️ [AI-SERVICE] Gateway error:', gatewayError?.message || gatewayError)
+        
+        // Restore key before fallback
+        if (previousKey) {
+          process.env.AI_GATEWAY_API_KEY = previousKey
+        } else {
+          delete process.env.AI_GATEWAY_API_KEY
+        }
+        
+        // FALLBACK: Try direct Google AI
+        if (providerType === 'google') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Google AI...')
+          
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          if (!directApiKey) {
+            throw new Error('Direct Google AI API key not found in provider configuration')
+          }
+          
+          logger.info('✅ [AI-SERVICE] Direct Google AI API key found')
+          const genAI = new GoogleGenerativeAI(directApiKey)
+          const model = genAI.getGenerativeModel({ model: request.model || 'gemini-2.5-flash' })
+          
+          logger.info('🚀 [AI-SERVICE] Calling direct Google AI...')
+          const googleResult = await model.generateContent(processedPrompt)
+          const response = await googleResult.response
+          const text = response.text()
+          
+          logger.info('✅ [AI-SERVICE-7/8] Direct Google AI generation successful!')
+          logger.info('📝 [AI-SERVICE] Content length:', text.length, 'chars')
+          
+          // Estimate token usage (Google AI doesn't always provide it)
+          const estimatedTokens = Math.ceil((processedPrompt.length + text.length) / 4)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: estimatedTokens,
+          })
+          
+          logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+          
+          return {
+            content: text,
+            provider: request.provider,
+            model: request.model || 'gemini-2.5-flash',
+            usage: {
+              prompt_tokens: Math.ceil(processedPrompt.length / 4),
+              completion_tokens: Math.ceil(text.length / 4),
+              total_tokens: estimatedTokens,
+            },
+          }
+        }
+        
+        // No fallback available for this provider
+        throw gatewayError
+      } finally {
+        // Restore previous key if AI Gateway was used
+        if (gatewaySuccess) {
+          if (previousKey) {
+            process.env.AI_GATEWAY_API_KEY = previousKey
+          } else {
+            delete process.env.AI_GATEWAY_API_KEY
+          }
+        }
+      }
 
+      // AI Gateway success path
       logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
       logger.info('📊 [AI-SERVICE] Tokens used:', result.usage.totalTokens)
       logger.info('📝 [AI-SERVICE] Content length:', result.text.length, 'chars')
@@ -159,7 +248,7 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.5-flash',
+      'google': 'gemini-2.5-flash',  // Updated to available model in Vercel AI Gateway
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-sonnet-4',
