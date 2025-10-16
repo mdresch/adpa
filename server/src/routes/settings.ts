@@ -19,33 +19,33 @@ async function initializeKEK(): Promise<string> {
     return process.env.ENCRYPTION_KEK
   }
 
-  // Priority 2: Load from database (DEVELOPMENT fallback)
-  try {
-    const result = await pool.query(
-      `SELECT setting_value FROM system_settings WHERE setting_key = 'kek_master' LIMIT 1`
-    )
-
-    if (result.rows.length > 0 && result.rows[0].setting_value) {
-      logger.warn('⚠️  Using KEK from database (development only). Set ENCRYPTION_KEK env var for production!')
-      return result.rows[0].setting_value
-    }
-
-    // Priority 3: Generate new KEK and persist (DEVELOPMENT only)
-    const newKEK = crypto.randomBytes(32).toString('hex')
-    await pool.query(
-      `INSERT INTO system_settings (setting_key, setting_value, is_encrypted, updated_by)
-       VALUES ('kek_master', $1, false, 'system')
-       ON CONFLICT (setting_key) DO NOTHING`,
-      [newKEK]
-    )
+  // SECURITY FIX: Do NOT store KEK in database (defeats envelope encryption!)
+  // Storing the encryption key in the same database as encrypted data provides no security benefit
+  
+  const nodeEnv = process.env.NODE_ENV || 'development'
+  
+  if (nodeEnv === 'production') {
+    // PRODUCTION: KEK is REQUIRED in environment variable
+    logger.error('🚨 ========================================')
+    logger.error('🚨 CRITICAL SECURITY ERROR')
+    logger.error('🚨 ENCRYPTION_KEK environment variable REQUIRED in production')
+    logger.error('🚨 Cannot start server without proper encryption key')
+    logger.error('🚨 ========================================')
+    throw new Error('ENCRYPTION_KEK environment variable must be set in production. See server/docs/ENCRYPTION_KEY_MANAGEMENT.md')
+  } else {
+    // DEVELOPMENT ONLY: Use known insecure KEK
+    // This KEK is publicly visible and should NEVER be used in production
+    logger.warn('⚠️  ========================================')
+    logger.warn('⚠️  DEVELOPMENT MODE ONLY')
+    logger.warn('⚠️  Using INSECURE development KEK')
+    logger.warn('⚠️  DO NOT USE IN PRODUCTION!')
+    logger.warn('⚠️  Set ENCRYPTION_KEK environment variable for production')
+    logger.warn('⚠️  ========================================')
     
-    logger.warn('⚠️  Generated new KEK and persisted to database (development only)')
-    logger.warn('🔐 For production, set ENCRYPTION_KEK environment variable!')
-    return newKEK
-  } catch (error) {
-    logger.error('❌ Failed to initialize KEK from database:', error)
-    logger.error('🚨 CRITICAL: Using temporary KEK. All encrypted data will be lost on restart!')
-    return crypto.randomBytes(32).toString('hex')
+    // Known insecure KEK for development convenience
+    // Anyone can see this, but that's fine for local development
+    const DEV_INSECURE_KEK = 'dev-insecure-kek-for-local-development-only-' + '0'.repeat(32)
+    return DEV_INSECURE_KEK.substring(0, 64) // 64 hex chars = 32 bytes
   }
 }
 
