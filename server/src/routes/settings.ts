@@ -7,7 +7,9 @@ import crypto from "crypto"
 const router = express.Router()
 
 // Encryption helpers
-const ALGORITHM = 'aes-256-cbc'
+// Upgraded to AES-256-GCM for authenticated encryption (prevents tampering)
+// GCM provides both confidentiality AND authenticity
+const ALGORITHM = 'aes-256-gcm'
 let ENCRYPTION_KEY: string | null = null
 let KEK: string | null = null // Key Encryption Key
 
@@ -57,24 +59,40 @@ async function getKEK(): Promise<string> {
   return KEK
 }
 
-// Encrypt data with a key using AES-256-CBC
+// Encrypt data with a key using AES-256-GCM (authenticated encryption)
 function encryptWithKey(text: string, key: string): string {
   const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(key.slice(0, 32)), iv)
-  let encrypted = cipher.update(text)
+  // FIXED: Key is hex-encoded (64 chars = 32 bytes), use Buffer.from(key, 'hex')
+  const keyBuffer = Buffer.from(key, 'hex')
+  const cipher = crypto.createCipheriv('aes-256-gcm', keyBuffer, iv)
+  
+  let encrypted = cipher.update(text, 'utf8')
   encrypted = Buffer.concat([encrypted, cipher.final()])
-  return iv.toString('hex') + ':' + encrypted.toString('hex')
+  
+  // Get authentication tag (GCM provides authenticity)
+  const authTag = cipher.getAuthTag()
+  
+  // Return format: iv:ciphertext:authTag
+  return iv.toString('hex') + ':' + encrypted.toString('hex') + ':' + authTag.toString('hex')
 }
 
-// Decrypt data with a key using AES-256-CBC
+// Decrypt data with a key using AES-256-GCM
 function decryptWithKey(text: string, key: string): string {
   const parts = text.split(':')
-  const iv = Buffer.from(parts.shift()!, 'hex')
-  const encryptedText = Buffer.from(parts.join(':'), 'hex')
-  const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(key.slice(0, 32)), iv)
+  const iv = Buffer.from(parts[0], 'hex')
+  const encryptedText = Buffer.from(parts[1], 'hex')
+  const authTag = Buffer.from(parts[2], 'hex')
+  
+  // FIXED: Key is hex-encoded (64 chars = 32 bytes), use Buffer.from(key, 'hex')
+  const keyBuffer = Buffer.from(key, 'hex')
+  const decipher = crypto.createDecipheriv('aes-256-gcm', keyBuffer, iv)
+  
+  // Set authentication tag for verification
+  decipher.setAuthTag(authTag)
+  
   let decrypted = decipher.update(encryptedText)
   decrypted = Buffer.concat([decrypted, decipher.final()])
-  return decrypted.toString()
+  return decrypted.toString('utf8')
 }
 
 // Initialize encryption key - load from database (encrypted with KEK) or generate new one
