@@ -125,11 +125,11 @@ class AIService {
       logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
       logger.info('🔑 [AI-SERVICE] API Key configured:', !!gatewayApiKey) // Don't log length (security)
       
+      // FIXED: Vercel AI SDK looks for AI_GATEWAY_API_KEY environment variable!
+      // Documentation: https://vercel.com/docs/ai-gateway
       // Temporarily set process.env for this request
-      // NOTE: This has a tiny race condition window, but it's the only way
-      // the Vercel AI SDK works with AI Gateway
-      const previousKey = process.env.OPENAI_API_KEY
-      process.env.OPENAI_API_KEY = gatewayApiKey
+      const previousKey = process.env.AI_GATEWAY_API_KEY
+      process.env.AI_GATEWAY_API_KEY = gatewayApiKey
       
       let result
       try {
@@ -142,9 +142,9 @@ class AIService {
       } finally {
         // Restore previous key immediately
         if (previousKey) {
-          process.env.OPENAI_API_KEY = previousKey
+          process.env.AI_GATEWAY_API_KEY = previousKey
         } else {
-          delete process.env.OPENAI_API_KEY
+          delete process.env.AI_GATEWAY_API_KEY
         }
       }
 
