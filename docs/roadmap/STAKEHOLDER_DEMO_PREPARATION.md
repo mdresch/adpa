@@ -632,12 +632,15 @@ async function extractBaseline(documents: File[]) {
 **Week 3: Drift Detection (MUST HAVE)**
 ```typescript
 // Comparison algorithm
-function detectDrift(baseline, currentDocs) {
+async function detectDrift(baseline, currentDocs) {
   const current = await extractBaseline(currentDocs);
-  return {
-    scopeDrift: compareScopebaseline.scope, current.scope),
+  const drifts = {
+    scopeDrift: compareScope(baseline.scope, current.scope),
     budgetDrift: (current.budget - baseline.budget) / baseline.budget,
-    timelineDrift: compareTimelines(baseline.timeline, current.timeline),
+    timelineDrift: compareTimelines(baseline.timeline, current.timeline)
+  };
+  return {
+    ...drifts,
     severity: calculateSeverity(drifts)
   };
 }
