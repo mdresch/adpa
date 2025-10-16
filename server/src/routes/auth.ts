@@ -170,8 +170,10 @@ router.post("/login", async (req, res) => {
 
   log.info(`User logged in: ${email}`)
 
-    // Track login activity
-    trackActivity.login(user.id, token.substring(0, 20)) // Use token prefix as session ID
+    // Track login activity (skip in production until database schema is verified)
+    if (process.env.NODE_ENV !== 'production') {
+      trackActivity.login(user.id, token.substring(0, 20)) // Use token prefix as session ID
+    }
 
     return res.json({
       message: "Login successful",
@@ -214,8 +216,8 @@ router.get("/me", authenticateToken, async (req, res) => {
 router.post("/logout", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    // Track logout activity
-    if (req.user?.id) {
+    // Track logout activity (skip in production until database schema is verified)
+    if (req.user?.id && process.env.NODE_ENV !== 'production') {
       trackActivity.logout(req.user.id)
     }
 

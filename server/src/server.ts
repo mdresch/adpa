@@ -115,8 +115,13 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 // Analytics tracking middleware (tracks all API requests automatically)
 import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
-app.use(analyticsMiddleware)
-logger.info("📊 Analytics tracking middleware enabled")
+// Temporarily disable analytics in production until database schema is verified
+if (process.env.NODE_ENV !== 'production') {
+  app.use(analyticsMiddleware)
+  logger.info("📊 Analytics tracking middleware enabled")
+} else {
+  logger.warn("⚠️  Analytics tracking disabled in production (database schema issue)")
+}
 
 // Health check
 app.get("/health", (req, res) => {
