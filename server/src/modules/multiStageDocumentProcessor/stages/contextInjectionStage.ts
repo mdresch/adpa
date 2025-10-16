@@ -384,7 +384,14 @@ export class ContextInjectionStage {
 
       return context
     } catch (error) {
-      logger.error('Failed to fetch project data for context enrichment', { projectId, error: error.message })
+      logger.error('Failed to fetch project data for context enrichment', { 
+        projectId, 
+        error: error instanceof Error ? {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        } : error
+      })
       return context // Return original context if fetch fails
     }
   }
@@ -445,7 +452,14 @@ export class ContextInjectionStage {
 
       return context
     } catch (error) {
-      logger.error('Failed to fetch stakeholder data for context enrichment', { projectId, error: error.message })
+      logger.error('Failed to fetch stakeholder data for context enrichment', { 
+        projectId, 
+        error: error instanceof Error ? {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        } : error
+      })
       return context // Return original context if fetch fails
     }
   }
@@ -708,7 +722,11 @@ export class ContextInjectionStage {
           logger.warn('Injection strategy failed', {
             strategy_id: strategy.strategy_id,
             opportunity_id: opportunity.opportunity_id,
-            error: error.message
+            error: error instanceof Error ? {
+              message: error.message,
+              stack: error.stack,
+              name: error.name
+            } : error
           })
         }
       }
