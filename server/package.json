@@ -10,7 +10,8 @@
     "start": "tsx src/server.ts",
     "test": "jest",
     "lint": "eslint src --ext .ts",
-    "migrate": "node -r dotenv/config scripts/run-migrations.js"
+    "migrate": "node -r dotenv/config scripts/run-migrations.js",
+    "create-admin": "tsx scripts/create-admin-user.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",

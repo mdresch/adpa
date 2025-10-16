@@ -167,21 +167,42 @@ async function getEncryptionKey(): Promise<string> {
 async function encrypt(text: string): Promise<string> {
   const key = await getEncryptionKey()
   const iv = crypto.randomBytes(16)
-  const cipher = crypto.createCipheriv(ALGORITHM, Buffer.from(key.slice(0, 32)), iv)
-  let encrypted = cipher.update(text)
+  // FIXED: Use proper hex decoding and GCM mode
+  const keyBuffer = Buffer.from(key, 'hex')
+  const cipher = crypto.createCipheriv(ALGORITHM, keyBuffer, iv)
+  
+  let encrypted = cipher.update(text, 'utf8')
   encrypted = Buffer.concat([encrypted, cipher.final()])
-  return iv.toString('hex') + ':' + encrypted.toString('hex')
+  
+  // Get authentication tag (GCM mode)
+  const authTag = cipher.getAuthTag()
+  
+  // Return format: iv:ciphertext:authTag
+  return iv.toString('hex') + ':' + encrypted.toString('hex') + ':' + authTag.toString('hex')
 }
 
 async function decrypt(text: string): Promise<string> {
   const key = await getEncryptionKey()
   const parts = text.split(':')
-  const iv = Buffer.from(parts.shift()!, 'hex')
-  const encryptedText = Buffer.from(parts.join(':'), 'hex')
-  const decipher = crypto.createDecipheriv(ALGORITHM, Buffer.from(key.slice(0, 32)), iv)
+  
+  if (parts.length !== 3) {
+    throw new Error('Invalid encrypted data format (expected iv:ciphertext:authTag)')
+  }
+  
+  const iv = Buffer.from(parts[0], 'hex')
+  const encryptedText = Buffer.from(parts[1], 'hex')
+  const authTag = Buffer.from(parts[2], 'hex')
+  
+  // FIXED: Use proper hex decoding and GCM mode
+  const keyBuffer = Buffer.from(key, 'hex')
+  const decipher = crypto.createDecipheriv(ALGORITHM, keyBuffer, iv)
+  
+  // Set authentication tag for verification
+  decipher.setAuthTag(authTag)
+  
   let decrypted = decipher.update(encryptedText)
   decrypted = Buffer.concat([decrypted, decipher.final()])
-  return decrypted.toString()
+  return decrypted.toString('utf8')
 }
 
 function maskApiKey(key: string): string {
