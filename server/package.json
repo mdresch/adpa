@@ -11,7 +11,8 @@
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "migrate": "node -r dotenv/config scripts/run-migrations.js",
-    "create-admin": "tsx scripts/create-admin-user.ts"
+    "create-admin": "tsx scripts/create-admin-user.ts",
+    "fix-encryption": "tsx scripts/fix-encryption-migration.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
