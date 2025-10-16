@@ -291,7 +291,7 @@ curl -X POST http://localhost:5000/api/settings/ai-gateway \
   -H "Authorization: Bearer <YOUR_TOKEN>" \
   -H "Content-Type: application/json" \
   -d '{
-    "api_key": "vck_38EtPhxVHuISczLXTu59Tgq5F2uAlRJsu2rLYG0VQaLq6Js6F700wtAy",
+    "api_key": "vck_YOUR_AI_GATEWAY_API_KEY_HERE",
     "enabled": true
   }'
 ```
