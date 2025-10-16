@@ -115,20 +115,21 @@ class AIService {
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
       logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
       
-      // Set AI Gateway API key as environment variable for Vercel AI SDK
-      process.env.AI_GATEWAY_API_KEY = gatewayApiKey
-      logger.info('🔑 [AI-SERVICE] AI Gateway API key configured for Vercel AI Gateway')
+      // FIXED: Pass API key directly to generateText, not through global process.env
+      // This prevents race conditions when multiple concurrent requests occur
+      logger.info('🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe)')
       
       // Use AI Gateway unified API (Vercel AI SDK)
       logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
       logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
-      logger.info('🔑 [AI-SERVICE] API Key set:', process.env.AI_GATEWAY_API_KEY ? 'Yes (length: ' + process.env.AI_GATEWAY_API_KEY.length + ')' : 'No')
+      logger.info('🔑 [AI-SERVICE] API Key:', gatewayApiKey ? 'Configured (length: ' + gatewayApiKey.length + ')' : 'Missing')
       
       const result = await generateText({
         model: gatewayModelId,
         prompt: processedPrompt,
         temperature: request.temperature || 0.7,
         maxTokens: request.max_tokens || 2000,
+        apiKey: gatewayApiKey, // FIXED: Pass API key directly, not via process.env
       } as any)
 
       logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
