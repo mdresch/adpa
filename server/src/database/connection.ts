@@ -56,7 +56,40 @@ export async function connectDatabase() {
   const maxRetriesPerMethod = 1 // Reduced retries for Railway timeout
   const retryDelay = 3000 // Reduced to 3 seconds
   
-  // Try each connection method
+  // If DATABASE_URL is provided, try it first
+  if (databaseUrl) {
+    console.log(`🔌 Trying database connection via DATABASE_URL`)
+    const testPool = new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+        ? { rejectUnauthorized: false }
+        : false,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+    
+    try {
+      const client = await Promise.race([
+        testPool.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 10000))
+      ]) as any
+      await Promise.race([
+        client.query("SELECT NOW()"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 5000))
+      ])
+      client.release()
+      
+      pool = testPool
+      logger.info(`✅ Database connected successfully via DATABASE_URL`)
+      return
+    } catch (error) {
+      logger.warn(`Database connection via DATABASE_URL failed:`, { error: error.message })
+      await testPool.end().catch(() => {})
+    }
+  }
+  
+  // Try each connection method as fallback
   for (const method of connectionMethods) {
     console.log(`🔌 Trying database connection via ${method.description}: ${method.host}`)
     
