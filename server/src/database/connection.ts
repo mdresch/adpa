@@ -9,6 +9,8 @@ import { logger } from "../utils/logger"
 
 // Check if DATABASE_URL is provided (Railway, Heroku, etc.)
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
+console.log(`🔍 DATABASE_URL check: ${databaseUrl ? `Found (${databaseUrl.substring(0, 30)}...)` : 'Not found'}`)
+console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV}`)
 
 // Hybrid connection approach: try hostnames first, then IP addresses
 const connectionMethods = [
