@@ -43,7 +43,7 @@ When the **Baseline & Drift Detection System** (CR-2026-001) identifies drift, i
               ↓                         ↓
     ┌──────────────────┐      ┌──────────────────┐
     │ Update Baseline  │      │ Corrective Action│
-    │ Capture Value    │      │ Budget Realloc   │
+    │ Capture Value    │      │ Budget Reallocation│
     └──────────────────┘      └──────────────────┘
 ```
 
