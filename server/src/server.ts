@@ -69,10 +69,43 @@ const PORT = process.env.PORT || 5000
 
 // Middleware
 app.use(helmet())
+
+// CORS Configuration - Allow Vercel deployments
+const allowedOrigins = [
+  "http://localhost:3000",                    // Local development
+  "http://localhost:3001",                    // Alternative local port
+  process.env.FRONTEND_URL,                   // Configured frontend URL
+  /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
+  /https:\/\/adpa.*\.vercel\.app$/,          // ADPA Vercel deployments
+]
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true)
+      
+      // Check if origin matches any allowed pattern
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin
+        }
+        if (allowed instanceof RegExp) {
+          return allowed.test(origin)
+        }
+        return false
+      })
+      
+      if (isAllowed) {
+        callback(null, true)
+      } else {
+        logger.warn(`CORS blocked origin: ${origin}`)
+        callback(new Error(`Origin ${origin} not allowed by CORS`))
+      }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 )
 // assign a request id to each incoming request
@@ -82,8 +115,13 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 // Analytics tracking middleware (tracks all API requests automatically)
 import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
-app.use(analyticsMiddleware)
-logger.info("📊 Analytics tracking middleware enabled")
+// Temporarily disable analytics in production until database schema is verified
+if (process.env.NODE_ENV !== 'production') {
+  app.use(analyticsMiddleware)
+  logger.info("📊 Analytics tracking middleware enabled")
+} else {
+  logger.warn("⚠️  Analytics tracking disabled in production (database schema issue)")
+}
 
 // Health check
 app.get("/health", (req, res) => {
