@@ -86,7 +86,13 @@ export async function connectDatabase() {
       logger.info(`✅ Database connected successfully via DATABASE_URL`)
       return
     } catch (error) {
-      logger.warn(`Database connection via DATABASE_URL failed:`, { error: error.message })
+      console.error(`❌ DATABASE_URL connection error:`, error)
+      logger.error(`Database connection via DATABASE_URL failed:`, { 
+        error: error.message,
+        code: error.code,
+        detail: error.detail,
+        stack: error.stack
+      })
       await testPool.end().catch(() => {})
     }
   }
