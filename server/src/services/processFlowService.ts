@@ -132,6 +132,7 @@ class ProcessFlowService {
         FROM documents d
         LEFT JOIN templates t ON d.template_id = t.id
         WHERE d.project_id = $1
+          AND d.deleted_at IS NULL
         ORDER BY d.updated_at DESC
       `, [projectId])
       return result.rows

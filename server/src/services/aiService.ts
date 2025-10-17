@@ -40,7 +40,20 @@ export interface AIGenerateResponse {
   metadata?: any
 }
 
+interface ProviderBackoffState {
+  provider: string
+  failureCount: number
+  lastFailureTime: number
+  nextRetryTime: number
+}
+
 class AIService {
+  private providerBackoff: Map<string, ProviderBackoffState> = new Map()
+  private readonly INITIAL_BACKOFF_MS = 1000 // 1 second
+  private readonly MAX_BACKOFF_MS = 60000 // 60 seconds
+  private readonly BACKOFF_MULTIPLIER = 2
+  private readonly BACKOFF_JITTER = 0.1 // 10% jitter
+
   constructor() {
     logger.info("AI Service initialized - will fetch AI Gateway key from database")
   }
@@ -64,6 +77,182 @@ class AIService {
   // This method is kept for compatibility but does nothing
   async addProvider(provider: AIProvider) {
     logger.info(`Provider ${provider.name} (${provider.type}) registered in database`)
+  }
+
+  /**
+   * Calculate backoff delay for a provider based on failure count
+   */
+  private calculateBackoffDelay(failureCount: number): number {
+    // Exponential backoff: delay = initial * (multiplier ^ failureCount)
+    let delay = this.INITIAL_BACKOFF_MS * Math.pow(this.BACKOFF_MULTIPLIER, failureCount - 1)
+    
+    // Cap at max backoff
+    delay = Math.min(delay, this.MAX_BACKOFF_MS)
+    
+    // Add jitter to prevent thundering herd (±10%)
+    const jitter = delay * this.BACKOFF_JITTER * (Math.random() * 2 - 1)
+    delay = delay + jitter
+    
+    return Math.floor(delay)
+  }
+
+  /**
+   * Check if provider is available (not in backoff period)
+   */
+  private isProviderAvailable(provider: string): boolean {
+    const backoffState = this.providerBackoff.get(provider)
+    
+    if (!backoffState) {
+      return true // No backoff state, provider is available
+    }
+    
+    const now = Date.now()
+    if (now < backoffState.nextRetryTime) {
+      const waitTime = Math.ceil((backoffState.nextRetryTime - now) / 1000)
+      logger.info(`⏸️ [AI-BACKOFF] Provider ${provider} in backoff, retry in ${waitTime}s`)
+      return false
+    }
+    
+    return true
+  }
+
+  /**
+   * Record provider failure and update backoff state
+   */
+  private recordProviderFailure(provider: string): void {
+    const now = Date.now()
+    const existingState = this.providerBackoff.get(provider)
+    
+    const failureCount = existingState ? existingState.failureCount + 1 : 1
+    const backoffDelay = this.calculateBackoffDelay(failureCount)
+    const nextRetryTime = now + backoffDelay
+    
+    this.providerBackoff.set(provider, {
+      provider,
+      failureCount,
+      lastFailureTime: now,
+      nextRetryTime
+    })
+    
+    logger.warn(`⏸️ [AI-BACKOFF] Provider ${provider} failed (attempt ${failureCount}), backing off for ${Math.ceil(backoffDelay / 1000)}s`)
+  }
+
+  /**
+   * Reset backoff state for provider after successful request
+   */
+  private resetProviderBackoff(provider: string): void {
+    const existingState = this.providerBackoff.get(provider)
+    
+    if (existingState && existingState.failureCount > 0) {
+      logger.info(`✅ [AI-BACKOFF] Provider ${provider} recovered, resetting backoff (was ${existingState.failureCount} failures)`)
+      this.providerBackoff.delete(provider)
+    }
+  }
+
+  /**
+   * Get list of active providers from database, ordered by priority
+   */
+  private async getActiveProviders(): Promise<string[]> {
+    try {
+      const result = await pool.query(
+        `SELECT provider_type 
+         FROM ai_providers 
+         WHERE is_active = true 
+         ORDER BY priority ASC, name ASC`
+      )
+      
+      const providers = result.rows.map(row => row.provider_type)
+      logger.info(`📋 [AI-FALLBACK] Active providers available: ${providers.join(', ')}`)
+      return providers
+    } catch (error) {
+      logger.error('Failed to get active providers:', error)
+      // Return default fallback list if DB query fails
+      return ['google', 'mistral', 'groq']
+    }
+  }
+
+  /**
+   * Generate with automatic fallback to alternative providers
+   * Dynamically checks database for active providers with exponential backoff
+   */
+  async generateWithFallback(
+    request: AIGenerateRequest, 
+    fallbackProviders?: string[]
+  ): Promise<AIGenerateResponse & { providerUsed: string }> {
+    // Always get active providers from database for filtering
+    const activeProvidersFromDb = await this.getActiveProviders()
+    
+    // Build provider list
+    let availableProviders: string[]
+    if (fallbackProviders && fallbackProviders.length > 0) {
+      // Filter fallback list to only include active providers
+      availableProviders = fallbackProviders.filter(p => activeProvidersFromDb.includes(p))
+    } else {
+      availableProviders = activeProvidersFromDb
+    }
+    
+    // Check if requested provider is active
+    const isRequestedProviderActive = activeProvidersFromDb.includes(request.provider)
+    
+    // Build provider chain: only include requested provider if it's active
+    let providers: string[]
+    if (isRequestedProviderActive) {
+      providers = [request.provider, ...availableProviders.filter(p => p !== request.provider)]
+    } else {
+      logger.info(`⚠️ [AI-FALLBACK] Requested provider ${request.provider} is not active, using active providers only`)
+      providers = availableProviders
+    }
+    
+    // Filter out providers in backoff period
+    const providersBeforeBackoff = providers.length
+    providers = providers.filter(p => this.isProviderAvailable(p))
+    
+    if (providers.length < providersBeforeBackoff) {
+      const skipped = providersBeforeBackoff - providers.length
+      logger.info(`⏸️ [AI-BACKOFF] Skipped ${skipped} provider(s) in backoff period`)
+    }
+    
+    if (providers.length === 0) {
+      throw new Error('All active providers are currently in backoff period. Please try again later.')
+    }
+    
+    logger.info(`🔄 [AI-FALLBACK] Provider chain (active only): ${providers.join(' → ')}`)
+    
+    let lastError: Error | null = null
+    let attemptsWithBackoff = 0
+    
+    for (const provider of providers) {
+      try {
+        attemptsWithBackoff++
+        logger.info(`🔄 [AI-FALLBACK] Trying provider: ${provider} (attempt ${attemptsWithBackoff}/${providers.length})`)
+        
+        const result = await this.generate({ ...request, provider })
+        
+        // Success! Reset backoff for this provider
+        this.resetProviderBackoff(provider)
+        
+        logger.info(`✅ [AI-FALLBACK] Success with provider: ${provider}`)
+        return { ...result, providerUsed: provider }
+      } catch (error: any) {
+        logger.warn(`⚠️ [AI-FALLBACK] Provider ${provider} failed: ${error.message}`)
+        
+        // Record failure and apply backoff
+        this.recordProviderFailure(provider)
+        
+        lastError = error
+        
+        // Add delay between provider attempts (progressive backoff)
+        if (attemptsWithBackoff < providers.length) {
+          const delayMs = Math.min(1000 * attemptsWithBackoff, 5000) // Max 5s between attempts
+          logger.info(`⏳ [AI-FALLBACK] Waiting ${delayMs}ms before trying next provider...`)
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+        }
+      }
+    }
+    
+    // All providers failed
+    logger.error('❌ [AI-FALLBACK] All active providers failed')
+    throw lastError || new Error('All AI providers failed')
   }
 
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
@@ -97,8 +286,9 @@ class AIService {
     try {
       // Get provider type from database to build the model ID
       logger.info('🔍 [AI-SERVICE-4/8] Looking up provider type...')
+      // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
       const providerResult = await pool.query(
-        "SELECT provider_type, configuration FROM ai_providers WHERE name = $1 AND is_active = true",
+        "SELECT provider_type, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
         [request.provider]
       )
 
@@ -108,7 +298,7 @@ class AIService {
       }
 
       const providerType = providerResult.rows[0].provider_type
-      logger.info('✅ [AI-SERVICE-5/8] Provider type:', providerType)
+      logger.info('✅ [AI-SERVICE-5/8] Provider type:', providerType, 'for requested provider:', request.provider)
       
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
@@ -248,18 +438,40 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.5-flash',  // Updated to available model in Vercel AI Gateway
+      'google': 'gemini-2.5-flash',
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-sonnet-4',
       'azure': 'gpt-4',
     }
 
+    // Define provider-specific model families
+    const providerModelFamilies: Record<string, string[]> = {
+      'openai': ['gpt-', 'o1-', 'text-'],
+      'google': ['gemini-', 'palm-'],
+      'groq': ['llama', 'mixtral', 'gemma'],
+      'mistral': ['mistral-', 'codestral-', 'pixtral-', 'magistral-'],
+      'anthropic': ['claude-'],
+      'azure': ['gpt-', 'text-']
+    }
+
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
+    
+    // Check if the requested model is compatible with the provider
+    const compatibleFamilies = providerModelFamilies[providerType] || []
+    const isCompatible = compatibleFamilies.some(family => 
+      modelId.toLowerCase().includes(family.toLowerCase())
+    )
+    
+    // If model is incompatible, use provider's default model
+    if (!isCompatible && model) {
+      logger.warn(`⚠️ [AI-SERVICE] Model ${model} not compatible with ${providerType}, using default: ${defaultModels[providerType]}`)
+      modelId = defaultModels[providerType]
+    }
     
     // Handle deprecated Groq models
     const groqModelMapping: Record<string, string> = {
-      'gemma2-9b-it': 'llama3-8b-8192',  // Decommissioned, use llama3 instead
+      'gemma2-9b-it': 'llama3-8b-8192',
       'gemma-7b-it': 'llama3-8b-8192',
       'llama-3.2-90b-text-preview': 'llama-3.3-70b-versatile',
       'llama2-70b-4096': 'llama3-70b-8192',

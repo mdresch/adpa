@@ -6,16 +6,46 @@ import { aiService } from "./aiService"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
 
-// Create job queues with IP-first configuration
+// Helper function to parse Redis URL for Bull
+function parseBullRedisConfig() {
+  const redisUrl = process.env.REDIS_URL
+  
+  if (!redisUrl) {
+    // Fallback to localhost
+    return {
+      host: 'localhost',
+      port: 6379,
+      maxRetriesPerRequest: null,
+    }
+  }
+  
+  // Parse Upstash/cloud Redis URL (rediss://default:password@host:port)
+  try {
+    const url = new URL(redisUrl)
+    return {
+      host: url.hostname,
+      port: parseInt(url.port) || 6379,
+      password: url.password || undefined,
+      username: url.username !== 'default' ? url.username : undefined,
+      tls: url.protocol === 'rediss:' ? { rejectUnauthorized: false } : undefined,
+      maxRetriesPerRequest: null, // Important for cloud Redis
+      enableReadyCheck: false,
+    }
+  } catch (error) {
+    logger.error('Failed to parse REDIS_URL, using localhost', error)
+    return {
+      host: 'localhost',
+      port: 6379,
+      maxRetriesPerRequest: null,
+    }
+  }
+}
+
+const bullRedisConfig = parseBullRedisConfig()
+
+// Create job queues using parsed Redis configuration
 const aiQueueOptions = {
-  redis: {
-    host: "172.19.0.2", // Use IP address first to avoid DNS issues
-    port: Number.parseInt(process.env.REDIS_PORT || "6379"),
-    password: process.env.REDIS_PASSWORD,
-    db: Number.parseInt(process.env.REDIS_DB || "0"),
-    connectTimeout: 30000, // 30 seconds per attempt
-    lazyConnect: true,
-  },
+  redis: bullRedisConfig,
   defaultJobOptions: {
     removeOnComplete: 100,
     removeOnFail: 50,
@@ -30,14 +60,7 @@ const aiQueueOptions = {
 export const aiQueue = new Bull("ai-processing", aiQueueOptions)
 
 const documentQueueOptions = {
-  redis: {
-    host: "172.19.0.2", // Use IP address first to avoid DNS issues
-    port: Number.parseInt(process.env.REDIS_PORT || "6379"),
-    password: process.env.REDIS_PASSWORD,
-    db: Number.parseInt(process.env.REDIS_DB || "0"),
-    connectTimeout: 30000, // 30 seconds per attempt
-    lazyConnect: true,
-  },
+  redis: bullRedisConfig,
   defaultJobOptions: {
     removeOnComplete: 50,
     removeOnFail: 25,
@@ -50,6 +73,22 @@ const documentQueueOptions = {
 }
 
 export const documentQueue = new Bull("document-processing", documentQueueOptions)
+
+const pipelineQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 25,
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 5000,
+    },
+    timeout: 600000, // 10 minutes timeout for pipeline jobs
+  },
+}
+
+export const pipelineQueue = new Bull("pipeline-processing", pipelineQueueOptions)
 
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
@@ -291,6 +330,9 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
       case "document-convert":
         queue = documentQueue
         break
+      case "pipeline-processing":
+        queue = pipelineQueue
+        break
       default:
         throw new Error(`Unknown job type: ${type}`)
     }
@@ -424,6 +466,25 @@ documentQueue.on("completed", (job, result) => {
 
 documentQueue.on("failed", (job, err) => {
   logger.error(`Document job failed: ${job.id}`, err)
+})
+
+// Pipeline queue processor
+pipelineQueue.process("pipeline-processing", async (job) => {
+  const { processPipelineJob } = await import("../workers/pipelineWorker")
+  return await processPipelineJob(job)
+})
+
+// Pipeline queue event listeners
+pipelineQueue.on("completed", (job, result) => {
+  logger.info(`Pipeline job completed: ${job.id}`, { jobId: job.data.jobId })
+})
+
+pipelineQueue.on("failed", (job, err) => {
+  logger.error(`Pipeline job failed: ${job.id}`, { jobId: job.data.jobId, error: err.message })
+})
+
+pipelineQueue.on("progress", (job, progress) => {
+  logger.debug(`Pipeline job progress: ${job.id} - ${progress}%`)
 })
 
 // Initialize queues

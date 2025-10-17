@@ -7,6 +7,7 @@ import Joi from "joi"
 import { logger, childLogger } from "../utils/logger"
 import { getJobStatus, cancelJob, addJob } from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
+import AnalyticsTrackingService from "../services/analyticsTrackingService"
 
 const router = express.Router()
 
@@ -400,4 +401,138 @@ router.get("/admin/all",
 )
 
 export default router
+
+// Job details endpoint: returns enriched metadata from jobs table and analytics logs
+router.get(
+  "/:id/details",
+  authenticateToken,
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Fetch job
+      const jobResult = await pool.query(
+        `SELECT j.*, u.name as created_by_name, u.email as created_by_email
+         FROM jobs j
+         LEFT JOIN users u ON j.created_by = u.id
+         WHERE j.id = $1`,
+        [id]
+      )
+      if (jobResult.rows.length === 0) return res.status(404).json({ error: "Job not found" })
+      const job = jobResult.rows[0]
+
+      // Authorization: owner or admin
+      if (job.created_by !== req.user?.id && req.user?.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      // Stage executions (if pipeline job)
+      const stages = await pool.query(
+        `SELECT stage_id, stage_type, execution_time, quality_score, status, started_at, completed_at,
+                input_data, output_data
+         FROM stage_executions WHERE job_id = $1 ORDER BY started_at ASC`,
+        [id]
+      )
+
+      // AI usage tied to this job via request_id or response_metadata.jobId (best-effort)
+      const aiUsage = await pool.query(
+        `SELECT provider_type, model_name, request_type, input_tokens, output_tokens, total_tokens,
+                response_time_ms, success, estimated_cost, created_at, request_payload, response_metadata
+         FROM ai_usage_logs
+         WHERE (response_metadata->>'jobId') = $1 OR (request_payload->>'jobId') = $1
+         ORDER BY created_at ASC`,
+        [id]
+      )
+
+      // Job execution analytics (per-stage synthetic entries)
+      const jobExec = await pool.query(
+        `SELECT status, queue_name, duration_ms, success, created_at
+         FROM job_execution_logs
+         WHERE job_id = $1 OR job_id LIKE $2
+         ORDER BY created_at ASC`,
+        [id, `${id}:%`]
+      )
+
+      // Compose summary
+      const tokens = aiUsage.rows.reduce(
+        (acc, r) => {
+          acc.input += Number(r.input_tokens || 0)
+          acc.output += Number(r.output_tokens || 0)
+          acc.total += Number(r.total_tokens || 0)
+          acc.cost += Number(r.estimated_cost || 0)
+          return acc
+        },
+        { input: 0, output: 0, total: 0, cost: 0 }
+      )
+
+      // Attempt to infer compression metrics from AI usage metadata
+      const compression = aiUsage.rows.reduce(
+        (acc: any, r: any) => {
+          try {
+            const meta = r.response_metadata || {}
+            const req = r.request_payload || {}
+            const raw = Number(meta.rawTokens || req.rawTokens || 0)
+            const comp = Number(meta.compressedTokens || req.compressedTokens || 0)
+            const level = Number(meta.compressionLevel || req.compressionLevel || 0)
+            if (raw > 0 && comp >= 0) {
+              acc.raw += raw
+              acc.compressed += comp
+              if (level) acc.levels.push(level)
+            }
+          } catch (_) {}
+          return acc
+        },
+        { raw: 0, compressed: 0, levels: [] as number[] }
+      )
+      const compression_ratio = compression.raw > 0 ? (compression.compressed / compression.raw) : null
+      const avg_compression_level = compression.levels.length ? (compression.levels.reduce((a, b) => a + b, 0) / compression.levels.length) : null
+
+      // Build enriched steps from stage outputs where possible
+      const steps = stages.rows.map((s: any) => {
+        const outMeta = (s.output_data && s.output_data.metadata) ? s.output_data.metadata : null
+        const stepTokens = outMeta && outMeta.tokens ? outMeta.tokens : null
+        const stepCompression = outMeta && outMeta.compression ? outMeta.compression : null
+        return {
+          stage_id: s.stage_id,
+          stage_type: s.stage_type,
+          status: s.status,
+          execution_time: s.execution_time,
+          quality_score: s.quality_score,
+          started_at: s.started_at,
+          completed_at: s.completed_at,
+          tokens: stepTokens,
+          compression: stepCompression,
+        }
+      })
+
+      return res.json({
+        job,
+        stages: steps,
+        ai_usage: aiUsage.rows,
+        job_execution: jobExec.rows,
+        summary: {
+          tokens,
+          compression: {
+            raw_tokens: compression.raw || null,
+            compressed_tokens: compression.compressed || null,
+            ratio: compression_ratio,
+            avg_level: avg_compression_level,
+          },
+          stage_count: stages.rows.length,
+          started_at: job.started_at,
+          completed_at: job.completed_at,
+          duration_ms:
+            job.started_at && job.completed_at
+              ? Math.max(0, new Date(job.completed_at).getTime() - new Date(job.started_at).getTime())
+              : null,
+        },
+      })
+    } catch (error) {
+      log.error("Get job details error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
 

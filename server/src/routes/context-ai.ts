@@ -409,7 +409,7 @@ router.post("/providers/:id/configure",
       }
 
       // Update configuration if provided
-      if (configuration || contextWindow || maxTokens || temperature || topP || frequencyPenalty || presencePenalty) {
+      if (configuration || contextWindow || maxTokens || temperature || topP || frequencyPenalty || presencePenalty || api_key) {
         // Get existing configuration
         const existingConfig = await pool.query(
           "SELECT configuration FROM ai_providers WHERE id = $1",
@@ -423,7 +423,7 @@ router.post("/providers/:id/configure",
           existingConfigObj = typeof config === 'string' ? JSON.parse(config) : config
         }
 
-        // Merge configurations
+        // Merge configurations and ensure API key is synced
         const updatedConfig = {
           ...existingConfigObj,
           ...configuration,
@@ -436,6 +436,11 @@ router.post("/providers/:id/configure",
             ...(frequencyPenalty && { frequencyPenalty }),
             ...(presencePenalty && { presencePenalty })
           }
+        }
+
+        // If API key is being updated, sync it to configuration.apiKey
+        if (api_key) {
+          updatedConfig.apiKey = api_key
         }
 
         updateFields.push(`configuration = $${paramCount}`)

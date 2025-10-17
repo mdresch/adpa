@@ -78,10 +78,7 @@ interface Document {
 interface DocumentStats {
   totalDocuments: number
   byStatus: {
-    draft: number
-    review: number
-    approved: number
-    published: number
+    [key: string]: number
   }
   byTemplate: Array<{
     template_name: string
@@ -92,15 +89,18 @@ interface DocumentStats {
     framework: string
     count: number
   }>
-  recentActivity: Array<{
-    document_name: string
-    action: string
-    timestamp: string
-    user: string
-  }>
   totalWords: number
+  totalCharacters: number
   totalSize: number
-  avgProcessingTime: number
+  readingTimeMinutes: number
+  readingTimeFormatted: string
+  counts: {
+    published: number
+    generated: number
+    underReview: number
+    reviewed: number
+    draft: number
+  }
 }
 
 export default function ProjectDocuments({ params }: { params: { id: string } }) {
@@ -273,67 +273,6 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
-  // Calculate document statistics
-  const calculateStats = (docs: Document[]): DocumentStats => {
-    const byStatus = docs.reduce((acc, doc) => {
-      acc[doc.status as keyof typeof acc] = (acc[doc.status as keyof typeof acc] || 0) + 1
-      return acc
-    }, { draft: 0, review: 0, approved: 0, published: 0 })
-
-    const byTemplate = docs.reduce((acc, doc) => {
-      if (doc.template_name) {
-        const existing = acc.find(t => t.template_name === doc.template_name)
-        if (existing) {
-          existing.count++
-        } else {
-          acc.push({
-            template_name: doc.template_name,
-            template_framework: doc.template_framework || 'Unknown',
-            count: 1
-          })
-        }
-      }
-      return acc
-    }, [] as Array<{ template_name: string; template_framework: string; count: number }>)
-
-    const byFramework = docs.reduce((acc, doc) => {
-      const framework = doc.template_framework || 'Unknown'
-      const existing = acc.find(f => f.framework === framework)
-      if (existing) {
-        existing.count++
-      } else {
-        acc.push({ framework, count: 1 })
-      }
-      return acc
-    }, [] as Array<{ framework: string; count: number }>)
-
-    const recentActivity = docs
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 5)
-      .map(doc => ({
-        document_name: doc.name,
-        action: 'Updated',
-        timestamp: doc.updated_at,
-        user: doc.updated_by
-      }))
-
-    const totalWords = docs.reduce((sum, doc) => sum + (doc.word_count || 0), 0)
-    const totalSize = docs.reduce((sum, doc) => sum + (doc.file_size || 0), 0)
-    const avgProcessingTime = docs.length > 0 
-      ? docs.reduce((sum, doc) => sum + (parseFloat(doc.metadata?.processing_time?.replace('s', '') || '0')), 0) / docs.length
-      : 0
-
-    return {
-      totalDocuments: docs.length,
-      byStatus,
-      byTemplate,
-      byFramework,
-      recentActivity,
-      totalWords,
-      totalSize,
-      avgProcessingTime
-    }
-  }
 
   // Handle document upload
   const handleUploadDocument = () => {
@@ -462,19 +401,26 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
-  // Delete document
+  // Delete document (soft delete)
   const handleDeleteDocument = async (documentId: string) => {
-    if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+    if (!confirm("Are you sure you want to move this document to trash? You can restore it later from the Deleted Items page.")) {
       return
     }
     
     try {
       await apiClient.deleteDocument(documentId)
-      toast.success("Document deleted successfully!")
+      toast({
+        title: "Document moved to trash",
+        description: "You can restore it later from the Deleted Items page."
+      })
       await fetchDocuments()
     } catch (error) {
       console.error("Failed to delete document:", error)
-      toast.error("Failed to delete document")
+      toast({
+        title: "Error",
+        description: "Failed to move document to trash",
+        variant: "destructive"
+      })
     }
   }
 
@@ -522,12 +468,39 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }, [pagination.page, searchTerm, statusFilter, templateFilter])
 
-  // Calculate stats when documents change
+  // Fetch comprehensive stats (across all documents)
+  const fetchStats = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/documents/project/${projectId}/stats`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+
+      if (response.ok) {
+        const statsData = await response.json()
+        setStats(statsData)
+      } else {
+        console.error('Failed to fetch stats:', response.statusText)
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+  // Fetch stats when component mounts or when documents are updated
+  useEffect(() => {
+    if (projectId) {
+      fetchStats()
+    }
+  }, [projectId])
+
+  // Refetch stats after documents change (create, update, delete)
   useEffect(() => {
     if (documents.length > 0) {
-      setStats(calculateStats(documents))
+      fetchStats()
     }
-  }, [documents])
+  }, [documents.length])
 
   if (!isAuthenticated) {
     return (
@@ -606,11 +579,111 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         <Upload className="h-4 w-4 mr-2" />
                         Upload Document
                       </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => router.push(`/projects/${projectId}/documents/deleted`)}
+                        className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Deleted Items
+                      </Button>
                     </div>
                   </div>
                 </motion.div>
 
-                {/* Dashboard Stats */}
+                {/* Template Category Distribution - Featured at Top */}
+                {stats && stats.totalDocuments > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.1 }}
+                    className="mb-8"
+                  >
+                    <AnimatedCard className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="flex items-center space-x-2 text-xl">
+                              <PieChart className="h-6 w-6 text-blue-600" />
+                              <span>Template Category Distribution</span>
+                            </CardTitle>
+                            <CardDescription className="mt-1">
+                              Documents organized by category and template type
+                            </CardDescription>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-3xl font-bold text-blue-600">{stats.byTemplate.length}</div>
+                            <div className="text-sm text-muted-foreground">Templates Used</div>
+                          </div>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {stats.byTemplate.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {stats.byTemplate.map((template, index) => {
+                              const percentage = ((template.count / stats.totalDocuments) * 100).toFixed(1)
+                              const colors = [
+                                'bg-blue-500',
+                                'bg-purple-500',
+                                'bg-green-500',
+                                'bg-orange-500',
+                                'bg-pink-500',
+                                'bg-cyan-500',
+                                'bg-yellow-500',
+                                'bg-red-500',
+                              ]
+                              const color = colors[index % colors.length]
+                              
+                              return (
+                                <div key={index} className="bg-white rounded-lg p-4 border shadow-sm hover:shadow-md transition-shadow">
+                                  <div className="flex items-start justify-between mb-3">
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-2 mb-1">
+                                        <div className={`w-3 h-3 rounded-full ${color}`}></div>
+                                        <span className="text-sm font-semibold text-gray-900 line-clamp-2">
+                                          {template.template_name}
+                                        </span>
+                                      </div>
+                                      <Badge variant="outline" className="text-xs">
+                                        {template.template_framework}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between text-sm">
+                                      <span className="text-muted-foreground">Documents</span>
+                                      <span className="font-bold text-lg">{template.count}</span>
+                                    </div>
+                                    <Progress value={parseFloat(percentage)} className="h-2" />
+                                    <div className="text-xs text-muted-foreground text-right">
+                                      {percentage}% of total
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-12">
+                            <PieChart className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                            <h3 className="text-lg font-semibold mb-2">No Template Data Available</h3>
+                            <p className="text-muted-foreground text-sm mb-4">
+                              {stats.totalDocuments === 0 
+                                ? "No documents have been created yet."
+                                : "Documents in this project don't have templates assigned."
+                              }
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Tip: When uploading or generating documents, select a template to enable template tracking.
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </AnimatedCard>
+                  </motion.div>
+                )}
+
+                {/* Dashboard Stats - Comprehensive across ALL documents */}
                 {stats && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -618,98 +691,84 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                     transition={{ delay: 0.2 }}
                     className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
                   >
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-blue-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <FileText className="h-4 w-4 text-blue-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalDocuments}</div>
-                        <p className="text-xs text-muted-foreground">
-                          {stats.totalWords.toLocaleString()} total words
+                        <div className="text-3xl font-bold text-blue-600">{stats.totalDocuments}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          📊 {stats.totalWords.toLocaleString()} total words
+                        </p>
+                        <p className="text-xs text-blue-600 font-medium mt-1">
+                          Across all pages
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-green-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Published</CardTitle>
                         <CheckCircle className="h-4 w-4 text-green-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{stats.byStatus.published}</div>
-                        <p className="text-xs text-muted-foreground">
-                          {((stats.byStatus.published / stats.totalDocuments) * 100).toFixed(1)}% of total
+                        <div className="text-3xl font-bold text-green-600">{stats.counts.published}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.published / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
+                        </p>
+                        <p className="text-xs text-green-600 font-medium mt-1">
+                          Live documents
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-yellow-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">In Review</CardTitle>
+                        <CardTitle className="text-sm font-medium">Under Review</CardTitle>
                         <AlertCircle className="h-4 w-4 text-yellow-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{stats.byStatus.review}</div>
-                        <p className="text-xs text-muted-foreground">
-                          {((stats.byStatus.review / stats.totalDocuments) * 100).toFixed(1)}% of total
+                        <div className="text-3xl font-bold text-yellow-600">{stats.counts.underReview}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.underReview / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
+                        </p>
+                        <p className="text-xs text-yellow-600 font-medium mt-1">
+                          Awaiting approval
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-purple-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Size</CardTitle>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Reading Time</CardTitle>
+                        <Clock className="h-4 w-4 text-purple-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{formatFileSize(stats.totalSize)}</div>
-                        <p className="text-xs text-muted-foreground">
-                          Avg: {formatFileSize(stats.totalSize / stats.totalDocuments)}
+                        <div className="text-3xl font-bold text-purple-600">{stats.readingTimeFormatted}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.readingTimeMinutes.toLocaleString()} minutes total
+                        </p>
+                        <p className="text-xs text-purple-600 font-medium mt-1">
+                          @ 225 words/min
                         </p>
                       </CardContent>
                     </AnimatedCard>
                   </motion.div>
                 )}
 
-                {/* Metadata Dashboard */}
-                {stats && (
+                {/* Framework Distribution */}
+                {stats && stats.totalDocuments > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"
+                    className="mb-8"
                   >
-                    {/* Template Distribution */}
-                    <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <PieChart className="h-5 w-5" />
-                          <span>Template Distribution</span>
-                        </CardTitle>
-                        <CardDescription>
-                          Documents organized by template and framework
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {stats.byTemplate.map((template, index) => (
-                            <div key={index} className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                                <span className="text-sm font-medium">{template.template_name}</span>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm font-bold">{template.count}</div>
-                                <div className="text-xs text-muted-foreground">{template.template_framework}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </AnimatedCard>
-
-                    {/* Framework Distribution */}
                     <AnimatedCard>
                       <CardHeader>
                         <CardTitle className="flex items-center space-x-2">
@@ -721,22 +780,41 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="space-y-4">
-                          {stats.byFramework.map((framework, index) => (
-                            <div key={index} className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                                <span className="text-sm font-medium">{framework.framework}</span>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm font-bold">{framework.count}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {((framework.count / stats.totalDocuments) * 100).toFixed(1)}%
+                        {stats.byFramework.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {stats.byFramework.map((framework, index) => {
+                              const percentage = ((framework.count / stats.totalDocuments) * 100).toFixed(1)
+                              const colors = [
+                                'bg-purple-500',
+                                'bg-indigo-500',
+                                'bg-blue-500',
+                                'bg-teal-500',
+                              ]
+                              const color = colors[index % colors.length]
+                              
+                              return (
+                                <div key={index} className="bg-gradient-to-br from-white to-gray-50 rounded-lg p-4 border shadow-sm">
+                                  <div className="flex items-center space-x-2 mb-3">
+                                    <div className={`w-4 h-4 rounded-full ${color}`}></div>
+                                    <span className="text-sm font-semibold">{framework.framework}</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="text-3xl font-bold">{framework.count}</div>
+                                    <Progress value={parseFloat(percentage)} className="h-2" />
+                                    <div className="text-xs text-muted-foreground">
+                                      {percentage}% of total documents
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <p>No framework information available for documents.</p>
+                            <p className="text-sm mt-2">Documents may not have templates assigned yet.</p>
+                          </div>
+                        )}
                       </CardContent>
                     </AnimatedCard>
                   </motion.div>
@@ -824,13 +902,20 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               <div className="flex-1">
                                 <div className="flex items-center space-x-3 mb-2">
                                   <FileText className="h-5 w-5 text-muted-foreground" />
-                                  <h3 className="text-lg font-semibold">{document.name}</h3>
-                                  <div className={getStatusColor(document.status)}>
+                                  <div className="flex-1">
+                                    <h3 className="text-lg font-semibold">{document.name}</h3>
+                                    {document.template_name && (
+                                      <p className="text-sm text-blue-600 font-medium">
+                                        📋 {document.template_name}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <Badge className={getStatusColor(document.status)}>
                                     {document.status}
-                                  </div>
-                                  <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                                  </Badge>
+                                  <Badge variant="outline">
                                     v{document.version}
-                                  </div>
+                                  </Badge>
                                 </div>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">

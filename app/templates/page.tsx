@@ -192,10 +192,7 @@ export default function Templates() {
     }
   }, [editingTemplate, isDialogOpen])
   const [submitting, setSubmitting] = useState(false)
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
-  const [selectedTemplateForGeneration, setSelectedTemplateForGeneration] = useState<any | null>(null)
-  const [generatePrompt, setGeneratePrompt] = useState("")
-  const [generating, setGenerating] = useState(false)
+  // generation from Templates view removed; use Process Flow instead
   const [downloadingIds, setDownloadingIds] = useState<string[]>([])
   const [cloningIds, setCloningIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
@@ -260,42 +257,7 @@ export default function Templates() {
     }
   }
 
-  const openGenerateDialog = (template: any) => {
-    setSelectedTemplateForGeneration(template)
-    setGeneratePrompt(`Generate a document using the "${template.name || 'template'}" template.`)
-    setGenerateDialogOpen(true)
-  }
-
-  const handleGenerateSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    const template = selectedTemplateForGeneration
-    if (!template?.id) return
-    setGenerating(true)
-    try {
-      const response = await apiClient.generateContent({ prompt: generatePrompt, provider: 'openai', template_id: String(template.id) })
-      // response may be string or object
-      const content = typeof response === 'string' ? response : JSON.stringify(response, null, 2)
-      const blob = new Blob([content], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      const safeName = (template.name || 'generated').replace(/[^a-z0-9\-_.]/gi, '_')
-      a.href = url
-      a.download = `${safeName}-generated.txt`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      toast.success('Generation complete — download started')
-    } catch (err: any) {
-      console.error('Failed to generate from template', err)
-      toast.error(err?.message || 'Failed to generate from template')
-    } finally {
-      setGenerating(false)
-      setGenerateDialogOpen(false)
-      setSelectedTemplateForGeneration(null)
-      setGeneratePrompt("")
-    }
-  }
+  // (no generate dialog here)
 
   const loadTrash = async (page?: number) => {
     const p = page || trashPage
@@ -769,29 +731,7 @@ export default function Templates() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-                {/* Generate from Template Dialog */}
-                <Dialog open={generateDialogOpen} onOpenChange={(open) => { if (!open) { setGenerateDialogOpen(false); setSelectedTemplateForGeneration(null); setGeneratePrompt("") } }}>
-                  <DialogContent className="sm:max-w-[600px]">
-                    <form onSubmit={handleGenerateSubmit}>
-                      <DialogHeader>
-                        <DialogTitle>Generate From Template</DialogTitle>
-                        <DialogDescription>Provide a prompt to generate a document using this template.</DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        <div>
-                          <label className="text-sm font-medium">Prompt</label>
-                          <textarea aria-label="Generate prompt" placeholder="Provide instructions for the document generation" className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1" value={generatePrompt} onChange={(e) => setGeneratePrompt(e.target.value)} />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <div className="flex gap-2">
-                          <Button type="button" variant="outline" onClick={() => { setGenerateDialogOpen(false); setSelectedTemplateForGeneration(null); setGeneratePrompt("") }} disabled={generating}>Cancel</Button>
-                          <Button type="submit" disabled={generating}>{generating ? 'Generating...' : 'Generate'}</Button>
-                        </div>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
+                {/* Generate dialog removed */}
               </div>
             </div>
 
@@ -860,19 +800,19 @@ export default function Templates() {
                         <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Version:</span>
-                            <span className="font-medium">{template.version}</span>
+                            <span className="font-medium">{String((template?.content?.metadata?.version) || template.version || '—')}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Usage:</span>
-                            <span className="font-medium">{template.usage} times</span>
+                            <span className="font-medium">{Number(template?.usage_count ?? template?.usage ?? 0)} times</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Modified:</span>
-                            <span className="font-medium">{template.lastModified}</span>
+                            <span className="font-medium">{template?.updated_at ? new Date(template.updated_at).toLocaleString() : '—'}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Author:</span>
-                            <span className="font-medium">{template.author}</span>
+                            <span className="font-medium">{template?.created_by_name || template?.author || '—'}</span>
                           </div>
 
                           {/* AI Enhancement Information */}
@@ -898,10 +838,7 @@ export default function Templates() {
                               <Edit className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
-                            <Button size="sm" variant="secondary" onClick={() => openGenerateDialog(template)}>
-                              <Plus className="h-4 w-4 mr-1" />
-                              Generate
-                            </Button>
+                            {/* Generate button removed from Templates list; generation happens in Process Flow */}
                             <Button variant="outline" size="sm" onClick={() => handleClone(template)} disabled={cloningIds.includes(String(template.id))}>
                               <Copy className="h-4 w-4" />
                             </Button>
@@ -943,13 +880,13 @@ export default function Templates() {
                               </div>
                               <p className="text-sm text-muted-foreground">{template.description}</p>
                               <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1">
-                                <span>v{template.version}</span>
+                                <span>v{String((template?.content?.metadata?.version) || template.version || '—')}</span>
                                 <span>•</span>
-                                <span>{template.usage} uses</span>
+                                <span>{Number(template?.usage_count ?? template?.usage ?? 0)} uses</span>
                                 <span>•</span>
-                                <span>Modified {template.lastModified}</span>
+                                <span>Modified {template?.updated_at ? new Date(template.updated_at).toLocaleString() : '—'}</span>
                                 <span>•</span>
-                                <span>by {template.author}</span>
+                                <span>by {template?.created_by_name || template?.author || '—'}</span>
                               </div>
                             </div>
                           </div>
@@ -958,10 +895,7 @@ export default function Templates() {
                               <Edit className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
-                            <Button size="sm" variant="secondary" onClick={() => openGenerateDialog(template)}>
-                              <Plus className="h-4 w-4 mr-1" />
-                              Generate
-                            </Button>
+                            {/* Generate button removed in list view as well */}
                             <Button variant="outline" size="sm" onClick={() => handleClone(template)} disabled={cloningIds.includes(String(template.id))}>
                               <Copy className="h-4 w-4" />
                             </Button>

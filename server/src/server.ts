@@ -24,6 +24,7 @@ import documentRoutes from "./routes/documents"
 import userRoutes from "./routes/users"
 import aiRoutes from "./routes/ai"
 import aiProvidersRoutes from "./routes/ai-providers"
+import aiFailoverRoutes from "./routes/ai-failover"
 import analyticsRoutes from "./routes/analytics"
 import jobRoutes from "./routes/jobs"
 import securityRoutes from "./routes/security"
@@ -174,6 +175,7 @@ app.use("/api/documents", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/ai", aiRoutes)
 app.use("/api/ai-providers", aiProvidersRoutes)
+app.use("/api/ai-failover", aiFailoverRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
 app.use("/api/security", securityRoutes)

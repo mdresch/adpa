@@ -105,6 +105,7 @@ export default function ProjectDocumentViewer() {
   const [newComment, setNewComment] = useState("")
   const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
+  const [templateName, setTemplateName] = useState<string>("")
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -335,9 +336,25 @@ The ADPA system represents a significant advancement in document processing auto
           }
         }
         
+        // Fetch template name if template_id exists
+        if (documentData.template_id) {
+          try {
+            const templateResponse = await apiClient.get(`/templates/${documentData.template_id}`)
+            setTemplateName(templateResponse.name || 'Unknown Template')
+          } catch (error) {
+            console.error('Failed to fetch template name:', error)
+            setTemplateName('Unknown Template')
+          }
+        }
+        
         setDocument({...documentData, content: contentString})
         setVersions(versionsData)
         setEditedContent(contentString)
+        
+        // Extract TOC from real document content
+        if (contentString) {
+          extractTableOfContents(contentString)
+        }
       } catch (error) {
         console.error("Failed to load document:", error)
         
@@ -367,22 +384,22 @@ The ADPA system represents a significant advancement in document processing auto
     const headings: Array<{ id: string; text: string; level: number }> = []
     const lines = (typeof content === 'string' ? content : '').split('\n')
     
-    lines.forEach((line, index) => {
+    lines.forEach((line) => {
       const h1Match = line.match(/^#\s+(.+)$/)
       const h2Match = line.match(/^##\s+(.+)$/)
       const h3Match = line.match(/^###\s+(.+)$/)
       
       if (h1Match) {
-        const text = h1Match[1]
-        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const text = h1Match[1].replace(/\*/g, '').trim() // Remove markdown formatting
+        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 1 })
       } else if (h2Match) {
-        const text = h2Match[1]
-        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const text = h2Match[1].replace(/\*/g, '').trim()
+        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 2 })
       } else if (h3Match) {
-        const text = h3Match[1]
-        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const text = h3Match[1].replace(/\*/g, '').trim()
+        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 3 })
       }
     })
@@ -602,10 +619,14 @@ The ADPA system represents a significant advancement in document processing auto
   }
 
   return (
-    <div className="min-h-screen bg-background flex" style={{ scrollBehavior: 'smooth' }}>
-      <Sidebar />
+    <div className="h-screen bg-background flex overflow-hidden" style={{ scrollBehavior: 'smooth' }}>
+      <div className="flex-shrink-0">
+        <Sidebar />
+      </div>
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
+        <div className="flex-shrink-0">
+          <Header />
+        </div>
         <main className="flex-1 overflow-y-auto p-6">
           <PageTransition>
             <AnimatedLayout>
@@ -899,8 +920,8 @@ The ADPA system represents a significant advancement in document processing auto
                     </AnimatedCard>
                   </div>
 
-                  {/* Sidebar */}
-                  <div className="space-y-6">
+                  {/* Sidebar - Sticky */}
+                  <div className="space-y-6 sticky top-6 self-start">
                     {/* Table of Contents */}
                     {!isEditing && tableOfContents.length > 0 && (
                       <AnimatedCard>
@@ -981,10 +1002,10 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="font-medium">v{(document as any).version}</span>
                               </div>
                             )}
-                            {(document as any).template_id && (
+                            {((document as any).template_id || templateName) && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Template:</span>
-                                <span className="font-medium text-xs">{(document as any).template_id.substring(0, 8)}...</span>
+                                <span className="font-medium">{templateName || 'Loading...'}</span>
                               </div>
                             )}
                             {(document as any).framework && (
@@ -1050,15 +1071,27 @@ The ADPA system represents a significant advancement in document processing auto
                           <div className="text-sm">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Ratio:</span>
-                              <span className="font-medium">{document.compression_ratio}%</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.file_metrics?.compression_ratio 
+                                  ? ((document as any).metadata.file_metrics.compression_ratio).toFixed(3) 
+                                  : document.compression_ratio || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Original:</span>
-                              <span className="font-medium">{document.original_size}</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.file_metrics?.file_size_kb 
+                                  ? `${(document as any).metadata.file_metrics.file_size_kb} KB`
+                                  : document.original_size || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">Compressed:</span>
-                              <span className="font-medium">{document.compressed_size}</span>
+                              <span className="text-muted-foreground">File Size:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.file_metrics?.file_size_bytes 
+                                  ? `${((document as any).metadata.file_metrics.file_size_bytes / 1024).toFixed(2)} KB`
+                                  : document.compressed_size || 'N/A'}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1068,19 +1101,39 @@ The ADPA system represents a significant advancement in document processing auto
                           <div className="text-sm">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Model:</span>
-                              <span className="font-medium">{document.ai_model}</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.ai_usage?.model_used || 
+                                 document.ai_model || 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Provider:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.ai_usage?.provider_used || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Time:</span>
-                              <span className="font-medium">{document.processing_time}</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.pipeline?.total_duration_seconds 
+                                  ? `${(document as any).metadata.pipeline.total_duration_seconds}s`
+                                  : document.processing_time || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">Input Tokens:</span>
-                              <span className="font-medium">{document.input_tokens}</span>
+                              <span className="text-muted-foreground">Total Tokens:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.ai_usage?.total_tokens || 
+                                 ((document.input_tokens || 0) + (document.output_tokens || 0)) || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">Output Tokens:</span>
-                              <span className="font-medium">{document.output_tokens}</span>
+                              <span className="text-muted-foreground">Est. Cost:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata?.ai_usage?.estimated_cost_usd 
+                                  ? `$${(document as any).metadata.ai_usage.estimated_cost_usd}`
+                                  : 'N/A'}
+                              </span>
                             </div>
                           </div>
                         </div>
