@@ -1531,28 +1531,28 @@ function LandingPage() {
                     {
                       domain: "Project Management",
                       primer: "PMBOK 7th Edition",
-                      icon: "📋",
+                      icon: FileText,
                       topics: "Scope, Schedule, Budget, Risk, Stakeholders",
                       color: "from-blue-500 to-blue-600"
                     },
                     {
                       domain: "Business Analysis",
                       primer: "BABOK v3",
-                      icon: "📊",
+                      icon: TrendingUp,
                       topics: "Requirements, Processes, Enterprise Architecture",
                       color: "from-blue-600 to-blue-700"
                     },
                     {
                       domain: "Data Management",
                       primer: "DMBOK Framework",
-                      icon: "🗄️",
+                      icon: Activity,
                       topics: "Data Governance, Quality, Architecture, Security",
                       color: "from-blue-700 to-blue-800"
                     },
                     {
                       domain: "Strategic Planning",
                       primer: "Enterprise Strategy",
-                      icon: "🎯",
+                      icon: Zap,
                       topics: "Vision, Goals, KPIs, Portfolio Alignment",
                       color: "from-blue-800 to-blue-900"
                     }
@@ -1565,8 +1565,8 @@ function LandingPage() {
                       whileHover={{ y: -4, scale: 1.02 }}
                       className="p-5 rounded-xl border-2 border-blue-200 dark:border-blue-700 hover:shadow-lg transition-all duration-200 bg-white dark:bg-slate-800"
                     >
-                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${area.color} flex items-center justify-center text-3xl mb-4 shadow-lg`}>
-                        {area.icon}
+                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${area.color} flex items-center justify-center mb-4 shadow-lg`}>
+                        <area.icon className="h-8 w-8 text-white" />
                       </div>
                       <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-2">
                         {area.domain}
@@ -1583,7 +1583,9 @@ function LandingPage() {
 
                 <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border-2 border-blue-200 dark:border-blue-700">
                   <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center text-lg">
-                    <span className="text-2xl mr-3">🎓</span>
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center mr-3">
+                      <Brain className="h-5 w-5 text-white" />
+                    </div>
                     Context Building Intelligence
                   </h4>
                   <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
@@ -1619,61 +1621,61 @@ function LandingPage() {
                     {
                       stage: "1. OCR & Ingestion",
                       description: "Optical character recognition for scanned documents, PDFs, and images with format normalization",
-                      icon: "📄",
+                      icon: FileText,
                       color: "from-blue-400 to-blue-500"
                     },
                     {
                       stage: "2. Context Gathering",
                       description: "Collects relevant project documents, stakeholder information, and historical context",
-                      icon: "🔍",
+                      icon: Activity,
                       color: "from-blue-450 to-blue-550"
                     },
                     {
                       stage: "3. Topic Extraction",
                       description: "AI-driven topic analysis and domain-specific knowledge categorization across frameworks",
-                      icon: "🎯",
+                      icon: Zap,
                       color: "from-blue-500 to-blue-600"
                     },
                     {
                       stage: "4. Content Prioritization",
                       description: "Ranks content by relevance, importance, and impact using multi-dimensional scoring",
-                      icon: "📊",
+                      icon: TrendingUp,
                       color: "from-blue-550 to-blue-650"
                     },
                     {
                       stage: "5. Smart Compression",
                       description: "Topic-centric compression with domain primers, achieving 80% token reduction",
-                      icon: "🗜️",
+                      icon: Activity,
                       color: "from-blue-600 to-blue-700"
                     },
                     {
                       stage: "6. Context Injection",
                       description: "Injects compressed, domain-aware context into AI prompts for enhanced generation",
-                      icon: "💉",
+                      icon: Zap,
                       color: "from-blue-650 to-blue-750"
                     },
                     {
                       stage: "7. AI Generation",
                       description: "Multi-provider AI generation with framework-specific templates and guardrails",
-                      icon: "🤖",
+                      icon: Brain,
                       color: "from-blue-700 to-blue-800"
                     },
                     {
                       stage: "8. Quality Scoring",
                       description: "Knowledge output matrix scoring: completeness, accuracy, coherence, compliance",
-                      icon: "⭐",
+                      icon: CheckCircle,
                       color: "from-blue-750 to-blue-850"
                     },
                     {
                       stage: "9. Analytics & Reporting",
                       description: "Real-time metrics, cost analysis, quality dashboards, and ROI tracking",
-                      icon: "📈",
+                      icon: TrendingUp,
                       color: "from-blue-800 to-blue-900"
                     },
                     {
                       stage: "10. Enterprise Integration",
                       description: "Seamless export to SharePoint, Confluence, Jira, and enterprise document systems",
-                      icon: "🔗",
+                      icon: Activity,
                       color: "from-blue-900 to-slate-900"
                     }
                   ].map((stage, index) => (
@@ -1686,8 +1688,8 @@ function LandingPage() {
                       className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-700 hover:shadow-lg transition-all duration-200 bg-white dark:bg-slate-800"
                     >
                       <div className="flex items-start space-x-3">
-                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${stage.color} flex items-center justify-center text-xl shadow-lg flex-shrink-0`}>
-                          {stage.icon}
+                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${stage.color} flex items-center justify-center shadow-lg flex-shrink-0`}>
+                          <stage.icon className="h-6 w-6 text-white" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
@@ -1730,8 +1732,8 @@ function LandingPage() {
                     className="p-6 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700"
                   >
                     <div className="flex items-start space-x-4 mb-4">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-3xl shadow-lg flex-shrink-0">
-                        📊
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <TrendingUp className="h-8 w-8 text-white" />
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
@@ -1774,8 +1776,8 @@ function LandingPage() {
                     className="p-6 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border-2 border-blue-300 dark:border-blue-600"
                   >
                     <div className="flex items-start space-x-4 mb-4">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center text-3xl shadow-lg flex-shrink-0">
-                        💬
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <FileText className="h-8 w-8 text-white" />
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
@@ -1818,8 +1820,8 @@ function LandingPage() {
                     className="p-6 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border-2 border-blue-300 dark:border-blue-600"
                   >
                     <div className="flex items-start space-x-4 mb-4">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-3xl shadow-lg flex-shrink-0">
-                        🏗️
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <Activity className="h-8 w-8 text-white" />
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
@@ -1862,8 +1864,8 @@ function LandingPage() {
                     className="p-6 rounded-xl bg-gradient-to-br from-blue-200 to-blue-300 dark:from-blue-700/20 dark:to-blue-600/20 border-2 border-blue-400 dark:border-blue-500"
                   >
                     <div className="flex items-start space-x-4 mb-4">
-                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-800 to-slate-900 flex items-center justify-center text-3xl shadow-lg flex-shrink-0">
-                        👥
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-800 to-slate-900 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <Users className="h-8 w-8 text-white" />
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
@@ -1902,7 +1904,9 @@ function LandingPage() {
                 {/* Value Proposition Banner */}
                 <div className="bg-gradient-to-r from-blue-700 to-blue-900 rounded-xl p-8 text-white shadow-2xl">
                   <div className="flex items-center space-x-6">
-                    <div className="text-5xl">🎯</div>
+                    <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center">
+                      <Zap className="h-10 w-10 text-white" />
+                    </div>
                     <div className="flex-1">
                       <h4 className="font-bold text-2xl mb-3">Proactive Intelligence, Not Reactive Management</h4>
                       <p className="text-blue-100 leading-relaxed text-base">
