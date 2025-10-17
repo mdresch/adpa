@@ -268,7 +268,7 @@ export default function Dashboard() {
                     transition={{ delay: 0.4, duration: 0.5 }}
                     className="text-xl opacity-90 max-w-2xl"
                   >
-                    Advanced Document Processing & Automation Framework - Your intelligent business automation platform
+                    Advanced Document Processing Analytics - Where every document builds intelligence for the next generation
                   </motion.p>
                 </div>
                 <motion.div
@@ -282,6 +282,64 @@ export default function Dashboard() {
                   className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24"
                 />
               </motion.div>
+
+              {/* Compounding Intelligence Showcase */}
+              <AnimatedCard className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-emerald-500 to-cyan-600 rounded-lg"
+                    >
+                      <Brain className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">Compounding Intelligence Engine</CardTitle>
+                      <CardDescription>Each document enhances the intelligence of future generations</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1, duration: 0.6 }}
+                      className="text-center p-6 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200 dark:border-blue-800"
+                    >
+                      <div className="text-4xl mb-4">🧠</div>
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Context Injection</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Previous high-quality documents automatically inform new generations with relevant context
+                      </p>
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2, duration: 0.6 }}
+                      className="text-center p-6 rounded-xl bg-gradient-to-br from-purple-50 to-pink-100 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-800"
+                    >
+                      <div className="text-4xl mb-4">📊</div>
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Adaptive Compression</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Intelligent compression reduces token usage by up to 80% while preserving critical information
+                      </p>
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3, duration: 0.6 }}
+                      className="text-center p-6 rounded-xl bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-900/20 dark:to-teal-900/20 border border-emerald-200 dark:border-emerald-800"
+                    >
+                      <div className="text-4xl mb-4">🔄</div>
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Knowledge Graph</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Documents form interconnected knowledge networks that evolve and improve over time
+                      </p>
+                    </motion.div>
+                  </div>
+                </CardContent>
+              </AnimatedCard>
 
               {/* System Status Cards */}
               <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -416,6 +474,89 @@ export default function Dashboard() {
                       </motion.div>
                     ))}
                   </motion.div>
+                </CardContent>
+              </AnimatedCard>
+
+              {/* 6-Stage Processing Pipeline */}
+              <AnimatedCard className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"
+                    >
+                      <Activity className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">6-Stage Document Processing Pipeline</CardTitle>
+                      <CardDescription>Intelligent multi-stage processing for optimal document generation</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {[
+                      {
+                        stage: "1. Context Gathering",
+                        description: "Collects relevant project documents and stakeholder information",
+                        icon: "🔍",
+                        color: "from-blue-500 to-cyan-500"
+                      },
+                      {
+                        stage: "2. Content Prioritization",
+                        description: "Ranks content by relevance and importance for the target document",
+                        icon: "📊",
+                        color: "from-cyan-500 to-teal-500"
+                      },
+                      {
+                        stage: "3. Intelligent Compression",
+                        description: "Compresses context while preserving critical information (up to 80% reduction)",
+                        icon: "🗜️",
+                        color: "from-teal-500 to-green-500"
+                      },
+                      {
+                        stage: "4. Context Injection",
+                        description: "Injects compressed context into AI prompts for enhanced generation",
+                        icon: "💉",
+                        color: "from-green-500 to-lime-500"
+                      },
+                      {
+                        stage: "5. AI Generation",
+                        description: "Generates high-quality documents using multi-provider AI models",
+                        icon: "🤖",
+                        color: "from-lime-500 to-yellow-500"
+                      },
+                      {
+                        stage: "6. Quality Enhancement",
+                        description: "Post-processes and enhances generated content for consistency",
+                        icon: "✨",
+                        color: "from-yellow-500 to-orange-500"
+                      }
+                    ].map((stage, index) => (
+                      <motion.div
+                        key={stage.stage}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1, duration: 0.6 }}
+                        whileHover={{ y: -2, scale: 1.02 }}
+                        className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${stage.color} flex items-center justify-center text-lg shadow-lg`}>
+                            {stage.icon}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                              {stage.stage}
+                            </h4>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                              {stage.description}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
                 </CardContent>
               </AnimatedCard>
 
@@ -806,7 +947,7 @@ function LandingPage() {
             </h1>
             <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300 max-w-4xl mx-auto leading-relaxed">
               Transform your document workflows with AI-powered automation, intelligent processing, 
-              and seamless integrations. Boost productivity, ensure compliance, and scale your operations.
+              and seamless integrations. Experience compounding intelligence where every document enhances the next.
             </p>
           </motion.div>
 
@@ -829,35 +970,35 @@ function LandingPage() {
                   <Brain className="h-12 w-12 text-white" />
                 </div>
                 <h3 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">ADPA Framework</h3>
-                <p className="text-lg text-slate-600 dark:text-slate-300">Advanced Data Processing Automation</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">From raw data to real-time decisions</p>
+                <p className="text-lg text-slate-600 dark:text-slate-300">Advanced Document Processing Analytics</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Where knowledge compounds and intelligence evolves</p>
               </motion.div>
 
               {/* Four Segments in Grid Layout */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
                 {[
                   { 
-                    icon: "🔎", 
-                    title: "Analyze", 
-                    description: "Inventory sources & contracts\nProfile & validate data quality\nDefine KPIs & outcomes",
+                    icon: "🔍", 
+                    title: "Gather", 
+                    description: "Collect project documents\nExtract stakeholder context\nBuild knowledge foundation",
                     color: "from-indigo-500 to-blue-500"
                   },
                   { 
-                    icon: "📐", 
-                    title: "Design", 
-                    description: "Model schemas & transformations\nOrchestrate flow (batch/stream)\nGuardrails: security • governance • lineage",
+                    icon: "🧠", 
+                    title: "Process", 
+                    description: "6-stage intelligent pipeline\nContext compression & injection\nMulti-provider AI generation",
                     color: "from-cyan-500 to-teal-500"
                   },
                   { 
-                    icon: "⚙️", 
-                    title: "Process", 
-                    description: "Execute pipelines on scalable compute\nMonitor SLAs, cost, carbon\nAutomate incident response",
+                    icon: "📊", 
+                    title: "Analyze", 
+                    description: "Real-time analytics & insights\nToken usage optimization\nQuality metrics tracking",
                     color: "from-lime-500 to-green-500"
                   },
                   { 
-                    icon: "🔁", 
-                    title: "Adapt", 
-                    description: "Feedback loops & drift detection\nContinuous optimization (AutoML, tuning)\nVersioning, rollback, A/B",
+                    icon: "🔄", 
+                    title: "Evolve", 
+                    description: "Compounding intelligence\nKnowledge graph growth\nContinuous improvement",
                     color: "from-amber-500 to-orange-500"
                   }
                 ].map((segment, index) => (
@@ -887,10 +1028,10 @@ function LandingPage() {
               {/* Benefits Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mb-8">
                 {[
-                  { title: "Faster time-to-insight", icon: "⚡" },
-                  { title: "Lower run costs", icon: "💰" },
-                  { title: "Higher reliability", icon: "🛡️" },
-                  { title: "Compliant by design", icon: "✅" }
+                  { title: "80% token reduction", icon: "⚡" },
+                  { title: "Compounding intelligence", icon: "🧠" },
+                  { title: "Enterprise security", icon: "🛡️" },
+                  { title: "Real-time analytics", icon: "📊" }
                 ].map((benefit, index) => (
                   <motion.div
                     key={benefit.title}
@@ -917,7 +1058,7 @@ function LandingPage() {
               >
                 <div className="inline-flex items-center space-x-2 text-slate-600 dark:text-slate-400">
                   <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 rounded-full"></div>
-                  <span className="text-sm font-medium">Built for modern data and AI ops</span>
+                  <span className="text-sm font-medium">Built for intelligent document processing</span>
                   <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 rounded-full"></div>
                 </div>
               </motion.div>
@@ -956,16 +1097,16 @@ function LandingPage() {
             className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto"
           >
             <div className="text-center">
-              <div className="text-4xl font-bold text-blue-600 mb-2">10M+</div>
-              <div className="text-slate-600 dark:text-slate-300">Documents Processed</div>
+              <div className="text-4xl font-bold text-blue-600 mb-2">44K+</div>
+              <div className="text-slate-600 dark:text-slate-300">Tokens Processed</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-purple-600 mb-2">500+</div>
-              <div className="text-slate-600 dark:text-slate-300">Enterprise Clients</div>
+              <div className="text-4xl font-bold text-purple-600 mb-2">80%</div>
+              <div className="text-slate-600 dark:text-slate-300">Compression Efficiency</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-indigo-600 mb-2">99.9%</div>
-              <div className="text-slate-600 dark:text-slate-300">Uptime Guarantee</div>
+              <div className="text-4xl font-bold text-indigo-600 mb-2">6</div>
+              <div className="text-slate-600 dark:text-slate-300">Stage Pipeline</div>
             </div>
           </motion.div>
         </div>
@@ -1074,8 +1215,8 @@ function LandingPage() {
               Ready to Transform Your Workflow?
             </h2>
             <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-              Join thousands of teams already using ADPA to automate their document processes 
-              and boost productivity by 300%.
+              Experience the power of compounding intelligence where every document enhances the next generation. 
+              Join the evolution of intelligent document processing.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
