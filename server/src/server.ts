@@ -60,8 +60,30 @@ const app = express()
 const server = createServer(app)
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true)
+      
+      // Check if origin matches any allowed pattern
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin
+        }
+        if (allowed instanceof RegExp) {
+          return allowed.test(origin)
+        }
+        return false
+      })
+      
+      if (isAllowed) {
+        callback(null, true)
+      } else {
+        console.warn(`Socket.IO CORS blocked origin: ${origin}`)
+        callback(new Error(`Origin ${origin} not allowed by CORS`))
+      }
+    },
     methods: ["GET", "POST"],
+    credentials: true,
   },
 })
 
@@ -76,7 +98,9 @@ const allowedOrigins = [
   "http://localhost:3001",                    // Alternative local port
   process.env.FRONTEND_URL,                   // Configured frontend URL
   /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
-  /https:\/\/adpa.*\.vercel\.app$/,          // ADPA Vercel deployments
+  /https:\/\/adpa.*\.vercel\.app$/,           // ADPA Vercel deployments
+  "https://adpa.vercel.app",                  // Production Vercel domain
+  "https://adpa-production.up.railway.app",   // Railway frontend (if accessing directly)
 ]
 
 app.use(

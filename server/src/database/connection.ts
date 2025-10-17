@@ -7,6 +7,11 @@ if (process.env.NODE_ENV !== "production") {
 import { Pool } from "pg"
 import { logger } from "../utils/logger"
 
+// Check if DATABASE_URL is provided (Railway, Heroku, etc.)
+const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
+console.log(`🔍 DATABASE_URL check: ${databaseUrl ? `Found (${databaseUrl.substring(0, 30)}...)` : 'Not found'}`)
+console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV}`)
+
 // Hybrid connection approach: try hostnames first, then IP addresses
 const connectionMethods = [
   { host: process.env.DB_HOST || "localhost", description: `Environment hostname (${process.env.DB_HOST || 'localhost'})` },
@@ -16,6 +21,21 @@ const connectionMethods = [
 ]
 
 const createPool = (host: string) => {
+  // If DATABASE_URL is provided, use it directly
+  if (databaseUrl && host === connectionMethods[0].host) {
+    console.log('Using DATABASE_URL connection string')
+    return new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+        ? { rejectUnauthorized: false }
+        : false,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    })
+  }
+  
+  // Otherwise use individual connection parameters
   return new Pool({
     host: host,
     port: Number(process.env.DB_PORT) || 5432,
@@ -38,7 +58,46 @@ export async function connectDatabase() {
   const maxRetriesPerMethod = 1 // Reduced retries for Railway timeout
   const retryDelay = 3000 // Reduced to 3 seconds
   
-  // Try each connection method
+  // If DATABASE_URL is provided, try it first
+  if (databaseUrl) {
+    console.log(`🔌 Trying database connection via DATABASE_URL`)
+    const testPool = new Pool({
+      connectionString: databaseUrl,
+      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+        ? { rejectUnauthorized: false }
+        : false,
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 30000, // Increased to 30 seconds for Railway
+    })
+    
+    try {
+      const client = await Promise.race([
+        testPool.connect(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database connection timeout')), 30000)) // Increased to 30s
+      ]) as any
+      await Promise.race([
+        client.query("SELECT NOW()"),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database query timeout')), 15000)) // Increased to 15s
+      ])
+      client.release()
+      
+      pool = testPool
+      logger.info(`✅ Database connected successfully via DATABASE_URL`)
+      return
+    } catch (error) {
+      console.error(`❌ DATABASE_URL connection error:`, error)
+      logger.error(`Database connection via DATABASE_URL failed:`, { 
+        error: error.message,
+        code: error.code,
+        detail: error.detail,
+        stack: error.stack
+      })
+      await testPool.end().catch(() => {})
+    }
+  }
+  
+  // Try each connection method as fallback
   for (const method of connectionMethods) {
     console.log(`🔌 Trying database connection via ${method.description}: ${method.host}`)
     
