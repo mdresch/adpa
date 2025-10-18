@@ -59,20 +59,8 @@ export const templateValidationSchemas = {
       context_priority: Joi.string().valid('high', 'medium', 'low').default('medium'),
       metadata: Joi.object().optional()
     }).optional(),
-    prompt_build_up: Joi.object({
-      enabled: Joi.boolean().default(false),
-      stages: Joi.array().items(Joi.object({
-        stage_name: Joi.string().required(),
-        stage_type: Joi.string().valid('context_gathering', 'template_processing', 'ai_generation', 'post_processing').required(),
-        prompt_template: Joi.string().required(),
-        variables: Joi.array().items(Joi.string()).default([]),
-        dependencies: Joi.array().items(Joi.string()).optional(),
-        order: Joi.number().integer().min(1).required(),
-        enabled: Joi.boolean().default(true)
-      })).default([]),
-      final_format: Joi.string().valid('markdown', 'structured_json', 'plain_text', 'html').default('markdown'),
-      include_metadata: Joi.boolean().default(true)
-    }).optional(),
+    // Allow flexible prompt_build_up structure for different template builder versions
+    prompt_build_up: Joi.object().unknown(true).optional(),
     template_paragraphs: Joi.array().items(Joi.object({
       section_name: Joi.string().required(),
       section_type: Joi.string().valid("header", "paragraph", "list", "table", "code_block", "summary", "conclusion").required(),
@@ -119,20 +107,8 @@ export const templateValidationSchemas = {
       context_priority: Joi.string().valid('high', 'medium', 'low').default('medium'),
       metadata: Joi.object().optional()
     }).optional(),
-    prompt_build_up: Joi.object({
-      enabled: Joi.boolean().default(false),
-      stages: Joi.array().items(Joi.object({
-        stage_name: Joi.string().required(),
-        stage_type: Joi.string().valid('context_gathering', 'template_processing', 'ai_generation', 'post_processing').required(),
-        prompt_template: Joi.string().required(),
-        variables: Joi.array().items(Joi.string()).default([]),
-        dependencies: Joi.array().items(Joi.string()).optional(),
-        order: Joi.number().integer().min(1).required(),
-        enabled: Joi.boolean().default(true)
-      })).default([]),
-      final_format: Joi.string().valid('markdown', 'structured_json', 'plain_text', 'html').default('markdown'),
-      include_metadata: Joi.boolean().default(true)
-    }).optional(),
+    // Allow flexible prompt_build_up structure for different template builder versions
+    prompt_build_up: Joi.object().unknown(true).optional(),
     template_paragraphs: Joi.array().items(Joi.object({
       section_name: Joi.string().required(),
       section_type: Joi.string().valid("header", "paragraph", "list", "table", "code_block", "summary", "conclusion").required(),

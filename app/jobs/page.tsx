@@ -585,8 +585,22 @@ export default function JobMonitorPage() {
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end">
-                                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                                        <DropdownMenuItem>View Logs</DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={(e) => {
+                                            e.preventDefault()
+                                            setSelectedJob(prev => (prev === job.id ? null : job.id))
+                                          }}
+                                        >
+                                          View Details
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={(e) => {
+                                            e.preventDefault()
+                                            setSelectedJob(prev => (prev === job.id ? null : job.id))
+                                          }}
+                                        >
+                                          View Logs
+                                        </DropdownMenuItem>
                                         {job.status === "running" && <DropdownMenuItem>Pause Job</DropdownMenuItem>}
                                         {job.status === "failed" && <DropdownMenuItem>Retry Job</DropdownMenuItem>}
                                         <DropdownMenuItem className="text-red-600">Cancel Job</DropdownMenuItem>
@@ -595,6 +609,54 @@ export default function JobMonitorPage() {
                                   </div>
                                 </CardContent>
                               </Card>
+                              {selectedJob === job.id && (
+                                <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                    <div>
+                                      <p className="text-muted-foreground">Job ID</p>
+                                      <p className="font-mono break-all">{job.id}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Queue</p>
+                                      <p className="font-medium">{job.queue || "-"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Priority</p>
+                                      <p className="font-medium capitalize">{job.priority}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Started</p>
+                                      <p className="font-medium">{job.startTime ? new Date(job.startTime).toLocaleString() : "-"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Completed</p>
+                                      <p className="font-medium">{job.completedTime ? new Date(job.completedTime).toLocaleString() : "-"}</p>
+                                    </div>
+                                    <div>
+                                      <p className="text-muted-foreground">Status</p>
+                                      <p className="font-medium capitalize">{job.status}</p>
+                                    </div>
+                                  </div>
+                                  {job.logs && job.logs.length > 0 && (
+                                    <div className="mt-4">
+                                      <p className="text-sm text-muted-foreground mb-2">Logs</p>
+                                      <div className="max-h-56 overflow-auto rounded-md bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 p-3 text-xs space-y-1">
+                                        {job.logs.map((line, i) => (
+                                          <pre key={i} className="whitespace-pre-wrap break-words">{line}</pre>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  )}
+                                  {job.error && (
+                                    <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm">
+                                      <div className="flex items-center space-x-2">
+                                        <AlertTriangle className="h-4 w-4 text-red-500" />
+                                        <p className="text-red-700 dark:text-red-300">{job.error}</p>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </AnimatedGridItemWithDelay>
                           ))}
                         </div>

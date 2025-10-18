@@ -79,6 +79,33 @@ export class ContextGatheringStage {
 
       const processingTime = Date.now() - startTime
 
+      // 🔍 DEBUG: Log what context was gathered
+      logger.info('📊 CONTEXT GATHERING DEBUG', {
+        project_id,
+        template_id,
+        sources_accessed: gatheringResult.gathering_metrics.total_sources_accessed,
+        context_data_keys: Object.keys(gatheringResult.context_data || {}),
+        context_size_bytes: JSON.stringify(gatheringResult.context_data).length,
+        quality_score: gatheringResult.quality_analysis.overall_quality_score,
+        has_project_data: !!gatheringResult.context_data?.project,
+        has_documents: !!gatheringResult.context_data?.documents,
+        document_count: gatheringResult.context_data?.documents?.length || 0
+      })
+
+      // 🔍 DEBUG: Log sample of gathered context
+      if (gatheringResult.context_data?.documents?.length > 0) {
+        logger.info('📄 GATHERED DOCUMENTS SAMPLE', {
+          project_id,
+          sample_documents: gatheringResult.context_data.documents.slice(0, 3).map(doc => ({
+            name: doc.name || 'unnamed',
+            content_length: doc.content?.length || 0,
+            content_preview: doc.content?.substring(0, 100) || 'no content'
+          }))
+        })
+      } else {
+        logger.warn('⚠️ NO DOCUMENTS GATHERED', { project_id })
+      }
+
       // Prepare context bundle for pipeline
       const contextBundle = {
         bundle_id: `bundle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,

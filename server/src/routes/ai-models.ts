@@ -874,7 +874,52 @@ async function testAuthentication(provider: any, config: any, startTime: number)
       }
     }
     
-    const apiKey = config.apiKey
+    // Try to get API key from multiple sources in order of preference:
+    // 1. config.apiKey (direct configuration)
+    // 2. provider.api_key_encrypted (individual provider key, base64 encoded)
+    // 3. AI Gateway key from system_settings (fallback for AI Gateway providers)
+    let apiKey = config.apiKey || config.api_key
+    
+    // Check for api_key_encrypted field (base64 encoded)
+    if (!apiKey && provider.api_key_encrypted) {
+      try {
+        apiKey = Buffer.from(provider.api_key_encrypted, 'base64').toString('utf-8')
+        logger.info(`Using provider's encrypted API key for ${providerType} authentication test`)
+      } catch (error) {
+        logger.warn(`Failed to decode api_key_encrypted for ${providerType}:`, error.message)
+      }
+    }
+    
+    // If still no API key, try AI Gateway key as fallback
+    if (!apiKey) {
+      try {
+        const gatewayResult = await pool.query(
+          `SELECT setting_value, is_encrypted 
+           FROM system_settings 
+           WHERE setting_key = 'ai_gateway_api_key' 
+           LIMIT 1`
+        )
+        
+        if (gatewayResult.rows.length > 0) {
+          const setting = gatewayResult.rows[0]
+          let gatewayKey = setting.setting_value
+          
+          if (setting.is_encrypted && gatewayKey) {
+            // Import decrypt function from settings
+            const { decrypt } = await import('./settings')
+            gatewayKey = await decrypt(gatewayKey)
+          }
+          
+          if (gatewayKey && gatewayKey.length > 0) {
+            apiKey = gatewayKey
+            logger.info(`Using AI Gateway API key for ${providerType} authentication test`)
+          }
+        }
+      } catch (error) {
+        logger.warn(`Failed to get AI Gateway key for ${providerType}:`, error.message)
+      }
+    }
+    
     if (!apiKey) {
       throw new Error("No API key configured")
     }

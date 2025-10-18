@@ -1337,6 +1337,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                   <Edit className="h-4 w-4 mr-2" />
                   Edit Project
                 </Button>
+                <Button variant="outline" asChild>
+                  <Link href={`/projects/${projectId}/documents`}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Document Library
+                  </Link>
+                </Button>
                 <Dialog open={createDialogOpen} onOpenChange={(open) => {
                   setCreateDialogOpen(open)
                   if (open) {

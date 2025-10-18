@@ -130,14 +130,29 @@ router.post('/:name/configure', async (req, res) => {
     const { name } = req.params
     const { api_key, configuration, is_active } = req.body
 
-    // Check if provider exists
+    // Check if provider exists and get current configuration
     const existingProvider = await pool.query(
-      'SELECT id FROM ai_providers WHERE name = $1',
+      'SELECT id, configuration FROM ai_providers WHERE name = $1',
       [name]
     )
 
     if (existingProvider.rows.length === 0) {
       return res.status(404).json({ error: 'Provider not found' })
+    }
+
+    // Merge configurations and ensure API key is synced
+    let updatedConfiguration = existingProvider.rows[0].configuration || {}
+    
+    if (configuration) {
+      updatedConfiguration = {
+        ...updatedConfiguration,
+        ...configuration
+      }
+    }
+    
+    // If API key is being updated, sync it to both fields
+    if (api_key) {
+      updatedConfiguration.apiKey = api_key
     }
 
     let updateQuery = `
@@ -154,9 +169,10 @@ router.post('/:name/configure', async (req, res) => {
       paramIndex++
     }
 
-    if (configuration) {
+    // Always update configuration if api_key or configuration was provided
+    if (api_key || configuration) {
       updateQuery += `, configuration = $${paramIndex}`
-      updateParams.push(JSON.stringify(configuration))
+      updateParams.push(JSON.stringify(updatedConfiguration))
       paramIndex++
     }
 
