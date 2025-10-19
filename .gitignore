@@ -102,7 +102,7 @@ server/src/routes/azure-ai-foundry.ts
 # Frontend experimental pages
 app/ai-analytics/
 app/ecs-ai/
-app/process-flow/
+# app/process-flow/  # NOW ENABLED FOR PRODUCTION
 
 # UI components and styles (experimental)
 # components/ui/icons-shim.tsx  # NOW ENABLED FOR PRODUCTION

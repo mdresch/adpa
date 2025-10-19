@@ -17,6 +17,8 @@ import {
   formatMetadataForDisplay,
   logGenerationMetadata 
 } from "../utils/documentMetadata"
+import { trackActivity } from "../middleware/analyticsMiddleware"
+import { cache } from "../utils/redis"
 
 const router = express.Router()
 
@@ -133,18 +135,59 @@ router.post("/generate",
           projectName: req.body.project_name || 'Unknown Project',
           userId: req.user?.id || 'unknown',
           userName: req.user?.name || 'Unknown User',
-          promptLength: prompt.length
+          promptLength: prompt.length,
+          sourceDocuments: req.body.source_documents || [],
+          contextStats: req.body.context_stats || null
         }
       )
       
-      // Analyze quality
-      const quality = analyzeDocumentQuality(content, metadata)
+      // Analyze quality with source document count
+      const sourceDocCount = (req.body.source_documents?.length || req.body.context_stats?.documents_used || 0)
+      const quality = analyzeDocumentQuality(content, metadata, sourceDocCount)
       
       // Format for display
       const formattedMetadata = formatMetadataForDisplay(metadata, quality)
       
       // Log comprehensive metadata
       logGenerationMetadata(metadata, quality)
+
+      // Track AI generation activity
+      if (req.user?.id) {
+        trackActivity.aiGeneration(
+          req.user.id,
+          template_id ? 'template_based' : 'direct_prompt',
+          {
+            provider,
+            model: model || result.model,
+            template_id,
+            prompt_length: prompt.length,
+            tokens_used: metadata.totalTokens,
+            quality_score: quality.overallQuality,
+            processing_time_ms: metadata.processingTimeMs
+          }
+        )
+      }
+
+      // Track template validation (for template lifecycle tracking)
+      if (template_id && quality.overallQuality) {
+        try {
+          await pool.query(
+            'SELECT update_template_validation($1, $2, $3)',
+            [template_id, quality.overallQuality / 100, req.user?.id]
+          )
+          log.info('✅ Template validation tracked', {
+            template_id,
+            quality_score: quality.overallQuality,
+            validation_count_incremented: true
+          })
+          
+          // IMPORTANT: Clear template cache so UI shows updated metrics immediately
+          await cache.del(`template:${template_id}`)
+          log.info('🔄 Template cache cleared for fresh metrics display')
+        } catch (error) {
+          log.warn('⚠️ Failed to track template validation:', error.message)
+        }
+      }
 
       // Track template usage with comprehensive metrics if template was used
       if (template_id && req.body.document_id) {

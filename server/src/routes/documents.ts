@@ -395,8 +395,41 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const countResult = await pool.query(countQuery, countParams)
     const total = Number.parseInt(countResult.rows[0].count)
 
+    // Parse JSON fields for each document
+    log.info(`📊 [GET-PROJECT-DOCS] Parsing ${result.rows.length} documents`)
+    const documents = result.rows.map(doc => {
+      if (doc.generation_metadata && typeof doc.generation_metadata === 'string') {
+        try {
+          log.info(`⚠️ [PARSE] generation_metadata is STRING for doc ${doc.name}, parsing...`)
+          doc.generation_metadata = JSON.parse(doc.generation_metadata)
+          log.info(`✅ [PARSE] Parsed successfully. Keys: ${Object.keys(doc.generation_metadata).join(', ')}`)
+        } catch (e) {
+          log.warn(`Failed to parse generation_metadata for doc ${doc.id}:`, e)
+        }
+      } else if (doc.generation_metadata) {
+        log.info(`✅ [PARSE] generation_metadata is already OBJECT for doc ${doc.name}`)
+      } else {
+        log.info(`❌ [PARSE] No generation_metadata for doc ${doc.name}`)
+      }
+      if (doc.metadata && typeof doc.metadata === 'string') {
+        try {
+          doc.metadata = JSON.parse(doc.metadata)
+        } catch (e) {
+          log.warn(`Failed to parse metadata for doc ${doc.id}:`, e)
+        }
+      }
+      if (doc.template_metadata && typeof doc.template_metadata === 'string') {
+        try {
+          doc.template_metadata = JSON.parse(doc.template_metadata)
+        } catch (e) {
+          log.warn(`Failed to parse template_metadata for doc ${doc.id}:`, e)
+        }
+      }
+      return doc
+    })
+
     return res.json({
-      documents: result.rows,
+      documents,
       pagination: {
         page: Number(page),
         limit: Number(limit),
@@ -442,6 +475,54 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     }
 
     const document = result.rows[0]
+    
+    // 🔍 DEBUG: Log what we got from database
+    log.info('📊 [GET-DOC] Retrieved from database:', {
+      id: document.id,
+      name: document.name,
+      has_generation_metadata: !!document.generation_metadata,
+      generation_metadata_type: typeof document.generation_metadata,
+      generation_metadata_is_string: typeof document.generation_metadata === 'string',
+      generation_metadata_length: document.generation_metadata ? JSON.stringify(document.generation_metadata).length : 0
+    })
+    
+    // Parse JSON fields if they're strings
+    if (document.generation_metadata && typeof document.generation_metadata === 'string') {
+      try {
+        log.info('⚠️ [GET-DOC] generation_metadata is STRING, parsing...')
+        document.generation_metadata = JSON.parse(document.generation_metadata)
+        log.info('✅ [GET-DOC] generation_metadata parsed successfully')
+      } catch (e) {
+        log.error('❌ [GET-DOC] Failed to parse generation_metadata:', e)
+      }
+    } else if (document.generation_metadata) {
+      log.info('✅ [GET-DOC] generation_metadata is already an OBJECT (pg parsed it)')
+    }
+    
+    if (document.metadata && typeof document.metadata === 'string') {
+      try {
+        document.metadata = JSON.parse(document.metadata)
+      } catch (e) {
+        log.warn('Failed to parse metadata:', e)
+      }
+    }
+    
+    if (document.template_metadata && typeof document.template_metadata === 'string') {
+      try {
+        document.template_metadata = JSON.parse(document.template_metadata)
+      } catch (e) {
+        log.warn('Failed to parse template_metadata:', e)
+      }
+    }
+    
+    // 🔍 DEBUG: Log what we're sending
+    log.info('📤 [GET-DOC] Sending to frontend:', {
+      id: document.id,
+      has_generation_metadata: !!document.generation_metadata,
+      generation_metadata_type: typeof document.generation_metadata,
+      has_aiProcessing: !!(document.generation_metadata?.aiProcessing),
+      has_quality: !!(document.generation_metadata?.quality || document.generation_metadata?.qualityMetrics)
+    })
 
     // Check if user has access to the project
     const projectCheck = await pool.query(
@@ -581,6 +662,14 @@ router.post("/project/:projectId",
 
       // Extract generation metadata from request if provided
       const generationMetadata = req.body.generation_metadata || null
+      
+      // 🔍 DEBUG: Log what we received
+      log.info('📊 [CREATE-DOC] Received generation_metadata:', {
+        has_metadata: !!generationMetadata,
+        metadata_type: typeof generationMetadata,
+        metadata_keys: generationMetadata ? Object.keys(generationMetadata) : [],
+        metadata_size: generationMetadata ? JSON.stringify(generationMetadata).length : 0
+      })
 
       const result = await pool.query(
         `

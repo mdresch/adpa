@@ -216,6 +216,10 @@ export const GitPullRequest = LucideIcons.GitPullRequest
 export const Sync = LucideIcons.RefreshCw
 export const TestTube = LucideIcons.TestTube
 export const Crosshair = LucideIcons.Crosshair
+export const Target = LucideIcons.Target
+export const PieChart = LucideIcons.PieChart
+export const Grid = LucideIcons.Grid
+export const Lightbulb = LucideIcons.Lightbulb
 
 // Default export with all icons
 export default {

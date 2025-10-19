@@ -47,14 +47,33 @@ export interface DocumentGenerationMetadata {
   status: 'success' | 'partial' | 'failed'
   warnings?: string[]
   errors?: string[]
+  
+  // Research Complexity (optional)
+  researchComplexity?: {
+    sourceDocuments: number
+    estimatedReadingTimeHours: number
+    researchScore: number
+    outputScore: number
+  }
 }
 
 export interface QualityMetrics {
-  completeness: number // 0-100%
-  structureScore: number // 0-100%
-  formattingScore: number // 0-100%
-  contentDepth: number // 0-100%
-  overallQuality: number // 0-100%
+  // Core 4 metrics (existing)
+  completeness: number // 0-100% - Has all required sections
+  structureScore: number // 0-100% - Proper hierarchy and organization
+  formattingScore: number // 0-100% - Markdown formatting quality
+  contentDepth: number // 0-100% - Level of detail and comprehensiveness
+  
+  // Advanced 6 metrics (new)
+  accuracy: number // 0-100% - Information accuracy and precision
+  consistency: number // 0-100% - Internal consistency and coherence
+  contextRelevance: number // 0-100% - Relevance to project context
+  professionalQuality: number // 0-100% - Professional writing standards
+  standardsCompliance: number // 0-100% - Framework compliance (PMBOK/BABOK/DMBOK)
+  complexityScore: number // 0-100% - Document complexity (higher = more complex to create manually)
+  
+  // Aggregate
+  overallQuality: number // 0-100% - Weighted average of all 10 dimensions
   recommendations: string[]
 }
 
@@ -78,14 +97,24 @@ export function calculateDocumentMetadata(
     userId: string
     userName: string
     promptLength: number
+    sourceDocuments?: any[]
+    contextStats?: any
   }
 ): DocumentGenerationMetadata {
   const processingTimeMs = generationEnd.getTime() - generationStart.getTime()
   
   // Extract token counts from AI response
-  const inputTokens = aiResponse.usage?.prompt_tokens || aiResponse.usage?.promptTokens || 0
-  const outputTokens = aiResponse.usage?.completion_tokens || aiResponse.usage?.completionTokens || 0
+  let inputTokens = aiResponse.usage?.prompt_tokens || aiResponse.usage?.promptTokens || 0
+  let outputTokens = aiResponse.usage?.completion_tokens || aiResponse.usage?.completionTokens || 0
   const totalTokens = aiResponse.usage?.total_tokens || aiResponse.usage?.totalTokens || inputTokens + outputTokens
+  
+  // If we have total but not input/output, estimate them
+  if (totalTokens > 0 && inputTokens === 0 && outputTokens === 0) {
+    // Estimate input tokens from prompt length (rough: 1 token ≈ 4 characters)
+    const estimatedInputTokens = Math.round(options.promptLength / 4)
+    inputTokens = estimatedInputTokens
+    outputTokens = totalTokens - estimatedInputTokens
+  }
   
   // Calculate content metrics
   const wordCount = content.split(/\s+/).filter(word => word.length > 0).length
@@ -149,17 +178,28 @@ export function calculateDocumentMetadata(
 /**
  * Analyzes document quality and provides metrics
  */
-export function analyzeDocumentQuality(content: string, metadata: DocumentGenerationMetadata): QualityMetrics {
+export function analyzeDocumentQuality(
+  content: string, 
+  metadata: DocumentGenerationMetadata,
+  sourceDocCount: number = 0
+): QualityMetrics {
   const metrics: QualityMetrics = {
     completeness: 0,
     structureScore: 0,
     formattingScore: 0,
     contentDepth: 0,
+    accuracy: 0,
+    consistency: 0,
+    contextRelevance: 0,
+    professionalQuality: 0,
+    standardsCompliance: 0,
+    complexityScore: 0,
     overallQuality: 0,
     recommendations: []
   }
   
-  // Check completeness (has headers, content, sections)
+  // === DIMENSION 1: COMPLETENESS ===
+  // Has all required sections (headers, content, tables, lists)
   const hasMainTitle = content.startsWith('#')
   const hasHeaders = (content.match(/^##/gm) || []).length >= 3
   const hasTables = (content.match(/\|/g) || []).length >= 10
@@ -171,7 +211,8 @@ export function analyzeDocumentQuality(content: string, metadata: DocumentGenera
     (hasTables ? 25 : 0) +
     (hasLists ? 25 : 0)
   
-  // Check structure (logical sections, proper hierarchy)
+  // === DIMENSION 2: STRUCTURE ===
+  // Logical organization and proper hierarchy
   const h1Count = (content.match(/^# /gm) || []).length
   const h2Count = (content.match(/^## /gm) || []).length
   const h3Count = (content.match(/^### /gm) || []).length
@@ -184,7 +225,8 @@ export function analyzeDocumentQuality(content: string, metadata: DocumentGenera
     (hasSubsections ? 30 : 0) +
     (metadata.paragraphCount >= 5 ? 20 : 10)
   
-  // Check formatting (Markdown syntax, tables, emphasis)
+  // === DIMENSION 3: FORMATTING ===
+  // Markdown syntax quality (tables, emphasis, code)
   const hasBold = content.includes('**')
   const hasCode = content.includes('`')
   const hasHR = content.includes('---')
@@ -197,7 +239,8 @@ export function analyzeDocumentQuality(content: string, metadata: DocumentGenera
     (hasNumberedLists ? 20 : 0) +
     (hasTables ? 30 : 0)
   
-  // Check content depth (word count, detail level)
+  // === DIMENSION 4: CONTENT DEPTH ===
+  // Level of detail and comprehensiveness
   const wordsPerSection = metadata.wordCount / (h2Count || 1)
   const hasDetailedContent = wordsPerSection >= 150
   const hasComprehensiveContent = metadata.wordCount >= 800
@@ -207,12 +250,130 @@ export function analyzeDocumentQuality(content: string, metadata: DocumentGenera
     (hasComprehensiveContent ? 40 : 20) +
     (metadata.sentenceCount >= 20 ? 20 : 10)
   
-  // Calculate overall quality
+  // === DIMENSION 5: ACCURACY ===
+  // Information precision and factual correctness
+  const hasSpecificData = /\d+%|\$\d+|\d+\s+(hours|days|months|years)/gi.test(content)
+  const hasProperCitations = content.includes('*') || content.includes('>')
+  const hasDefinitions = content.toLowerCase().includes('definition') || content.toLowerCase().includes('refers to')
+  const hasExamples = content.toLowerCase().includes('example') || content.toLowerCase().includes('for instance')
+  
+  metrics.accuracy =
+    (hasSpecificData ? 30 : 15) +
+    (hasProperCitations ? 20 : 0) +
+    (hasDefinitions ? 25 : 10) +
+    (hasExamples ? 25 : 10)
+  
+  // === DIMENSION 6: CONSISTENCY ===
+  // Internal coherence and uniform terminology
+  const hasTOC = content.toLowerCase().includes('table of contents') || content.toLowerCase().includes('## contents')
+  const hasConsistentHeaders = h2Count > 0 && h2Count <= 15 // Not too few, not too many
+  const properSentenceLength = metadata.wordCount / metadata.sentenceCount
+  const hasGoodFlowRange = properSentenceLength >= 10 && properSentenceLength <= 25
+  const hasUniformSections = Math.abs(wordsPerSection - 200) < 100 // Sections are similar in length
+  
+  metrics.consistency =
+    (hasTOC ? 20 : 0) +
+    (hasConsistentHeaders ? 25 : 10) +
+    (hasGoodFlowRange ? 30 : 15) +
+    (hasUniformSections ? 25 : 10)
+  
+  // === DIMENSION 7: CONTEXT RELEVANCE ===
+  // Alignment with project context and framework
+  const frameworkKeywords = ['project', 'stakeholder', 'risk', 'scope', 'budget', 'schedule', 'quality', 'resource']
+  const frameworkMentions = frameworkKeywords.filter(kw => content.toLowerCase().includes(kw)).length
+  const hasProjectContext = content.toLowerCase().includes('project') && frameworkMentions >= 3
+  const hasFrameworkAlignment = content.includes('PMBOK') || content.includes('BABOK') || content.includes('DMBOK')
+  const hasActionableContent = /\b(should|must|will|shall)\b/gi.test(content)
+  
+  metrics.contextRelevance =
+    (hasProjectContext ? 35 : 15) +
+    (hasFrameworkAlignment ? 25 : 0) +
+    (hasActionableContent ? 25 : 10) +
+    (frameworkMentions >= 5 ? 15 : 0)
+  
+  // === DIMENSION 8: PROFESSIONAL QUALITY ===
+  // Writing standards and presentation
+  const hasExecutiveSummary = content.toLowerCase().includes('executive summary') || content.toLowerCase().includes('## summary')
+  const hasIntroduction = content.toLowerCase().includes('introduction') || content.toLowerCase().includes('## 1.')
+  const hasConclusion = content.toLowerCase().includes('conclusion') || content.toLowerCase().includes('next steps')
+  const hasProperGrammar = metadata.sentenceCount > 0 && (metadata.wordCount / metadata.sentenceCount) > 8 // Sentence complexity
+  const noExcessiveCaps = (content.match(/[A-Z]{4,}/g) || []).length < 5 // Avoid ALL CAPS spam
+  
+  metrics.professionalQuality =
+    (hasExecutiveSummary ? 25 : 0) +
+    (hasIntroduction ? 20 : 10) +
+    (hasConclusion ? 20 : 0) +
+    (hasProperGrammar ? 20 : 10) +
+    (noExcessiveCaps ? 15 : 0)
+  
+  // === DIMENSION 9: STANDARDS COMPLIANCE ===
+  // Adherence to framework requirements
+  const hasRequiredSections = h2Count >= 5 // Most frameworks require 5+ major sections
+  const hasRolesResponsibilities = content.toLowerCase().includes('role') || content.toLowerCase().includes('responsible')
+  const hasMetrics = content.toLowerCase().includes('metric') || content.toLowerCase().includes('kpi') || content.toLowerCase().includes('measure')
+  const hasTimelines = content.toLowerCase().includes('timeline') || content.toLowerCase().includes('schedule') || content.toLowerCase().includes('deadline')
+  const hasApprovals = content.toLowerCase().includes('approval') || content.toLowerCase().includes('authority') || content.toLowerCase().includes('sign-off')
+  
+  metrics.standardsCompliance =
+    (hasRequiredSections ? 25 : 10) +
+    (hasRolesResponsibilities ? 20 : 0) +
+    (hasMetrics ? 20 : 0) +
+    (hasTimelines ? 20 : 0) +
+    (hasApprovals ? 15 : 0)
+  
+  // === DIMENSION 10: COMPLEXITY SCORE ===
+  // Estimates manual creation effort (higher = more complex/time-consuming)
+  
+  // DOCUMENT OUTPUT COMPLEXITY (60 points max)
+  const hasMultipleTables = (content.match(/\|/g) || []).length >= 50 // 5+ tables
+  const hasDeepHierarchy = h3Count >= 5 // Many subsections
+  const hasLongSections = wordsPerSection >= 300 // Detailed sections
+  const hasTechnicalContent = content.match(/\b(API|database|security|architecture|integration|compliance|governance)\b/gi)?.length || 0
+  const isLongDocument = metadata.wordCount >= 2000
+  
+  const outputComplexity =
+    (hasMultipleTables ? 12 : 6) +
+    (hasDeepHierarchy ? 12 : 6) +
+    (hasLongSections ? 12 : 6) +
+    (hasTechnicalContent >= 10 ? 15 : hasTechnicalContent >= 5 ? 9 : 3) +
+    (isLongDocument ? 9 : 3)
+  
+  // CONTEXT RESEARCH COMPLEXITY (40 points max) - NEW!
+  // Accounts for reading/understanding all source documents
+  const sourceDocWordEstimate = sourceDocCount * 1500 // Avg 1500 words per doc
+  const readingTimeHours = sourceDocWordEstimate / 250 / 60 // 250 words/min reading speed
+  
+  const researchComplexity =
+    (sourceDocCount === 0 ? 0 :       // No research needed
+     sourceDocCount === 1 ? 5 :        // Minimal research (1 doc)
+     sourceDocCount <= 3 ? 10 :        // Light research (2-3 docs)
+     sourceDocCount <= 5 ? 20 :        // Moderate research (4-5 docs)
+     sourceDocCount <= 7 ? 30 :        // Heavy research (6-7 docs)
+     40)                               // Extensive research (8-10 docs)
+  
+  metrics.complexityScore = Math.min(100, outputComplexity + researchComplexity)
+  
+  // Store research metrics for display
+  metadata.researchComplexity = {
+    sourceDocuments: sourceDocCount,
+    estimatedReadingTimeHours: Math.round(readingTimeHours * 10) / 10,
+    researchScore: researchComplexity,
+    outputScore: outputComplexity
+  }
+  
+  // === CALCULATE OVERALL QUALITY ===
+  // Weighted average of all 10 dimensions
   metrics.overallQuality = Math.round(
-    (metrics.completeness * 0.25 +
-     metrics.structureScore * 0.25 +
-     metrics.formattingScore * 0.25 +
-     metrics.contentDepth * 0.25)
+    (metrics.completeness * 0.14 +          // 14% - Has all sections
+     metrics.structureScore * 0.14 +        // 14% - Proper organization
+     metrics.formattingScore * 0.09 +       // 9%  - Markdown quality
+     metrics.contentDepth * 0.11 +          // 11% - Level of detail
+     metrics.accuracy * 0.11 +              // 11% - Factual precision
+     metrics.consistency * 0.10 +           // 10% - Internal coherence
+     metrics.contextRelevance * 0.10 +      // 10% - Project alignment
+     metrics.professionalQuality * 0.08 +   // 8%  - Writing standards
+     metrics.standardsCompliance * 0.08 +   // 8%  - Framework compliance
+     metrics.complexityScore * 0.05)        // 5%  - Manual effort estimate
   )
   
   // Generate recommendations
@@ -341,4 +502,3 @@ export function logGenerationMetadata(metadata: DocumentGenerationMetadata, qual
     formatted: formattedData
   })
 }
-
