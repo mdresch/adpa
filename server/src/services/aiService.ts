@@ -274,13 +274,29 @@ class AIService {
     }
     logger.info('✅ [AI-SERVICE-2/8] AI Gateway API key retrieved from database')
 
-    // Process template if provided
-    let processedPrompt = request.prompt
-    if (request.template_id && request.variables) {
-      logger.info('🔄 [AI-SERVICE-3/8] Processing template variables...')
-      processedPrompt = await this.processTemplate(request.template_id, request.variables, request.prompt)
+    // KISS: Build system and user messages separately
+    let systemMessage: string | undefined = undefined
+    let userMessage: string = request.prompt
+    
+    if (request.template_id) {
+      logger.info('🔄 [AI-SERVICE-3/8] Loading template system prompt (KISS)...')
+      const templateSystemPrompt = await this.getTemplateSystemPrompt(request.template_id)
+      if (templateSystemPrompt) {
+        systemMessage = templateSystemPrompt
+        // Build user message with ALL context
+        userMessage = this.buildUserMessage(request.prompt, request.variables)
+        logger.info('✅ [AI-SERVICE-3/8] KISS architecture applied: System=Template, User=Context')
+      } else {
+        logger.warn('⚠️ [AI-SERVICE-3/8] Template not found, using direct prompt')
+      }
     } else {
-      logger.info('✅ [AI-SERVICE-3/8] No template processing needed')
+      logger.info('✅ [AI-SERVICE-3/8] No template, using direct prompt')
+    }
+    
+    // If system_prompt provided directly in request, use that
+    if (request.system_prompt) {
+      systemMessage = request.system_prompt
+      logger.info('✅ [AI-SERVICE-3/8] Using provided system_prompt')
     }
 
     try {
@@ -305,7 +321,10 @@ class AIService {
       
       logger.info('🌐 [AI-SERVICE-6/8] AI Gateway generation starting:', gatewayModelId)
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
-      logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
+      logger.info('📝 [AI-SERVICE] User message length:', userMessage.length, 'chars')
+      if (systemMessage) {
+        logger.info('📝 [AI-SERVICE] System message length:', systemMessage.length, 'chars')
+      }
       
       // FIXED: Use environment variable for AI Gateway (Vercel AI SDK requirement)
       // The SDK reads from process.env.OPENAI_API_KEY automatically
@@ -327,12 +346,27 @@ class AIService {
       let gatewaySuccess = false
       
       try {
-        result = await generateText({
-          model: gatewayModelId,
-          prompt: processedPrompt,
-          temperature: request.temperature || 0.7,
-          maxTokens: request.max_tokens || 2000,
-        } as any)
+        // KISS: Use messages array if we have system message, otherwise use prompt
+        if (systemMessage) {
+          logger.info('📨 [AI-SERVICE-6/8] Using KISS architecture with system + user messages')
+          result = await generateText({
+            model: gatewayModelId,
+            messages: [
+              { role: 'system', content: systemMessage },
+              { role: 'user', content: userMessage }
+            ],
+            temperature: request.temperature || 0.7,
+            maxTokens: request.max_tokens || 2000,
+          } as any)
+        } else {
+          logger.info('📨 [AI-SERVICE-6/8] Using simple prompt (no template)')
+          result = await generateText({
+            model: gatewayModelId,
+            prompt: userMessage,
+            temperature: request.temperature || 0.7,
+            maxTokens: request.max_tokens || 2000,
+          } as any)
+        }
         gatewaySuccess = true
       } catch (gatewayError: any) {
         logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
@@ -359,8 +393,12 @@ class AIService {
           const genAI = new GoogleGenerativeAI(directApiKey)
           const model = genAI.getGenerativeModel({ model: request.model || 'gemini-2.5-flash' })
           
-          logger.info('🚀 [AI-SERVICE] Calling direct Google AI...')
-          const googleResult = await model.generateContent(processedPrompt)
+          logger.info('🚀 [AI-SERVICE] Calling direct Google AI with KISS architecture...')
+          // KISS: Combine system and user message for Google AI (it doesn't have separate system role)
+          const combinedPrompt = systemMessage 
+            ? `${systemMessage}\n\n---\n\n${userMessage}`
+            : userMessage
+          const googleResult = await model.generateContent(combinedPrompt)
           const response = await googleResult.response
           const text = response.text()
           
@@ -368,7 +406,8 @@ class AIService {
           logger.info('📝 [AI-SERVICE] Content length:', text.length, 'chars')
           
           // Estimate token usage (Google AI doesn't always provide it)
-          const estimatedTokens = Math.ceil((processedPrompt.length + text.length) / 4)
+          const promptLength = systemMessage ? systemMessage.length + userMessage.length : userMessage.length
+          const estimatedTokens = Math.ceil((promptLength + text.length) / 4)
           
           // Update usage stats
           await this.updateUsageStats(request.provider, {
@@ -382,7 +421,7 @@ class AIService {
             provider: request.provider,
             model: request.model || 'gemini-2.5-flash',
             usage: {
-              prompt_tokens: Math.ceil(processedPrompt.length / 4),
+              prompt_tokens: Math.ceil(promptLength / 4),
               completion_tokens: Math.ceil(text.length / 4),
               total_tokens: estimatedTokens,
             },
@@ -571,37 +610,74 @@ class AIService {
     }
   }
 
-  private async processTemplate(
-    templateId: string,
-    variables: Record<string, any>,
-    basePrompt: string
-  ): Promise<string> {
+  /**
+   * Get template system prompt (KISS: Keep It Simple)
+   * System prompt = Pure methodology, no variables replaced
+   */
+  private async getTemplateSystemPrompt(templateId: string): Promise<string | null> {
     try {
       const result = await pool.query(
-        "SELECT content, variables FROM templates WHERE id = $1",
+        "SELECT system_prompt, content FROM templates WHERE id = $1",
         [templateId]
       )
 
       if (result.rows.length === 0) {
-        logger.warn(`Template not found: ${templateId}, using base prompt`)
-        return basePrompt
+        logger.warn(`Template not found: ${templateId}`)
+        return null
       }
 
       const template = result.rows[0]
-      let processedContent = JSON.stringify(template.content)
-
-      // Replace variables in template
-      for (const [key, value] of Object.entries(variables)) {
-        const regex = new RegExp(`{{\\s*${key}\\s*}}`, "g")
-        processedContent = processedContent.replace(regex, String(value))
+      let systemMessage = template.system_prompt || ''
+      
+      // Add template content structure if defined
+      if (template.content && Object.keys(template.content).length > 0) {
+        systemMessage += '\n\nTEMPLATE STRUCTURE:\n'
+        systemMessage += JSON.stringify(template.content, null, 2)
       }
-
-      // Combine with base prompt
-      return `${basePrompt}\n\nTemplate Context:\n${processedContent}`
+      
+      return systemMessage
     } catch (error) {
-      logger.error(`Template processing failed for ${templateId}:`, error)
-      return basePrompt
+      logger.error(`Failed to get template system prompt for ${templateId}:`, error)
+      return null
     }
+  }
+
+  /**
+   * Build user message with ALL context (KISS: Keep It Simple)
+   * User message = Variables + User prompt + All context
+   */
+  private buildUserMessage(
+    userPrompt: string,
+    variables?: Record<string, any>,
+    additionalContext?: string
+  ): string {
+    let userMessage = ''
+    
+    // 1. Add variables (project-specific data)
+    if (variables && Object.keys(variables).length > 0) {
+      userMessage += 'PROJECT CONTEXT:\n'
+      userMessage += JSON.stringify(variables, null, 2)
+      userMessage += '\n\n'
+    }
+    
+    // 2. Add user's request
+    if (userPrompt) {
+      userMessage += 'USER REQUEST:\n'
+      userMessage += userPrompt
+      userMessage += '\n\n'
+    }
+    
+    // 3. Add additional context (from project/documents/integrations)
+    if (additionalContext) {
+      userMessage += 'ADDITIONAL CONTEXT:\n'
+      userMessage += additionalContext
+      userMessage += '\n\n'
+    }
+    
+    // 4. Add explicit instruction
+    userMessage += 'Please extract the information above and populate the template using the provided data.'
+    
+    return userMessage
   }
 }
 

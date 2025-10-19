@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams as useNextParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,7 +52,11 @@ import {
   Zap,
   XCircle,
   RefreshCw,
-} from "lucide-react"
+  Settings,
+  Copy,
+  Lightbulb,
+  Database,
+} from "@/components/ui/icons-shim"
 import {
   Dialog,
   DialogContent,
@@ -67,18 +71,42 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
 
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
+
 interface Document {
   id: string
   project_id: string
   name: string
   content?: any
   template_id?: string
+  template_name?: string
   status: string
   version: number
   created_by: string
   updated_by: string
   created_at: string
   updated_at: string
+  priority_rank?: number
+  dependency_level?: number
+  character_count?: number
+  word_count?: number
+  document?: any
 }
 
 interface Stakeholder {
@@ -101,12 +129,18 @@ interface Stakeholder {
   updated_at: string
 }
 
+// Extended Project interface to include settings and metadata
+interface ExtendedProject extends Project {
+  settings?: any
+  metadata?: any
+}
+
 export default function ProjectDetail() {
-  const params = useParams()
-  const projectId = params.id as string
+  const params = useNextParams()
+  const projectId = params?.id as string
   const { isAuthenticated } = useAuth()
 
-  const [project, setProject] = useState<Project | null>(null)
+  const [project, setProject] = useState<ExtendedProject | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [stakeholders, setStakeholders] = useState<Stakeholder[]>([])
   const [loading, setLoading] = useState(true)
@@ -403,6 +437,276 @@ export default function ProjectDetail() {
         ? `Timeline: ${project.start_date} to ${project.end_date}`
         : 'Timeline to be determined'
       
+      // 🆕 SMART DOCUMENT LIBRARY CONTEXT - Prioritize relevant documents
+      const getPrioritizedDocuments = (templateName: string, allDocs: Document[]) => {
+        // 🆕 PROJECT LIFECYCLE ORDER - Documents in logical progression
+        const lifecycleOrder: { [key: string]: number } = {
+          'ideation': 1,
+          'business case': 2,
+          'project charter': 3,
+          'charter': 3,
+          'stakeholder': 4,
+          'scope': 5,
+          'requirement': 6,
+          'schedule': 7,
+          'cost': 8,
+          'budget': 8,
+          'resource': 9,
+          'quality': 10,
+          'risk': 11,
+          'communication': 12,
+          'procurement': 13,
+          'integration': 14,
+          'closeout': 15,
+          'lessons': 16,
+        }
+        
+        const priorities: { [key: string]: string[] } = {
+          'ideation': [],
+          'business case': ['ideation'],
+          'charter': ['business case', 'ideation', 'stakeholder'],
+          'stakeholder': ['charter', 'business case', 'ideation'],
+          'scope': ['charter', 'stakeholder', 'business case', 'requirement'],
+          'requirement': ['charter', 'stakeholder', 'business case'],
+          'schedule': ['charter', 'scope', 'requirement', 'resource'],
+          'cost': ['charter', 'scope', 'schedule', 'requirement', 'resource'],
+          'budget': ['charter', 'scope', 'schedule', 'requirement', 'resource'],
+          'resource': ['charter', 'scope', 'schedule', 'requirement'],
+          'quality': ['charter', 'scope', 'requirement', 'stakeholder'],
+          'risk': ['charter', 'stakeholder', 'scope', 'schedule', 'cost', 'requirement'],
+          'communication': ['stakeholder', 'charter', 'scope'],
+          'procurement': ['charter', 'scope', 'cost', 'risk', 'requirement'],
+          'integration': ['charter', 'scope', 'schedule', 'cost', 'quality', 'risk', 'stakeholder'],
+          'project management plan': ['charter', 'stakeholder', 'scope', 'schedule', 'cost', 'quality', 'resource', 'communication', 'risk', 'procurement'],
+          'closeout': ['charter', 'scope', 'schedule', 'cost', 'quality', 'risk'],
+          'lessons': ['charter', 'scope', 'schedule', 'cost', 'quality', 'risk', 'stakeholder'],
+        }
+        
+        const templateLower = templateName.toLowerCase()
+        let priorityKeywords: string[] = []
+        
+        // Find matching priority list
+        for (const [key, keywords] of Object.entries(priorities)) {
+          if (templateLower.includes(key)) {
+            priorityKeywords = keywords
+            break
+          }
+        }
+        
+        // If no specific priority, use general order
+        if (priorityKeywords.length === 0) {
+          priorityKeywords = ['charter', 'stakeholder', 'scope', 'risk', 'schedule', 'cost']
+        }
+        
+        // Score and sort documents
+        const scoredDocs = allDocs
+          .filter(doc => doc.status === 'final' || doc.status === 'approved' || doc.status === 'draft')
+          .map(doc => {
+            const docName = (doc.name || '').toLowerCase()
+            const templateNameLower = (doc.template_name || '').toLowerCase()
+            
+            let score = 0
+            
+            // 1. Priority keyword matching (highest weight)
+            priorityKeywords.forEach((keyword, index) => {
+              const priority = priorityKeywords.length - index
+              if (docName.includes(keyword) || templateNameLower.includes(keyword)) {
+                score += priority * 10
+              }
+            })
+            
+            // 2. Lifecycle order bonus - favor earlier documents (foundation)
+            let docLifecyclePhase = 99 // Default high number (late)
+            for (const [key, phase] of Object.entries(lifecycleOrder)) {
+              if (docName.includes(key) || templateNameLower.includes(key)) {
+                docLifecyclePhase = Math.min(docLifecyclePhase, phase)
+              }
+            }
+            
+            // Earlier documents get higher bonus (inverted: 16 - phase)
+            const lifecycleBonus = Math.max(0, 16 - docLifecyclePhase)
+            score += lifecycleBonus * 3 // Moderate weight
+            
+            // 3. Status boost (quality indicator)
+            if (doc.status === 'approved') score += 10
+            if (doc.status === 'final') score += 7
+            if (doc.status === 'draft') score += 2
+            
+            return { doc, score, lifecyclePhase: docLifecyclePhase }
+          })
+          .filter(item => item.score > 0) // Only include relevant documents
+          .sort((a, b) => {
+            // Primary sort: by score (relevance + lifecycle + status)
+            if (b.score !== a.score) return b.score - a.score
+            // Secondary sort: by lifecycle order (earlier first)
+            return a.lifecyclePhase - b.lifecyclePhase
+          })
+          .slice(0, 10) // 🆕 INCREASED LIMIT: Top 10 for complex dependencies
+          .map(item => ({ 
+            ...item.doc, 
+            priority_rank: item.score,
+            dependency_level: Math.ceil(item.score / 20) // Group by dependency strength
+          }))
+        
+        return scoredDocs
+      }
+      
+      // 🆕 BUILD DOCUMENT LIBRARY CONTEXT
+      let documentLibraryContext = ''
+      const relevantDocs = getPrioritizedDocuments(templateContent.title, documents)
+      
+      // Get lifecycle phase for current template
+      const getTemplatePhase = (name: string) => {
+        const nameLower = name.toLowerCase()
+        const phases: any = {
+          'ideation': 1, 'business case': 2, 'charter': 3, 'stakeholder': 4,
+          'scope': 5, 'requirement': 6, 'schedule': 7, 'cost': 8, 'budget': 8,
+          'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
+          'procurement': 13, 'integration': 14, 'closeout': 15, 'lessons': 16
+        }
+        for (const [key, phase] of Object.entries(phases)) {
+          if (nameLower.includes(key)) return { phase, name: key }
+        }
+        return { phase: 99, name: 'other' }
+      }
+      
+      const currentTemplatePhase = getTemplatePhase(templateContent.title)
+      
+      console.log('📚 [CONTEXT-1/3] Document Library Analysis:')
+      console.log('  Total documents in project:', documents.length)
+      console.log('  Template being generated:', templateContent.title, `(Phase ${currentTemplatePhase.phase})`)
+      console.log('  Prioritized documents selected:', relevantDocs.length, '(LIMIT: 10 for complex dependencies)')
+      if (relevantDocs.length > 0) {
+        console.log('  ')
+        console.log('  📊 DOCUMENT DEPENDENCY MAP:')
+        console.log('  ═══════════════════════════════════════════════════════')
+        
+        // Group by dependency level
+        const dependencyGroups: { [key: number]: any[] } = {}
+        relevantDocs.forEach(doc => {
+          const level = (doc as any).dependency_level || 1
+          if (!dependencyGroups[level]) dependencyGroups[level] = []
+          dependencyGroups[level].push(doc)
+        })
+        
+        const maxLevel = Math.max(...Object.keys(dependencyGroups).map(Number))
+        
+        for (let level = maxLevel; level >= 1; level--) {
+          if (dependencyGroups[level]) {
+            const strength = level === maxLevel ? '🔴 CRITICAL' : 
+                           level >= maxLevel - 1 ? '🟠 HIGH' :
+                           level >= maxLevel - 2 ? '🟡 MEDIUM' : '🟢 LOW'
+            console.log(`  `)
+            console.log(`  ${strength} Dependency (Level ${level}):`)
+            
+            dependencyGroups[level].forEach((doc, idx) => {
+              const docPhase = getTemplatePhase(doc.name)
+              const phaseIcon = docPhase.phase < currentTemplatePhase.phase ? '⬅️' : 
+                               docPhase.phase === currentTemplatePhase.phase ? '➡️' : '⬇️'
+              const rank = (doc as any).priority_rank || 0
+              console.log(`    ${phaseIcon} ${doc.name}`)
+              console.log(`       Status: ${doc.status} | Phase ${docPhase.phase} | Score: ${rank}`)
+            })
+          }
+        }
+        
+        console.log('  ')
+        console.log('  ⬅️ = Earlier phase (foundation) | ➡️ = Same phase | ⬇️ = Later phase')
+        console.log('  🔴 = Must reference | 🟠 = Should reference | 🟡 = May reference | 🟢 = Optional')
+      }
+      
+      if (relevantDocs.length > 0) {
+        documentLibraryContext = `\n\n**📚 Existing Project Documents (for reference and consistency):**\n`
+        
+        relevantDocs.forEach((doc, index) => {
+          // Extract key information from document content
+          const contentPreview = doc.content ? doc.content.substring(0, 1500) : ''
+          const hasObjectives = contentPreview.toLowerCase().includes('objective')
+          const hasRisks = contentPreview.toLowerCase().includes('risk')
+          const hasStakeholders = contentPreview.toLowerCase().includes('stakeholder')
+          
+          documentLibraryContext += `\n${index + 1}. **${doc.name}** (${doc.template_name || 'Custom'}) - Status: ${doc.status}\n`
+          
+          // Add content summary with key sections
+          if (contentPreview) {
+            documentLibraryContext += `   Summary: ${contentPreview.replace(/\n/g, ' ').substring(0, 800)}...\n`
+            
+            // Highlight what's in this document
+            const features = []
+            if (hasObjectives) features.push('objectives')
+            if (hasRisks) features.push('risks')
+            if (hasStakeholders) features.push('stakeholders')
+            if (features.length > 0) {
+              documentLibraryContext += `   Contains: ${features.join(', ')}\n`
+            }
+          }
+        })
+        
+        documentLibraryContext += `\n**📋 CONSISTENCY INSTRUCTIONS:**\n`
+        documentLibraryContext += `- Review the existing documents above before generating new content\n`
+        documentLibraryContext += `- Reuse objectives, stakeholders, risks, and metrics where they appear in existing documents\n`
+        documentLibraryContext += `- Reference related documents explicitly (e.g., "As defined in the Project Charter..." or "See Risk Management Plan section 3.2...")\n`
+        documentLibraryContext += `- Ensure all tables (stakeholders, risks, objectives) are consistent with data from existing documents\n`
+        documentLibraryContext += `- If conflicts arise, prioritize information from approved documents over draft documents\n`
+      }
+      
+      // 🆕 BUILD STAKEHOLDER CONTEXT
+      let stakeholderContext = ''
+      console.log('👥 [CONTEXT-2/3] Stakeholder Analysis:')
+      console.log('  Stakeholders available:', stakeholders?.length || 0)
+      
+      if (stakeholders && stakeholders.length > 0) {
+        console.log('  Stakeholder names:', stakeholders.map(s => s.name).join(', '))
+        stakeholderContext = `\n\n**👥 Project Stakeholders (use these in stakeholder tables):**\n`
+        
+        stakeholders.forEach(sh => {
+          stakeholderContext += `- **${sh.name}** (${sh.role || 'Team Member'})`
+          if (sh.interest_level || sh.influence_level) {
+            stakeholderContext += ` - Interest: ${sh.interest_level || 'Medium'}, Influence: ${sh.influence_level || 'Medium'}`
+          }
+          if (sh.email) {
+            stakeholderContext += ` - Contact: ${sh.email}`
+          }
+          stakeholderContext += `\n`
+        })
+        
+        stakeholderContext += `\n**📋 STAKEHOLDER INSTRUCTIONS:**\n`
+        stakeholderContext += `- Use the actual stakeholders listed above in any stakeholder tables, matrices, or RACI charts\n`
+        stakeholderContext += `- Include their roles, interest levels, and influence levels as specified\n`
+        stakeholderContext += `- Do NOT create fictional stakeholders - use only the real stakeholders listed\n`
+      }
+      
+      // 🆕 BUILD CUSTOM VARIABLES CONTEXT
+      let customVariablesContext = ''
+      const hasSettings = project?.settings && Object.keys(project.settings).length > 0
+      const hasMetadata = project?.metadata && Object.keys(project.metadata).length > 0
+      
+      console.log('⚙️ [CONTEXT-3/3] Custom Variables Analysis:')
+      console.log('  Settings available:', hasSettings ? Object.keys(project.settings).length : 0)
+      console.log('  Metadata available:', hasMetadata ? Object.keys(project.metadata).length : 0)
+      
+      if (hasSettings || hasMetadata) {
+        customVariablesContext = `\n\n**⚙️ Custom Project Variables:**\n`
+        
+        if (hasSettings) {
+          customVariablesContext += `\nSettings:\n`
+          Object.entries(project.settings).forEach(([key, value]) => {
+            customVariablesContext += `- ${key}: ${value}\n`
+          })
+        }
+        
+        if (hasMetadata) {
+          customVariablesContext += `\nMetadata:\n`
+          Object.entries(project.metadata).forEach(([key, value]) => {
+            customVariablesContext += `- ${key}: ${value}\n`
+          })
+        }
+        
+        customVariablesContext += `\n**📋 VARIABLE INSTRUCTIONS:**\n`
+        customVariablesContext += `- Incorporate these custom variables where relevant to the document type\n`
+        customVariablesContext += `- Use them to add project-specific details and context\n`
+      }
+      
       // Enhanced prompt with detailed instructions for comprehensive generation
       const aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
 
@@ -411,7 +715,7 @@ export default function ProjectDetail() {
 **Description**: ${projectDesc}
 ${teamContext}
 ${budgetContext}
-${timelineContext}
+${timelineContext}${documentLibraryContext}${stakeholderContext}${customVariablesContext}
 
 **CRITICAL REQUIREMENTS - MUST FOLLOW:**
 1. ✅ Generate a COMPLETE, DETAILED document with ALL sections FULLY populated (minimum 2000 words total)
@@ -483,6 +787,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       console.log('✅ [6/10] Prompt built. Length:', aiPrompt.length, 'chars')
       console.log('📝 Prompt preview:', aiPrompt.substring(0, 200) + '...')
+      console.log('📊 [CONTEXT SUMMARY]')
+      console.log('  ✅ Base project info included')
+      console.log('  📚 Document library context:', relevantDocs.length, 'documents')
+      console.log('  👥 Stakeholder context:', stakeholders?.length || 0, 'stakeholders')
+      console.log('  ⚙️ Custom variables:', (hasSettings ? 'settings' : '') + (hasMetadata ? ' metadata' : '') || 'none')
+      console.log('  📏 Estimated tokens:', Math.round(aiPrompt.length / 4))
 
       // Enqueue AI generation job via jobs API
       let jobId: string | undefined
@@ -604,6 +914,55 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       const qualityMetrics = genResult?.quality || null
       console.log('📊 [SAVE-1/6] Metadata extracted:', { hasMetadata: !!generationMetadata, hasQuality: !!qualityMetrics })
       
+      // 🆕 Build source documents metadata from context
+      const sourceDocuments = relevantDocs.map((doc, index) => {
+        // Determine lifecycle phase for this document
+        const docNameLower = (doc.name || '').toLowerCase()
+        const templateNameLower = (doc.template_name || '').toLowerCase()
+        const lifecycleOrder: { [key: string]: number } = {
+          'ideation': 1, 'business case': 2, 'charter': 3, 'stakeholder': 4,
+          'scope': 5, 'requirement': 6, 'schedule': 7, 'cost': 8, 'budget': 8,
+          'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
+          'procurement': 13, 'integration': 14, 'closeout': 15, 'lessons': 16
+        }
+        
+        let phase = 99
+        let phaseName = 'Other'
+        for (const [key, phaseNum] of Object.entries(lifecycleOrder)) {
+          if (docNameLower.includes(key) || templateNameLower.includes(key)) {
+            if (phaseNum < phase) {
+              phase = phaseNum
+              phaseName = key.charAt(0).toUpperCase() + key.slice(1)
+            }
+          }
+        }
+        
+        // Calculate reading metrics for this document
+        const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
+        const wordCount = doc.word_count || Math.round(charCount / 5) // Estimate if not available
+        const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10 // 250 words/min
+        
+        return {
+          id: doc.id,
+          title: doc.name,
+          type: doc.template_name || 'Document',
+          template_id: doc.template_id,
+          status: doc.status,
+          url: `/projects/${projectId}/documents/${doc.id}/view`,
+          lifecycle_phase: phase,
+          phase_name: phaseName,
+          priority_rank: index + 1,
+          character_count: charCount,
+          word_count: wordCount,
+          reading_time_minutes: readingTimeMinutes
+        }
+      })
+      
+      console.log('📚 [SAVE-1.5/6] Source documents tracked:', sourceDocuments.length, 'documents')
+      if (sourceDocuments.length > 0) {
+        console.log('  Source document names:', sourceDocuments.map(d => d.title).join(', '))
+      }
+      
       const documentData = {
         name: documentName,
         content: generatedText || "# Document content not generated",
@@ -611,8 +970,28 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         status: 'draft' as const,
         generation_metadata: generationMetadata ? {
           ...generationMetadata,
-          quality: qualityMetrics
-        } : null
+          qualityMetrics: qualityMetrics,  // Changed from 'quality' to 'qualityMetrics'
+          source_documents: sourceDocuments,
+          context_stats: {
+            total_documents_available: documents.length,
+            documents_used_as_context: relevantDocs.length,
+            stakeholders_available: stakeholders?.length || 0,
+            custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
+            custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
+            estimated_context_tokens: Math.round(aiPrompt.length / 4)
+          }
+        } : {
+          qualityMetrics: qualityMetrics,  // Added quality metrics even without other metadata
+          source_documents: sourceDocuments,
+          context_stats: {
+            total_documents_available: documents.length,
+            documents_used_as_context: relevantDocs.length,
+            stakeholders_available: stakeholders?.length || 0,
+            custom_settings_count: hasSettings ? Object.keys(project.settings).length : 0,
+            custom_metadata_count: hasMetadata ? Object.keys(project.metadata).length : 0,
+            estimated_context_tokens: Math.round(aiPrompt.length / 4)
+          }
+        }
       }
       console.log('📄 [SAVE-2/6] Document data prepared:', {
         name: documentData.name,
@@ -1018,9 +1397,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
   const handleEditStakeholder = (stakeholder: Stakeholder) => {
     setEditingStakeholder(stakeholder)
     setStakeholderForm({
-      name: stakeholder.name,
+      name: stakeholder.name || "",
       role: stakeholder.role,
-      department: stakeholder.department,
+      department: stakeholder.department || "",
       email: stakeholder.email,
       phone: stakeholder.phone || "",
       interest_level: stakeholder.interest_level,
@@ -1029,8 +1408,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       communication_frequency: stakeholder.communication_frequency,
       stakeholder_type: stakeholder.stakeholder_type,
       stakeholder_category: stakeholder.stakeholder_category,
-      expectations: stakeholder.expectations,
-      potential_impact: stakeholder.potential_impact
+      expectations: stakeholder.expectations || "",
+      potential_impact: stakeholder.potential_impact || ""
     })
     setStakeholderDialogOpen(true)
   }
@@ -1343,7 +1722,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                     Document Library
                   </Link>
                 </Button>
-                <Dialog open={createDialogOpen} onOpenChange={(open) => {
+                <Dialog open={createDialogOpen} onOpenChange={(open: boolean) => {
                   setCreateDialogOpen(open)
                   if (open) {
                     fetchTemplatesForUpload()
@@ -1372,7 +1751,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             aria-label="Select Template"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             value={selectedTemplate}
-                            onChange={(e) => setSelectedTemplate(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTemplate(e.target.value)}
                             required
                           >
                             <option value="">Choose a template</option>
@@ -1381,11 +1760,93 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             ) : (
                               templates.map((template) => (
                                 <option key={template.id} value={template.id}>
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                    : ''}
                                   {template.name} ({template.framework})
+                                  {template.development_status === 'production' ? ' ✓' : ''}
                                 </option>
                               ))
                             )}
                           </select>
+                          
+                          {/* Template Status Information Panel */}
+                          {selectedTemplate && templates.find(t => t.id === selectedTemplate) && (() => {
+                            const template = templates.find(t => t.id === selectedTemplate)!
+                            return (
+                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                      <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant}>
+                                        <>{statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}</>
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
+                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
+                                      <>{healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}</>
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {template.validation_count !== undefined && template.validation_count > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Success Rate</span>
+                                      <span className="font-semibold">
+                                        {template.success_rate !== undefined 
+                                          ? `${Number(template.success_rate).toFixed(1)}%`
+                                          : template.success_count && template.validation_count
+                                            ? `${Math.round((template.success_count / template.validation_count) * 100)}%`
+                                            : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Test Runs</span>
+                                      <span className="font-semibold">{template.validation_count}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Warning for non-production templates */}
+                                {template.development_status && template.development_status !== 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                        {template.development_status === 'draft' && 'Draft Template - Untested'}
+                                        {template.development_status === 'testing' && 'Testing Template - Limited validation'}
+                                        {template.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
+                                        {template.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
+                                      </p>
+                                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                        This template is still being tested. Results may vary in quality.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Success indicator for production templates */}
+                                {template.development_status === 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                        Production Template - Fully Validated
+                                      </p>
+                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                        This template has been thoroughly tested and is ready for production use.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                         <div>
                           <Label htmlFor="doc-name">Document Name</Label>
@@ -1394,7 +1855,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             placeholder="Enter document name" 
                             className="mt-1"
                             value={documentName}
-                            onChange={(e) => setDocumentName(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentName(e.target.value)}
                             required
                           />
                         </div>
@@ -1405,7 +1866,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             placeholder="Brief description of the document" 
                             className="mt-1"
                             value={documentDescription}
-                            onChange={(e) => setDocumentDescription(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentDescription(e.target.value)}
                           />
                         </div>
                         <div>
@@ -1414,7 +1875,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             id="ai-provider"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             value={selectedProvider}
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                               const provider = aiProviders.find(p => p.name === e.target.value)
                               setSelectedProvider(e.target.value)
                               if (provider && provider.models && provider.models.length > 0) {
@@ -1435,7 +1896,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             id="ai-model"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             value={selectedModel}
-                            onChange={(e) => setSelectedModel(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedModel(e.target.value)}
                           >
                             {aiProviders
                               .find(p => p.name === selectedProvider)
@@ -1456,7 +1917,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             max="1"
                             step="0.1"
                             value={aiTemperature}
-                            onChange={(e) => setAiTemperature(parseFloat(e.target.value))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAiTemperature(parseFloat(e.target.value))}
                             className="w-full mt-1"
                           />
                           <p className="text-xs text-muted-foreground mt-1">
@@ -1515,7 +1976,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="Enter project name" 
                               className="mt-2"
                               value={editForm.name}
-                              onChange={(e) => setEditForm(prev => ({...prev, name: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, name: e.target.value}))}
                               required
                             />
                           </div>
@@ -1528,7 +1989,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               aria-label="Priority"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.priority}
-                              onChange={(e) => setEditForm(prev => ({...prev, priority: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({...prev, priority: e.target.value}))}
                             >
                               <option value="low">Low</option>
                               <option value="medium">Medium</option>
@@ -1547,7 +2008,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               aria-label="Framework"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.framework}
-                              onChange={(e) => setEditForm(prev => ({...prev, framework: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({...prev, framework: e.target.value}))}
                               required
                             >
                               <option value="">Select framework</option>
@@ -1565,7 +2026,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               aria-label="Status"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.status}
-                              onChange={(e) => setEditForm(prev => ({...prev, status: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({...prev, status: e.target.value}))}
                             >
                               <option value="planning">Planning</option>
                               <option value="active">Active</option>
@@ -1585,7 +2046,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             placeholder="Describe the project objectives and scope"
                             className="mt-2"
                             value={editForm.description}
-                            onChange={(e) => setEditForm(prev => ({...prev, description: e.target.value}))}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditForm(prev => ({...prev, description: e.target.value}))}
                             rows={3}
                           />
                         </div>
@@ -1601,7 +2062,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               type="date"
                               className="mt-2"
                               value={editForm.start_date}
-                              onChange={(e) => setEditForm(prev => ({...prev, start_date: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, start_date: e.target.value}))}
                             />
                           </div>
                           <div>
@@ -1613,7 +2074,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               type="date"
                               className="mt-2"
                               value={editForm.end_date}
-                              onChange={(e) => setEditForm(prev => ({...prev, end_date: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, end_date: e.target.value}))}
                             />
                           </div>
                           <div>
@@ -1626,7 +2087,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="0"
                               className="mt-2"
                               value={editForm.budget}
-                              onChange={(e) => setEditForm(prev => ({...prev, budget: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, budget: e.target.value}))}
                             />
                           </div>
                         </div>
@@ -1641,7 +2102,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             placeholder="Enter project manager name"
                             className="mt-2"
                             value={editForm.manager}
-                            onChange={(e) => setEditForm(prev => ({...prev, manager: e.target.value}))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, manager: e.target.value}))}
                           />
                         </div>
 
@@ -1717,7 +2178,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="Enter role/title (e.g., Project Manager, Business Analyst)" 
                               className="mt-2"
                               value={stakeholderForm.role}
-                              onChange={(e) => setStakeholderForm(prev => ({...prev, role: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, role: e.target.value}))}
                               required
                             />
                           </div>
@@ -1730,7 +2191,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="Enter stakeholder name (leave blank if to be recruited)" 
                               className="mt-2"
                               value={stakeholderForm.name}
-                              onChange={(e) => setStakeholderForm(prev => ({...prev, name: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, name: e.target.value}))}
                             />
                           </div>
                         </div>
@@ -1745,7 +2206,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="Enter department" 
                               className="mt-2"
                               value={stakeholderForm.department}
-                              onChange={(e) => setStakeholderForm(prev => ({...prev, department: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, department: e.target.value}))}
                             />
                           </div>
                           <div>
@@ -1758,7 +2219,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="Enter email address" 
                               className="mt-2"
                               value={stakeholderForm.email}
-                              onChange={(e) => setStakeholderForm(prev => ({...prev, email: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, email: e.target.value}))}
                               required
                             />
                           </div>
@@ -1774,7 +2235,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               placeholder="Enter phone number" 
                               className="mt-2"
                               value={stakeholderForm.phone}
-                              onChange={(e) => setStakeholderForm(prev => ({...prev, phone: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, phone: e.target.value}))}
                             />
                           </div>
                           <div>
@@ -1785,7 +2246,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                               id="stakeholder-type"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={stakeholderForm.stakeholder_type}
-                              onChange={(e) => setStakeholderForm(prev => ({...prev, stakeholder_type: e.target.value as 'internal' | 'external'}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, stakeholder_type: e.target.value as 'internal' | 'external'}))}
                             >
                               <option value="internal">Internal</option>
                               <option value="external">External</option>
@@ -1806,7 +2267,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 id="interest-level"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.interest_level}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, interest_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, interest_level: e.target.value as 'high' | 'medium' | 'low'}))}
                               >
                                 <option value="high">High</option>
                                 <option value="medium">Medium</option>
@@ -1821,7 +2282,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 id="influence-level"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.influence_level}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, influence_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, influence_level: e.target.value as 'high' | 'medium' | 'low'}))}
                               >
                                 <option value="high">High</option>
                                 <option value="medium">Medium</option>
@@ -1839,7 +2300,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 id="engagement-approach"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.engagement_approach}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, engagement_approach: e.target.value as 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, engagement_approach: e.target.value as 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'}))}
                               >
                                 <option value="manage_closely">Manage Closely</option>
                                 <option value="keep_satisfied">Keep Satisfied</option>
@@ -1855,7 +2316,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 id="communication-frequency"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.communication_frequency}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, communication_frequency: e.target.value as 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, communication_frequency: e.target.value as 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'}))}
                               >
                                 <option value="daily">Daily</option>
                                 <option value="weekly">Weekly</option>
@@ -1875,7 +2336,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 id="stakeholder-category"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.stakeholder_category}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, stakeholder_category: e.target.value as 'primary' | 'secondary'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, stakeholder_category: e.target.value as 'primary' | 'secondary'}))}
                               >
                                 <option value="primary">Primary</option>
                                 <option value="secondary">Secondary</option>
@@ -1898,7 +2359,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 placeholder="Describe what this stakeholder expects from the project"
                                 className="mt-2"
                                 value={stakeholderForm.expectations}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, expectations: e.target.value}))}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({...prev, expectations: e.target.value}))}
                                 rows={3}
                               />
                             </div>
@@ -1911,7 +2372,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                                 placeholder="Describe how this stakeholder can impact the project"
                                 className="mt-2"
                                 value={stakeholderForm.potential_impact}
-                                onChange={(e) => setStakeholderForm(prev => ({...prev, potential_impact: e.target.value}))}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({...prev, potential_impact: e.target.value}))}
                                 rows={3}
                               />
                             </div>
@@ -1950,7 +2411,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             id="upload-doc-name"
                             placeholder="Enter document name"
                             value={uploadForm.name}
-                            onChange={(e) => setUploadForm({...uploadForm, name: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({...uploadForm, name: e.target.value})}
                             className="mt-2"
                             required
                           />
@@ -1964,7 +2425,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             title="Select a template for metadata tagging"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                             value={uploadForm.template_id}
-                            onChange={(e) => setUploadForm({...uploadForm, template_id: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUploadForm({...uploadForm, template_id: e.target.value})}
                             required
                           >
                             <option value="">Select a template (required)</option>
@@ -1990,7 +2451,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             id="file-upload"
                             type="file"
                             accept=".pdf,.doc,.docx,.txt,.md"
-                            onChange={(e) => {
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                               const file = e.target.files?.[0] || null
                               setUploadForm({...uploadForm, file})
                             }}
@@ -2029,6 +2490,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
+                <TabsTrigger value="variables">Variables</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
               </TabsList>
 
@@ -2088,7 +2550,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                     <Input
                       placeholder="Search documents..."
                       value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                       className="pl-10"
                     />
                   </div>
@@ -2332,7 +2794,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             cx="50%"
                             cy="50%"
                             labelLine={false}
-                            label={(entry) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
+                            label={(entry: any) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
                             outerRadius={80}
                             dataKey="value"
                           >
@@ -2737,6 +3199,349 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                     )}
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="variables" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings className="h-5 w-5" />
+                      Project Variables & Metadata
+                    </CardTitle>
+                    <CardDescription>
+                      Key project attributes and configuration variables that can be used in document generation
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Basic Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Basic Information</h3>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Project Name</p>
+                              <p className="text-sm font-semibold">{project?.name || 'N/A'}</p>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(project?.name || '')
+                                toast.success('Copied to clipboard')
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Description</p>
+                              <p className="text-sm">{project?.description || 'No description'}</p>
+                            </div>
+                            {project?.description && (
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(project?.description || '')
+                                  toast.success('Copied to clipboard')
+                                }}
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Project ID</p>
+                              <p className="text-sm font-mono text-xs">{project?.id || 'N/A'}</p>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              onClick={() => {
+                                navigator.clipboard.writeText(project?.id || '')
+                                toast.success('Copied to clipboard')
+                              }}
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Project Attributes */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Project Attributes</h3>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Framework</p>
+                              <Badge variant="outline">{project?.framework || 'N/A'}</Badge>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
+                              <Badge>{project?.status || 'N/A'}</Badge>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Priority</p>
+                              <Badge variant={
+                                project?.priority === 'high' ? 'destructive' : 
+                                project?.priority === 'medium' ? 'default' : 
+                                'secondary'
+                              }>
+                                {project?.priority || 'N/A'}
+                              </Badge>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Owner</p>
+                              <p className="text-sm">{project?.owner_name || 'N/A'}</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Timeline & Budget */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Timeline & Budget</h3>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Start Date</p>
+                              <p className="text-sm">
+                                {project?.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">End Date</p>
+                              <p className="text-sm">
+                                {project?.end_date ? new Date(project.end_date).toLocaleDateString() : 'Not set'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Budget</p>
+                              <p className="text-sm font-semibold">
+                                {project?.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Duration</p>
+                              <p className="text-sm">
+                                {project?.start_date && project?.end_date
+                                  ? `${Math.ceil((new Date(project.end_date).getTime() - new Date(project.start_date).getTime()) / (1000 * 60 * 60 * 24))} days`
+                                  : 'Not set'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Team & Timestamps */}
+                      <div className="space-y-4">
+                        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Team & Tracking</h3>
+                        
+                        <div className="space-y-3">
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Team Members</p>
+                              <p className="text-sm">
+                                {project?.team_members && project.team_members.length > 0 
+                                  ? `${project.team_members.length} members`
+                                  : 'No team members'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Created</p>
+                              <p className="text-sm">
+                                {project?.created_at ? new Date(project.created_at).toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Last Updated</p>
+                              <p className="text-sm">
+                                {project?.updated_at ? new Date(project.updated_at).toLocaleString() : 'N/A'}
+                              </p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Documents</p>
+                              <p className="text-sm font-semibold">{documents.length} documents</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-muted-foreground mb-1">Stakeholders</p>
+                              <p className="text-sm font-semibold">{stakeholders.length} stakeholders</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Custom Variables from Settings & Metadata */}
+                    {(project as any)?.settings && Object.keys((project as any).settings).length > 0 && (
+                      <div className="mt-6">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Settings className="h-5 w-5" />
+                              Custom Settings
+                            </CardTitle>
+                            <CardDescription>
+                              Project-specific configuration settings
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {Object.entries((project as any).settings).map(([key, value]) => (
+                                <div key={key} className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                                  <div className="flex-1">
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">{key}</p>
+                                    <p className="text-sm font-mono text-xs">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>
+                                  </div>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value) : String(value))
+                                      toast.success('Copied to clipboard')
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                    
+                    {(project as any)?.metadata && Object.keys((project as any).metadata).length > 0 && (
+                      <div className="mt-6">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg flex items-center gap-2">
+                              <Database className="h-5 w-5" />
+                              Custom Metadata
+                            </CardTitle>
+                            <CardDescription>
+                              Additional project metadata and custom fields
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2">
+                              {Object.entries((project as any).metadata).map(([key, value]) => (
+                                <div key={key} className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
+                                  <div className="flex-1">
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">{key}</p>
+                                    <p className="text-sm font-mono text-xs">{typeof value === 'object' ? JSON.stringify(value) : String(value)}</p>
+                                  </div>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="sm"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value) : String(value))
+                                      toast.success('Copied to clipboard')
+                                    }}
+                                  >
+                                    <Copy className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+
+                    {/* Variable Usage Guide */}
+                    <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Lightbulb className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                            Using Project Variables in Document Generation
+                          </h4>
+                          <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
+                            These variables are automatically available when generating documents for this project. You can reference them using template placeholders:
+                          </p>
+                          <div className="space-y-1 text-xs text-blue-800 dark:text-blue-200 font-mono bg-blue-100 dark:bg-blue-900 p-3 rounded">
+                            <p className="font-semibold mb-1">Standard Variables:</p>
+                            <p>{"{{project_name}}"} → {project?.name}</p>
+                            <p>{"{{project_framework}}"} → {project?.framework}</p>
+                            <p>{"{{project_status}}"} → {project?.status}</p>
+                            <p>{"{{project_priority}}"} → {project?.priority}</p>
+                            <p>{"{{project_budget}}"} → {project?.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}</p>
+                            <p>{"{{project_owner}}"} → {project?.owner_name || 'N/A'}</p>
+                            <p>{"{{start_date}}"} → {project?.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set'}</p>
+                            <p>{"{{end_date}}"} → {project?.end_date ? new Date(project.end_date).toLocaleDateString() : 'Not set'}</p>
+                            <p>{"{{document_count}}"} → {documents.length}</p>
+                            <p>{"{{stakeholder_count}}"} → {stakeholders.length}</p>
+                            
+                            {(project as any)?.team_members && (project as any).team_members.length > 0 && (
+                              <>
+                                <p className="font-semibold mt-2 mb-1">Team Variables:</p>
+                                <p>{"{{team_size}}"} → {(project as any).team_members.length}</p>
+                              </>
+                            )}
+                            
+                            {(project as any)?.settings && Object.keys((project as any).settings).length > 0 && (
+                              <>
+                                <p className="font-semibold mt-2 mb-1">Custom Settings:</p>
+                                {Object.keys((project as any).settings).map(key => (
+                                  <p key={key}>{"{{settings." + key + "}}"} → {String((project as any).settings[key])}</p>
+                                ))}
+                              </>
+                            )}
+                            
+                            {(project as any)?.metadata && Object.keys((project as any).metadata).length > 0 && (
+                              <>
+                                <p className="font-semibold mt-2 mb-1">Custom Metadata:</p>
+                                {Object.keys((project as any).metadata).map(key => (
+                                  <p key={key}>{"{{metadata." + key + "}}"} → {String((project as any).metadata[key])}</p>
+                                ))}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               </TabsContent>
 
               <TabsContent value="timeline" className="space-y-4">

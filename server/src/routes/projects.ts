@@ -298,11 +298,15 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
         d.word_count,
         d.character_count,
         d.metadata,
+        d.generation_metadata,
+        d.template_metadata,
         d.template_id,
-        d.framework
+        d.framework,
+        t.name as template_name
       FROM documents d
       JOIN projects p ON d.project_id = p.id
       LEFT JOIN users u ON d.created_by = u.id
+      LEFT JOIN templates t ON d.template_id = t.id
       WHERE d.id = $1 AND d.project_id = $2
     `
 
@@ -313,6 +317,15 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
     }
 
     const document = result.rows[0]
+    
+    // 🔍 DEBUG: Log what we got from database
+    log.info('📊 [GET-PROJECT-DOC] Retrieved document:', {
+      id: document.id,
+      name: document.title,
+      has_generation_metadata: !!document.generation_metadata,
+      generation_metadata_type: typeof document.generation_metadata,
+      generation_metadata_length: document.generation_metadata ? JSON.stringify(document.generation_metadata).length : 0
+    })
 
     // Parse metadata if it exists and is a string
     if (document.metadata && typeof document.metadata === 'string') {
@@ -323,6 +336,40 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
         document.metadata = {}
       }
     }
+    
+    // Parse generation_metadata if it exists and is a string
+    if (document.generation_metadata && typeof document.generation_metadata === 'string') {
+      try {
+        log.info('⚠️ [GET-PROJECT-DOC] generation_metadata is STRING, parsing...')
+        document.generation_metadata = JSON.parse(document.generation_metadata)
+        log.info('✅ [GET-PROJECT-DOC] Parsed successfully. Keys:', Object.keys(document.generation_metadata))
+      } catch (e) {
+        log.error('❌ [GET-PROJECT-DOC] Failed to parse generation_metadata:', e)
+        document.generation_metadata = null
+      }
+    } else if (document.generation_metadata) {
+      log.info('✅ [GET-PROJECT-DOC] generation_metadata is already OBJECT')
+    } else {
+      log.info('❌ [GET-PROJECT-DOC] No generation_metadata in database')
+    }
+    
+    // Parse template_metadata if it exists and is a string
+    if (document.template_metadata && typeof document.template_metadata === 'string') {
+      try {
+        document.template_metadata = JSON.parse(document.template_metadata)
+      } catch (e) {
+        log.warn('Failed to parse template_metadata:', e)
+        document.template_metadata = null
+      }
+    }
+    
+    // 🔍 DEBUG: Log what we're sending
+    log.info('📤 [GET-PROJECT-DOC] Sending to frontend:', {
+      id: document.id,
+      has_generation_metadata: !!document.generation_metadata,
+      has_aiProcessing: !!(document.generation_metadata?.aiProcessing),
+      has_source_documents: !!(document.generation_metadata?.source_documents)
+    })
 
     res.json(document)
   } catch (error) {

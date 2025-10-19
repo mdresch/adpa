@@ -533,16 +533,60 @@ router.get('/templates',
     try {
       const result = await pool.query(
         `
-        SELECT id, name, description, category, framework, is_public, created_at
+        SELECT 
+          id, 
+          name, 
+          description, 
+          category, 
+          framework, 
+          is_public, 
+          created_at,
+          development_status,
+          validation_count,
+          success_count,
+          CASE 
+            WHEN validation_count = 0 THEN 0
+            ELSE ROUND((success_count::NUMERIC / validation_count::NUMERIC * 100), 2)
+          END as success_rate,
+          last_validated_at
         FROM templates
         WHERE deleted_at IS NULL
-        ORDER BY name
+        ORDER BY 
+          CASE development_status
+            WHEN 'production' THEN 1
+            WHEN 'validated' THEN 2
+            WHEN 'testing' THEN 3
+            WHEN 'compliance' THEN 4
+            WHEN 'draft' THEN 5
+            ELSE 6
+          END,
+          name
         `
       )
 
+      // Calculate health rating for each template
+      const templatesWithHealth = result.rows.map(template => {
+        let health_rating = null
+        if (template.validation_count > 0 && template.success_rate !== null) {
+          if (template.success_rate >= 90) {
+            health_rating = 'Excellent'
+          } else if (template.success_rate >= 80) {
+            health_rating = 'Good'
+          } else if (template.success_rate >= 70) {
+            health_rating = 'Fair'
+          } else {
+            health_rating = 'Needs Improvement'
+          }
+        }
+        return {
+          ...template,
+          health_rating
+        }
+      })
+
       res.json({
         success: true,
-        data: result.rows
+        data: templatesWithHealth
       })
 
     } catch (error) {

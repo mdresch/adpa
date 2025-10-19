@@ -54,6 +54,24 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { toast } from "sonner"
 
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
+
 interface Document {
   id: string
   name: string
@@ -591,98 +609,6 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                   </div>
                 </motion.div>
 
-                {/* Template Category Distribution - Featured at Top */}
-                {stats && stats.totalDocuments > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    className="mb-8"
-                  >
-                    <AnimatedCard className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <CardTitle className="flex items-center space-x-2 text-xl">
-                              <PieChart className="h-6 w-6 text-blue-600" />
-                              <span>Template Category Distribution</span>
-                            </CardTitle>
-                            <CardDescription className="mt-1">
-                              Documents organized by category and template type
-                            </CardDescription>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-3xl font-bold text-blue-600">{stats.byTemplate.length}</div>
-                            <div className="text-sm text-muted-foreground">Templates Used</div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        {stats.byTemplate.length > 0 ? (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {stats.byTemplate.map((template, index) => {
-                              const percentage = ((template.count / stats.totalDocuments) * 100).toFixed(1)
-                              const colors = [
-                                'bg-blue-500',
-                                'bg-purple-500',
-                                'bg-green-500',
-                                'bg-orange-500',
-                                'bg-pink-500',
-                                'bg-cyan-500',
-                                'bg-yellow-500',
-                                'bg-red-500',
-                              ]
-                              const color = colors[index % colors.length]
-                              
-                              return (
-                                <div key={index} className="bg-white rounded-lg p-4 border shadow-sm hover:shadow-md transition-shadow">
-                                  <div className="flex items-start justify-between mb-3">
-                                    <div className="flex-1">
-                                      <div className="flex items-center space-x-2 mb-1">
-                                        <div className={`w-3 h-3 rounded-full ${color}`}></div>
-                                        <span className="text-sm font-semibold text-gray-900 line-clamp-2">
-                                          {template.template_name}
-                                        </span>
-                                      </div>
-                                      <Badge variant="outline" className="text-xs">
-                                        {template.template_framework}
-                                      </Badge>
-                                    </div>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-sm">
-                                      <span className="text-muted-foreground">Documents</span>
-                                      <span className="font-bold text-lg">{template.count}</span>
-                                    </div>
-                                    <Progress value={parseFloat(percentage)} className="h-2" />
-                                    <div className="text-xs text-muted-foreground text-right">
-                                      {percentage}% of total
-                                    </div>
-                                  </div>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center py-12">
-                            <PieChart className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
-                            <h3 className="text-lg font-semibold mb-2">No Template Data Available</h3>
-                            <p className="text-muted-foreground text-sm mb-4">
-                              {stats.totalDocuments === 0 
-                                ? "No documents have been created yet."
-                                : "Documents in this project don't have templates assigned."
-                              }
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Tip: When uploading or generating documents, select a template to enable template tracking.
-                            </p>
-                          </div>
-                        )}
-                      </CardContent>
-                    </AnimatedCard>
-                  </motion.div>
-                )}
-
                 {/* Dashboard Stats - Comprehensive across ALL documents */}
                 {stats && (
                   <motion.div
@@ -1098,7 +1024,11 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                             ) : (
                               templates.map((template) => (
                                 <option key={template.id} value={template.id}>
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                    : ''}
                                   {template.name} ({template.framework})
+                                  {template.development_status === 'production' ? ' ✓' : ''}
                                 </option>
                               ))
                             )}
@@ -1106,6 +1036,83 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                           <p className="text-xs text-muted-foreground mt-1">
                             Template selection is required to ensure proper document metadata and review compliance
                           </p>
+                          
+                          {/* Template Status Information Panel */}
+                          {uploadForm.template_id && templates.find(t => t.id === uploadForm.template_id) && (() => {
+                            const selectedTemplate = templates.find(t => t.id === uploadForm.template_id)!
+                            return (
+                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                      <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                        {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
+                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                      {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Success Rate</span>
+                                      <span className="font-semibold">
+                                        {selectedTemplate.success_rate !== undefined 
+                                          ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                          : selectedTemplate.success_count && selectedTemplate.validation_count
+                                            ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                            : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Test Runs</span>
+                                      <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Info for production templates */}
+                                {selectedTemplate.development_status === 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                        Production Template - Recommended for Uploads
+                                      </p>
+                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                        Using this template ensures proper metadata tagging and compliance tracking.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Note for non-production templates */}
+                                {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-blue-800 dark:text-blue-200">
+                                        Template Status: {selectedTemplate.development_status === 'draft' && 'Draft'}
+                                        {selectedTemplate.development_status === 'testing' && 'Testing'}
+                                        {selectedTemplate.development_status === 'validated' && 'Validated'}
+                                      </p>
+                                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                                        Metadata tagging will use this template's structure. Consider using a production template for better compliance tracking.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                         <div>
                           <Label htmlFor="file-upload">File *</Label>
@@ -1183,11 +1190,93 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                             ) : (
                               templates.map((template) => (
                                 <option key={template.id} value={template.id}>
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                    : ''}
                                   {template.name} ({template.framework})
+                                  {template.development_status === 'production' ? ' ✓' : ''}
                                 </option>
                               ))
                             )}
                           </select>
+                          
+                          {/* Template Status Information Panel */}
+                          {generateForm.template_id && templates.find(t => t.id === generateForm.template_id) && (() => {
+                            const selectedTemplate = templates.find(t => t.id === generateForm.template_id)!
+                            return (
+                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                      <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                        {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
+                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                      {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Success Rate</span>
+                                      <span className="font-semibold">
+                                        {selectedTemplate.success_rate !== undefined 
+                                          ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                          : selectedTemplate.success_count && selectedTemplate.validation_count
+                                            ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                            : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Test Runs</span>
+                                      <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Warning for non-production templates */}
+                                {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                        {selectedTemplate.development_status === 'draft' && 'Draft Template - Untested'}
+                                        {selectedTemplate.development_status === 'testing' && 'Testing Template - Limited validation'}
+                                        {selectedTemplate.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
+                                        {selectedTemplate.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
+                                      </p>
+                                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                        This template is still being tested. Results may vary in quality.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Success indicator for production templates */}
+                                {selectedTemplate.development_status === 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                        Production Template - Fully Validated
+                                      </p>
+                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                        This template has been thoroughly tested and is ready for production use.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                         <div>
                           <Label htmlFor="generate-prompt">Generation Prompt *</Label>

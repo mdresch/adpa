@@ -47,6 +47,24 @@ import { usePipelineAPI } from './hooks/usePipelineAPI'
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from 'sonner'
 
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
+
 interface StageStatus {
   id: string
   name: string
@@ -556,7 +574,7 @@ export default function VisualPipelinePage() {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Template Selection */}
-            <div>
+            <div className="space-y-3">
               <label className="text-sm font-medium mb-2 block">Template</label>
               <select
                 value={selectedTemplate}
@@ -565,15 +583,71 @@ export default function VisualPipelinePage() {
                 disabled={isStarting}
               >
                 <option value="">Select a template...</option>
-                {templates.map((template) => (
+                {templates.map((template: any) => (
                   <option key={template.id} value={template.id}>
+                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                      ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                      : ''}
                     {template.name} {template.category ? `(${template.category})` : ''}
+                    {template.development_status === 'production' ? ' ✓' : ''}
                   </option>
                 ))}
               </select>
               {templates.length === 0 && (
                 <p className="text-sm text-gray-500 mt-1">No templates available</p>
               )}
+              
+              {/* Template Status Panel */}
+              {selectedTemplate && templates.find((t: any) => t.id === selectedTemplate) && (() => {
+                const template = templates.find((t: any) => t.id === selectedTemplate)
+                if (!template) return null
+                
+                return (
+                  <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">Status:</span>
+                        {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                          // @ts-expect-error - Badge accepts children via HTMLAttributes
+                          <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant} className="text-xs">
+                            {statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}
+                          </Badge>
+                        )}
+                      </div>
+                      {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
+                        // @ts-expect-error - Badge accepts children via HTMLAttributes
+                        <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
+                          {healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {template.validation_count !== undefined && template.validation_count > 0 && (
+                      <div className="flex items-center gap-4 text-xs">
+                        <span className="text-muted-foreground">
+                          Success: <span className="font-semibold text-foreground">
+                            {template.success_rate !== undefined 
+                              ? `${Number(template.success_rate).toFixed(1)}%`
+                              : 'N/A'}
+                          </span>
+                        </span>
+                        <span className="text-muted-foreground">
+                          Runs: <span className="font-semibold text-foreground">{template.validation_count}</span>
+                        </span>
+                      </div>
+                    )}
+                    
+                    {template.development_status && template.development_status !== 'production' && (
+                      <Alert className="py-2">
+                        <AlertTriangle className="h-3 w-3" />
+                        <AlertDescription className="text-xs">
+                          Pipeline processing recommended with production templates only
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Project Selection */}

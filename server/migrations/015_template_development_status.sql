@@ -64,7 +64,12 @@ SELECT
   END as health_rating
 FROM templates t
 LEFT JOIN users u ON t.last_validated_by = u.id
-ORDER BY t.development_status, t.success_rate DESC NULLS LAST;
+WHERE t.deleted_at IS NULL
+ORDER BY t.development_status, 
+  CASE 
+    WHEN t.validation_count = 0 THEN 0
+    ELSE ROUND((t.success_count::NUMERIC / t.validation_count::NUMERIC * 100), 2)
+  END DESC NULLS LAST;
 
 -- Create function to update template validation stats
 CREATE OR REPLACE FUNCTION update_template_validation(

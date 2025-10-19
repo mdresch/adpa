@@ -58,6 +58,24 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 // @ts-ignore
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
+
 export default function ProcessFlowWorkflow() {
   const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
   const apiUrl = (path: string) => `${apiBase}${path}`
@@ -81,6 +99,12 @@ export default function ProcessFlowWorkflow() {
     description: string
     category: string
     content?: string
+    development_status?: 'draft' | 'testing' | 'compliance' | 'validated' | 'production' | 'deprecated' | 'archived'
+    validation_count?: number
+    success_count?: number
+    success_rate?: number
+    health_rating?: 'Excellent' | 'Good' | 'Fair' | 'Needs Improvement'
+    framework?: string
   }>>([])
   const [availableProjects, setAvailableProjects] = useState<Array<{
     id: string
@@ -1298,21 +1322,112 @@ export default function ProcessFlowWorkflow() {
                           <SelectContent>
                             {availableTemplates.map((template) => (
                               <SelectItem key={template.id} value={template.id}>
-                                {template.name} ({template.category})
+                                <div className="flex items-center gap-2 w-full">
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                                    <span className="text-xs">
+                                      {statusConfig[template.development_status as keyof typeof statusConfig].emoji}
+                                    </span>
+                                  )}
+                                  <span>{template.name} ({template.category || template.framework})</span>
+                                  {template.development_status === 'production' && (
+                                    <span className="text-xs">✓</span>
+                                  )}
+                                </div>
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
                       </div>
                       
-                      {selectedTemplate && (
-                        <div className="p-4 bg-muted rounded-lg">
-                          <h4 className="font-medium">Selected Template</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {availableTemplates.find(t => t.id === selectedTemplate)?.description}
-                          </p>
-                        </div>
-                      )}
+                      {selectedTemplate && (() => {
+                        const template = availableTemplates.find(t => t.id === selectedTemplate)
+                        if (!template) return null
+                        
+                        return (
+                          <div className="space-y-3">
+                            {/* Template Status Information Panel */}
+                            <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">Template Status:</span>
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                    <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant}>
+                                      {statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}
+                                    </Badge>
+                                  )}
+                                </div>
+                                {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
+                                  // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                  <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
+                                    {healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {template.validation_count !== undefined && template.validation_count > 0 && (
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                  <div className="flex flex-col">
+                                    <span className="text-muted-foreground text-xs">Success Rate</span>
+                                    <span className="font-semibold">
+                                      {template.success_rate !== undefined 
+                                        ? `${Number(template.success_rate).toFixed(1)}%`
+                                        : template.success_count && template.validation_count
+                                          ? `${Math.round((template.success_count / template.validation_count) * 100)}%`
+                                          : 'N/A'}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-muted-foreground text-xs">Test Runs</span>
+                                    <span className="font-semibold">{template.validation_count}</span>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Batch Generation Warning for Non-Production Templates */}
+                              {template.development_status && template.development_status !== 'production' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                  <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1">
+                                    <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                      {template.development_status === 'draft' && 'Draft Template - Not Ready for Batch Generation'}
+                                      {template.development_status === 'testing' && 'Testing Template - Limited Validation'}
+                                      {template.development_status === 'validated' && 'Validated Template - Use Caution in Batch Operations'}
+                                      {template.development_status === 'deprecated' && 'Deprecated Template - Not Recommended'}
+                                    </p>
+                                    <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                      This template is not production-ready. Batch processing may produce inconsistent results.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Success indicator for production templates */}
+                              {template.development_status === 'production' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1">
+                                    <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                      Production Template - Ready for Batch Generation
+                                    </p>
+                                    <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                      This template has been thoroughly tested and is ready for high-volume processing.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                            
+                            {/* Template Description */}
+                            <div className="p-4 bg-muted rounded-lg">
+                              <h4 className="font-medium">Template Description</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {template.description}
+                              </p>
+                            </div>
+                          </div>
+                        )
+                      })()}
                     </CardContent>
                   </Card>
 

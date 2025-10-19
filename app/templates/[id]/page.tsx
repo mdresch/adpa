@@ -1,0 +1,1103 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Sidebar } from "@/components/sidebar"
+import { Header } from "@/components/header"
+import { PageTransition } from "@/components/page-transition"
+import { AnimatedLayout, AnimatedCard } from "@/components/animated-layout"
+import { motion } from "framer-motion"
+import {
+  FileText,
+  TrendingUp,
+  CheckCircle,
+  AlertTriangle,
+  Clock,
+  Users,
+  BarChart3,
+  Activity,
+  ArrowRight,
+  Edit,
+  Copy,
+  Eye,
+  Zap,
+  Calendar,
+} from "@/components/ui/icons-shim"
+import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles } from "lucide-react"
+import { useAuth } from "@/contexts/AuthContext"
+import { apiClient } from "@/lib/api"
+import { toast } from "sonner"
+
+interface Template {
+  id: string
+  name: string
+  description: string
+  framework: string
+  category: string
+  development_status: 'draft' | 'testing' | 'compliance' | 'validated' | 'production' | 'archived' | 'deprecated'
+  validation_count: number
+  success_count: number
+  success_rate: number
+  health_rating: string
+  quality_threshold: number
+  prompt_version: number
+  last_validated_at: string | null
+  compliance_checked_at?: string | null
+  framework_compliance_score?: number | null
+  archived_at?: string | null
+  is_public: boolean
+  usage_count: number
+  created_by: string
+  created_by_name: string
+  created_at: string
+  updated_at: string
+}
+
+const statusConfig = {
+  draft: {
+    label: '⚪ Draft',
+    color: 'bg-gray-100 text-gray-800 border-gray-300',
+    description: 'Newly created, untested',
+    icon: Edit,
+    nextStatus: 'testing',
+    restrictions: 'One document at a time only',
+  },
+  testing: {
+    label: '🔵 Testing',
+    color: 'bg-blue-100 text-blue-800 border-blue-300',
+    description: 'Under validation',
+    icon: Activity,
+    nextStatus: 'compliance',
+    restrictions: 'One document at a time only',
+    requiresValidation: 3,
+    requiresSuccess: 75,
+  },
+  compliance: {
+    label: '🟣 Compliance Review',
+    emoji: '🟣',
+    color: 'bg-purple-100 text-purple-800 border-purple-300',
+    description: 'Framework alignment verification',
+    icon: ClipboardCheck,
+    nextStatus: 'validated',
+    restrictions: 'Framework compliance verification required',
+    requiresValidation: 5,
+    requiresSuccess: 80,
+    requiresCompliance: true,
+  },
+  validated: {
+    label: '🟡 Validated',
+    color: 'bg-yellow-100 text-yellow-800 border-yellow-300',
+    description: 'Compliance approved',
+    icon: CheckCircle,
+    nextStatus: 'production',
+    restrictions: 'Ready for broader use',
+    requiresValidation: 10,
+    requiresSuccess: 90,
+  },
+  production: {
+    label: '🟢 Production',
+    color: 'bg-green-100 text-green-800 border-green-300',
+    description: 'Production-ready',
+    icon: Award,
+    nextStatus: null,
+    restrictions: 'Batch generation allowed (up to 10)',
+  },
+  archived: {
+    label: '📦 Archived',
+    emoji: '📦',
+    color: 'bg-gray-100 text-gray-800 border-gray-300',
+    description: 'Archived and inactive',
+    icon: Archive,
+    nextStatus: null,
+    restrictions: 'No longer in active use',
+  },
+  deprecated: {
+    label: '🔴 Deprecated',
+    color: 'bg-red-100 text-red-800 border-red-300',
+    description: 'No longer recommended',
+    icon: AlertTriangle,
+    nextStatus: null,
+    restrictions: 'Not recommended for use',
+  },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', icon: Award },
+  'Good': { color: 'text-blue-600', icon: CheckCircle },
+  'Fair': { color: 'text-yellow-600', icon: Target },
+  'Needs Improvement': { color: 'text-red-600', icon: AlertTriangle },
+  'Not tested yet': { color: 'text-gray-600', icon: Clock },
+}
+
+export default function TemplateDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const { user, hasPermission } = useAuth()
+  const templateId = params.id as string
+  
+  const [template, setTemplate] = useState<Template | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [promoting, setPromoting] = useState(false)
+  const [archiving, setArchiving] = useState(false)
+
+  useEffect(() => {
+    fetchTemplate()
+  }, [templateId])
+
+  const fetchTemplate = async () => {
+    try {
+      setLoading(true)
+      const template = await apiClient.getTemplate(templateId)
+      setTemplate(template)
+    } catch (error) {
+      console.error('Failed to fetch template:', error)
+      toast.error('Failed to load template')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handlePromote = async () => {
+    if (!template) return
+    
+    const config = statusConfig[template.development_status]
+    if (!config.nextStatus) {
+      toast.error('Template cannot be promoted from current status')
+      return
+    }
+
+    try {
+      setPromoting(true)
+      
+      const response = await apiClient.request(`/templates/${template.id}/promote`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: `Promotion to ${config.nextStatus}`,
+        })
+      })
+
+      if (response.success) {
+        toast.success(response.message || 'Template promoted successfully!')
+        fetchTemplate() // Refresh to show new status
+      } else {
+        toast.error(response.message || 'Promotion failed')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to promote template')
+    } finally {
+      setPromoting(false)
+    }
+  }
+
+  const handleArchive = async () => {
+    if (!template) return
+    
+    const reason = prompt('Reason for archiving this template (optional):')
+    
+    try {
+      setArchiving(true)
+      
+      const response = await apiClient.request(`/templates/${template.id}/archive`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: reason || 'Archived by user',
+        })
+      })
+
+      if (response.success) {
+        toast.success(response.message || 'Template archived successfully!')
+        fetchTemplate() // Refresh to show archived status
+      } else {
+        toast.error(response.message || 'Archive failed')
+      }
+    } catch (error: any) {
+      toast.error(error.message || 'Failed to archive template')
+    } finally {
+      setArchiving(false)
+    }
+  }
+
+  const handleApproveCompliance = async () => {
+    if (!template) return
+
+    try {
+      setPromoting(true)
+      
+      // Default compliance score of 95% (can be made configurable)
+      const complianceScore = 95
+      
+      const response = await apiClient.request(`/templates/${template.id}/compliance/approve`, {
+        method: 'POST',
+        body: JSON.stringify({
+          compliance_score: complianceScore,
+          notes: `${template.framework} compliance approved by ${user?.name || 'reviewer'}. Generated documents follow framework structure, required sections are present and complete, terminology aligns with standards, and content quality meets expectations.`
+        })
+      })
+
+      if (response.success) {
+        toast.success(`${template.framework} compliance approved! Ready to promote to Validated.`)
+        fetchTemplate() // Refresh to show compliance status
+      } else {
+        toast.error(response.message || 'Failed to approve compliance')
+      }
+    } catch (error) {
+      console.error('Failed to approve compliance:', error)
+      toast.error('Failed to approve compliance')
+    } finally {
+      setPromoting(false)
+    }
+  }
+
+  const canPromote = (): boolean => {
+    if (!template) return false
+    
+    const status = template.development_status
+    const config = statusConfig[status]
+    
+    if (!config.nextStatus) return false
+    if (status === 'draft') return true // Manual promotion
+    if (status === 'archived') return false // Cannot promote from archived
+    
+    // Check validation requirements
+    if (config.requiresValidation && template.validation_count < config.requiresValidation) return false
+    if (config.requiresSuccess && successRate < config.requiresSuccess) return false
+    
+    // Check compliance requirement
+    if (config.requiresCompliance && !template.compliance_checked_at) return false
+    
+    return true
+  }
+
+  const getPromotionMessage = (): string => {
+    if (!template) return ''
+    
+    const status = template.development_status
+    const config = statusConfig[status]
+    
+    if (!config.nextStatus) return 'Cannot promote further'
+    if (status === 'draft') return 'Ready to promote to testing'
+    
+    if (config.requiresValidation && template.validation_count < config.requiresValidation) {
+      const needed = config.requiresValidation - template.validation_count
+      return `Need ${needed} more validation run${needed > 1 ? 's' : ''} (${template.validation_count}/${config.requiresValidation})`
+    }
+    
+    if (config.requiresSuccess && template.success_rate < config.requiresSuccess) {
+      return `Need ${config.requiresSuccess}%+ success rate (currently ${template.success_rate}%)`
+    }
+    
+    return `Ready to promote to ${config.nextStatus}`
+  }
+
+  if (loading) {
+    return (
+      <PageTransition>
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-6">
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading template...</p>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </PageTransition>
+    )
+  }
+
+  if (!template) {
+    return (
+      <PageTransition>
+        <div className="flex h-screen bg-background">
+          <Sidebar />
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <Header />
+            <main className="flex-1 overflow-y-auto p-6">
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                  <AlertTriangle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                  <h2 className="text-xl font-semibold mb-2">Template Not Found</h2>
+                  <Button onClick={() => router.push('/templates')}>Back to Templates</Button>
+                </div>
+              </div>
+            </main>
+          </div>
+        </div>
+      </PageTransition>
+    )
+  }
+
+  const currentConfig = statusConfig[template.development_status]
+  const HealthIcon = healthConfig[template.health_rating]?.icon || Clock
+  
+  // Calculate success rate if not provided by backend
+  const successRate = template.success_rate !== undefined && template.success_rate !== null
+    ? Number(template.success_rate)
+    : template.validation_count > 0
+      ? Math.round((template.success_count / template.validation_count) * 100)
+      : 0
+
+  return (
+    <PageTransition>
+      <div className="flex h-screen bg-background">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6">
+            <AnimatedLayout>
+              <div className="max-w-7xl mx-auto space-y-6">
+                
+                {/* Header */}
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => router.push('/templates')}
+                        >
+                          ← Back
+                        </Button>
+                      </div>
+                      <h1 className="text-3xl font-bold flex items-center gap-3">
+                        <FileText className="h-8 w-8 text-purple-500" />
+                        {template.name}
+                      </h1>
+                      <p className="text-muted-foreground mt-2">
+                        {template.description}
+                      </p>
+                      <div className="flex items-center gap-3 mt-4">
+                        <Badge variant="outline">{template.framework}</Badge>
+                        <Badge variant="outline">{template.category}</Badge>
+                        <Badge className={currentConfig.color}>
+                          {currentConfig.label}
+                        </Badge>
+                        {template.is_public && <Badge variant="secondary">Public</Badge>}
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => router.push(`/templates/${template.id}/edit`)}>
+                        <Edit className="h-4 w-4 mr-2" />
+                        Edit
+                      </Button>
+                      {template.development_status !== 'archived' && hasPermission('templates.update') && (
+                        <Button 
+                          variant="outline" 
+                          onClick={handleArchive}
+                          disabled={archiving}
+                          className="border-orange-300 hover:bg-orange-50"
+                        >
+                          <Archive className="h-4 w-4 mr-2" />
+                          {archiving ? 'Archiving...' : 'Archive'}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  
+                  {/* Main Content */}
+                  <div className="lg:col-span-2 space-y-6">
+                    
+                    {/* Lifecycle Status */}
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Activity className="h-5 w-5" />
+                          Development Lifecycle
+                        </CardTitle>
+                        <CardDescription>
+                          Track template maturity and quality validation
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        
+                        {/* Visual Lifecycle Timeline */}
+                        <div className="relative">
+                          <div className="flex items-center justify-between mb-8">
+                            {(['draft', 'testing', 'compliance', 'validated', 'production'] as const).map((status, index) => {
+                              const config = statusConfig[status]
+                              const Icon = config.icon
+                              const isActive = template.development_status === status
+                              const lifecycleOrder = ['draft', 'testing', 'compliance', 'validated', 'production']
+                              const currentIndex = lifecycleOrder.indexOf(template.development_status)
+                              const isPast = currentIndex > index && template.development_status !== 'archived'
+                              const isCurrent = isActive
+                              
+                              return (
+                                <div key={status} className="flex-1 relative">
+                                  <div className="flex flex-col items-center">
+                                    {/* Circle indicator */}
+                                    <div
+                                      className={`
+                                        w-12 h-12 rounded-full border-2 flex items-center justify-center mb-2 transition-all
+                                        ${isCurrent ? config.color + ' ring-4 ring-offset-2 ring-offset-background' : ''}
+                                        ${isPast ? 'bg-green-100 border-green-500' : ''}
+                                        ${!isPast && !isCurrent ? 'bg-gray-100 border-gray-300' : ''}
+                                      `}
+                                    >
+                                      <Icon className={`h-6 w-6 ${isCurrent || isPast ? '' : 'text-gray-400'}`} />
+                                    </div>
+                                    
+                                    {/* Label */}
+                                    <div className="text-center">
+                                      <p className={`text-sm font-medium ${isCurrent ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                        {config.label}
+                                      </p>
+                                      {isCurrent && (
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          Current
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  
+                                  {/* Connector line */}
+                                  {index < 3 && (
+                                    <div 
+                                      className={`
+                                        absolute top-6 left-1/2 h-0.5 w-full -z-10
+                                        ${isPast ? 'bg-green-500' : 'bg-gray-300'}
+                                      `}
+                                    />
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Current Status Details */}
+                        <div className="bg-muted rounded-lg p-4 space-y-3">
+                          <div className="flex items-start gap-3">
+                            <div className={`rounded-full p-2 ${currentConfig.color.replace('text-', 'bg-').replace('800', '500')}`}>
+                              <currentConfig.icon className="h-5 w-5 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <h4 className="font-semibold mb-1">{currentConfig.description}</h4>
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {currentConfig.restrictions}
+                              </p>
+                              
+                              {/* Validation Progress */}
+                              {template.development_status !== 'draft' && template.development_status !== 'deprecated' && (
+                                <div className="space-y-2 mt-3">
+                                  <div className="flex justify-between text-sm">
+                                    <span>Validation Progress</span>
+                                    <span className="font-medium">
+                                      {template.validation_count} / {currentConfig.requiresValidation || 0} runs
+                                    </span>
+                                  </div>
+                                  <Progress 
+                                    value={(template.validation_count / (currentConfig.requiresValidation || 1)) * 100}
+                                    className="h-2"
+                                  />
+                                  
+                                  <div className="flex justify-between text-sm">
+                                    <span>Success Rate</span>
+                                    <span className="font-medium">
+                                      {successRate}% / {currentConfig.requiresSuccess || 0}%
+                                    </span>
+                                  </div>
+                                  <Progress 
+                                    value={(successRate / (currentConfig.requiresSuccess || 100)) * 100}
+                                    className="h-2"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Promotion Action */}
+                        {currentConfig.nextStatus && template.development_status !== 'archived' && (
+                          <div className="space-y-3 pt-4 border-t">
+                            <div className="flex items-center justify-between">
+                              <div className="flex-1">
+                                <p className="font-medium mb-1">Next Stage: {statusConfig[currentConfig.nextStatus].label}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {getPromotionMessage()}
+                                </p>
+                              </div>
+                              <Button
+                                onClick={handlePromote}
+                                disabled={!canPromote() || promoting}
+                                className={canPromote() ? 'bg-green-600 hover:bg-green-700' : ''}
+                              >
+                                {promoting ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                                    Promoting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <ArrowUp className="h-4 w-4 mr-2" />
+                                    Promote to {statusConfig[currentConfig.nextStatus].label}
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                            
+                            {/* Archive Button - Available from any stage */}
+                            <div className="flex items-center justify-between border-t pt-3">
+                              <div className="flex-1">
+                                <p className="font-medium mb-1 text-orange-700">Archive Template</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Move to archive (can be done from any stage)
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                onClick={handleArchive}
+                                disabled={archiving}
+                                className="border-orange-300 hover:bg-orange-50"
+                              >
+                                {archiving ? (
+                                  <>
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600 mr-2" />
+                                    Archiving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Archive className="h-4 w-4 mr-2" />
+                                    Archive
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </AnimatedCard>
+                    
+                    {/* Compliance Review Panel (Only shown when in compliance stage) */}
+                    {template.development_status === 'compliance' && (
+                      <AnimatedCard>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <ClipboardCheck className="h-5 w-5 text-purple-600" />
+                            Framework Compliance Review
+                          </CardTitle>
+                          <CardDescription>
+                            Verify generated documents align with {template.framework} standards
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                            <h4 className="font-semibold mb-2">{template.framework} Compliance Checklist</h4>
+                            <p className="text-sm text-muted-foreground mb-3">
+                              Review generated documents to ensure they follow {template.framework} framework standards
+                            </p>
+                            
+                            {/* Compliance status */}
+                            {template.compliance_checked_at ? (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 text-green-700">
+                                  <CheckCircle className="h-5 w-5" />
+                                  <span className="font-medium">Compliance Approved</span>
+                                </div>
+                                <div className="text-sm space-y-1">
+                                  <p>Score: {template.framework_compliance_score ? (template.framework_compliance_score * 100).toFixed(0) : 'N/A'}%</p>
+                                  <p>Reviewed: {new Date(template.compliance_checked_at).toLocaleDateString()}</p>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                <div className="flex items-center gap-2 text-orange-700">
+                                  <AlertTriangle className="h-5 w-5" />
+                                  <span className="font-medium">Pending Review</span>
+                                </div>
+                                <p className="text-sm">
+                                  Manual compliance review required before promotion to Validated stage
+                                </p>
+                                <div className="bg-white dark:bg-gray-900 rounded p-3">
+                                  <p className="text-sm font-medium mb-2">Review Requirements:</p>
+                                  <ul className="text-sm space-y-1 list-disc list-inside">
+                                    <li>Generated documents follow {template.framework} structure</li>
+                                    <li>Required sections are present and complete</li>
+                                    <li>Terminology aligns with framework standards</li>
+                                    <li>Content quality meets framework expectations</li>
+                                  </ul>
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  💡 Tip: Generate 3-5 sample documents with different prompts to verify consistency
+                                </p>
+                                
+                                {/* Approve Compliance Button */}
+                                <Button 
+                                  onClick={() => handleApproveCompliance()}
+                                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                                  disabled={promoting}
+                                >
+                                  <ClipboardCheck className="h-4 w-4 mr-2" />
+                                  Approve {template.framework} Compliance
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </AnimatedCard>
+                    )}
+
+                    {/* Template Details */}
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle>Template Details</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <Tabs defaultValue="overview">
+                          <TabsList className="grid w-full grid-cols-3">
+                            <TabsTrigger value="overview">Overview</TabsTrigger>
+                            <TabsTrigger value="content">Content</TabsTrigger>
+                            <TabsTrigger value="variables">Variables</TabsTrigger>
+                          </TabsList>
+                          
+                          <TabsContent value="overview" className="space-y-4 mt-4">
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <p className="text-sm text-muted-foreground">Framework</p>
+                                <p className="font-medium">{template.framework}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground">Category</p>
+                                <p className="font-medium">{template.category}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground">Created By</p>
+                                <p className="font-medium">{template.created_by_name || 'Unknown'}</p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground">Created</p>
+                                <p className="font-medium">
+                                  {new Date(template.created_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground">Last Updated</p>
+                                <p className="font-medium">
+                                  {new Date(template.updated_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                              <div>
+                                <p className="text-sm text-muted-foreground">Prompt Version</p>
+                                <p className="font-medium">v{template.prompt_version}</p>
+                              </div>
+                            </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="content" className="mt-4 space-y-4">
+                            {/* System Prompt (Main AI Guidance) */}
+                            {(template as any).system_prompt && (
+                              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <Brain className="h-5 w-5 text-blue-600" />
+                                  <h4 className="font-semibold text-blue-900 dark:text-blue-100">
+                                    AI System Prompt
+                                  </h4>
+                                  <Badge variant="outline" className="text-xs">
+                                    Main AI Guidance
+                                  </Badge>
+                                </div>
+                                <div className="bg-white dark:bg-gray-900 rounded p-3 max-h-64 overflow-y-auto">
+                                  <p className="text-sm whitespace-pre-wrap">
+                                    {(template as any).system_prompt}
+                                  </p>
+                                </div>
+                                <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                                  This prompt guides the AI on how to generate content with this template.
+                                </p>
+                              </div>
+                            )}
+                            
+                            {/* Template Paragraphs/Sections */}
+                            {(template as any).template_paragraphs && (template as any).template_paragraphs.length > 0 && (
+                              <div className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 rounded-lg p-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <FileText className="h-5 w-5 text-purple-600" />
+                                  <h4 className="font-semibold text-purple-900 dark:text-purple-100">
+                                    Template Sections
+                                  </h4>
+                                  <Badge variant="outline" className="text-xs">
+                                    {(template as any).template_paragraphs.length} sections
+                                  </Badge>
+                                </div>
+                                <div className="space-y-2">
+                                  {(template as any).template_paragraphs.map((section: any, idx: number) => (
+                                    <div key={idx} className="bg-white dark:bg-gray-900 rounded p-3">
+                                      <p className="font-medium text-sm">{section.section_name}</p>
+                                      {section.description && (
+                                        <p className="text-xs text-muted-foreground mt-1">{section.description}</p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Content Blocks (Legacy/Alternative Format) */}
+                            <div className="bg-muted rounded-lg p-4">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="text-sm font-medium text-muted-foreground">
+                                  Content Blocks
+                                </p>
+                                {template.content?.blocks?.length === 0 && (
+                                  <Badge variant="secondary" className="text-xs">Empty</Badge>
+                                )}
+                              </div>
+                              <div className="bg-background rounded p-3 max-h-64 overflow-y-auto">
+                                {template.content?.blocks && template.content.blocks.length > 0 ? (
+                                  <pre className="text-xs">
+                                    {JSON.stringify(template.content.blocks, null, 2)}
+                                  </pre>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground italic">
+                                    No content blocks defined. This template uses system prompt for AI guidance.
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {/* Raw Content (Debug View) */}
+                            <details className="bg-muted rounded-lg p-4">
+                              <summary className="text-sm font-medium cursor-pointer">
+                                Raw Content (Debug View)
+                              </summary>
+                              <div className="bg-background rounded p-3 mt-2 max-h-96 overflow-y-auto">
+                                <pre className="text-xs">
+                                  {JSON.stringify(template.content || {}, null, 2)}
+                                </pre>
+                              </div>
+                            </details>
+                          </TabsContent>
+                          
+                          <TabsContent value="variables" className="mt-4">
+                            <div className="bg-muted rounded-lg p-4">
+                              <p className="text-sm text-muted-foreground mb-2">Template Variables</p>
+                              {template.variables && Array.isArray(template.variables) && template.variables.length > 0 ? (
+                                <div className="space-y-2">
+                                  {template.variables.map((variable: any, index: number) => (
+                                    <div key={index} className="bg-background rounded p-3 flex items-start justify-between">
+                                      <div>
+                                        <p className="font-medium">{variable.name}</p>
+                                        <p className="text-sm text-muted-foreground">{variable.description}</p>
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <Badge variant="outline">{variable.type}</Badge>
+                                        {variable.required && <Badge variant="destructive">Required</Badge>}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No variables defined</p>
+                              )}
+                            </div>
+                          </TabsContent>
+                        </Tabs>
+                      </CardContent>
+                    </AnimatedCard>
+
+                    {/* Usage Analytics */}
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5" />
+                          Usage Analytics
+                        </CardTitle>
+                        <CardDescription>
+                          Template usage patterns and performance metrics
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 rounded-lg border border-blue-200 dark:border-blue-800">
+                            <p className="text-3xl font-bold text-blue-700 dark:text-blue-300">{template.validation_count}</p>
+                            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">Generations</p>
+                          </div>
+                          <div className="text-center p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 rounded-lg border border-green-200 dark:border-green-800">
+                            <p className="text-3xl font-bold text-green-700 dark:text-green-300">{successRate}%</p>
+                            <p className="text-sm text-green-600 dark:text-green-400 mt-1">Success Rate</p>
+                          </div>
+                          <div className="text-center p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 rounded-lg border border-purple-200 dark:border-purple-800">
+                            <p className="text-3xl font-bold text-purple-700 dark:text-purple-300">{template.health_rating || 'Not tested'}</p>
+                            <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">Health Rating</p>
+                          </div>
+                        </div>
+                        
+                        {template.validation_count > 0 ? (
+                          <div className="mt-4 p-4 bg-muted rounded-lg space-y-3">
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Total Successful</span>
+                              <span className="font-semibold text-green-600">{template.success_count} / {template.validation_count}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Quality Threshold</span>
+                              <span className="font-semibold">{(template.quality_threshold * 100).toFixed(0)}%</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm">
+                              <span className="text-muted-foreground">Current Version</span>
+                              <span className="font-semibold">v{template.prompt_version}</span>
+                            </div>
+                            {template.last_validated_at && (
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-muted-foreground">Last Generation</span>
+                                <span className="font-semibold">{new Date(template.last_validated_at).toLocaleString()}</span>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-4 p-6 bg-muted rounded-lg text-center">
+                            <BarChart3 className="h-12 w-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+                            <p className="text-sm text-muted-foreground">
+                              Generate documents to see usage analytics
+                            </p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </AnimatedCard>
+                  </div>
+
+                  {/* Sidebar */}
+                  <div className="space-y-6">
+                    
+                    {/* Health Status */}
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <HealthIcon className={`h-5 w-5 ${healthConfig[template.health_rating]?.color}`} />
+                          Health Status
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="text-center">
+                            <div className={`text-4xl font-bold mb-2 ${healthConfig[template.health_rating]?.color}`}>
+                              {template.health_rating}
+                            </div>
+                            {template.validation_count > 0 && (
+                              <p className="text-sm text-muted-foreground">
+                                Based on {template.validation_count} validation run{template.validation_count > 1 ? 's' : ''}
+                              </p>
+                            )}
+                          </div>
+                          
+                          <Separator />
+                          
+                          <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Success Rate</span>
+                              <span className="text-lg font-semibold">{template.success_rate}%</span>
+                            </div>
+                            <Progress value={template.success_rate} className="h-2" />
+                            
+                            <div className="text-xs text-muted-foreground">
+                              {template.success_count} successful out of {template.validation_count} total runs
+                            </div>
+                          </div>
+                          
+                          <Separator />
+                          
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Quality Threshold</span>
+                              <span className="font-medium">{(template.quality_threshold * 100).toFixed(0)}%</span>
+                            </div>
+                            {template.last_validated_at && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground">Last Validated</span>
+                                <span className="font-medium">
+                                  {new Date(template.last_validated_at).toLocaleDateString()}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </AnimatedCard>
+
+                    {/* Quick Stats */}
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Zap className="h-5 w-5" />
+                          Quick Stats
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">Document Generations</span>
+                          </div>
+                          <span className="font-semibold">{template.validation_count}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">Successful</span>
+                          </div>
+                          <span className="font-semibold">{template.success_count}</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">Success Rate</span>
+                          </div>
+                          <span className="font-semibold">{successRate}%</span>
+                        </div>
+                        
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-sm">Visibility</span>
+                          </div>
+                          <Badge variant={template.is_public ? "default" : "secondary"}>
+                            {template.is_public ? 'Public' : 'Private'}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </AnimatedCard>
+
+                    {/* Promotion Guidance */}
+                    {currentConfig.nextStatus && (
+                      <AnimatedCard>
+                        <CardHeader>
+                          <CardTitle className="flex items-center gap-2">
+                            <ArrowUp className="h-5 w-5" />
+                            Promotion Guidance
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          {canPromote() ? (
+                            <Alert>
+                              <CheckCircle className="h-4 w-4" />
+                              <AlertTitle>Ready to Promote!</AlertTitle>
+                              <AlertDescription>
+                                This template meets all criteria for {statusConfig[currentConfig.nextStatus].label} status.
+                              </AlertDescription>
+                            </Alert>
+                          ) : (
+                            <Alert variant="destructive">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertTitle>Requirements Not Met</AlertTitle>
+                              <AlertDescription className="space-y-2 mt-2">
+                                <p>{getPromotionMessage()}</p>
+                                
+                                {currentConfig.requiresValidation && (
+                                  <div className="mt-3">
+                                    <p className="font-medium text-sm">To promote to {currentConfig.nextStatus}:</p>
+                                    <ul className="list-disc list-inside text-sm mt-1 space-y-1">
+                                      <li>Run {currentConfig.requiresValidation}+ validation tests</li>
+                                      <li>Achieve {currentConfig.requiresSuccess}%+ success rate</li>
+                                    </ul>
+                                  </div>
+                                )}
+                              </AlertDescription>
+                            </Alert>
+                          )}
+                        </CardContent>
+                      </AnimatedCard>
+                    )}
+
+                    {/* Recent Activity */}
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Calendar className="h-5 w-5" />
+                          Recent Activity
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {template.validation_count > 0 ? (
+                          <div className="space-y-4">
+                            {/* Last Validation */}
+                            {template.last_validated_at && (
+                              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                                <div className="bg-blue-500 rounded-full p-2 mt-1">
+                                  <CheckCircle className="h-4 w-4 text-white" />
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-sm">Latest Validation</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(template.last_validated_at).toLocaleString()}
+                                  </p>
+                                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                    ✓ Success • Quality: {template.health_rating}
+                                  </p>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Status Change */}
+                            <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
+                              <div className="bg-purple-500 rounded-full p-2 mt-1">
+                                <ArrowUp className="h-4 w-4 text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">Status: {statusConfig[template.development_status]?.emoji} {statusConfig[template.development_status]?.label}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Updated: {new Date(template.updated_at).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                                  {currentConfig.description}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            {/* Template Created */}
+                            <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
+                              <div className="bg-gray-500 rounded-full p-2 mt-1">
+                                <Sparkles className="h-4 w-4 text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">Template Created</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(template.created_at).toLocaleString()}
+                                </p>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                  By {template.created_by_name || 'Unknown'}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p className="text-sm">No validation history yet</p>
+                            <p className="text-xs mt-1">Generate documents to see activity</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </AnimatedCard>
+                  </div>
+                </div>
+              </div>
+            </AnimatedLayout>
+          </main>
+        </div>
+      </div>
+    </PageTransition>
+  )
+}
+
