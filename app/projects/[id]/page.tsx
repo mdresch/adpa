@@ -246,6 +246,36 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
     }
   }
 
+  const handleDeclineBaseline = async (baselineId: string) => {
+    const reason = prompt('Please provide a reason for declining this baseline (insights will be preserved):')
+    if (!reason) {
+      toast.error('Decline reason is required')
+      return
+    }
+
+    try {
+      await apiClient.request(`/baselines/${baselineId}/decline`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      })
+      toast.success('Baseline declined and archived. Analysis preserved for future reference.')
+      await fetchBaseline()
+      await fetchBaselines()
+      setShowDetailsDialog(false)
+    } catch (error: any) {
+      console.error('Error declining baseline:', error)
+      toast.error(error?.message || 'Failed to decline baseline')
+    }
+  }
+
+  const handleRerunBaseline = () => {
+    // Close the details dialog and open the extract dialog with current documents selected
+    setShowDetailsDialog(false)
+    setSelectedDocuments(documents.map(d => d.id))
+    setShowExtractDialog(true)
+    toast.info('Select additional documents (like WBS, Activity List) to include in the re-extraction')
+  }
+
   const handleViewBaseline = async (baselineId: string) => {
     try {
       const response = await apiClient.request<{ baseline: any }>(`/baselines/${baselineId}`)
@@ -799,16 +829,38 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
             </div>
           )}
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
-              Close
-            </Button>
-            {viewingBaseline?.status === 'draft' && (
-              <Button onClick={() => handleApproveBaseline(viewingBaseline.id)}>
-                <CheckCircle className="h-4 w-4 mr-2" />
-                Approve Baseline
+          <DialogFooter className="flex justify-between">
+            <div className="flex gap-2">
+              {viewingBaseline?.status === 'draft' && (
+                <>
+                  <Button 
+                    variant="outline" 
+                    onClick={() => handleDeclineBaseline(viewingBaseline.id)}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Decline & Archive
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    onClick={handleRerunBaseline}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Rerun with More Documents
+                  </Button>
+                </>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
+                Close
               </Button>
-            )}
+              {viewingBaseline?.status === 'draft' && (
+                <Button onClick={() => handleApproveBaseline(viewingBaseline.id)}>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Approve Baseline
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
