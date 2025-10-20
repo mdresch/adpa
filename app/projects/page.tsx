@@ -262,62 +262,36 @@ export default function Projects() {
           
           // Create a document from the business case
           if (content && createdProject && createdProject.id) {
-            console.log('📄 Attempting to save business case as document...', {
-              projectId: createdProject.id,
-              projectName: createdProject.name,
-              contentLength: content.length,
-              templateId: draft.templateId
-            })
-            
-            // Create document via API (expects JSON, not file upload)
-            const documentData = {
-              name: draft.templateName || `${newProject.name} - Business Case`,
-              content: content,
-              template_id: draft.templateId || null,
-              status: 'draft', // Changed from 'final' to 'draft'
-              metadata: draft.metadata || {}
-            }
-            
-            console.log('📄 Sending document data:', {
-              ...documentData,
-              content: `${content.substring(0, 100)}... (${content.length} chars total)`
-            })
-            
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/documents/project/${createdProject.id}`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(documentData)
-            })
-            
-            console.log('📄 Document API response:', {
-              status: response.status,
-              statusText: response.statusText,
-              ok: response.ok,
-              url: response.url
-            })
-            
-            if (response.ok) {
-              const docData = await response.json()
-              console.log('✅ Document created successfully:', docData)
-              toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
-            } else {
-              const errorText = await response.text()
-              let errorData
-              try {
-                errorData = JSON.parse(errorText)
-              } catch {
-                errorData = { error: errorText }
-              }
-              console.error("❌ Document creation failed:", {
-                status: response.status,
-                statusText: response.statusText,
-                error: errorData,
-                errorText: errorText
+            try {
+              console.log('📄 Attempting to save business case as document...', {
+                projectId: createdProject.id,
+                projectName: createdProject.name,
+                contentLength: content.length,
+                templateId: draft.templateId
               })
-              toast.error(`Project created, but document failed to save: ${errorData.error || errorData.message || 'Unknown error'}`)
+              
+              // Create document via API (expects JSON, not file upload)
+              const documentData = {
+                name: draft.templateName || `${newProject.name} - Business Case`,
+                content: content,
+                template_id: draft.templateId || null,
+                status: 'draft', // Changed from 'final' to 'draft'
+                metadata: draft.metadata || {}
+              }
+              
+              console.log('📄 Sending document data:', {
+                ...documentData,
+                content: `${content.substring(0, 100)}... (${content.length} chars total)`
+              })
+              
+              // Use apiClient instead of raw fetch to avoid URL duplication
+              const createdDocument = await apiClient.createDocument(createdProject.id, documentData)
+              
+              console.log('✅ Document created successfully:', createdDocument)
+              toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
+            } catch (docCreateError: any) {
+              console.error('❌ Document creation failed:', docCreateError)
+              toast.error(`Project created, but document failed to save: ${docCreateError.message || 'Unknown error'}`)
             }
           } else {
             console.log('⚠️ Skipping document creation:', {
