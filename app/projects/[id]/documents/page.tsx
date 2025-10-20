@@ -427,18 +427,11 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     
     try {
       await apiClient.deleteDocument(documentId)
-      toast({
-        title: "Document moved to trash",
-        description: "You can restore it later from the Deleted Items page."
-      })
+      toast.success("Document moved to trash. You can restore it later from the Deleted Items page.")
       await fetchDocuments()
     } catch (error) {
       console.error("Failed to delete document:", error)
-      toast({
-        title: "Error",
-        description: "Failed to move document to trash",
-        variant: "destructive"
-      })
+      toast.error("Failed to move document to trash")
     }
   }
 
