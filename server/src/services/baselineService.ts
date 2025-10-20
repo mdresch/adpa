@@ -164,6 +164,33 @@ export async function createBaseline(
   documentIds: string[]
 ): Promise<any> {
   try {
+    // Check for existing draft baselines - delete them to allow re-extraction
+    const existingDraftResult = await pool.query(
+      `SELECT id FROM project_baselines 
+       WHERE project_id = $1 AND status = 'draft'`,
+      [projectId]
+    )
+
+    if (existingDraftResult.rows.length > 0) {
+      logger.info(`Deleting existing draft baseline for project ${projectId} to allow re-extraction`)
+      await pool.query(
+        `DELETE FROM project_baselines WHERE project_id = $1 AND status = 'draft'`,
+        [projectId]
+      )
+    }
+
+    // Get next version number
+    const versionResult = await pool.query(
+      `SELECT COALESCE(MAX(CAST(SPLIT_PART(version, '.', 1) AS INTEGER)), 0) + 1 as next_major,
+              COALESCE(MAX(CAST(SPLIT_PART(version, '.', 2) AS INTEGER)), 0) as next_minor
+       FROM project_baselines 
+       WHERE project_id = $1 AND status != 'draft'`,
+      [projectId]
+    )
+
+    const nextMajor = versionResult.rows[0].next_major
+    const version = `${nextMajor}.0`
+
     const result = await pool.query(
       `INSERT INTO project_baselines (
         project_id,
@@ -186,7 +213,7 @@ export async function createBaseline(
       RETURNING *`,
       [
         projectId,
-        '1.0', // First version
+        version, // Auto-incremented version
         'draft', // Initial status
         userId,
         JSON.stringify(documentIds),
@@ -213,10 +240,10 @@ export async function createBaseline(
         change_description,
         changed_by
       ) VALUES ($1, $2, $3, $4, $5)`,
-      [result.rows[0].id, '1.0', 'created', 'Initial baseline created from document corpus', userId]
+      [result.rows[0].id, version, 'created', 'Baseline created from document corpus', userId]
     )
 
-    logger.info(`Baseline created for project ${projectId}: ${result.rows[0].id}`)
+    logger.info(`Baseline created for project ${projectId}: ${result.rows[0].id} (version ${version})`)
     return result.rows[0]
   } catch (error) {
     logger.error('Error creating baseline:', error)
