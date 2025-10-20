@@ -250,13 +250,13 @@ router.post("/generate",
 
           await pool.query(
             `INSERT INTO documents 
-             (id, project_id, title, content, template_id, generation_metadata, created_by, created_at, updated_at)
+             (id, project_id, name, content, template_id, generation_metadata, created_by, created_at, updated_at)
              VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
              RETURNING id`,
             [
               documentId,
               req.body.project_id,
-              documentTitle,
+              documentTitle,  // Changed column from 'title' to 'name'
               content,
               template_id || null,
               JSON.stringify({
