@@ -5,7 +5,9 @@
 **Date:** October 15, 2025  
 **Status:** ✅ Approved & Authorized (October 19, 2025)  
 **Approved By:** Menno Drescher (Project Owner)  
-**Authorization:** Proceed with Phase 1 implementation immediately
+**Authorization:** Proceed with Phase 1 implementation immediately  
+**Test Plan:** [BASELINE_DRIFT_DETECTION_TEST_PLAN.md](../../06-features/BASELINE_DRIFT_DETECTION_TEST_PLAN.md)  
+**Production Approval:** ⏳ Pending test plan execution and UAT sign-off
 
 ---
 
@@ -328,6 +330,54 @@ Please approve:
 - Go/No-Go decision point after Phase 1 (baseline creation)
 - Patent detection requires legal team engagement
 - CFO funding approval contingent on receipt of constraints & requirements dossier (Scope, Cost, Schedule baselines and risks)
+- **Testing Gate:** Production deployment blocked until comprehensive test plan executed and approved (see section 9.1)
+
+### 9.1 Testing & Quality Gate
+
+**Pre-Production Testing Requirements:**
+
+All Phase 1 features must pass comprehensive testing before production approval:
+
+1. **Test Plan Execution** (3 weeks)
+   - Unit Testing: Backend services (85% coverage target)
+   - Integration Testing: API & database operations
+   - UI/UX Testing: Frontend baseline management interface
+   - End-to-End Testing: Full workflow validation
+   - Performance Testing: Load and stress tests
+   - Security Testing: Permission enforcement, input validation
+
+2. **User Acceptance Testing (UAT)**
+   - Session 1: Project Managers (3 participants, 1 hour)
+   - Session 2: Stakeholders (2 executives, CFO, 30 minutes)
+   - Acceptance Criteria:
+     * ≥ 80% of PMs rate extraction accuracy as "good" or "excellent"
+     * 100% successfully create and approve baseline
+     * Stakeholder confirmation of business value
+     * No critical UI bugs
+
+3. **Production Approval Checklist**
+   - [ ] All critical test cases passed (100%)
+   - [ ] ≥ 95% high-priority test cases passed
+   - [ ] No unresolved critical/high severity defects
+   - [ ] Performance benchmarks met (baseline extraction < 30s for 5 docs)
+   - [ ] Security audit passed (permission enforcement verified)
+   - [ ] UAT completed with stakeholder sign-off
+   - [ ] Documentation complete
+   - [ ] Rollback plan documented
+   - [ ] Support team trained
+
+**Quality Targets:**
+- Baseline extraction accuracy: ≥ 85%
+- Drift detection precision: ≥ 80%
+- API response time: < 500ms (reads), < 35s (extraction)
+- Zero critical security vulnerabilities
+
+**Go/No-Go Authority:**
+- Technical Lead (QA sign-off)
+- Project Owner (business value confirmation)
+- Product Manager (feature completeness)
+
+**Full Test Plan:** See [BASELINE_DRIFT_DETECTION_TEST_PLAN.md](../../06-features/BASELINE_DRIFT_DETECTION_TEST_PLAN.md)
 
 ---
 

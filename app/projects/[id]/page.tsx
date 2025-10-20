@@ -136,6 +136,426 @@ interface ExtendedProject extends Project {
   metadata?: any
 }
 
+// CR-2026-001: Baseline Management Component
+interface BaselineManagementProps {
+  projectId: string
+  documents: Document[]
+}
+
+function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
+  const [baseline, setBaseline] = useState<any>(null)
+  const [baselines, setBaselines] = useState<any[]>([])
+  const [drifts, setDrifts] = useState<any[]>([])
+  const [loading, setLoading] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
+  const [showExtractDialog, setShowExtractDialog] = useState(false)
+
+  // Fetch active baseline
+  const fetchBaseline = async () => {
+    try {
+      const response = await apiClient.get(`/baselines/project/${projectId}/active`)
+      setBaseline(response.data.baseline)
+    } catch (error: any) {
+      if (error.response?.status !== 404) {
+        console.error('Error fetching baseline:', error)
+      }
+    }
+  }
+
+  // Fetch all baselines
+  const fetchBaselines = async () => {
+    try {
+      const response = await apiClient.get(`/baselines/project/${projectId}`)
+      setBaselines(response.data.baselines || [])
+    } catch (error) {
+      console.error('Error fetching baselines:', error)
+    }
+  }
+
+  // Fetch drift detections
+  const fetchDrifts = async () => {
+    if (!baseline) return
+    try {
+      const response = await apiClient.get(`/baselines/${baseline.id}/drift`)
+      setDrifts(response.data.drifts || [])
+    } catch (error) {
+      console.error('Error fetching drifts:', error)
+    }
+  }
+
+  useEffect(() => {
+    setLoading(true)
+    Promise.all([fetchBaseline(), fetchBaselines()]).finally(() => setLoading(false))
+  }, [projectId])
+
+  useEffect(() => {
+    if (baseline) {
+      fetchDrifts()
+    }
+  }, [baseline])
+
+  const handleExtractBaseline = async () => {
+    if (documents.length === 0) {
+      toast.error('No documents available to create baseline')
+      return
+    }
+
+    setExtracting(true)
+    try {
+      const response = await apiClient.post('/baselines/extract', {
+        project_id: projectId,
+        document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+      })
+
+      toast.success('Baseline extracted successfully!')
+      setShowExtractDialog(false)
+      setSelectedDocuments([])
+      await fetchBaselines()
+      await fetchBaseline()
+    } catch (error: any) {
+      console.error('Error extracting baseline:', error)
+      toast.error(error.response?.data?.error || 'Failed to extract baseline')
+    } finally {
+      setExtracting(false)
+    }
+  }
+
+  const handleApproveBaseline = async (baselineId: string) => {
+    try {
+      await apiClient.post(`/baselines/${baselineId}/approve`)
+      toast.success('Baseline approved and activated!')
+      await fetchBaseline()
+      await fetchBaselines()
+    } catch (error: any) {
+      console.error('Error approving baseline:', error)
+      toast.error(error.response?.data?.error || 'Failed to approve baseline')
+    }
+  }
+
+  const getDriftSeverityColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'text-red-600 bg-red-50 border-red-200'
+      case 'high': return 'text-orange-600 bg-orange-50 border-orange-200'
+      case 'medium': return 'text-yellow-600 bg-yellow-50 border-yellow-200'
+      case 'low': return 'text-blue-600 bg-blue-50 border-blue-200'
+      default: return 'text-gray-600 bg-gray-50 border-gray-200'
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Baseline Status Overview */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="h-5 w-5 text-blue-600" />
+                Project Baseline
+              </CardTitle>
+              <CardDescription>
+                AI-extracted project baseline for drift detection
+              </CardDescription>
+            </div>
+            {!baseline ? (
+              <Dialog open={showExtractDialog} onOpenChange={setShowExtractDialog}>
+                <DialogTrigger asChild>
+                  <Button>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Baseline
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Extract Project Baseline</DialogTitle>
+                    <DialogDescription>
+                      AI will analyze your project documents to extract scope, technical, timeline, cost, and success criteria baselines.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-4">
+                    <div>
+                      <Label>Select Documents (optional)</Label>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Leave empty to use all {documents.length} documents, or select specific documents:
+                      </p>
+                      <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
+                        {documents.map(doc => (
+                          <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedDocuments.includes(doc.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedDocuments([...selectedDocuments, doc.id])
+                                } else {
+                                  setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm">{doc.name}</span>
+                            {doc.template_name && (
+                              <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
+                            )}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowExtractDialog(false)} disabled={extracting}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleExtractBaseline} disabled={extracting}>
+                      {extracting ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Extracting...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4 mr-2" />
+                          Extract Baseline
+                        </>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            ) : (
+              <Button variant="outline" onClick={() => setShowExtractDialog(true)}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Update Baseline
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent>
+          {baseline ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-3 border rounded-lg">
+                  <p className="text-sm text-muted-foreground">Version</p>
+                  <p className="text-lg font-semibold">{baseline.version}</p>
+                </div>
+                <div className="p-3 border rounded-lg">
+                  <p className="text-sm text-muted-foreground">Status</p>
+                  <Badge variant={baseline.status === 'active' ? 'default' : 'secondary'}>
+                    {baseline.status}
+                  </Badge>
+                </div>
+                <div className="p-3 border rounded-lg">
+                  <p className="text-sm text-muted-foreground">Confidence</p>
+                  <p className="text-lg font-semibold">{Math.round(baseline.extraction_confidence * 100)}%</p>
+                </div>
+                <div className="p-3 border rounded-lg">
+                  <p className="text-sm text-muted-foreground">Completeness</p>
+                  <p className="text-lg font-semibold">{Math.round(baseline.completeness_score * 100)}%</p>
+                </div>
+              </div>
+
+              {/* Baseline Components */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {baseline.scope_baseline && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Target className="h-4 w-4" />
+                        Scope Baseline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      {baseline.scope_baseline.key_deliverables && (
+                        <div>
+                          <p className="font-medium">Deliverables:</p>
+                          <ul className="list-disc list-inside text-muted-foreground">
+                            {baseline.scope_baseline.key_deliverables.slice(0, 3).map((d: string, i: number) => (
+                              <li key={i} className="truncate">{d}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {baseline.technical_baseline && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Database className="h-4 w-4" />
+                        Technical Baseline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      {baseline.technical_baseline.technology_stack && (
+                        <div>
+                          <p className="font-medium">Tech Stack:</p>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {baseline.technical_baseline.technology_stack.slice(0, 6).map((tech: string, i: number) => (
+                              <Badge key={i} variant="secondary" className="text-xs">{tech}</Badge>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {baseline.timeline_baseline && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Timeline Baseline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      {baseline.timeline_baseline.project_duration && (
+                        <p><span className="font-medium">Duration:</span> {baseline.timeline_baseline.project_duration}</p>
+                      )}
+                      {baseline.timeline_baseline.key_milestones && (
+                        <p className="text-muted-foreground">{baseline.timeline_baseline.key_milestones.length} milestones</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {baseline.success_criteria && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4" />
+                        Success Criteria
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      {baseline.success_criteria.kpis && (
+                        <p className="text-muted-foreground">{baseline.success_criteria.kpis.length} KPIs defined</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Target className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p className="font-medium mb-1">No Baseline Created</p>
+              <p className="text-sm">Create a baseline to enable automated drift detection</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Drift Detections */}
+      {baseline && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-orange-600" />
+              Drift Detections
+              {drifts.length > 0 && (
+                <Badge variant="destructive" className="ml-2">{drifts.length}</Badge>
+              )}
+            </CardTitle>
+            <CardDescription>
+              AI-detected deviations from the established baseline
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {drifts.length > 0 ? (
+              <div className="space-y-3">
+                {drifts.map(drift => (
+                  <div key={drift.id} className={`p-4 border rounded-lg ${getDriftSeverityColor(drift.drift_severity)}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <Badge variant="outline" className="text-xs">{drift.detection_type.replace('_', ' ')}</Badge>
+                          <Badge variant="outline" className="text-xs">{drift.drift_severity}</Badge>
+                        </div>
+                        <p className="font-medium">{drift.drift_description}</p>
+                        {drift.drift_impact && (
+                          <p className="text-sm mt-1 opacity-75">Impact: {drift.drift_impact}</p>
+                        )}
+                      </div>
+                      <div className="text-right text-xs opacity-75">
+                        {new Date(drift.detection_date).toLocaleDateString()}
+                      </div>
+                    </div>
+                    {drift.document_title && (
+                      <p className="text-xs mt-2 opacity-75">
+                        Source: {drift.document_title}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500 opacity-50" />
+                <p className="font-medium mb-1">No Drift Detected</p>
+                <p className="text-sm">All documents align with the baseline</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Baseline History */}
+      {baselines.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-5 w-5" />
+              Baseline History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {baselines.map(b => (
+                <div key={b.id} className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">Version {b.version}</span>
+                      <Badge variant={b.status === 'active' ? 'default' : 'secondary'}>
+                        {b.status}
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Created {new Date(b.created_at).toLocaleDateString()} by {b.created_by_name}
+                      {b.approved_at && ` • Approved ${new Date(b.approved_at).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                  {b.status === 'draft' && (
+                    <Button
+                      size="sm"
+                      onClick={() => handleApproveBaseline(b.id)}
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      Approve
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  )
+}
+
 export default function ProjectDetail() {
   const params = useParams()
   const projectId = params?.id as string
@@ -2493,6 +2913,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
+                <TabsTrigger value="baseline">Baseline</TabsTrigger>
                 <TabsTrigger value="variables">Variables</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
               </TabsList>
@@ -3202,6 +3623,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                     )}
                   </div>
                 )}
+              </TabsContent>
+
+              <TabsContent value="baseline" className="space-y-4">
+                {/* Baseline Tab - CR-2026-001 */}
+                <BaselineManagement projectId={projectId} documents={documents} />
               </TabsContent>
 
               <TabsContent value="variables" className="space-y-4">
