@@ -742,6 +742,12 @@ The ADPA system represents a significant advancement in document processing auto
                                   <Share className="h-4 w-4 mr-2" />
                                   Share
                                 </Button>
+                                <Link href={`/projects/${projectId}/documents/${documentId}`}>
+                                  <Button variant="default" size="sm">
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    View Metadata
+                                  </Button>
+                                </Link>
                               </>
                             ) : (
                               <>
