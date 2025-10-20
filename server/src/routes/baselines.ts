@@ -5,8 +5,7 @@
 
 import express from 'express'
 import Joi from 'joi'
-import { authenticateToken } from '../middleware/auth'
-import { requirePermission } from '../middleware/permissions'
+import { authenticateToken, requirePermission } from '../middleware/auth'
 import { validateBody, validateQuery } from '../middleware/validation'
 import { baselineService } from '../services/baselineService'
 import { logger } from '../utils/logger'

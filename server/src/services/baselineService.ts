@@ -4,9 +4,9 @@
  * Phase 1: AI-powered baseline extraction from document corpus
  */
 
-import { pool } from '../db'
+import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
-import { aiGateway } from './aiGateway'
+import { aiService } from './aiService'
 
 interface DocumentForBaseline {
   id: string
@@ -101,18 +101,18 @@ export async function extractBaselineFromCorpus(
 
     // Call AI to extract baseline
     const startTime = Date.now()
-    const aiResponse = await aiGateway.generateText({
-      prompt,
+    const aiResponse = await aiService.generate({
+      prompt: prompt + '\n\nSYSTEM INSTRUCTIONS:\n' + BASELINE_EXTRACTION_SYSTEM_PROMPT,
       provider: options.aiProvider || 'openai',
       model: options.aiModel || 'gpt-4-turbo-preview',
       temperature: 0.3, // Lower temperature for more consistent extraction
-      maxTokens: 4000,
-      systemPrompt: BASELINE_EXTRACTION_SYSTEM_PROMPT
+      max_tokens: 4000,
+      system_prompt: BASELINE_EXTRACTION_SYSTEM_PROMPT
     })
     const processingTime = Date.now() - startTime
 
     // Parse AI response
-    const extractedBaseline = parseBaselineExtractionResponse(aiResponse.text)
+    const extractedBaseline = parseBaselineExtractionResponse(aiResponse.content)
 
     // Calculate quality scores
     const qualityScores = calculateBaselineQualityScores(extractedBaseline, documents.length)
@@ -130,12 +130,12 @@ export async function extractBaselineFromCorpus(
       consistency_score: qualityScores.consistency,
       clarity_score: qualityScores.clarity,
       ai_processing_metadata: {
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: aiResponse.provider || options.aiProvider || 'openai',
+        model: aiResponse.model || options.aiModel || 'gpt-4-turbo-preview',
         processing_time_ms: processingTime,
-        input_tokens: aiResponse.usage?.inputTokens || 0,
-        output_tokens: aiResponse.usage?.outputTokens || 0,
-        total_tokens: aiResponse.usage?.totalTokens || 0,
+        input_tokens: aiResponse.usage?.prompt_tokens || 0,
+        output_tokens: aiResponse.usage?.completion_tokens || 0,
+        total_tokens: aiResponse.usage?.total_tokens || 0,
         documents_analyzed: documents.length,
         total_words_analyzed: documents.reduce((sum, doc) => sum + (doc.word_count || 0), 0)
       }
@@ -254,17 +254,17 @@ export async function validateDocumentAgainstBaseline(
     const prompt = buildDriftDetectionPrompt(baseline, documentContent, documentTitle)
 
     // Call AI to detect drift
-    const aiResponse = await aiGateway.generateText({
-      prompt,
+    const aiResponse = await aiService.generate({
+      prompt: prompt + '\n\nSYSTEM INSTRUCTIONS:\n' + DRIFT_DETECTION_SYSTEM_PROMPT,
       provider: 'openai',
       model: 'gpt-4-turbo-preview',
       temperature: 0.2, // Very low temperature for consistent detection
-      maxTokens: 2000,
-      systemPrompt: DRIFT_DETECTION_SYSTEM_PROMPT
+      max_tokens: 2000,
+      system_prompt: DRIFT_DETECTION_SYSTEM_PROMPT
     })
 
     // Parse drift detection response
-    const detectedDrifts = parseDriftDetectionResponse(aiResponse.text)
+    const detectedDrifts = parseDriftDetectionResponse(aiResponse.content)
 
     // Store detected drifts in database
     const driftRecords = []
