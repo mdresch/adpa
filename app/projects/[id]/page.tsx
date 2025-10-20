@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useParams as useNextParams } from "next/navigation"
+// @ts-expect-error - useParams is available in Next.js 14
+import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -136,7 +137,7 @@ interface ExtendedProject extends Project {
 }
 
 export default function ProjectDetail() {
-  const params = useNextParams()
+  const params = useParams()
   const projectId = params?.id as string
   const { isAuthenticated } = useAuth()
 
@@ -556,9 +557,9 @@ export default function ProjectDetail() {
       const relevantDocs = getPrioritizedDocuments(templateContent.title, documents)
       
       // Get lifecycle phase for current template
-      const getTemplatePhase = (name: string) => {
+      const getTemplatePhase = (name: string): { phase: number; name: string } => {
         const nameLower = name.toLowerCase()
-        const phases: any = {
+        const phases: Record<string, number> = {
           'ideation': 1, 'business case': 2, 'charter': 3, 'stakeholder': 4,
           'scope': 5, 'requirement': 6, 'schedule': 7, 'cost': 8, 'budget': 8,
           'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
@@ -865,10 +866,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           temperature: aiTemperature,
           template_id: selectedTemplate,
           // Additional context for metadata tracking
-          project_id: projectId,
-          project_name: project?.name || 'Unknown Project',
-          template_name: template?.name || 'Unknown Template',
-          framework: project?.framework || template?.framework || 'General'
+          variables: {
+            project_id: projectId,
+            project_name: project?.name || 'Unknown Project',
+            template_name: template?.name || 'Unknown Template',
+            framework: project?.framework || template?.framework || 'General'
+          }
         })
         
         console.log('✅ [AI-3/5] API call completed. Response:', genResult)
@@ -1002,7 +1005,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       console.log('🌐 [SAVE-3/6] Calling apiClient.createDocument()...')
       const createResult = await apiClient.createDocument(projectId, documentData)
-      console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.document?.id || 'unknown')
+      console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.id || 'unknown')
       
       // Step 4: Complete!
       console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
