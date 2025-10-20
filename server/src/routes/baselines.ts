@@ -6,7 +6,7 @@
 import express from 'express'
 import Joi from 'joi'
 import { authenticateToken, requirePermission } from '../middleware/auth'
-import { validateBody, validateQuery } from '../middleware/validation'
+import { validate, validateQuery } from '../middleware/validation'
 import { baselineService } from '../services/baselineService'
 import { logger } from '../utils/logger'
 
@@ -117,7 +117,7 @@ router.post(
   '/extract',
   authenticateToken,
   requirePermission('baselines.create'),
-  validateBody(
+  validate(
     Joi.object({
       project_id: Joi.string().uuid().required(),
       document_ids: Joi.array().items(Joi.string().uuid()).optional(),
@@ -280,7 +280,7 @@ router.post(
   '/validate-document',
   authenticateToken,
   requirePermission('projects.view'),
-  validateBody(
+  validate(
     Joi.object({
       project_id: Joi.string().uuid().required(),
       document_id: Joi.string().uuid().required(),

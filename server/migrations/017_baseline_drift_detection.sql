@@ -203,6 +203,8 @@ COMMENT ON TABLE baseline_drift_detection IS 'AI-detected deviations from establ
 COMMENT ON TABLE innovation_opportunities IS 'AI-identified innovation and patent opportunities';
 
 -- Insert initial baseline for CR-2026-001 (Baseline Drift Detection System)
+-- Commented out: This will be created via the UI once a project exists
+/*
 INSERT INTO project_baselines (
     project_id,
     version,
@@ -294,3 +296,4 @@ INSERT INTO project_baselines (
     0.92,
     'Initial baseline for CR-2026-001 Baseline Drift Detection System - approved for implementation'
 );
+*/
