@@ -1,0 +1,123 @@
+=========================================
+COPY THIS EXACT CONTENT TO server/.env
+=========================================
+
+Save this file as: D:\source\repos\adpa\server\.env
+
+Only thing you need to change:
+- Line 11: Replace YOUR_REDIS_PASSWORD with password from Upstash console
+
+------ START COPYING BELOW THIS LINE ------
+
+DATABASE_URL=postgresql://postgres:QueIQ4Klopman$@db.blxzjbxczpmmgiwbtmdo.supabase.co:5432/postgres
+
+SUPABASE_URL=https://blxzjbxczpmmgiwbtmdo.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJseHpqYnhjenBtbWdpd2J0bWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5MjIwMzAsImV4cCI6MjA3NjQ5ODAzMH0.2U4c5wrUBAD6BM8yRwJcS0MwgcSEVpzfS3gXUeVtNYM
+SUPABASE_PROJECT_REF=blxzjbxczpmmgiwbtmdo
+
+REDIS_HOST=natural-vulture-7034.upstash.io
+REDIS_PORT=6379
+REDIS_TLS=true
+REDIS_URL=rediss://default:YOUR_REDIS_PASSWORD@natural-vulture-7034.upstash.io:6379
+
+UPSTASH_REDIS_REST_URL=https://natural-vulture-7034.upstash.io
+UPSTASH_REDIS_REST_TOKEN=ARt6AAImcDIwMjg1MzZkM2Y0ZTE0MGVhOTIzNTRjOWQ3NmIyMDUxM3AyNzAzNA
+
+PORT=5000
+NODE_ENV=development
+
+JWT_SECRET=adpa-jwt-dev-secret-12345
+SESSION_SECRET=adpa-session-dev-secret-67890
+
+FRONTEND_URL=http://localhost:3000
+
+MAX_FILE_SIZE=52428800
+UPLOAD_DIR=./uploads
+
+LOG_LEVEL=info
+LOG_DIR=./logs
+
+------ STOP COPYING ABOVE THIS LINE ------
+
+=========================================
+COPY THIS EXACT CONTENT TO .env.local
+=========================================
+
+Save this file as: D:\source\repos\adpa\.env.local
+
+------ START COPYING BELOW THIS LINE ------
+
+NEXT_PUBLIC_SUPABASE_URL=https://blxzjbxczpmmgiwbtmdo.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJseHpqYnhjenBtbWdpd2J0bWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5MjIwMzAsImV4cCI6MjA3NjQ5ODAzMH0.2U4c5wrUBAD6BM8yRwJcS0MwgcSEVpzfS3gXUeVtNYM
+
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_WS_URL=http://localhost:5000
+
+------ STOP COPYING ABOVE THIS LINE ------
+
+=========================================
+HOW TO GET REDIS PASSWORD
+=========================================
+
+Method 1: Upstash Console (Easiest)
+1. Go to: https://console.upstash.com
+2. Sign in
+3. Click on database: "natural-vulture-7034"
+4. Look for "Connect" or "Details" section
+5. Find "Redis Connect" URL
+6. It shows: rediss://default:PASSWORD@natural-vulture-7034.upstash.io:6379
+7. Copy the PASSWORD part (between "default:" and "@")
+8. Paste it in server/.env line 11
+
+Method 2: Railway Variables (If linked)
+1. Go to: https://railway.app/dashboard
+2. Select ADPA project
+3. Click backend service
+4. Variables tab
+5. Click REDIS_URL to reveal
+6. Copy password from the URL
+
+=========================================
+AFTER CREATING FILES
+=========================================
+
+Run these commands:
+
+cd D:\source\repos\adpa
+
+# Apply migrations
+node scripts/apply-baseline-migration.js
+
+# Create Change Request template
+node scripts/create-change-request-template.js
+
+# Verify tables
+node scripts/check-baseline-tables.js
+
+# Start backend
+cd server
+npm run dev
+
+Should see:
+✅ Database connected successfully
+✅ Redis connected successfully
+✅ Server running on port 5000
+
+=========================================
+VERIFICATION CHECKLIST
+=========================================
+
+Database connection will show:
+✅ "DATABASE_URL check: Found (postgresql://postgres.blxz...)"
+✅ "Database connected successfully"
+
+Redis connection will show:
+✅ "Connecting to Redis..."
+✅ "Redis connected successfully"
+
+If you see:
+❌ "ENOTFOUND aws-0-.pooler.supabase.com" → DATABASE_URL is wrong (missing region)
+❌ "ECONNREFUSED localhost:6379" → REDIS_URL not set or wrong
+
+=========================================
+
