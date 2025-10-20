@@ -381,6 +381,50 @@ Enable truly asynchronous document generation where users can continue working w
 
 ---
 
+## CR-2026-004: Budget & Resources Adjustment for ADPA (Feasibility Correction)
+
+Status: ✅ Approved for Sponsor Review  
+Priority: P0 (Critical – Feasibility)  
+Submitted: October 19, 2025  
+Owner: Product Owner / Project Manager  
+Affected Baselines: Cost, Scope, Schedule
+
+### Problem / Finding
+- Current budget baseline: $75,000.00 for a 6‑month, complex, high‑technology scope (Node.js/TS, AI/ML engine, API layer, Admin UI).  
+- This violates PMBOK Stewardship and Feasibility principles; scope is unachievable within cost/time constraints.  
+- Risk: Guaranteed failure due to invalid baseline alignment.
+
+### Recommendation
+Issue CR to adjust budget and resources OR reduce scope to a feasible MVP. Proceed with budget increase to preserve value delivery momentum.
+
+### Proposed Change (Preferred)
+- Increase budget baseline to: $320,000 – $400,000 (aligned with CR-2026-001 business case ranges)
+- Resource plan:
+  - Senior Backend Engineer: 70% × 7 months
+  - AI/ML Engineer: 80% × 6–10 months
+  - UX/Frontend Engineer: 50% × 4–6 months
+  - QA Engineer: 40% × 5 months
+  - Product Manager: 25% × 6–7 months
+- Schedule: Maintain 6 months; adjust scope to phased delivery if needed
+
+### Scope Safeguards (If Budget Not Approved)
+- Reduce scope to MVP: Core Node.js service + 1 API + minimal Admin UI
+- Defer AI model training to Phase 2
+- Limit integrations to one provider
+
+### Impact Analysis
+- Cost: +$245K to +$325K vs. original $75K
+- Schedule: Baseline remains viable (6 months) with adequate staffing
+- Risk: Major feasibility risk removed; improves probability of success from <30% to >75%
+- Value: Preserves €460K–€1.0M annual benefits case
+
+### Approvals Required
+- Sponsor approval to adjust Cost Baseline  
+- Finance confirmation of funding source  
+- PM updates Scope/Schedule baselines accordingly
+
+---
+
 ## 📊 Change Request Summary
 
 ### By Status
