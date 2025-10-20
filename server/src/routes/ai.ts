@@ -232,13 +232,67 @@ router.post("/generate",
       )
 
       log.info('✅ [BACKEND-10/10] Metadata calculated and logged')
+
+      // AUTO-SAVE: If project_id is provided, automatically save the document to the project
+      let savedDocumentId = null
+      if (req.body.project_id && req.body.project_id !== 'unknown') {
+        try {
+          log.info('💾 [AUTO-SAVE] Saving document to project', {
+            projectId: req.body.project_id,
+            projectName: req.body.project_name
+          })
+
+          const documentId = require('crypto').randomUUID()
+          const templateData = template_id ? await pool.query('SELECT name FROM templates WHERE id = $1', [template_id]) : null
+          const documentTitle = templateData?.rows[0]?.name 
+            ? `${templateData.rows[0].name} - ${new Date().toLocaleDateString()}`
+            : `AI Generated Document - ${new Date().toLocaleDateString()}`
+
+          await pool.query(
+            `INSERT INTO documents 
+             (id, project_id, title, content, template_id, generation_metadata, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+             RETURNING id`,
+            [
+              documentId,
+              req.body.project_id,
+              documentTitle,
+              content,
+              template_id || null,
+              JSON.stringify({
+                prompt: prompt,
+                provider: provider,
+                model: model || result.model,
+                template_id: template_id,
+                quality: quality,
+                ...formattedMetadata
+              }),
+              req.user?.id
+            ]
+          )
+
+          savedDocumentId = documentId
+          log.info('✅ [AUTO-SAVE] Document saved to project', {
+            documentId,
+            projectId: req.body.project_id,
+            title: documentTitle
+          })
+        } catch (saveError) {
+          log.error('❌ [AUTO-SAVE] Failed to save document to project:', saveError)
+          // Continue anyway - user can manually save if auto-save fails
+        }
+      }
+
       log.info('🎉 [BACKEND-10/10] Sending response to client')
 
       res.json({
         message: "Content generated successfully",
         result,
         metadata: formattedMetadata,
-        quality: quality
+        quality: quality,
+        savedToProject: !!savedDocumentId,
+        documentId: savedDocumentId,
+        projectId: req.body.project_id !== 'unknown' ? req.body.project_id : null
       })
       
       log.info('✅ [BACKEND] AI generation COMPLETE! Document ready.')

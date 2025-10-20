@@ -225,7 +225,22 @@ Please create a document that considers the project context above and ensures co
         // Immediate response
         setResult(response.result)
         setIsGenerating(false)
-        toast.success("AI generation completed!")
+        
+        // Check if document was auto-saved to project
+        if (response.savedToProject && response.projectId) {
+          const projectName = projects.find(p => p.id === response.projectId)?.name || 'Project'
+          toast.success("Document saved to project!", {
+            description: `Saved to ${projectName}. Click to view.`,
+            action: {
+              label: "View Project",
+              onClick: () => {
+                window.location.href = `/projects/${response.projectId}?tab=documents`
+              }
+            }
+          })
+        } else {
+          toast.success("AI generation completed!")
+        }
       }
     } catch (error) {
       console.error("AI generation failed:", error)
