@@ -40,6 +40,8 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
     }
 
     try {
+      console.log('Baseline timeline data:', baseline.timeline_baseline)
+      
       // Transform baseline timeline to Gantt tasks
       const tasks: GanttTask[] = []
       
@@ -49,6 +51,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
       
       // Extract milestones from timeline baseline
       const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
+      console.log('Extracted milestones:', milestones)
       
       if (Array.isArray(milestones) && milestones.length > 0) {
         milestones.forEach((milestone: any, idx: number) => {
@@ -84,14 +87,19 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
             milestoneEnd = end.toISOString().split('T')[0]
           }
           
+          // Assign color based on index for variety
+          const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
+          const taskColor = colors[idx % colors.length]
+          
           tasks.push({
             id: `milestone-${idx}`,
             name: milestoneName,
             start: milestoneDate,
             end: milestoneEnd,
             progress: typeof progress === 'number' ? progress : 0,
-            custom_class: progress >= 100 ? 'bar-complete' : progress > 0 ? 'bar-in-progress' : 'bar-pending'
-          })
+            custom_class: progress >= 100 ? 'bar-complete' : progress > 0 ? 'bar-in-progress' : 'bar-pending',
+            color: taskColor
+          } as any)
           
           // Update project start if earlier
           if (new Date(milestoneDate) < new Date(projectStart)) {
@@ -141,32 +149,51 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
         }
       }
       
+      // Check if we have tasks to render
+      if (tasks.length === 0) {
+        ganttContainerRef.current.innerHTML = '<div class="p-8 text-center text-gray-500">No timeline tasks available</div>'
+        return
+      }
+
+      console.log('Creating Gantt chart with', tasks.length, 'tasks:', tasks)
+
       // Always create fresh Gantt instance (prevents duplication issues)
       ganttInstance.current = new Gantt(ganttContainerRef.current, tasks, {
-          view_mode: viewMode,
-          bar_height: 35,
-          bar_corner_radius: 3,
-          arrow_curve: 5,
-          padding: 18,
-          date_format: 'YYYY-MM-DD',
-          language: 'en',
-          custom_popup_html: function(task: any) {
+        view_mode: viewMode,
+        bar_height: 35,
+        bar_corner_radius: 3,
+        arrow_curve: 5,
+        padding: 18,
+        date_format: 'YYYY-MM-DD',
+        language: 'en',
+        // Force responsive sizing
+        header_height: 50,
+        column_width: 30,
+        step: 24,
+        width: '100%',
+        height: Math.max(200, tasks.length * 60 + 100), // Dynamic height based on tasks
+        custom_popup_html: function(task: any) {
           const duration = Math.ceil((new Date(task._end).getTime() - new Date(task._start).getTime()) / (1000 * 60 * 60 * 24))
-            return `
-              <div class="p-3">
-                <h5 class="font-semibold mb-2">${task.name}</h5>
-                <p class="text-sm text-gray-600">
-                  Start: ${new Date(task._start).toLocaleDateString()}<br/>
-                  End: ${new Date(task._end).toLocaleDateString()}<br/>
+          return `
+            <div class="p-3">
+              <h5 class="font-semibold mb-2">${task.name}</h5>
+              <p class="text-sm text-gray-600">
+                Start: ${new Date(task._start).toLocaleDateString()}<br/>
+                End: ${new Date(task._end).toLocaleDateString()}<br/>
                 Duration: ${duration} days<br/>
-                  Progress: ${task.progress}%
-                </p>
-              </div>
-            `
-          }
-        })
+                Progress: ${task.progress}%
+              </p>
+            </div>
+          `
+        }
+      })
+      
+      console.log('Gantt chart created successfully')
     } catch (error) {
       console.error('Error creating Gantt chart:', error)
+      if (ganttContainerRef.current) {
+        ganttContainerRef.current.innerHTML = `<div class="p-8 text-center text-red-500">Error rendering timeline: ${error instanceof Error ? error.message : 'Unknown error'}</div>`
+      }
     }
 
     // Cleanup
@@ -184,16 +211,87 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
     )
   }
 
+  // Extract milestones for table view
+  const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
+
   return (
-    <div className="w-full overflow-x-auto bg-white dark:bg-slate-900 p-4 rounded-lg border">
+    <div className="w-full bg-white dark:bg-slate-900 p-4 rounded-lg border space-y-4">
+      {/* Table/Grid View */}
+      <div className="overflow-x-auto border rounded-lg">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 dark:bg-slate-800 border-b">
+            <tr>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">#</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Milestone</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Target Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Status</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+            {Array.isArray(milestones) && milestones.length > 0 ? (
+              milestones.map((milestone: any, idx: number) => {
+                const milestoneName = typeof milestone === 'string' 
+                  ? milestone 
+                  : (milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`)
+                const milestoneDate = typeof milestone === 'object' 
+                  ? (milestone.date || milestone.start_date || milestone.target_date || '-')
+                  : '-'
+                const progress = typeof milestone === 'object' 
+                  ? (milestone.progress || milestone.completion || 0)
+                  : 0
+                const statusColor = progress >= 100 ? 'bg-green-100 text-green-800' : progress > 0 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
+                const statusText = progress >= 100 ? 'Complete' : progress > 0 ? 'In Progress' : 'Pending'
+                
+                // Color indicator matching gantt bars
+                const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+                const colorClass = colors[idx % colors.length]
+                
+                return (
+                  <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-sm ${colorClass}`}></div>
+                        {idx + 1}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">{milestoneName}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{milestoneDate}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusColor}`}>
+                        {statusText}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })
+            ) : (
+              <tr>
+                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                  No milestones available
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+      
+      {/* Visual Timeline (Gantt Chart) */}
+      <div className="border-t pt-4">
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Visual Timeline</h4>
       <style jsx global>{`
         .gantt-container {
           font-family: inherit;
-          overflow: visible;
+          overflow: hidden;
+          max-width: 100%;
         }
         .gantt {
-          width: 100%;
+          width: 100% !important;
+          max-width: 100% !important;
           font-family: inherit;
+          overflow: hidden;
+        }
+        .gantt .grid-row {
+          max-width: 100%;
         }
         .gantt .grid-header {
           fill: #f8fafc;
@@ -230,11 +328,38 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
         .gantt .bar-pending {
           fill: #94a3b8;
         }
+        .gantt .bar,
+        .gantt .bar-wrapper .bar,
+        .gantt-container .bar {
+          fill: #3b82f6 !important;
+          stroke: #2563eb !important;
+          stroke-width: 0;
+          rx: 3;
+          ry: 3;
+        }
+        /* Force colors on all bar elements */
+        svg .bar {
+          fill: #3b82f6 !important;
+          stroke: #2563eb !important;
+        }
         .gantt .bar-wrapper {
           cursor: pointer;
         }
         .gantt .bar-wrapper:hover .bar {
           opacity: 0.8;
+          fill: #2563eb !important;
+        }
+        .gantt .bar-wrapper:nth-child(odd) .bar {
+          fill: #8b5cf6 !important;
+          stroke: #7c3aed !important;
+        }
+        .gantt .bar-wrapper:nth-child(3n) .bar {
+          fill: #10b981 !important;
+          stroke: #059669 !important;
+        }
+        .gantt .bar-wrapper:nth-child(4n) .bar {
+          fill: #f59e0b !important;
+          stroke: #d97706 !important;
         }
         .gantt .bar-progress {
           fill: #059669;
@@ -267,7 +392,17 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           stroke: #f59e0b;
         }
       `}</style>
-      <div ref={ganttContainerRef} className="gantt-container" style={{ minHeight: '400px' }}></div>
+        <div 
+          ref={ganttContainerRef} 
+          className="gantt-container" 
+          style={{ 
+            minHeight: '200px',
+            maxHeight: '400px',
+            width: '100%',
+            overflow: 'hidden'
+          }}
+        ></div>
+      </div>
     </div>
   )
 }
