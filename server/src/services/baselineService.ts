@@ -101,11 +101,11 @@ export async function extractBaselineFromCorpus(
 
     // Call AI to extract baseline
     const startTime = Date.now()
-    const aiResponse = await aiService.generate({
+    const aiResponse = await aiService.generateWithFallback({
       prompt: prompt + '\n\nSYSTEM INSTRUCTIONS:\n' + BASELINE_EXTRACTION_SYSTEM_PROMPT,
       provider: options.aiProvider || 'openai',
       model: options.aiModel || 'gpt-4-turbo-preview',
-      temperature: 0.3, // Lower temperature for more consistent extraction
+      temperature: 0.3,
       max_tokens: 4000,
       system_prompt: BASELINE_EXTRACTION_SYSTEM_PROMPT
     })
@@ -130,7 +130,7 @@ export async function extractBaselineFromCorpus(
       consistency_score: qualityScores.consistency,
       clarity_score: qualityScores.clarity,
       ai_processing_metadata: {
-        provider: aiResponse.provider || options.aiProvider || 'openai',
+        provider: (aiResponse as any).provider || (aiResponse as any).providerUsed || options.aiProvider || 'openai',
         model: aiResponse.model || options.aiModel || 'gpt-4-turbo-preview',
         processing_time_ms: processingTime,
         input_tokens: aiResponse.usage?.prompt_tokens || 0,
@@ -254,11 +254,11 @@ export async function validateDocumentAgainstBaseline(
     const prompt = buildDriftDetectionPrompt(baseline, documentContent, documentTitle)
 
     // Call AI to detect drift
-    const aiResponse = await aiService.generate({
+    const aiResponse = await aiService.generateWithFallback({
       prompt: prompt + '\n\nSYSTEM INSTRUCTIONS:\n' + DRIFT_DETECTION_SYSTEM_PROMPT,
       provider: 'openai',
       model: 'gpt-4-turbo-preview',
-      temperature: 0.2, // Very low temperature for consistent detection
+      temperature: 0.2,
       max_tokens: 2000,
       system_prompt: DRIFT_DETECTION_SYSTEM_PROMPT
     })
