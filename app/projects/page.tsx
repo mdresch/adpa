@@ -242,26 +242,46 @@ export default function Projects() {
       
       // Check if there's a business case draft to save as a document
       const projectDraft = sessionStorage.getItem('project-draft')
+      console.log('🔍 Checking for project draft in sessionStorage:', {
+        hasDraft: !!projectDraft,
+        draftLength: projectDraft?.length
+      })
+      
       if (projectDraft) {
         try {
           const draft = JSON.parse(projectDraft)
           const content = draft.content || ''
           
+          console.log('🔍 Project draft parsed:', {
+            hasContent: !!content,
+            contentLength: content.length,
+            templateId: draft.templateId,
+            templateName: draft.templateName,
+            framework: draft.framework
+          })
+          
           // Create a document from the business case
           if (content && createdProject && createdProject.id) {
             console.log('📄 Attempting to save business case as document...', {
               projectId: createdProject.id,
+              projectName: createdProject.name,
               contentLength: content.length,
               templateId: draft.templateId
             })
             
             // Create document via API (expects JSON, not file upload)
             const documentData = {
-              name: `${newProject.name} - Business Case`,
+              name: draft.templateName || `${newProject.name} - Business Case`,
               content: content,
               template_id: draft.templateId || null,
-              status: 'final'
+              status: 'draft', // Changed from 'final' to 'draft'
+              metadata: draft.metadata || {}
             }
+            
+            console.log('📄 Sending document data:', {
+              ...documentData,
+              content: `${content.substring(0, 100)}... (${content.length} chars total)`
+            })
             
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/documents/project/${createdProject.id}`, {
               method: 'POST',
@@ -275,27 +295,37 @@ export default function Projects() {
             console.log('📄 Document API response:', {
               status: response.status,
               statusText: response.statusText,
-              ok: response.ok
+              ok: response.ok,
+              url: response.url
             })
             
             if (response.ok) {
               const docData = await response.json()
               console.log('✅ Document created successfully:', docData)
-              toast.success("Project and business case document created successfully!")
+              toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
             } else {
-              const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+              const errorText = await response.text()
+              let errorData
+              try {
+                errorData = JSON.parse(errorText)
+              } catch {
+                errorData = { error: errorText }
+              }
               console.error("❌ Document creation failed:", {
                 status: response.status,
                 statusText: response.statusText,
-                error: errorData
+                error: errorData,
+                errorText: errorText
               })
-              toast.error(`Project created, but business case document failed: ${errorData.error || errorData.message || 'Unknown error'}`)
+              toast.error(`Project created, but document failed to save: ${errorData.error || errorData.message || 'Unknown error'}`)
             }
           } else {
             console.log('⚠️ Skipping document creation:', {
               hasContent: !!content,
+              contentLength: content?.length,
               hasProject: !!createdProject,
-              hasProjectId: !!createdProject?.id
+              hasProjectId: !!createdProject?.id,
+              projectId: createdProject?.id
             })
             toast.success("Project created successfully!")
           }
@@ -303,10 +333,11 @@ export default function Projects() {
           // Clear the draft from session storage
           sessionStorage.removeItem('project-draft')
         } catch (docError) {
-          console.error("Failed to save business case as document:", docError)
-          toast.success("Project created! (Business case document could not be saved)")
+          console.error("❌ Failed to save business case as document:", docError)
+          toast.error("Project created, but initial document could not be saved. You can upload it manually.")
         }
       } else {
+        console.log('ℹ️ No project draft found in sessionStorage - creating project without initial document')
         toast.success("Project created successfully!")
       }
       
