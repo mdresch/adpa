@@ -21,9 +21,26 @@ interface BaselineGanttChartProps {
 export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGanttChartProps) {
   const ganttRef = useRef<SVGSVGElement>(null)
   const ganttInstance = useRef<any>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    if (!ganttRef.current || !baseline?.timeline_baseline) return
+    if (!ganttRef.current || !baseline?.timeline_baseline || !containerRef.current) return
+
+    // Clear any existing Gantt instance first
+    if (ganttInstance.current) {
+      try {
+        ganttInstance.current = null
+      } catch (e) {
+        console.warn('Error clearing previous Gantt:', e)
+      }
+    }
+
+    // Clear the SVG container
+    if (ganttRef.current) {
+      while (ganttRef.current.firstChild) {
+        ganttRef.current.removeChild(ganttRef.current.firstChild)
+      }
+    }
 
     try {
       // Transform baseline timeline to Gantt tasks
@@ -127,32 +144,30 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
         }
       }
       
-      // Create or update Gantt chart
-      if (ganttInstance.current) {
-        ganttInstance.current.refresh(tasks)
-      } else {
-        ganttInstance.current = new Gantt(ganttRef.current, tasks, {
-          view_mode: viewMode,
-          bar_height: 35,
-          bar_corner_radius: 3,
-          arrow_curve: 5,
-          padding: 18,
-          date_format: 'YYYY-MM-DD',
-          language: 'en',
-          custom_popup_html: function(task: any) {
-            return `
-              <div class="p-3">
-                <h5 class="font-semibold mb-2">${task.name}</h5>
-                <p class="text-sm text-gray-600">
-                  Start: ${new Date(task._start).toLocaleDateString()}<br/>
-                  End: ${new Date(task._end).toLocaleDateString()}<br/>
-                  Progress: ${task.progress}%
-                </p>
-              </div>
-            `
-          }
-        })
-      }
+      // Always create fresh Gantt instance (prevents duplication issues)
+      ganttInstance.current = new Gantt(ganttRef.current, tasks, {
+        view_mode: viewMode,
+        bar_height: 35,
+        bar_corner_radius: 3,
+        arrow_curve: 5,
+        padding: 18,
+        date_format: 'YYYY-MM-DD',
+        language: 'en',
+        custom_popup_html: function(task: any) {
+          const duration = Math.ceil((new Date(task._end).getTime() - new Date(task._start).getTime()) / (1000 * 60 * 60 * 24))
+          return `
+            <div class="p-3">
+              <h5 class="font-semibold mb-2">${task.name}</h5>
+              <p class="text-sm text-gray-600">
+                Start: ${new Date(task._start).toLocaleDateString()}<br/>
+                End: ${new Date(task._end).toLocaleDateString()}<br/>
+                Duration: ${duration} days<br/>
+                Progress: ${task.progress}%
+              </p>
+            </div>
+          `
+        }
+      })
     } catch (error) {
       console.error('Error creating Gantt chart:', error)
     }
@@ -173,7 +188,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
   }
 
   return (
-    <div className="w-full overflow-x-auto bg-white dark:bg-slate-900 p-4 rounded-lg border">
+    <div ref={containerRef} className="w-full overflow-x-auto bg-white dark:bg-slate-900 p-4 rounded-lg border">
       <style jsx global>{`
         .gantt-container {
           font-family: inherit;
