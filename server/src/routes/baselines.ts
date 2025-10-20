@@ -9,6 +9,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth'
 import { validate, validateQuery } from '../middleware/validation'
 import { baselineService } from '../services/baselineService'
 import { logger } from '../utils/logger'
+import { generateFormalBaselineDocument, identifyMissingBaselineDocuments } from '../services/baselineDocumentGenerator'
 
 const router = express.Router()
 
@@ -374,6 +375,56 @@ router.get(
     } catch (error) {
       logger.error('Error fetching baseline summary:', error)
       res.status(500).json({ error: 'Failed to fetch baseline summary' })
+    }
+  }
+)
+
+/**
+ * GET /api/baselines/:id/formal-document
+ * Generate formal PMBOK-style baseline document
+ */
+router.get(
+  '/:id/formal-document',
+  authenticateToken,
+  requirePermission('projects.view'),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const { pool } = await import('../database/connection')
+
+      // Get baseline with project name
+      const result = await pool.query(
+        `SELECT 
+          pb.*,
+          p.name as project_name
+        FROM project_baselines pb
+        LEFT JOIN projects p ON pb.project_id = p.id
+        WHERE pb.id = $1`,
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Baseline not found' })
+      }
+
+      const baseline = result.rows[0]
+      const projectName = baseline.project_name || 'Unnamed Project'
+
+      // Generate formal document
+      const formalDocument = generateFormalBaselineDocument(baseline, projectName)
+      
+      // Identify missing documents
+      const missingDocuments = identifyMissingBaselineDocuments(baseline)
+
+      res.json({
+        document: formalDocument,
+        missing_documents: missingDocuments,
+        baseline_id: id,
+        project_name: projectName
+      })
+    } catch (error) {
+      logger.error('Error generating formal baseline document:', error)
+      res.status(500).json({ error: 'Failed to generate formal document' })
     }
   }
 )

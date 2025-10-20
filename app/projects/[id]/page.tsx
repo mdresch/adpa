@@ -152,6 +152,9 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   const [showExtractDialog, setShowExtractDialog] = useState(false)
   const [viewingBaseline, setViewingBaseline] = useState<any>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
+  const [formalDocument, setFormalDocument] = useState<string>('')
+  const [missingDocuments, setMissingDocuments] = useState<any[]>([])
+  const [showFormalDocDialog, setShowFormalDocDialog] = useState(false)
 
   // Fetch active baseline
   const fetchBaseline = async () => {
@@ -251,6 +254,23 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
     } catch (error: any) {
       console.error('Error fetching baseline:', error)
       toast.error('Failed to load baseline details')
+    }
+  }
+
+  const handleGenerateFormalDocument = async (baselineId: string) => {
+    try {
+      const response = await apiClient.request<{ 
+        document: string
+        missing_documents: any[]
+        project_name: string
+      }>(`/baselines/${baselineId}/formal-document`)
+      
+      setFormalDocument(response.document)
+      setMissingDocuments(response.missing_documents || [])
+      setShowFormalDocDialog(true)
+    } catch (error: any) {
+      console.error('Error generating formal document:', error)
+      toast.error('Failed to generate formal baseline document')
     }
   }
 
@@ -567,6 +587,14 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
                       <Eye className="h-4 w-4 mr-2" />
                       View Details
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleGenerateFormalDocument(b.id)}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      Formal Document
+                    </Button>
                     {b.status === 'draft' && (
                       <Button
                         size="sm"
@@ -745,6 +773,117 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
                 Approve Baseline
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Formal Baseline Document Dialog */}
+      <Dialog open={showFormalDocDialog} onOpenChange={setShowFormalDocDialog}>
+        <DialogContent className="max-w-6xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Formal Project Baseline Document
+            </DialogTitle>
+            <DialogDescription>
+              PMBOK-style baseline document with completeness assessment and recommendations
+            </DialogDescription>
+          </DialogHeader>
+          
+          <Tabs defaultValue="document" className="flex-1 overflow-hidden flex flex-col">
+            <TabsList>
+              <TabsTrigger value="document">Baseline Document</TabsTrigger>
+              <TabsTrigger value="gaps">
+                Missing Details
+                {missingDocuments.length > 0 && (
+                  <Badge variant="destructive" className="ml-2">{missingDocuments.length}</Badge>
+                )}
+              </TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="document" className="flex-1 overflow-y-auto prose prose-sm max-w-none p-4 border rounded-md bg-muted/30">
+              <div className="bg-background p-6 rounded-lg">
+                <pre className="whitespace-pre-wrap font-sans text-sm">{formalDocument}</pre>
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="gaps" className="flex-1 overflow-y-auto p-4">
+              {missingDocuments.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
+                    <p className="text-sm font-medium text-orange-900">
+                      {missingDocuments.length} Baseline Detail{missingDocuments.length > 1 ? 's' : ''} Missing
+                    </p>
+                    <p className="text-xs text-orange-700 mt-1">
+                      Consider creating these documents to enhance baseline completeness and enable deeper project insights.
+                    </p>
+                  </div>
+                  
+                  {missingDocuments.map((doc, idx) => (
+                    <Card key={idx}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <CardTitle className="text-sm flex items-center gap-2">
+                              <Lightbulb className="h-4 w-4 text-orange-500" />
+                              {doc.documentType}
+                            </CardTitle>
+                            <CardDescription className="text-xs mt-1">
+                              {doc.purpose}
+                            </CardDescription>
+                          </div>
+                          <Badge variant={
+                            doc.priority === 'Critical' ? 'destructive' :
+                            doc.priority === 'High' ? 'default' :
+                            'secondary'
+                          }>
+                            {doc.priority}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent className="text-xs space-y-2">
+                        <div>
+                          <span className="font-medium">What it provides:</span>
+                          <p className="text-muted-foreground mt-1">{doc.whatItProvides}</p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2">
+                          <Badge variant="outline" className="text-xs">
+                            <FileText className="h-3 w-3 mr-1" />
+                            {doc.template}
+                          </Badge>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500 opacity-50" />
+                  <p className="font-medium mb-1">Baseline is Complete!</p>
+                  <p className="text-sm">All critical baseline components are present.</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+
+          <DialogFooter className="flex items-center justify-between">
+            <div className="text-xs text-muted-foreground">
+              {missingDocuments.length > 0 && (
+                <span>💡 Tip: Create missing documents to enhance baseline depth</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setShowFormalDocDialog(false)}>
+                Close
+              </Button>
+              <Button onClick={() => {
+                navigator.clipboard.writeText(formalDocument)
+                toast.success('Baseline document copied to clipboard!')
+              }}>
+                <Copy className="h-4 w-4 mr-2" />
+                Copy Document
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
