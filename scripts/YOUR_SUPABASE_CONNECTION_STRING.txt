@@ -1,0 +1,92 @@
+=========================================
+ADPA SUPABASE CONNECTION INFORMATION
+=========================================
+
+Project: CBA/ADPA
+Project Ref: blxzjbxczpmmgiwbtmdo
+Database Password: QueIQ4Klopman$
+
+=========================================
+STEP 1: GET YOUR CONNECTION STRING
+=========================================
+
+Go to this URL:
+https://supabase.com/dashboard/project/blxzjbxczpmmgiwbtmdo/settings/database
+
+Scroll to "Connection string" section
+Click "URI" tab
+Select "Connection pooling" (Transaction mode)
+
+=========================================
+YOUR CONNECTION STRING WILL LOOK LIKE:
+=========================================
+
+postgresql://postgres.blxzjbxczpmmgiwbtmdo:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
+
+REPLACE [YOUR-PASSWORD] with: QueIQ4Klopman$
+REPLACE [REGION] with your selected region (e.g., us-east-1, us-west-2)
+
+EXAMPLE (if region is us-east-1):
+postgresql://postgres.blxzjbxczpmmgiwbtmdo:QueIQ4Klopman$@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+
+=========================================
+STEP 2: UPDATE server/.env
+=========================================
+
+Add or update this line in server/.env:
+
+DATABASE_URL=postgresql://postgres.blxzjbxczpmmgiwbtmdo:QueIQ4Klopman$@aws-0-[YOUR-REGION].pooler.supabase.com:6543/postgres
+
+(Replace [YOUR-REGION] with actual region from Supabase dashboard)
+
+=========================================
+STEP 3: UPDATE .env.local (Frontend)
+=========================================
+
+Add these lines to .env.local (root folder):
+
+NEXT_PUBLIC_SUPABASE_URL=https://blxzjbxczpmmgiwbtmdo.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJseHpqYnhjenBtbWdpd2J0bWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5MjIwMzAsImV4cCI6MjA3NjQ5ODAzMH0.2U4c5wrUBAD6BM8yRwJcS0MwgcSEVpzfS3gXUeVtNYM
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+
+=========================================
+STEP 4: RUN MIGRATIONS
+=========================================
+
+cd server
+node scripts/apply-baseline-migration.js
+node scripts/create-change-request-template.js
+node scripts/check-baseline-tables.js
+
+=========================================
+STEP 5: START BACKEND
+=========================================
+
+cd server
+npm run dev
+
+Should see:
+✅ Database connected successfully
+✅ All API routes registered
+
+=========================================
+QUICK REFERENCE
+=========================================
+
+Supabase Dashboard:
+https://supabase.com/dashboard/project/blxzjbxczpmmgiwbtmdo
+
+Database Settings:
+https://supabase.com/dashboard/project/blxzjbxczpmmgiwbtmdo/settings/database
+
+Table Editor:
+https://supabase.com/dashboard/project/blxzjbxczpmmgiwbtmdo/editor
+
+SQL Editor:
+https://supabase.com/dashboard/project/blxzjbxczpmmgiwbtmdo/sql/new
+
+API Docs (Auto-generated):
+https://supabase.com/dashboard/project/blxzjbxczpmmgiwbtmdo/api
+
+=========================================
+
