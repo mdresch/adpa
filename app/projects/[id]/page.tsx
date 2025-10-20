@@ -667,11 +667,116 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
                   <p className="text-xs text-green-700 font-medium">Overall Completeness</p>
                   <p className="text-2xl font-bold text-green-900">{Math.round((viewingBaseline.completeness_score || 0) * 100)}%</p>
                 </div>
-                <div className="p-3 border rounded-lg bg-gradient-to-br from-purple-50 to-purple-100">
-                  <p className="text-xs text-purple-700 font-medium">Consistency</p>
-                  <p className="text-2xl font-bold text-purple-900">{Math.round((viewingBaseline.consistency_score || 0) * 100)}%</p>
+                <div className={`p-3 border rounded-lg ${
+                  (viewingBaseline.consistency_score || 0) * 100 >= 70 ? 'bg-gradient-to-br from-purple-50 to-purple-100' :
+                  (viewingBaseline.consistency_score || 0) * 100 >= 60 ? 'bg-gradient-to-br from-yellow-50 to-yellow-100' :
+                  'bg-gradient-to-br from-red-50 to-red-100'
+                }`}>
+                  <p className={`text-xs font-medium ${
+                    (viewingBaseline.consistency_score || 0) * 100 >= 70 ? 'text-purple-700' :
+                    (viewingBaseline.consistency_score || 0) * 100 >= 60 ? 'text-yellow-700' :
+                    'text-red-700'
+                  }`}>Consistency {(viewingBaseline.consistency_score || 0) * 100 < 60 && '⚠️'}</p>
+                  <p className={`text-2xl font-bold ${
+                    (viewingBaseline.consistency_score || 0) * 100 >= 70 ? 'text-purple-900' :
+                    (viewingBaseline.consistency_score || 0) * 100 >= 60 ? 'text-yellow-900' :
+                    'text-red-900'
+                  }`}>{Math.round((viewingBaseline.consistency_score || 0) * 100)}%</p>
                 </div>
               </div>
+
+              {/* Quality Audit: Red Flags */}
+              {viewingBaseline.ai_processing_metadata?.quality_audit?.red_flags?.length > 0 && (
+                <Card className="border-red-200 bg-red-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold text-red-900 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      🚨 Critical Issues Detected ({viewingBaseline.ai_processing_metadata.quality_audit.red_flags.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {viewingBaseline.ai_processing_metadata.quality_audit.red_flags.map((flag: any, idx: number) => (
+                      <div key={idx} className="p-3 border border-red-300 rounded-lg bg-white">
+                        <div className="flex items-start justify-between mb-2">
+                          <h5 className="font-semibold text-red-900">{flag.title}</h5>
+                          <Badge variant={flag.severity === 'critical' ? 'destructive' : 'default'} className="ml-2">
+                            {flag.severity.toUpperCase()}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-gray-700 mb-2">{flag.description}</p>
+                        <div className="space-y-1 text-xs">
+                          <p className="font-medium text-gray-900">Evidence:</p>
+                          <ul className="list-disc list-inside text-gray-600 space-y-0.5">
+                            {flag.evidence.map((e: string, i: number) => (
+                              <li key={i}>{e}</li>
+                            ))}
+                          </ul>
+                        </div>
+                        <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded">
+                          <p className="text-xs font-medium text-yellow-900">Required Action:</p>
+                          <p className="text-xs text-yellow-800 mt-1">{flag.required_action}</p>
+                        </div>
+                        {flag.blocking && (
+                          <Badge variant="destructive" className="mt-2">
+                            ⛔ BLOCKS APPROVAL
+                          </Badge>
+                        )}
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Quality Audit: Warnings */}
+              {viewingBaseline.ai_processing_metadata?.quality_audit?.warnings?.length > 0 && (
+                <Card className="border-yellow-200 bg-yellow-50">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm font-semibold text-yellow-900 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      ⚠️ Warnings ({viewingBaseline.ai_processing_metadata.quality_audit.warnings.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {viewingBaseline.ai_processing_metadata.quality_audit.warnings.map((warning: any, idx: number) => (
+                      <div key={idx} className="p-2 border border-yellow-300 rounded bg-white text-sm">
+                        <p className="font-medium text-yellow-900">{warning.title}</p>
+                        <p className="text-gray-700 text-xs mt-1">{warning.description}</p>
+                        <p className="text-gray-600 text-xs mt-1"><strong>Recommendation:</strong> {warning.recommendation}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Quality Audit: Feasibility Score */}
+              {viewingBaseline.ai_processing_metadata?.quality_audit?.feasibility_score !== undefined && (
+                <div className={`p-4 border rounded-lg ${
+                  viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score >= 70 ? 'bg-green-50 border-green-200' :
+                  viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score >= 50 ? 'bg-yellow-50 border-yellow-200' :
+                  'bg-red-50 border-red-200'
+                }`}>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold">Feasibility Assessment</p>
+                      <p className="text-xs text-gray-600 mt-1">
+                        {viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score >= 70 ? 'Project is FEASIBLE as scoped' :
+                         viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score >= 50 ? 'Project feasibility is QUESTIONABLE' :
+                         'Project is NOT FEASIBLE as currently scoped'}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-3xl font-bold ${
+                        viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score >= 70 ? 'text-green-700' :
+                        viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score >= 50 ? 'text-yellow-700' :
+                        'text-red-700'
+                      }`}>
+                        {Math.round(viewingBaseline.ai_processing_metadata.quality_audit.feasibility_score)}%
+                      </p>
+                      <p className="text-xs text-gray-600">Feasibility Score</p>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Baseline Component Completeness Cards */}
               <div>

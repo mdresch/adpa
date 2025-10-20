@@ -7,6 +7,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
+import { performBaselineQualityAudit, recalibrateCompletenessScore } from './baselineQualityAudit'
 
 interface DocumentForBaseline {
   id: string
@@ -117,8 +118,14 @@ export async function extractBaselineFromCorpus(
     // Calculate quality scores
     const qualityScores = calculateBaselineQualityScores(extractedBaseline, documents.length)
 
-    // Build result
-    const result: BaselineExtractionResult = {
+    // Recalibrate completeness based on document types
+    const calibratedCompleteness = recalibrateCompletenessScore(
+      { completeness_score: qualityScores.completeness },
+      documents
+    )
+
+    // Build preliminary result
+    const preliminaryResult = {
       scope_baseline: extractedBaseline.scope_baseline,
       technical_baseline: extractedBaseline.technical_baseline,
       timeline_baseline: extractedBaseline.timeline_baseline,
@@ -126,9 +133,17 @@ export async function extractBaselineFromCorpus(
       resource_baseline: extractedBaseline.resource_baseline,
       success_criteria: extractedBaseline.success_criteria,
       extraction_confidence: extractedBaseline.confidence || 0.85,
-      completeness_score: qualityScores.completeness,
+      completeness_score: calibratedCompleteness, // Use calibrated score
       consistency_score: qualityScores.consistency,
-      clarity_score: qualityScores.clarity,
+      clarity_score: qualityScores.clarity
+    }
+
+    // Perform comprehensive quality audit
+    const qualityAudit = await performBaselineQualityAudit(preliminaryResult, documents)
+
+    // Build final result with quality audit
+    const result: BaselineExtractionResult = {
+      ...preliminaryResult,
       ai_processing_metadata: {
         provider: (aiResponse as any).provider || (aiResponse as any).providerUsed || options.aiProvider || 'openai',
         model: aiResponse.model || options.aiModel || 'gpt-4-turbo-preview',
@@ -137,13 +152,19 @@ export async function extractBaselineFromCorpus(
         output_tokens: aiResponse.usage?.completion_tokens || 0,
         total_tokens: aiResponse.usage?.total_tokens || 0,
         documents_analyzed: documents.length,
-        total_words_analyzed: documents.reduce((sum, doc) => sum + (doc.word_count || 0), 0)
+        total_words_analyzed: documents.reduce((sum, doc) => sum + (doc.word_count || 0), 0),
+        quality_audit: qualityAudit // Include quality audit results
       }
     }
 
     logger.info(`Baseline extracted for project ${projectId}:`, {
       documents_analyzed: documents.length,
       extraction_confidence: result.extraction_confidence,
+      calibrated_completeness: calibratedCompleteness,
+      original_completeness: qualityScores.completeness,
+      red_flags: qualityAudit.red_flags.length,
+      warnings: qualityAudit.warnings.length,
+      feasibility_score: qualityAudit.feasibility_score,
       processing_time_ms: processingTime
     })
 
