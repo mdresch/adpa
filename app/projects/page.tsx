@@ -654,6 +654,13 @@ export default function Projects() {
     return matchesSearch && matchesStatus
   })
 
+  // Sort by most recently updated first
+  const sortedProjects = [...filteredProjects].sort((a, b) => {
+    const aTime = a.updated_at ? new Date(a.updated_at).getTime() : 0
+    const bTime = b.updated_at ? new Date(b.updated_at).getTime() : 0
+    return bTime - aTime
+  })
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
@@ -1580,7 +1587,7 @@ export default function Projects() {
               {/* Projects Grid */}
               {!loading && (
                 <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProjects.map((project, index) => {
+                  {sortedProjects.map((project, index) => {
                     const progress = getProjectProgress(project)
                     const documentsCount = (project as any).document_count || 0
                     
@@ -1784,7 +1791,7 @@ export default function Projects() {
                 </AnimatedGrid>
               )}
 
-              {!loading && filteredProjects.length === 0 && (
+              {!loading && sortedProjects.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1821,7 +1828,7 @@ export default function Projects() {
               )}
 
               {/* Pagination */}
-              {!loading && filteredProjects.length > 0 && pagination.pages > 1 && (
+              {!loading && sortedProjects.length > 0 && pagination.pages > 1 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
