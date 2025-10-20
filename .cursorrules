@@ -1,0 +1,1301 @@
+# ADPA Framework - Ultimate LLM Development Guide
+
+## Project Overview
+
+**ADPA (Advanced Document Processing & Automation)** is an enterprise-grade, full-stack document processing platform that combines AI-powered document generation with seamless third-party integrations. The system generates standards-compliant documentation (PMBOK, BABOK, DMBOK) with multi-provider AI support and real-time collaboration features.
+
+**Project Status**: Production-ready, actively developed  
+**Version**: 2.0.0  
+**Architecture**: Monorepo with separate frontend and backend  
+**Development Environment**: RUNNING (All services operational)
+
+---
+
+## Critical Rules - READ FIRST
+
+### 1. **Markdown Storage Rule (MANDATORY)**
+- **ALL text content MUST be stored as Markdown in the database**
+- Markdown is the canonical storage format for all documents
+- Export to PDF or DOCX only for reporting/download purposes
+- Never store PDF/DOCX directly; always convert from Markdown
+- Use JSONB columns for storing Markdown content in PostgreSQL
+
+### 2. **Database-First Approach**
+- **ALWAYS use Supabase PostgreSQL as primary database** (serverless, SSL required)
+- Connection string stored in environment variables
+- Use parameterized queries to prevent SQL injection
+- UUID primary keys for all tables
+- JSONB for flexible content storage
+
+### 3. **Development Environment**
+- **Docker is no longer used** for all development work
+
+### 4. **No Uncommitted Changes**
+- commit but dont push unless explicitly requested by user**
+- Always request approval before pushing
+- Test all changes before declaring success
+- User must validate functionality before celebration they are great though
+
+### 5. **TypeScript Strict Mode**
+- All code must be TypeScript with proper type definitions
+- No `any` types without justification
+- Use interfaces/types from project type definitions
+- Enable strict mode in tsconfig.json
+
+---
+
+## System Architecture
+
+### High-Level Architecture
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Client Browser                            │
+│              (Next.js 14 + React 18)                        │
+└────────────────────┬────────────────────────────────────────┘
+                     │ HTTP/HTTPS + WebSocket
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│              Next.js Frontend (Port 3000)                    │
+│  • Pages Router                                              │
+│  • Tailwind CSS + Radix UI                                  │
+│  • React Hook Form + Framer Motion                          │
+│  • Socket.io Client                                         │
+└────────────────────┬────────────────────────────────────────┘
+                     │ REST API + WebSocket
+                     ↓
+┌─────────────────────────────────────────────────────────────┐
+│            Express.js Backend (Port 5000)                    │
+│  • JWT Authentication + RBAC                                 │
+│  • Socket.io Server                                         │
+│  • Bull Queue (Redis-based)                                 │
+│  • Winston Logging                                          │
+│  • Multi-module architecture                                │
+└────────┬───────────────┬──────────────┬─────────────────────┘
+         │               │              │
+         ↓               ↓              ↓
+  ┌──────────┐   ┌─────────────┐  ┌─────────┐
+  │PostgreSQL│   │   Redis     │  │ AI APIs │
+  │  (Supabase)  │   │ (Cache/Jobs)│  │ Providers│
+  │ Port:5432│   │  Port:6379  │  │(External)│
+  └──────────┘   └─────────────┘  └─────────┘
+```
+
+### Technology Stack
+
+#### Frontend (`/` - root directory)
+- **Framework**: Next.js 14.2.30 (Pages Router, not App Router)
+- **Language**: TypeScript 5.9.3
+- **UI Framework**: React 18.3.1
+- **Styling**: Tailwind CSS 3.4.13 + Tailwind Animate
+- **Component Library**: Radix UI (complete suite) + Lucide React icons
+- **Animations**: Framer Motion
+- **Forms**: React Hook Form + Joi validation
+- **State Management**: React Context API (AuthContext, WebSocketContext)
+- **API Client**: Custom hooks (`use-api.ts`, `use-auth.ts`)
+- **Charts**: Recharts 3.2.1
+- **Markdown**: react-markdown + remark-gfm
+- **Real-time**: Socket.io Client
+- **Database**: @supabase/serverless, @vercel/postgres
+- **Cache**: @vercel/kv (Redis)
+- **Package Manager**: pnpm 10.18.0
+
+#### Backend (`/server` directory)
+- **Runtime**: Node.js 18+ (TypeScript 5.9.3)
+- **Framework**: Express 5.1.0
+- **Database**: PostgreSQL 15 (via `pg` 8.16.3)
+- **Cache/Sessions**: Redis 5.6.0 (ioredis 5.3.2)
+- **Queue System**: Bull 4.16.5 (Redis-backed job queues)
+- **Authentication**: JWT (jsonwebtoken 9.0.2) + bcryptjs 2.4.3
+- **Validation**: Joi 17.13.3 + express-validator 7.2.1
+- **Security**: Helmet 8.1.0 + CORS 2.8.5
+- **Logging**: Winston 3.11.0
+- **Real-time**: Socket.io 4.8.1
+- **File Processing**: Multer 1.4.5-lts.1, Sharp 0.33.2
+- **Document Generation**: 
+  - Handlebars 4.7.8 (templates)
+  - Puppeteer 22.0.0 (PDF generation)
+  - docx 9.5.1 (Word export)
+  - marked 16.4.0, markdown-it 14.1.0 (Markdown processing)
+  - turndown 7.2.1 (HTML to Markdown)
+- **AI Providers**:
+  - OpenAI 4.28.0
+  - @google/generative-ai 0.24.1
+  - @adobe/pdfservices-node-sdk 4.1.0
+  - ai 5.0.70 (Vercel AI SDK)
+
+#### Database Schema (PostgreSQL)
+```sql
+-- Core Tables
+users                 -- User accounts, roles, permissions
+projects              -- Project management
+documents             -- Document storage (JSONB content in Markdown)
+templates             -- Reusable document templates
+document_templates    -- Template definitions with variables
+ai_providers          -- AI service configurations (OpenAI, Google AI, etc.)
+ai_provider_usage     -- Usage tracking and analytics
+jobs                  -- Background job queue tracking
+audit_logs           -- Action audit trail
+security_events      -- Security monitoring
+integrations         -- Third-party integrations (Confluence, SharePoint, GitHub)
+analytics_events     -- Custom event tracking
+baselines            -- Project baselines and snapshots
+stakeholders         -- Stakeholder management
+process_flows        -- Document generation pipelines
+settings             -- System and user settings
+```
+
+#### Redis Usage
+- **Session Storage**: User sessions with JWT
+- **Caching**: Frequent queries, user dashboards, AI provider health
+- **Job Queues**: Bull queues for AI generation, document processing, exports
+- **Pub/Sub**: Real-time updates, notifications, WebSocket events
+- **Rate Limiting**: API throttling and abuse prevention
+
+---
+
+## Development Environment Setup
+
+### Prerequisites (All MANDATORY)
+1. **Docker Desktop** (Windows/Mac) or Docker Engine (Linux)
+2. **Docker Compose** v2.0+
+3. **Git** for version control
+4. **VS Code** (recommended) with extensions:
+   - TypeScript
+   - ESLint
+   - Tailwind CSS IntelliSense
+   - Docker
+   - PostgreSQL
+
+### Quick Start
+
+```powershell
+# 1. Clone repository
+git clone <repository-url>
+cd adpa
+
+
+# 4. Check health
+Frontend: http://localhost:3000
+Backend:  http://localhost:5000/health
+
+
+# 5. View logs
+```
+
+### Environment Configuration
+
+#### Frontend Environment (`.env.local` - root directory)
+```bash
+# Neon PostgreSQL (Serverless)
+POSTGRES_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
+POSTGRES_PRISMA_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require&pgbouncer=true
+POSTGRES_URL_NON_POOLING=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
+
+
+
+
+# Redis (Vercel KV compatible)
+KV_URL=redis://default:password@localhost:6379
+KV_REST_API_URL=https://your-kv-database.vercel-storage.com
+KV_REST_API_TOKEN=your_api_token
+
+# Authentication
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars-long
+
+# API URL
+NEXT_PUBLIC_API_URL=http://localhost:5000
+NEXT_PUBLIC_WS_URL=http://localhost:5000
+```
+
+#### Backend Environment (`server/.env`)
+```bash
+# Server Configuration
+NODE_ENV=development
+PORT=5000
+
+# Database (Neon PostgreSQL with SSL)
+DATABASE_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
+POSTGRES_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
+DB_HOST=host.neon.tech
+DB_PORT=5432
+DB_NAME=adpa_db
+DB_USER=your_user
+DB_PASSWORD=your_password
+DB_SSL=true
+
+# Redis
+REDIS_URL=redis://localhost:6379
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# Authentication & Security
+JWT_SECRET=your-super-secret-jwt-key-min-32-chars-long
+JWT_REFRESH_SECRET=your-refresh-token-secret
+ENCRYPTION_KEY=your-32-byte-encryption-key
+
+# AI Providers (add your API keys)
+OPENAI_API_KEY=sk-...
+GOOGLE_AI_API_KEY=...
+ANTHROPIC_API_KEY=...
+MISTRAL_API_KEY=...
+GITHUB_TOKEN=ghp_...
+
+# Adobe PDF Services
+ADOBE_CLIENT_ID=...
+ADOBE_CLIENT_SECRET=...
+
+# Third-Party Integrations
+CONFLUENCE_CLIENT_ID=...
+CONFLUENCE_CLIENT_SECRET=...
+CONFLUENCE_CALLBACK_URL=http://localhost:5000/api/confluence/callback
+
+SHAREPOINT_CLIENT_ID=...
+SHAREPOINT_CLIENT_SECRET=...
+SHAREPOINT_TENANT_ID=...
+
+# Frontend URL (for CORS)
+FRONTEND_URL=http://localhost:3000
+
+# Logging
+LOG_LEVEL=info
+```
+
+### Directory Structure
+
+```
+adpa/
+├── app/                          # Next.js Pages (Pages Router)
+│   ├── ai/                       # AI provider management
+│   ├── ai-analytics/             # AI usage analytics
+│   ├── ai-providers/             # AI provider configuration
+│   ├── analytics/                # System analytics
+│   ├── auth/login/               # Authentication pages
+│   ├── documents/[id]/           # Document viewer/editor
+│   ├── integrations/             # Third-party integrations
+│   │   ├── confluence/           # Confluence integration
+│   │   ├── github/               # GitHub integration
+│   │   └── sharepoint/           # SharePoint integration
+│   ├── jobs/                     # Background job monitoring
+│   ├── projects/[id]/            # Project management
+│   ├── security/                 # Security dashboard
+│   ├── settings/                 # User settings
+│   ├── templates/                # Template management
+│   └── users/                    # User management (admin)
+├── components/                   # React components
+│   ├── ui/                       # Radix UI components (51 files)
+│   ├── auth/                     # Authentication components
+│   ├── header.tsx                # Main header
+│   ├── sidebar.tsx               # Navigation sidebar
+│   └── ...
+├── contexts/                     # React Context providers
+│   ├── AuthContext.tsx           # Authentication state
+│   └── WebSocketContext.tsx      # Real-time connections
+├── hooks/                        # Custom React hooks
+│   ├── use-api.ts                # API client hook
+│   ├── use-auth.ts               # Authentication hook
+│   └── use-azure-validation.ts   # Azure validation
+├── lib/                          # Utility libraries
+│   ├── api.ts                    # API client
+│   ├── auth.ts                   # Auth utilities
+│   ├── db.ts                     # Database client
+│   └── utils.ts                  # Common utilities
+├── server/                       # Backend application
+│   ├── src/
+│   │   ├── database/             # Database connection, migrations
+│   │   ├── middleware/           # Express middleware
+│   │   ├── routes/               # API route handlers (43 routes)
+│   │   ├── services/             # Business logic services
+│   │   ├── modules/              # Feature modules
+│   │   │   ├── ai/               # AI provider integrations
+│   │   │   ├── context/          # Context management
+│   │   │   ├── documentGenerator/    # Document generation
+│   │   │   ├── documentTemplates/    # Template management
+│   │   │   ├── enhancedTemplateProcessor/  # Advanced templating
+│   │   │   ├── multiStageDocumentProcessor/ # Pipeline processing
+│   │   │   └── ...               # 15+ specialized modules
+│   │   ├── utils/                # Utility functions
+│   │   └── server.ts             # Main server file
+│   ├── migrations/               # Database migrations (57 files)
+│   ├── scripts/                  # Management scripts
+│   ├── logs/                     # Winston logs
+│   └── uploads/                  # Temporary file uploads
+├── docs/                         # Comprehensive documentation
+│   ├── 01-getting-started/       # Setup guides
+│   ├── 02-setup-configuration/   # Configuration
+│   ├── 03-development/           # Development guides
+│   ├── 04-deployment/            # Deployment docs
+│   ├── 05-integrations/          # Integration guides
+│   ├── 06-features/              # Feature documentation (102 files)
+│   ├── 07-architecture/          # Architecture docs (41 files)
+│   └── ...
+├── generated-documents/          # Generated document storage
+│   ├── pmbok/                    # PMBOK documents
+│   ├── babok/                    # BABOK documents
+│   ├── dmbok/                    # DMBOK documents
+│   └── ...
+├── scripts/                      # DevOps and utility scripts (87 files)
+├── __tests__/                    # Frontend tests
+├── docker-compose.yml            # Production Docker setup
+├── docker-compose.dev.yml        # Development Docker setup
+├── package.json                  # Frontend dependencies
+└── README.md                     # Project documentation
+```
+
+---
+
+## Key Features & Modules
+
+### 1. **Multi-Provider AI Orchestration**
+- **Location**: `server/src/modules/ai/`
+- **Providers**: OpenAI, Google AI (Gemini), Azure OpenAI, Mistral
+- **Features**:
+  - Intelligent provider failover and health monitoring
+  - Usage tracking and cost analytics
+  - Context-aware prompt engineering
+  - Rate limiting and retry logic
+- **Usage**:
+  ```typescript
+  import { aiService } from './services/aiService';
+  
+  const result = await aiService.generateText({
+    prompt: 'Generate a project charter...',
+    provider: 'openai',
+    model: 'gpt-4',
+    context: { projectName: 'ADPA' }
+  });
+  ```
+
+### 2. **Document Generation System**
+- **Location**: `server/src/modules/documentGenerator/`
+- **Features**:
+  - Standards-compliant templates (PMBOK, BABOK, DMBOK)
+  - Variable substitution with Handlebars
+  - Multi-format export (Markdown → PDF/DOCX)
+  - Validation and quality assurance
+- **Storage Rule**: ALL documents stored as Markdown in JSONB columns
+- **API Endpoints**:
+  - `POST /api/document-generator/generate` - Generate document
+  - `POST /api/document-generator/validate` - Validate inputs
+  - `GET /api/document-generator/templates` - List templates
+
+### 3. **Context Management System**
+- **Location**: `server/src/modules/context/`
+- **Purpose**: Intelligent context gathering for AI prompts
+- **Features**:
+  - Document history analysis
+  - Project context aggregation
+  - User preference learning
+  - Token budget management (1M token support)
+  - Context freshness tracking
+  - Semantic search with embeddings
+
+### 4. **Multi-Stage Document Processing Pipeline**
+- **Location**: `server/src/modules/multiStageDocumentProcessor/`
+- **Stages**:
+  1. Context Gathering
+  2. Variable Resolution
+  3. Content Structuring
+  4. AI Generation
+  5. Quality Assurance
+  6. Formatting & Export
+- **Features**: Retry logic, partial results, progress tracking
+
+### 5. **Enterprise Integrations**
+
+#### Confluence Integration
+- **Location**: `server/src/routes/confluenceRoutes.ts`
+- **Authentication**: OAuth2
+- **Features**: Page publishing, metadata sync, space management
+- **API**: `POST /api/confluence/sync`, `GET /api/confluence/spaces`
+
+#### SharePoint Integration
+- **Location**: `server/src/routes/sharepointRoutes.ts`
+- **Authentication**: Microsoft Graph API (OAuth2)
+- **Features**: Document library sync, metadata management
+- **API**: `POST /api/sharepoint/upload`, `GET /api/sharepoint/sites`
+
+#### GitHub Integration
+- **Location**: `server/src/routes/githubRoutes.ts`
+- **Authentication**: Personal Access Token / GitHub App
+- **Features**: Repository management, issue tracking, PR creation
+- **API**: `POST /api/github/create-repo`, `GET /api/github/issues`
+
+### 6. **Real-Time Features**
+- **WebSocket Server**: Socket.io on Express server
+- **Client**: Socket.io Client in `contexts/WebSocketContext.tsx`
+- **Events**:
+  - `document:updated` - Document changes
+  - `job:status` - Background job progress
+  - `notification` - System notifications
+  - `analytics:update` - Real-time metrics
+- **Authentication**: JWT token validation on connection
+
+### 7. **Background Job System**
+- **Queue**: Bull (Redis-backed)
+- **Queues**:
+  - `document-generation` - AI document generation
+  - `export-processing` - PDF/DOCX exports
+  - `integration-sync` - Third-party synchronization
+  - `analytics-processing` - Data aggregation
+- **Management**: `server/src/services/queueService.ts`
+- **Monitoring**: `/app/jobs/page.tsx` dashboard
+
+### 8. **Analytics & Monitoring**
+- **Location**: `server/src/routes/analytics.ts`
+- **Dashboards**:
+  - User dashboard: Document generation stats, AI usage
+  - System dashboard (admin): Overall metrics, performance
+  - AI analytics: Provider performance, cost tracking
+- **Storage**: `analytics_events` table (JSONB data)
+- **Permissions**: RBAC-enforced analytics viewing
+
+### 9. **Security & Compliance**
+- **Authentication**: JWT with refresh tokens, bcrypt password hashing
+- **Authorization**: Role-Based Access Control (RBAC)
+  - Roles: admin, manager, user, viewer
+  - Granular permissions per resource
+- **Audit Logging**: All actions logged to `audit_logs` table
+- **Security Events**: Tracked in `security_events` table
+- **Input Validation**: Joi schemas for all API endpoints
+- **Rate Limiting**: Express rate limiter on sensitive endpoints
+- **CORS**: Configurable origins (Vercel, localhost)
+- **Helmet**: Security headers enabled
+
+---
+
+## Development Guidelines
+
+### Code Style & Standards
+
+#### TypeScript
+```typescript
+// ✅ GOOD - Proper typing
+interface GenerateDocumentParams {
+  templateId: string;
+  projectId: string;
+  data: Record<string, unknown>;
+  outputFormat: 'markdown' | 'pdf' | 'docx';
+}
+
+async function generateDocument(params: GenerateDocumentParams): Promise<Document> {
+  // Implementation
+}
+
+// ❌ BAD - No typing
+async function generateDocument(params: any) {
+  // Implementation
+}
+```
+
+#### React Components
+```typescript
+// ✅ GOOD - Functional component with proper types
+interface ButtonProps {
+  onClick: () => void;
+  children: React.ReactNode;
+  variant?: 'primary' | 'secondary';
+}
+
+export function Button({ onClick, children, variant = 'primary' }: ButtonProps) {
+  return (
+    <button onClick={onClick} className={cn('btn', variant)}>
+      {children}
+    </button>
+  );
+}
+
+// ❌ BAD - No types, class component
+export class Button extends React.Component {
+  render() {
+    return <button onClick={this.props.onClick}>{this.props.children}</button>;
+  }
+}
+```
+
+#### API Routes
+```typescript
+// ✅ GOOD - Proper error handling, validation, types
+router.post('/documents/generate', 
+  authenticate,
+  validateRequest(generateDocumentSchema),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const document = await documentService.generate(req.body);
+      res.json({ success: true, data: document });
+    } catch (error) {
+      next(error); // Pass to error handler
+    }
+  }
+);
+
+// ❌ BAD - No validation, poor error handling
+router.post('/documents/generate', async (req, res) => {
+  const document = await documentService.generate(req.body);
+  res.json(document);
+});
+```
+
+#### Database Queries
+```typescript
+// ✅ GOOD - Parameterized queries
+const result = await pool.query(
+  'SELECT * FROM documents WHERE project_id = $1 AND user_id = $2',
+  [projectId, userId]
+);
+
+// ❌ BAD - SQL injection risk
+const result = await pool.query(
+  `SELECT * FROM documents WHERE project_id = '${projectId}'`
+);
+```
+
+#### Markdown Storage
+```typescript
+// ✅ GOOD - Store as Markdown
+await pool.query(
+  'INSERT INTO documents (id, content, format) VALUES ($1, $2, $3)',
+  [id, markdownContent, 'markdown']
+);
+
+// Export to PDF when needed
+const pdf = await convertMarkdownToPdf(markdownContent);
+res.setHeader('Content-Type', 'application/pdf');
+res.send(pdf);
+
+// ❌ BAD - Storing PDF directly
+await pool.query(
+  'INSERT INTO documents (id, content) VALUES ($1, $2)',
+  [id, pdfBuffer]
+);
+```
+
+### Testing Strategy
+
+#### Unit Tests (Jest)
+```bash
+# Frontend unit tests
+npm run test:db-unit
+npm run test:db-integration
+
+# Backend unit tests
+cd server
+npm test
+```
+
+#### Integration Tests
+```typescript
+// Example: Document generation integration test
+describe('Document Generator', () => {
+  it('should generate PMBOK project charter', async () => {
+    const response = await request(app)
+      .post('/api/document-generator/generate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        templateId: 'pmbok-project-charter',
+        projectId: testProjectId,
+        data: {
+          projectName: 'Test Project',
+          sponsor: 'John Doe'
+        }
+      });
+    
+    expect(response.status).toBe(200);
+    expect(response.body.data.format).toBe('markdown');
+    expect(response.body.data.content).toContain('# Project Charter');
+  });
+});
+```
+
+#### E2E Tests (Recommended: Playwright/Cypress)
+```typescript
+// Example Cypress test
+describe('Document Generation Flow', () => {
+  it('creates a new document from template', () => {
+    cy.login('admin@adpa.com', 'admin123');
+    cy.visit('/projects/123');
+    cy.get('[data-testid="new-document"]').click();
+    cy.get('[data-testid="template-select"]').select('Project Charter');
+    cy.get('[data-testid="generate-button"]').click();
+    cy.contains('Document generated successfully').should('be.visible');
+  });
+});
+```
+
+### Error Handling
+
+#### Backend Errors
+```typescript
+// Custom error classes
+export class DocumentNotFoundError extends Error {
+  statusCode = 404;
+  constructor(documentId: string) {
+    super(`Document not found: ${documentId}`);
+    this.name = 'DocumentNotFoundError';
+  }
+}
+
+// Error handler middleware
+app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+  logger.error(err.stack);
+  
+  if (err instanceof DocumentNotFoundError) {
+    return res.status(err.statusCode).json({
+      error: err.message,
+      code: 'DOCUMENT_NOT_FOUND'
+    });
+  }
+  
+  res.status(500).json({ error: 'Internal server error' });
+});
+```
+
+#### Frontend Errors
+```typescript
+// API error handling
+try {
+  const response = await fetch('/api/documents/generate', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}` },
+    body: JSON.stringify(data)
+  });
+  
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to generate document');
+  }
+  
+  const result = await response.json();
+  return result;
+} catch (error) {
+  console.error('Document generation failed:', error);
+  toast.error('Failed to generate document. Please try again.');
+  throw error;
+}
+```
+
+### Logging
+
+#### Backend Logging (Winston)
+```typescript
+import { logger } from './utils/logger';
+
+// Different log levels
+logger.info('Document generated successfully', { documentId, userId });
+logger.warn('AI provider rate limit approaching', { provider: 'openai' });
+logger.error('Failed to connect to database', { error: error.message });
+
+// Structured logging for analytics
+logger.info('Analytics event', {
+  event: 'document_generated',
+  userId,
+  projectId,
+  templateType,
+  duration: 1234
+});
+```
+
+#### Frontend Logging
+```typescript
+// Console logging for development
+if (process.env.NODE_ENV === 'development') {
+  console.log('[Debug] API response:', data);
+}
+
+// Send errors to backend for tracking
+try {
+  await apiCall();
+} catch (error) {
+  await fetch('/api/analytics/error', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      error: error.message,
+      stack: error.stack,
+      context: { page: router.pathname }
+    })
+  });
+}
+```
+
+---
+
+## Database Management
+
+### Migrations
+
+```powershell
+# Run all pending migrations (Neon)
+cd server
+psql $env:DATABASE_URL -f migrations/001_initial_schema.sql
+
+# Or use the PowerShell script
+.\run-migration-neon.ps1
+```
+
+### Common Queries
+
+```sql
+-- Get all documents for a project (with Markdown content)
+SELECT id, title, content, format, created_at
+FROM documents
+WHERE project_id = 'project-uuid'
+AND format = 'markdown'
+ORDER BY created_at DESC;
+
+-- Get AI provider usage statistics
+SELECT provider_name, COUNT(*) as usage_count, AVG(response_time) as avg_response_time
+FROM ai_provider_usage
+WHERE created_at > NOW() - INTERVAL '7 days'
+GROUP BY provider_name;
+
+-- Get user's recent activity
+SELECT al.action, al.resource_type, al.created_at, u.email
+FROM audit_logs al
+JOIN users u ON al.user_id = u.id
+WHERE u.id = 'user-uuid'
+ORDER BY al.created_at DESC
+LIMIT 20;
+```
+
+### Backup & Restore
+
+```powershell
+# Backup Neon database
+pg_dump $env:DATABASE_URL > backup_$(Get-Date -Format 'yyyy-MM-dd').sql
+
+# Restore
+psql $env:DATABASE_URL < backup_2024-10-20.sql
+```
+
+---
+
+## API Development Guidelines
+
+### REST API Standards
+
+```typescript
+// ✅ GOOD - RESTful endpoint
+GET    /api/projects           # List all projects
+POST   /api/projects           # Create project
+GET    /api/projects/:id       # Get project
+PUT    /api/projects/:id       # Update project
+DELETE /api/projects/:id       # Delete project
+
+// Nested resources
+GET    /api/projects/:id/documents    # Get project documents
+POST   /api/projects/:id/documents    # Create document in project
+
+// ❌ BAD - Non-RESTful
+POST   /api/getProjects
+POST   /api/updateProject
+GET    /api/deleteProject/:id
+```
+
+### Response Format
+
+```typescript
+// ✅ GOOD - Consistent response format
+{
+  "success": true,
+  "data": {
+    "id": "uuid",
+    "title": "Project Charter",
+    "content": "# Project Charter\n\n..."
+  },
+  "meta": {
+    "timestamp": "2024-10-20T10:00:00Z",
+    "requestId": "req-123"
+  }
+}
+
+// Error response
+{
+  "success": false,
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid project ID",
+    "details": {
+      "field": "projectId",
+      "reason": "Must be a valid UUID"
+    }
+  }
+}
+```
+
+### Pagination
+
+```typescript
+// Query parameters
+GET /api/documents?page=2&limit=20&sort=created_at&order=desc
+
+// Response
+{
+  "success": true,
+  "data": [...],
+  "pagination": {
+    "page": 2,
+    "limit": 20,
+    "total": 156,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": true
+  }
+}
+```
+
+---
+
+## Deployment
+
+### Docker Deployment
+
+```powershell
+# Production build
+docker-compose -f docker-compose.yml up -d --build
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Clean rebuild
+docker-compose down -v
+docker-compose up -d --build
+```
+
+### Environment-Specific Configurations
+
+#### Development
+- Hot reload enabled
+- Debug logging
+- Local database (optional)
+- CORS: `http://localhost:3000`
+
+#### Staging
+- Production build, debug logging
+- Staging database (Neon)
+- CORS: staging domain
+- Test API keys
+
+#### Production
+- Optimized builds, minified assets
+- Production database (Neon with backups)
+- CORS: production domain only
+- Rate limiting enabled
+- Security headers enforced
+- Monitoring and alerting active
+
+### Health Checks
+
+```typescript
+// Backend health endpoint
+app.get('/health', async (req, res) => {
+  try {
+    // Check database
+    await pool.query('SELECT 1');
+    
+    // Check Redis
+    await redis.ping();
+    
+    res.json({
+      status: 'healthy',
+      timestamp: new Date().toISOString(),
+      services: {
+        database: 'up',
+        redis: 'up'
+      }
+    });
+  } catch (error) {
+    res.status(503).json({
+      status: 'unhealthy',
+      error: error.message
+    });
+  }
+});
+```
+
+### Monitoring & Observability
+
+- **Logs**: Winston logs to `server/logs/` directory
+  - `combined.log` - All logs
+  - `error.log` - Error logs only
+- **Metrics**: Track via `analytics_events` table
+- **Uptime**: Health check endpoint at `/health`
+- **Performance**: Response time tracking in middleware
+- **Errors**: Sentry or similar (optional)
+
+---
+
+## AI Integration Best Practices
+
+### 1. **Provider Selection**
+```typescript
+// Automatic failover
+const result = await aiService.generateWithFailover({
+  prompt: 'Generate content...',
+  preferredProvider: 'openai',
+  fallbackProviders: ['google', 'azure']
+});
+```
+
+### 2. **Context Management**
+```typescript
+// Gather relevant context
+const context = await contextService.gather({
+  projectId,
+  documentType: 'project-charter',
+  userPreferences: true,
+  documentHistory: true,
+  maxTokens: 8000 // Leave room for prompt and response
+});
+
+// Use in AI generation
+const result = await aiService.generate({
+  prompt: enhancePromptWithContext(basePrompt, context),
+  provider: 'openai'
+});
+```
+
+### 3. **Usage Tracking**
+```typescript
+// Track every AI call
+await trackAIUsage({
+  userId,
+  projectId,
+  provider: 'openai',
+  model: 'gpt-4',
+  tokensUsed: response.usage.total_tokens,
+  cost: calculateCost(response.usage),
+  responseTime: duration
+});
+```
+
+### 4. **Rate Limiting & Retries**
+```typescript
+// Implement exponential backoff
+async function callAIWithRetry(params: AIParams, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await aiService.generate(params);
+    } catch (error) {
+      if (error.code === 'RATE_LIMIT' && i < maxRetries - 1) {
+        const delay = Math.pow(2, i) * 1000; // 1s, 2s, 4s
+        await sleep(delay);
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+```
+
+### 5. **Prompt Engineering**
+```typescript
+// Use system prompts and structured output
+const systemPrompt = `You are an expert in ${framework} documentation.
+Generate a ${documentType} that follows ${standard} standards.
+Output MUST be in Markdown format.`;
+
+const userPrompt = `
+Project: ${projectName}
+Description: ${description}
+Requirements:
+${requirements.map(r => `- ${r}`).join('\n')}
+
+Generate a comprehensive ${documentType}.
+`;
+
+const result = await aiService.generate({
+  system: systemPrompt,
+  user: userPrompt,
+  temperature: 0.7,
+  maxTokens: 4000
+});
+```
+
+---
+
+## Security Checklist
+
+### Before Deployment
+- [ ] All environment variables configured (no hardcoded secrets)
+- [ ] JWT_SECRET is strong (min 32 characters)
+- [ ] Database credentials rotated
+- [ ] CORS configured for production domain only
+- [ ] Rate limiting enabled on all endpoints
+- [ ] Input validation on all user inputs (Joi schemas)
+- [ ] SQL injection prevention (parameterized queries)
+- [ ] XSS protection (Helmet middleware)
+- [ ] HTTPS enforced (SSL/TLS)
+- [ ] Audit logging enabled
+- [ ] Security event monitoring active
+- [ ] File upload restrictions (type, size)
+- [ ] API authentication required on all protected routes
+- [ ] Role-based access control enforced
+
+### During Development
+- [ ] Never commit `.env` files
+- [ ] Use `.env.example` for templates
+- [ ] Rotate development secrets before production
+- [ ] Test authentication flows
+- [ ] Validate all user inputs
+- [ ] Sanitize outputs to prevent XSS
+- [ ] Use HTTPS for external API calls
+
+---
+
+## Performance Optimization
+
+### Database
+```typescript
+// ✅ GOOD - Use indexes
+CREATE INDEX idx_documents_project_id ON documents(project_id);
+CREATE INDEX idx_documents_user_id ON documents(user_id);
+CREATE INDEX idx_documents_created_at ON documents(created_at DESC);
+
+// Use JSONB efficiently
+SELECT content->>'title' as title
+FROM documents
+WHERE content @> '{"status": "published"}';
+
+// Connection pooling
+const pool = new Pool({
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000
+});
+```
+
+### Redis Caching
+```typescript
+// Cache frequent queries
+async function getProject(projectId: string) {
+  const cacheKey = `project:${projectId}`;
+  
+  // Try cache first
+  const cached = await redis.get(cacheKey);
+  if (cached) return JSON.parse(cached);
+  
+  // Query database
+  const project = await pool.query(
+    'SELECT * FROM projects WHERE id = $1',
+    [projectId]
+  );
+  
+  // Cache for 5 minutes
+  await redis.setex(cacheKey, 300, JSON.stringify(project.rows[0]));
+  
+  return project.rows[0];
+}
+
+// Invalidate cache on update
+async function updateProject(projectId: string, data: any) {
+  await pool.query('UPDATE projects SET ... WHERE id = $1', [projectId]);
+  await redis.del(`project:${projectId}`); // Invalidate cache
+}
+```
+
+### Next.js Optimization
+```typescript
+// Image optimization
+import Image from 'next/image';
+<Image src="/logo.png" alt="Logo" width={200} height={50} />
+
+// Dynamic imports for heavy components
+const HeavyChart = dynamic(() => import('@/components/HeavyChart'), {
+  loading: () => <Spinner />,
+  ssr: false
+});
+
+// API route caching
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate');
+  // ...
+}
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### "Cannot connect to database"
+```powershell
+# Check environment variables
+echo $env:DATABASE_URL
+
+# Test connection
+npm run test:db
+
+# Verify Neon is accessible
+psql $env:DATABASE_URL -c "SELECT 1;"
+```
+
+#### "Redis connection failed"
+```powershell
+# Check Redis is running
+docker ps | grep redis
+
+# Test Redis
+redis-cli ping
+
+# Check environment
+echo $env:REDIS_URL
+```
+
+#### "Frontend cannot connect to backend"
+```powershell
+# Check backend is running
+curl http://localhost:5000/health
+
+# Check CORS configuration in server/src/server.ts
+# Verify NEXT_PUBLIC_API_URL in .env.local
+```
+
+#### "Authentication not working"
+```typescript
+// Check JWT_SECRET matches between frontend and backend
+// Verify token is being sent in Authorization header
+// Check token expiration (default: 24h)
+
+// Debug token
+import jwt from 'jsonwebtoken';
+const decoded = jwt.decode(token);
+console.log('Token payload:', decoded);
+```
+
+### Debugging Tips
+
+```typescript
+// Enable debug logging
+// Backend: Set LOG_LEVEL=debug in server/.env
+logger.debug('Debugging info', { data });
+
+// Frontend: Check browser console
+console.log('[Debug]', data);
+
+// Inspect database queries
+pool.on('query', (query) => {
+  console.log('SQL:', query.text, query.values);
+});
+
+// Monitor WebSocket events
+socket.onAny((event, ...args) => {
+  console.log('Socket event:', event, args);
+});
+```
+
+---
+
+## Resources & Documentation
+
+### Internal Documentation
+- **Architecture**: `/docs/07-architecture/`
+- **Features**: `/docs/06-features/` (102 documents)
+- **API Documentation**: `/docs/05-integrations/`
+- **Deployment**: `/docs/04-deployment/`
+- **Troubleshooting**: `/docs/10-troubleshooting/`
+
+### External Resources
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Express.js Guide](https://expressjs.com/en/guide/routing.html)
+- [PostgreSQL Docs](https://www.postgresql.org/docs/)
+- [Redis Documentation](https://redis.io/docs/)
+- [Socket.io Docs](https://socket.io/docs/)
+- [OpenAI API Reference](https://platform.openai.com/docs/)
+- [Google AI Documentation](https://ai.google.dev/docs)
+
+---
+
+## Quick Reference Commands
+
+### Development
+
+
+
+# Frontend development
+npm run dev
+
+# Backend development
+cd server
+npm run dev
+
+# Run tests
+npm run test:db-unit
+npm run test:db-integration
+
+# View logs
+
+
+# Stop services
+```
+
+### Database
+```powershell
+# Connect to database
+psql $env:DATABASE_URL
+
+# Run migration
+psql $env:DATABASE_URL -f server/migrations/xxx_migration.sql
+
+# Backup
+pg_dump $env:DATABASE_URL > backup.sql
+
+# Query logs
+tail -f server/logs/combined.log
+```
+
+### Git Workflow
+```powershell
+# Check status
+git status
+
+# View current changes
+git diff
+
+# NEVER push without explicit user approval
+# User MUST request push explicitly
+```
+
+---
+
+## Contact & Support
+
+### Core Team
+- **Technical Lead**: Contact via project repository
+- **Documentation**: See `/docs` directory for comprehensive guides
+
+### Support Channels
+- **GitHub Issues**: For bug reports and feature requests
+- **Internal Documentation**: Refer to `/docs` for detailed guides
+
+---
+
+## Summary: Key Points for LLMs
+
+1. **Markdown is King**: ALL document content MUST be stored as Markdown in database. Export to PDF/DOCX only when needed.
+
+2. **Docker is Mandatory**: All development uses Docker. No manual local setup.
+
+3. **Supabase PostgreSQL**: Serverless PostgreSQL with SSL. Connection string in environment variables.
+
+4. **No Uncommitted Changes**: NEVER commit unless user explicitly requests. Always ask for approval.
+
+5. **TypeScript Strict Mode**: All code must be properly typed. No `any` without justification.
+
+6. **Security First**: JWT auth, RBAC, input validation, parameterized queries, audit logging.
+
+7. **Real-Time**: Socket.io for WebSocket connections. Events for documents, jobs, notifications.
+
+8. **AI Integration**: Multi-provider support (OpenAI, Google AI, Azure). Failover and usage tracking.
+
+9. **Module Architecture**: Backend uses modular structure. Understand feature modules before editing.
+
+10. **Test Before Success**: User must approve and validate before declaring task complete.
+
+---
+
+**Built with ❤️ for enterprise document automation and AI-powered workflows**
+
