@@ -159,36 +159,81 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
 
       // Always create fresh Gantt instance (prevents duplication issues)
       ganttInstance.current = new Gantt(ganttContainerRef.current, tasks, {
-        view_mode: viewMode,
-        bar_height: 35,
-        bar_corner_radius: 3,
-        arrow_curve: 5,
-        padding: 18,
-        date_format: 'YYYY-MM-DD',
-        language: 'en',
+          view_mode: viewMode,
+          bar_height: 35,
+          bar_corner_radius: 3,
+          arrow_curve: 5,
+          padding: 18,
+          date_format: 'YYYY-MM-DD',
+          language: 'en',
         // Force responsive sizing
         header_height: 50,
         column_width: 30,
         step: 24,
         width: '100%',
         height: Math.max(200, tasks.length * 60 + 100), // Dynamic height based on tasks
-        custom_popup_html: function(task: any) {
+          custom_popup_html: function(task: any) {
           const duration = Math.ceil((new Date(task._end).getTime() - new Date(task._start).getTime()) / (1000 * 60 * 60 * 24))
-          return `
-            <div class="p-3">
-              <h5 class="font-semibold mb-2">${task.name}</h5>
-              <p class="text-sm text-gray-600">
-                Start: ${new Date(task._start).toLocaleDateString()}<br/>
-                End: ${new Date(task._end).toLocaleDateString()}<br/>
+            return `
+              <div class="p-3">
+                <h5 class="font-semibold mb-2">${task.name}</h5>
+                <p class="text-sm text-gray-600">
+                  Start: ${new Date(task._start).toLocaleDateString()}<br/>
+                  End: ${new Date(task._end).toLocaleDateString()}<br/>
                 Duration: ${duration} days<br/>
-                Progress: ${task.progress}%
-              </p>
-            </div>
-          `
-        }
-      })
+                  Progress: ${task.progress}%
+                </p>
+              </div>
+            `
+          }
+        })
       
       console.log('Gantt chart created successfully')
+      
+      // Make sure SVG is visible and properly sized
+      const svg = ganttContainerRef.current?.querySelector('svg') as SVGSVGElement
+      if (svg) {
+        // Force SVG to be visible and reasonably sized
+        svg.style.backgroundColor = 'white'
+        svg.style.display = 'block'
+        svg.style.visibility = 'visible'
+        svg.style.width = '100%'
+        svg.style.maxWidth = '100%'
+        svg.setAttribute('width', '100%')
+        
+        const rect = svg.getBoundingClientRect()
+        console.log('SVG dimensions:', {
+          width: rect.width,
+          height: rect.height,
+          viewBox: svg.getAttribute('viewBox')
+        })
+        
+        // Check if bars exist
+        const bars = svg.querySelectorAll('.bar')
+        const texts = svg.querySelectorAll('text')
+        console.log(`SVG content: ${bars.length} bars, ${texts.length} text elements`)
+      }
+      
+      // FORCE BAR COLORS - Apply colors directly to ALL rect elements in bars
+      setTimeout(() => {
+        const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
+        const barWrappers = ganttContainerRef.current?.querySelectorAll('.bar-wrapper')
+        
+        barWrappers?.forEach((wrapper, idx) => {
+          // Find all rect elements in this bar-wrapper
+          const rects = wrapper.querySelectorAll('rect')
+          rects.forEach((rect) => {
+            const color = colors[idx % colors.length]
+            // Force color using multiple methods
+            rect.setAttribute('fill', color)
+            rect.setAttribute('style', `fill: ${color} !important`)
+            rect.style.setProperty('fill', color, 'important')
+            console.log(`Applied color ${color} to bar ${idx}, rect count: ${rects.length}`)
+          })
+        })
+        
+        console.log(`Colored ${barWrappers?.length || 0} bar wrappers`)
+      }, 200)
     } catch (error) {
       console.error('Error creating Gantt chart:', error)
       if (ganttContainerRef.current) {
@@ -278,6 +323,44 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
       {/* Visual Timeline (Gantt Chart) */}
       <div className="border-t pt-4">
         <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Visual Timeline</h4>
+        
+        {/* Simple Timeline View (fallback) */}
+        <div className="mb-4 space-y-2">
+          {Array.isArray(milestones) && milestones.length > 0 ? (
+            milestones.map((milestone: any, idx: number) => {
+              const milestoneName = typeof milestone === 'string' 
+                ? milestone 
+                : (milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`)
+              const milestoneDate = typeof milestone === 'object' 
+                ? (milestone.date || milestone.start_date || milestone.target_date || '')
+                : ''
+              
+              const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+              const colorClass = colors[idx % colors.length]
+              
+              return (
+                <div key={idx} className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded">
+                  <div className={`w-2 h-12 ${colorClass} rounded`}></div>
+                  <div className="flex-1">
+                    <div className="font-medium text-sm">{milestoneName}</div>
+                    {milestoneDate && (
+                      <div className="text-xs text-slate-500">{new Date(milestoneDate).toLocaleDateString()}</div>
+                    )}
+                  </div>
+                  <div className={`px-3 py-1 ${colorClass} text-white text-xs rounded-full`}>
+                    {idx + 1}
+                  </div>
+                </div>
+              )
+            })
+          ) : (
+            <div className="text-slate-500 text-sm">No milestones to display</div>
+          )}
+        </div>
+        
+        {/* Gantt Chart (experimental) */}
+        <div className="mt-4">
+          <h5 className="text-xs font-semibold text-slate-500 mb-2">Interactive Gantt Chart</h5>
       <style jsx global>{`
         .gantt-container {
           font-family: inherit;
@@ -396,12 +479,17 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           ref={ganttContainerRef} 
           className="gantt-container" 
           style={{ 
-            minHeight: '200px',
-            maxHeight: '400px',
+            minHeight: '400px',
+            maxHeight: '600px',
             width: '100%',
-            overflow: 'hidden'
+            overflow: 'auto',
+            backgroundColor: '#ffffff',
+            border: '1px solid #e5e7eb',
+            borderRadius: '0.5rem',
+            padding: '1rem'
           }}
         ></div>
+        </div>
       </div>
     </div>
   )
