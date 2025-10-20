@@ -23,7 +23,7 @@ router.get(
   async (req, res) => {
     try {
       const { projectId } = req.params
-      const { pool } = await import('../db')
+      const { pool } = await import('../database/connection')
 
       const result = await pool.query(
         `SELECT 
@@ -83,7 +83,7 @@ router.get(
   async (req, res) => {
     try {
       const { id } = req.params
-      const { pool } = await import('../db')
+      const { pool } = await import('../database/connection')
 
       const result = await pool.query(
         `SELECT 
@@ -211,7 +211,7 @@ router.get(
     try {
       const { id } = req.params
       const { severity, status, page = 1, limit = 20 } = req.query
-      const { pool } = await import('../db')
+      const { pool } = await import('../database/connection')
 
       const offset = (Number(page) - 1) * Number(limit)
 
@@ -323,7 +323,7 @@ router.get(
   async (req, res) => {
     try {
       const { projectId } = req.params
-      const { pool } = await import('../db')
+      const { pool } = await import('../database/connection')
 
       // Get active baseline
       const baseline = await baselineService.getActiveBaseline(projectId)
