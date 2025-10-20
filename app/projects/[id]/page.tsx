@@ -150,6 +150,8 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   const [extracting, setExtracting] = useState(false)
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
   const [showExtractDialog, setShowExtractDialog] = useState(false)
+  const [viewingBaseline, setViewingBaseline] = useState<any>(null)
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false)
 
   // Fetch active baseline
   const fetchBaseline = async () => {
@@ -234,9 +236,21 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
       toast.success('Baseline approved and activated!')
       await fetchBaseline()
       await fetchBaselines()
+      setShowDetailsDialog(false)
     } catch (error: any) {
       console.error('Error approving baseline:', error)
       toast.error(error?.message || 'Failed to approve baseline')
+    }
+  }
+
+  const handleViewBaseline = async (baselineId: string) => {
+    try {
+      const response = await apiClient.request<{ baseline: any }>(`/baselines/${baselineId}`)
+      setViewingBaseline(response.baseline)
+      setShowDetailsDialog(true)
+    } catch (error: any) {
+      console.error('Error fetching baseline:', error)
+      toast.error('Failed to load baseline details')
     }
   }
 
@@ -544,21 +558,196 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
                       {b.approved_at && ` • Approved ${new Date(b.approved_at).toLocaleDateString()}`}
                     </p>
                   </div>
-                  {b.status === 'draft' && (
+                  <div className="flex items-center gap-2">
                     <Button
                       size="sm"
-                      onClick={() => handleApproveBaseline(b.id)}
+                      variant="outline"
+                      onClick={() => handleViewBaseline(b.id)}
                     >
-                      <CheckCircle className="h-4 w-4 mr-2" />
-                      Approve
+                      <Eye className="h-4 w-4 mr-2" />
+                      View Details
                     </Button>
-                  )}
+                    {b.status === 'draft' && (
+                      <Button
+                        size="sm"
+                        onClick={() => handleApproveBaseline(b.id)}
+                      >
+                        <CheckCircle className="h-4 w-4 mr-2" />
+                        Approve
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
       )}
+
+      {/* Baseline Details Dialog */}
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              Baseline Details - Version {viewingBaseline?.version}
+            </DialogTitle>
+            <DialogDescription>
+              Review baseline components before approving
+            </DialogDescription>
+          </DialogHeader>
+          
+          {viewingBaseline && (
+            <div className="space-y-4">
+              {/* Quality Metrics */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 border rounded-lg">
+                  <p className="text-xs text-muted-foreground">Confidence</p>
+                  <p className="text-lg font-semibold">{Math.round((viewingBaseline.extraction_confidence || 0) * 100)}%</p>
+                </div>
+                <div className="p-3 border rounded-lg">
+                  <p className="text-xs text-muted-foreground">Completeness</p>
+                  <p className="text-lg font-semibold">{Math.round((viewingBaseline.completeness_score || 0) * 100)}%</p>
+                </div>
+                <div className="p-3 border rounded-lg">
+                  <p className="text-xs text-muted-foreground">Consistency</p>
+                  <p className="text-lg font-semibold">{Math.round((viewingBaseline.consistency_score || 0) * 100)}%</p>
+                </div>
+              </div>
+
+              {/* Scope Baseline */}
+              {viewingBaseline.scope_baseline && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Target className="h-4 w-4" />
+                      Scope Baseline
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    {viewingBaseline.scope_baseline.key_deliverables && (
+                      <div>
+                        <p className="font-medium mb-1">Key Deliverables:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {viewingBaseline.scope_baseline.key_deliverables.map((d: string, i: number) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {viewingBaseline.scope_baseline.scope_boundaries && (
+                      <div>
+                        <p className="font-medium mb-1">Scope Boundaries:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {viewingBaseline.scope_baseline.scope_boundaries.map((b: string, i: number) => (
+                            <li key={i}>{b}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Technical Baseline */}
+              {viewingBaseline.technical_baseline && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Database className="h-4 w-4" />
+                      Technical Baseline
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    {viewingBaseline.technical_baseline.technology_stack && (
+                      <div>
+                        <p className="font-medium mb-1">Technology Stack:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {viewingBaseline.technical_baseline.technology_stack.map((tech: string, i: number) => (
+                            <Badge key={i} variant="secondary">{tech}</Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {viewingBaseline.technical_baseline.architecture && (
+                      <div>
+                        <p className="font-medium mb-1">Architecture:</p>
+                        <p className="text-muted-foreground">{viewingBaseline.technical_baseline.architecture}</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Timeline Baseline */}
+              {viewingBaseline.timeline_baseline && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Timeline Baseline
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    {viewingBaseline.timeline_baseline.project_duration && (
+                      <div>
+                        <p className="font-medium">Duration:</p>
+                        <p className="text-muted-foreground">{viewingBaseline.timeline_baseline.project_duration}</p>
+                      </div>
+                    )}
+                    {viewingBaseline.timeline_baseline.key_milestones && (
+                      <div>
+                        <p className="font-medium mb-1">Key Milestones:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {viewingBaseline.timeline_baseline.key_milestones.map((m: any, i: number) => (
+                            <li key={i}>{m.name || m}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Success Criteria */}
+              {viewingBaseline.success_criteria && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4" />
+                      Success Criteria
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    {viewingBaseline.success_criteria.kpis && (
+                      <div>
+                        <p className="font-medium mb-1">KPIs:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {viewingBaseline.success_criteria.kpis.map((kpi: string, i: number) => (
+                            <li key={i}>{kpi}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
+              Close
+            </Button>
+            {viewingBaseline?.status === 'draft' && (
+              <Button onClick={() => handleApproveBaseline(viewingBaseline.id)}>
+                <CheckCircle className="h-4 w-4 mr-2" />
+                Approve Baseline
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
