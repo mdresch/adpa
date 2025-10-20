@@ -1419,12 +1419,12 @@ export default function ProcessFlowWorkflow() {
                             </div>
                             
                             {/* Template Description */}
-                            <div className="p-4 bg-muted rounded-lg">
+                        <div className="p-4 bg-muted rounded-lg">
                               <h4 className="font-medium">Template Description</h4>
-                              <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-muted-foreground">
                                 {template.description}
-                              </p>
-                            </div>
+                          </p>
+                        </div>
                           </div>
                         )
                       })()}

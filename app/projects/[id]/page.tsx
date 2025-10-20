@@ -154,10 +154,10 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   // Fetch active baseline
   const fetchBaseline = async () => {
     try {
-      const response = await apiClient.get(`/baselines/project/${projectId}/active`)
-      setBaseline(response.data.baseline)
+      const response = await apiClient.request<{ baseline: any }>(`/baselines/project/${projectId}/active`)
+      setBaseline(response.baseline)
     } catch (error: any) {
-      if (error.response?.status !== 404) {
+      if (error?.status !== 404) {
         console.error('Error fetching baseline:', error)
       }
     }
@@ -166,8 +166,8 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   // Fetch all baselines
   const fetchBaselines = async () => {
     try {
-      const response = await apiClient.get(`/baselines/project/${projectId}`)
-      setBaselines(response.data.baselines || [])
+      const response = await apiClient.request<{ baselines: any[] }>(`/baselines/project/${projectId}`)
+      setBaselines(response.baselines || [])
     } catch (error) {
       console.error('Error fetching baselines:', error)
     }
@@ -177,8 +177,8 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   const fetchDrifts = async () => {
     if (!baseline) return
     try {
-      const response = await apiClient.get(`/baselines/${baseline.id}/drift`)
-      setDrifts(response.data.drifts || [])
+      const response = await apiClient.request<{ drifts: any[] }>(`/baselines/${baseline.id}/drift`)
+      setDrifts(response.drifts || [])
     } catch (error) {
       console.error('Error fetching drifts:', error)
     }
@@ -187,12 +187,14 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   useEffect(() => {
     setLoading(true)
     Promise.all([fetchBaseline(), fetchBaselines()]).finally(() => setLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 
   useEffect(() => {
     if (baseline) {
       fetchDrifts()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseline])
 
   const handleExtractBaseline = async () => {
@@ -203,9 +205,12 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
 
     setExtracting(true)
     try {
-      const response = await apiClient.post('/baselines/extract', {
-        project_id: projectId,
-        document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+      await apiClient.request('/baselines/extract', {
+        method: 'POST',
+        body: JSON.stringify({
+          project_id: projectId,
+          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+        })
       })
 
       toast.success('Baseline extracted successfully!')
@@ -215,7 +220,7 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
       await fetchBaseline()
     } catch (error: any) {
       console.error('Error extracting baseline:', error)
-      toast.error(error.response?.data?.error || 'Failed to extract baseline')
+      toast.error(error?.message || 'Failed to extract baseline')
     } finally {
       setExtracting(false)
     }
@@ -223,13 +228,15 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
 
   const handleApproveBaseline = async (baselineId: string) => {
     try {
-      await apiClient.post(`/baselines/${baselineId}/approve`)
+      await apiClient.request(`/baselines/${baselineId}/approve`, {
+        method: 'POST'
+      })
       toast.success('Baseline approved and activated!')
       await fetchBaseline()
       await fetchBaselines()
     } catch (error: any) {
       console.error('Error approving baseline:', error)
-      toast.error(error.response?.data?.error || 'Failed to approve baseline')
+      toast.error(error?.message || 'Failed to approve baseline')
     }
   }
 
@@ -2198,23 +2205,21 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             const template = templates.find(t => t.id === selectedTemplate)!
                             return (
                               <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">Template Status:</span>
-                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
-                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
-                                      <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant}>
-                                        <>{statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}</>
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">Template Status:</span>
+                                      {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                                        <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant}>
+                                          <>{statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}</>
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
+                                      <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
+                                        <>{healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}</>
                                       </Badge>
                                     )}
                                   </div>
-                                  {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
-                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
-                                    <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
-                                      <>{healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}</>
-                                    </Badge>
-                                  )}
-                                </div>
                                 
                                 {template.validation_count !== undefined && template.validation_count > 0 && (
                                   <div className="grid grid-cols-2 gap-3 text-sm">
