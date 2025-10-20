@@ -142,7 +142,7 @@ export async function performBaselineQualityAudit(
  */
 function checkConsistencyThreshold(baselineData: any): AutomatedCheck {
   const consistencyScore = baselineData.consistency_score || 0
-  const threshold = 60
+  const threshold = 0.6 // 60% stored as 0-1 scale
   
   return {
     check_name: 'Consistency Score Threshold',
@@ -150,8 +150,8 @@ function checkConsistencyThreshold(baselineData: any): AutomatedCheck {
     passed: consistencyScore >= threshold,
     score: consistencyScore,
     details: consistencyScore >= threshold
-      ? `Consistency score ${consistencyScore}% meets threshold (>=${threshold}%)`
-      : `Consistency score ${consistencyScore}% below threshold (>=${threshold}%). Indicates contradictions or gaps in baseline data.`,
+      ? `Consistency score ${Math.round(consistencyScore * 100)}% meets threshold (>=${Math.round(threshold * 100)}%)`
+      : `Consistency score ${Math.round(consistencyScore * 100)}% below threshold (>=${Math.round(threshold * 100)}%). Indicates contradictions or gaps in baseline data.`,
     recommendations: consistencyScore < threshold 
       ? ['Review baseline for contradictions', 'Validate scope aligns with value proposition', 'Ensure success criteria are achievable with defined scope']
       : []
@@ -161,15 +161,16 @@ function checkConsistencyThreshold(baselineData: any): AutomatedCheck {
 function generateConsistencyRedFlags(baselineData: any, check: AutomatedCheck): RedFlag[] {
   const flags: RedFlag[] = []
   
-  if (baselineData.consistency_score < 50) {
+  // consistency_score is stored as 0-1 (e.g., 1.0 = 100%)
+  if (baselineData.consistency_score < 0.5) {
     flags.push({
       id: 'RF-CONSISTENCY-CRITICAL',
       severity: 'critical',
       category: 'Data Quality',
       title: 'Critical Consistency Issues Detected',
-      description: `Baseline consistency score is ${baselineData.consistency_score}%, indicating severe contradictions or logical flaws in the baseline data.`,
+      description: `Baseline consistency score is ${Math.round(baselineData.consistency_score * 100)}%, indicating severe contradictions or logical flaws in the baseline data.`,
       evidence: [
-        `Consistency score: ${baselineData.consistency_score}% (threshold: 60%)`,
+        `Consistency score: ${Math.round(baselineData.consistency_score * 100)}% (threshold: 60%)`,
         'Multiple contradictions detected between baseline components',
         'Scope, value proposition, or success criteria may be misaligned'
       ],
@@ -177,15 +178,15 @@ function generateConsistencyRedFlags(baselineData: any, check: AutomatedCheck): 
       required_action: 'Conduct detailed review to identify and resolve contradictions. Common issues: scope/value misalignment, unachievable success criteria, cost/schedule conflicts.',
       blocking: true
     })
-  } else if (baselineData.consistency_score < 60) {
+  } else if (baselineData.consistency_score < 0.6) {
     flags.push({
       id: 'RF-CONSISTENCY-HIGH',
       severity: 'high',
       category: 'Data Quality',
       title: 'Consistency Issues Require Review',
-      description: `Baseline consistency score is ${baselineData.consistency_score}%, below acceptable threshold. Some contradictions detected.`,
+      description: `Baseline consistency score is ${Math.round(baselineData.consistency_score * 100)}%, below acceptable threshold. Some contradictions detected.`,
       evidence: [
-        `Consistency score: ${baselineData.consistency_score}% (threshold: 60%)`,
+        `Consistency score: ${Math.round(baselineData.consistency_score * 100)}% (threshold: 60%)`,
         'Minor contradictions present in baseline data'
       ],
       impact: 'Conditional approval possible, but contradictions should be resolved.',
@@ -687,4 +688,3 @@ export default {
   performBaselineQualityAudit,
   recalibrateCompletenessScore
 }
-

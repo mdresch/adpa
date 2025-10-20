@@ -339,70 +339,10 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
               </CardDescription>
             </div>
             {!baseline ? (
-              <Dialog open={showExtractDialog} onOpenChange={setShowExtractDialog}>
-                <DialogTrigger asChild>
-                  <Button>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Baseline
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Extract Project Baseline</DialogTitle>
-                    <DialogDescription>
-                      AI will analyze your project documents to extract scope, technical, timeline, cost, and success criteria baselines.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div>
-                      <Label>Select Documents (optional)</Label>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Leave empty to use all {documents.length} documents, or select specific documents:
-                      </p>
-                      <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
-                        {documents.map(doc => (
-                          <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={selectedDocuments.includes(doc.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedDocuments([...selectedDocuments, doc.id])
-                                } else {
-                                  setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-sm">{doc.name}</span>
-                            {doc.template_name && (
-                              <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
-                            )}
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowExtractDialog(false)} disabled={extracting}>
-                      Cancel
-                    </Button>
-                    <Button onClick={handleExtractBaseline} disabled={extracting}>
-                      {extracting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Extracting...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-4 w-4 mr-2" />
-                          Extract Baseline
-                        </>
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <Button onClick={() => setShowExtractDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Baseline
+              </Button>
             ) : (
               <Button variant="outline" onClick={() => setShowExtractDialog(true)}>
                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -528,6 +468,66 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
           )}
         </CardContent>
       </Card>
+
+      {/* Extract/Update Baseline Dialog */}
+      <Dialog open={showExtractDialog} onOpenChange={setShowExtractDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{baseline ? 'Update' : 'Extract'} Project Baseline</DialogTitle>
+            <DialogDescription>
+              AI will analyze your project documents to extract scope, technical, timeline, cost, and success criteria baselines.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Select Documents (optional)</Label>
+              <p className="text-sm text-muted-foreground mb-2">
+                Leave empty to use all {documents.length} documents, or select specific documents:
+              </p>
+              <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
+                {documents.map(doc => (
+                  <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedDocuments.includes(doc.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedDocuments([...selectedDocuments, doc.id])
+                        } else {
+                          setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <span className="text-sm">{doc.name}</span>
+                    {doc.template_name && (
+                      <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowExtractDialog(false)} disabled={extracting}>
+              Cancel
+            </Button>
+            <Button onClick={handleExtractBaseline} disabled={extracting}>
+              {extracting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Extracting...
+                </>
+              ) : (
+                <>
+                  <Zap className="h-4 w-4 mr-2" />
+                  {baseline ? 'Update' : 'Extract'} Baseline
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Drift Detections */}
       {baseline && (
@@ -4687,6 +4687,111 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                           <div className="flex items-start gap-4 p-3 rounded-lg border bg-muted/30">
                             <div className="w-10 h-10 rounded-full bg-orange-100 dark:bg-orange-900/20 flex items-center justify-center shrink-0">
                               <Calendar className="h-5 w-5 text-orange-600" />
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="font-semibold">Project Completion</p>
+                                <Badge variant="outline">Scheduled</Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(project.end_date).toLocaleDateString('en-US', { 
+                                  year: 'numeric', 
+                                  month: 'long', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Timeline Visualization */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <TrendingUp className="h-5 w-5 text-primary" />
+                        Project Timeline
+                      </CardTitle>
+                      <CardDescription>Visual project timeline</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="relative">
+                        {/* Timeline Bar */}
+                        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+                          <div 
+                            className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 transition-all duration-500"
+                            style={{ width: `${progress}%` }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <span className="text-xs font-semibold text-white drop-shadow-md">
+                              {progress}% Complete
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Timeline Labels */}
+                        <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                          <span>
+                            {project.start_date 
+                              ? new Date(project.start_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                              : 'Start'}
+                          </span>
+                          <span>
+                            {project.end_date 
+                              ? new Date(project.end_date).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+                              : 'End'}
+                          </span>
+                        </div>
+
+                        {/* Key Dates */}
+                        <div className="mt-6 space-y-3">
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Project Start</span>
+                            <span className="text-sm text-muted-foreground">
+                              {project.start_date 
+                                ? new Date(project.start_date).toLocaleDateString()
+                                : 'Not set'}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Today</span>
+                            <span className="text-sm text-muted-foreground">
+                              {new Date().toLocaleDateString()}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
+                            <span className="text-sm font-medium">Target End</span>
+                            <span className="text-sm text-muted-foreground">
+                              {project.end_date 
+                                ? new Date(project.end_date).toLocaleDateString()
+                                : 'Not set'}
+                            </span>
+                          </div>
+                          
+                          {project.start_date && project.end_date && (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-primary/10">
+                              <span className="text-sm font-medium">Time Remaining</span>
+                              <span className="text-sm font-semibold text-primary">
+                                {Math.max(0, Math.ceil((new Date(project.end_date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))} days
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+            </Tabs>
+          </div>
+        </main>
+      </div>
+    </div>
+  )
+}
+
                             </div>
                             <div className="flex-1">
                               <div className="flex items-center justify-between mb-1">

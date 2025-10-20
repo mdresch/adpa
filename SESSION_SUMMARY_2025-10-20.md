@@ -499,14 +499,152 @@ Template had NO field for user to describe what change they actually want!
 **The Absurdity:**
 Like offering typing courses to people without keyboards. You need the foundation FIRST, not fancy automation!
 
-**Solution:**
-- ❌ Don't use AI to generate CRs
-- ✅ Let users write their own CRs (they're better than AI!)
-- ✅ Upload manually via existing document system
-- ✅ Provide version control, cascading updates, consistency checks
+**Solution - The Better Way:**
+Instead of complex auto-generation, use the **AI Page + Template approach**:
+
+1. **User goes to AI page** (existing flow)
+2. **Selects "Change Request" template** (already works)
+3. **Describes the change they want to make** (natural, simple)
+4. **NEW: "Save to Existing Project" option** (instead of creating new project)
+   - Dropdown to select which project
+   - CR is saved directly to that project's document library
+   - No new project created
+   - Uses existing AI generation + template infrastructure
+
+**Why This Works:**
+- ✅ Leverages existing AI generation (which works great)
+- ✅ Leverages existing templates (Change Request template exists)
+- ✅ Simple, intuitive workflow
+- ✅ CRs attached to correct project (not orphaned in new projects)
+- ✅ Users still control the content (not auto-generated nonsense)
+- ✅ AI helps formulate the CR properly (structured, compliant)
+- ✅ No complex drift detection needed
+
+**Implementation:**
+- Add "Save to Project" option in AI page document generation dialog
+- When selected, show project dropdown (instead of "Create New Project")
+- **ENHANCED**: Fetch project context BEFORE AI generation
+- **ENHANCED**: Include project context in AI prompt for better results
+- Save generated document to selected project's document library
+- Mark document type as "Change Request" for special handling
+
+**Enhanced Context Flow:**
+1. User selects "Save to Existing Project"
+2. User picks project from dropdown
+3. System fetches project context (documents, recent changes, baseline)
+4. AI prompt enhanced with project context
+5. AI generates contextually-aware Change Request
+6. Document saved to correct project
+
+**Why This is Better Than Drift Detection:**
+- ✅ User controls what changes to make (not AI guessing)
+- ✅ AI has full project context (not just baseline comparison)
+- ✅ Leverages existing AI generation (which works great)
+- ✅ Simple workflow (no complex automation)
+- ✅ Results are relevant and actionable
 
 **Key Insight:**
 Technology for technology's sake is useless. Build tools that solve actual problems, not tools looking for problems to solve.
+
+---
+
+## Feature Implementation Complete: AI Page Save to Project ✅
+
+### What Was Built
+
+**Frontend (`app/ai/page.tsx`)**:
+- ✅ Radio buttons: "Create New Project" / "Save to Existing Project"
+- ✅ Project dropdown with existing projects
+- ✅ Project context fetching (documents, changes, baseline)
+- ✅ AI prompt enhancement with project context
+- ✅ Save document to selected project
+- ✅ Redirect to project page after save
+
+**Backend (`server/src/routes/projects.ts`)**:
+- ✅ `GET /api/projects/:id/context` - Lightweight context for AI
+- ✅ `POST /api/projects/:projectId/documents` - Create document in project
+
+### Benefits
+- No more orphaned Change Request projects
+- AI generates context-aware documents
+- References existing project documents
+- Aligns with approved baseline
+- Faster, cleaner workflow
+
+### Test Now
+1. Go to `/ai`
+2. Select "Save to Existing Project"
+3. Choose ADPA project from dropdown
+4. Generate a Change Request
+5. Verify it references existing project context
+6. Click "Save to Project"
+7. Verify document appears in ADPA's document library
+
+---
+
+## Baseline Extraction Complete for ADPA ✅
+
+- **Baseline ID**: `b893e7a5-df0f-4727-a3d2-31ca325eddb3`
+- **Version**: 1.0
+- **Status**: Draft (ready for review)
+- **Documents**: 10 analyzed
+- **Quality Score**: 32 (needs improvement)
+- **Feasibility**: 72.5% (good)
+- **Red Flags**: 2 critical issues
+
+**Next**: Refresh browser, click Baseline tab, review and approve/decline
+
+---
+
+## Feedback Intelligence System - Database Ready ✅
+
+- **Migration**: `058_create_feedback_system.sql`
+- **Tables**: 6 tables created (feedback, issues, actions, analytics, effectiveness, notifications)
+- **Views**: 3 analytical views
+- **Status**: Schema complete, ready for backend API
+
+**Next**: Implement feedback submission and retrieval APIs
+
+---
+
+## REFOCUS: Back to Baseline Testing
+
+**User Feedback**: "We drifted away from baseline implementation and testing"
+
+**Reality Check**: ✅ You're right!
+
+We implemented:
+- ✅ 6 database tables for baselines
+- ✅ Backend services (extraction, approval, quality audit)
+- ✅ Frontend UI (tab, dialogs, Gantt charts)
+- ✅ Quality audit system with red flags
+- ✅ Approval/decline workflows
+
+**But we NEVER tested it properly!**
+
+### What We're Parking (For Later)
+- ❌ AI Page "Save to Project" - Implemented but not priority
+- ❌ Feedback Intelligence System - Only schema, no rush
+- ❌ Drift detection automation - Not implemented yet
+- ❌ Code refactoring - Files work, just messy
+- ❌ Supabase Realtime Migration - Documented in roadmap (FR-2026-003)
+
+### What We're Testing NOW
+1. **Baseline tab loads** ✅ Backend running
+2. **Baseline appears** (from extraction we ran earlier)
+3. **Details dialog works** (6 components, quality audit, Gantt)
+4. **Red flags display** (should show 2 critical issues)
+5. **Approval workflow** (draft → approved)
+6. **Decline workflow** (archive with reason)
+7. **Rerun extraction** (add more documents)
+8. **Formal document generation** (PMBOK-style output)
+
+**Next Step**: 
+1. Refresh browser at ADPA project
+2. Click "Baseline" tab
+3. Follow `BASELINE_TESTING_FOCUSED.md`
+4. Report results for each test
+5. Fix bugs ONLY, no new features
 
 ---
 

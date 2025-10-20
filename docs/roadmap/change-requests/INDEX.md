@@ -1,15 +1,15 @@
 # ADPA Strategic Change Requests - Index
 
-**Last Updated:** October 15, 2025  
+**Last Updated:** October 20, 2025  
 **Status:** All CRs pending sponsor review  
-**Total Investment Requested:** $1.6M over 18 months (recommended strategy)  
+**Total Investment Requested:** $1.65M over 18 months (recommended strategy)  
 **Expected 3-Year ROI:** 250-500%
 
 ---
 
 ## 📋 Change Requests Summary
 
-### 🟢 Ready for Review (All Complete!)
+### 🟢 Ready for Review
 
 | CR ID | Feature | Investment | Timeline | ROI (3-yr) | Status | Priority |
 |-------|---------|------------|----------|------------|--------|----------|
@@ -17,10 +17,11 @@
 | **CR-2026-002** | Document Review & Feedback | $400K | 7 months | 150-300% | ✅ Complete | Medium |
 | **CR-2026-003** | Hierarchical Project Mgmt | $600K | 8 months | 200-400% | ✅ Complete | ⭐ High |
 | **CR-2027-001** | Resource Allocation Intelligence | $200K | 5 months | 150-300% | ✅ Complete | Medium |
+| **CR-2026-005** | Supabase Realtime Migration | $50K | 6 weeks | N/A (Tech Debt) | ✅ Complete | Medium (Tech) |
 
-**Total:** $1.6M investment | Expected annual value: $1.5M-$4.5M
+**Total:** $1.65M investment | Expected annual value: $1.5M-$4.5M + tech efficiency
 
-**All CRs now complete and ready for sponsor prioritization!** 🎯
+**All CRs complete and ready for technical/sponsor prioritization!** 🎯
 
 ---
 
@@ -679,6 +680,32 @@ Lightweight resource allocation tracking with overallocation detection, integrat
 **ROI:** 150-300% (3-year)  
 **Risk:** Low (integration-focused)  
 **Priority:** Medium
+
+---
+
+### CR-2026-005: Supabase Realtime WebSocket Migration
+
+**File:** `CR-2026-005_Supabase_Realtime_Migration.md` ✅ **COMPLETE**
+
+**Executive Summary:**
+Migrate from Socket.io-only architecture to hybrid approach using Supabase Realtime for database changes while retaining Socket.io for complex business logic. Technical debt reduction and performance improvement initiative.
+
+**Key Benefits:**
+- 30-40% reduction in backend WebSocket processing
+- 20-30ms lower latency for database updates
+- Built-in Row-Level Security (RLS)
+- Simplified codebase (eliminate manual broadcasts)
+- Support 200 concurrent connections (vs 100 current)
+- Reduced server costs (~$200-400/month savings)
+
+**Investment:** $50K over 6 weeks  
+**ROI:** N/A (Technical Debt & Infrastructure)  
+**Impact:** Performance improvement, cost savings, developer productivity  
+**Risk:** Low (hybrid approach, gradual migration)  
+**Priority:** Medium (Technical Infrastructure)
+
+**Type:** Technical Infrastructure Improvement  
+**Category:** Performance Optimization, Technical Debt Reduction
 
 ---
 

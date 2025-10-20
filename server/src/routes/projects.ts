@@ -97,6 +97,101 @@ router.get("/", authenticateToken, async (req, res) => {
   }
 })
 
+// Get project context for AI generation (must be before /:id route)
+router.get("/:id/context", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+
+    // Get project details with document count
+    const projectResult = await pool.query(
+      `
+      SELECT p.*, 
+             u.name as owner_name,
+             COUNT(DISTINCT d.id) as documents_count,
+             MAX(d.updated_at) as last_document_update
+      FROM projects p
+      LEFT JOIN users u ON p.owner_id = u.id
+      LEFT JOIN documents d ON p.id = d.project_id
+      WHERE p.id = $1
+      GROUP BY p.id, u.name
+    `,
+      [id]
+    )
+
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    // Get recent documents (last 10) with title only
+    const documentsResult = await pool.query(
+      `
+      SELECT id, title, template_id, created_at, updated_at
+      FROM documents 
+      WHERE project_id = $1 
+      ORDER BY updated_at DESC 
+      LIMIT 10
+    `,
+      [id]
+    )
+
+    // Get recent changes (last 5 documents created/updated)
+    const recentChangesResult = await pool.query(
+      `
+      SELECT 
+        title, 
+        created_at, 
+        updated_at,
+        CASE 
+          WHEN created_at > (updated_at - INTERVAL '1 hour') THEN 'created' 
+          ELSE 'updated' 
+        END as change_type
+      FROM documents 
+      WHERE project_id = $1 
+      ORDER BY GREATEST(created_at, updated_at) DESC 
+      LIMIT 5
+    `,
+      [id]
+    )
+
+    // Get baseline info if exists
+    const baselineResult = await pool.query(
+      `
+      SELECT id, version, status, created_at
+      FROM project_baselines 
+      WHERE project_id = $1 
+      ORDER BY created_at DESC 
+      LIMIT 1
+    `,
+      [id]
+    )
+
+    const context = {
+      id: projectResult.rows[0].id,
+      name: projectResult.rows[0].name,
+      description: projectResult.rows[0].description,
+      status: projectResult.rows[0].status,
+      created_at: projectResult.rows[0].created_at,
+      documents_count: parseInt(projectResult.rows[0].documents_count) || 0,
+      last_document_update: projectResult.rows[0].last_document_update,
+      documents: documentsResult.rows,
+      recent_changes: recentChangesResult.rows,
+      baseline: baselineResult.rows[0] || null
+    }
+
+    log.info(`Project context retrieved for project ${id}`, {
+      documentsCount: context.documents_count,
+      hasBaseline: !!context.baseline
+    })
+
+    res.json(context)
+  } catch (error) {
+    log.error("Get project context error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 // Get project by ID
 router.get("/:id", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
@@ -276,6 +371,61 @@ router.delete("/:id", authenticateToken, requirePermission("projects.delete"), a
 })
 
 // Project Document Routes
+
+// Create a new document in a project
+router.post("/:projectId/documents", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+    const { title, content, template_id, generation_metadata } = req.body
+    const userId = req.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    // Verify user has access to project
+    const projectCheck = await pool.query(
+      'SELECT id, name FROM projects WHERE id = $1',
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    // Create document
+    const documentId = uuidv4()
+    const result = await pool.query(
+      `
+      INSERT INTO documents 
+      (id, project_id, title, content, template_id, generation_metadata, created_by, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+      RETURNING *
+      `,
+      [
+        documentId,
+        projectId,
+        title,
+        content,
+        template_id || null,
+        generation_metadata ? JSON.stringify(generation_metadata) : null,
+        userId
+      ]
+    )
+
+    log.info(`Document created in project ${projectId}`, {
+      documentId,
+      title,
+      hasTemplate: !!template_id
+    })
+
+    res.json(result.rows[0])
+  } catch (error) {
+    log.error("Create document error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
 
 // Get a specific document from a project
 router.get("/:projectId/documents/:documentId", authenticateToken, async (req, res) => {

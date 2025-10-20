@@ -393,7 +393,7 @@ export async function approveBaseline(baselineId: string, userId: string): Promi
       [baselineId, userId]
     )
 
-    // Log approval
+    // Log approval (use UPSERT to avoid duplicate key error)
     await pool.query(
       `INSERT INTO baseline_versions (
         baseline_id,
@@ -401,7 +401,13 @@ export async function approveBaseline(baselineId: string, userId: string): Promi
         change_type,
         change_description,
         changed_by
-      ) VALUES ($1, $2, $3, $4, $5)`,
+      ) VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (baseline_id, version_number) 
+      DO UPDATE SET 
+        change_type = 'approved',
+        change_description = 'Baseline approved and activated',
+        changed_by = $5,
+        created_at = NOW()`,
       [baselineId, result.rows[0].version, 'approved', 'Baseline approved and activated', userId]
     )
 

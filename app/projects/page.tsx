@@ -444,6 +444,9 @@ export default function Projects() {
       name: `${project.name} - Generated Document`,
       template_id: "",
       prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
+      provider: "Groq AI",
+      model: "llama-3.1-8b-instant",
+      temperature: 0.7
     })
     setGenerateDialogOpen(true)
     fetchTemplates()
@@ -1059,7 +1062,7 @@ export default function Projects() {
                                 id="manager"
                                 placeholder="Enter manager name"
                                 value={newProject.manager}
-                                onChange={(e) => setNewProject({...newProject, manager: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, manager: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1072,7 +1075,7 @@ export default function Projects() {
                               id="description"
                               placeholder="Describe the project objectives and scope"
                               value={newProject.description}
-                              onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProject({...newProject, description: e.target.value})}
                               className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             />
                           </div>
@@ -1085,7 +1088,7 @@ export default function Projects() {
                                 id="start-date"
                                 type="date"
                                 value={newProject.start_date}
-                                onChange={(e) => setNewProject({...newProject, start_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, start_date: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1097,7 +1100,7 @@ export default function Projects() {
                                 id="end-date"
                                 type="date"
                                 value={newProject.end_date}
-                                onChange={(e) => setNewProject({...newProject, end_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, end_date: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1109,7 +1112,7 @@ export default function Projects() {
                                 id="budget"
                                 placeholder="$0"
                                 value={newProject.budget}
-                                onChange={(e) => setNewProject({...newProject, budget: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, budget: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1153,7 +1156,7 @@ export default function Projects() {
                             id="edit-project-name"
                             placeholder="Enter project name"
                             value={editingProject?.name || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, name: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, name: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             required
                           />
@@ -1219,7 +1222,7 @@ export default function Projects() {
                           id="edit-description"
                           placeholder="Describe the project objectives and scope"
                           value={editingProject?.description || ""}
-                          onChange={(e) => setEditingProject({...editingProject!, description: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditingProject({...editingProject!, description: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                         />
                       </div>
@@ -1232,7 +1235,7 @@ export default function Projects() {
                             id="edit-start-date"
                             type="date"
                             value={editingProject?.start_date || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, start_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, start_date: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -1244,7 +1247,7 @@ export default function Projects() {
                             id="edit-end-date"
                             type="date"
                             value={editingProject?.end_date || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, end_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, end_date: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -1256,7 +1259,7 @@ export default function Projects() {
                             id="edit-budget"
                             placeholder="$0"
                             value={editingProject?.budget?.toString() || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -1297,7 +1300,7 @@ export default function Projects() {
                           id="doc-name"
                           placeholder="Enter document name"
                           value={documentGenerationForm.name}
-                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
@@ -1338,14 +1341,12 @@ export default function Projects() {
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium">Template Status:</span>
                                   {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
-                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
                                     <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
                                       <>{statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}</>
                                     </Badge>
                                   )}
                                 </div>
                                 {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                  // @ts-expect-error - Badge accepts children via HTMLAttributes
                                   <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
                                     <>{healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}</>
                                   </Badge>
@@ -1415,7 +1416,7 @@ export default function Projects() {
                           id="generation-prompt"
                           placeholder="Describe what you want the document to contain..."
                           value={documentGenerationForm.prompt}
-                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           rows={4}
                           required
@@ -1479,7 +1480,7 @@ export default function Projects() {
                           id="upload-doc-name"
                           placeholder="Enter document name"
                           value={documentUploadForm.name}
-                          onChange={(e) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
@@ -1519,7 +1520,7 @@ export default function Projects() {
                           id="file-upload"
                           type="file"
                           accept=".pdf,.doc,.docx,.txt,.md"
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             const file = e.target.files?.[0] || null
                             setDocumentUploadForm({...documentUploadForm, file})
                           }}

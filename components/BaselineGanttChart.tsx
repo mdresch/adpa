@@ -1,0 +1,418 @@
+'use client'
+
+import { useEffect, useRef } from 'react'
+import Gantt from 'frappe-gantt'
+import 'frappe-gantt/dist/frappe-gantt.css'
+
+interface GanttTask {
+  id: string
+  name: string
+  start: string
+  end: string
+  progress: number
+  dependencies?: string
+  custom_class?: string
+}
+
+interface BaselineGanttChartProps {
+  baseline: any
+  viewMode?: 'Quarter Day' | 'Half Day' | 'Day' | 'Week' | 'Month'
+}
+
+export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGanttChartProps) {
+  const ganttRef = useRef<SVGSVGElement>(null)
+  const ganttInstance = useRef<any>(null)
+
+  useEffect(() => {
+    if (!ganttRef.current || !baseline?.timeline_baseline) return
+
+    try {
+      // Transform baseline timeline to Gantt tasks
+      const tasks: GanttTask[] = []
+      
+      // Get project start date (from earliest milestone or today)
+      const today = new Date().toISOString().split('T')[0]
+      let projectStart = today
+      
+      // Extract milestones from timeline baseline
+      const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
+      
+      if (Array.isArray(milestones) && milestones.length > 0) {
+        milestones.forEach((milestone: any, idx: number) => {
+          // Handle different milestone formats
+          let milestoneName = ''
+          let milestoneDate = ''
+          let milestoneEnd = ''
+          let progress = 0
+          
+          if (typeof milestone === 'string') {
+            // Simple string format: "Complete Immediate Actions"
+            milestoneName = milestone
+            // Estimate dates based on index (each milestone ~1 month apart)
+            const startDate = new Date()
+            startDate.setMonth(startDate.getMonth() + idx)
+            milestoneDate = startDate.toISOString().split('T')[0]
+            
+            const endDate = new Date(startDate)
+            endDate.setMonth(endDate.getMonth() + 1)
+            milestoneEnd = endDate.toISOString().split('T')[0]
+          } else if (typeof milestone === 'object') {
+            // Object format with date, name, etc.
+            milestoneName = milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`
+            milestoneDate = milestone.date || milestone.start_date || milestone.target_date || today
+            milestoneEnd = milestone.end_date || milestone.date || today
+            progress = milestone.progress || milestone.completion || 0
+          }
+          
+          // Ensure end date is after start date
+          if (new Date(milestoneEnd) <= new Date(milestoneDate)) {
+            const end = new Date(milestoneDate)
+            end.setDate(end.getDate() + 30) // Default 30-day duration
+            milestoneEnd = end.toISOString().split('T')[0]
+          }
+          
+          tasks.push({
+            id: `milestone-${idx}`,
+            name: milestoneName,
+            start: milestoneDate,
+            end: milestoneEnd,
+            progress: typeof progress === 'number' ? progress : 0,
+            custom_class: progress >= 100 ? 'bar-complete' : progress > 0 ? 'bar-in-progress' : 'bar-pending'
+          })
+          
+          // Update project start if earlier
+          if (new Date(milestoneDate) < new Date(projectStart)) {
+            projectStart = milestoneDate
+          }
+        })
+      }
+      
+      // If no milestones, create phases from duration
+      if (tasks.length === 0) {
+        const duration = baseline.timeline_baseline.duration_months || 
+                        baseline.timeline_baseline.duration || 
+                        6 // Default 6 months
+        
+        const phases = [
+          { name: 'Phase 1: Foundation', percentage: 0.33 },
+          { name: 'Phase 2: Development', percentage: 0.33 },
+          { name: 'Phase 3: Deployment', percentage: 0.34 }
+        ]
+        
+        let currentStart = new Date()
+        phases.forEach((phase, idx) => {
+          const phaseDuration = Math.ceil(duration * phase.percentage)
+          const start = new Date(currentStart)
+          const end = new Date(currentStart)
+          end.setMonth(end.getMonth() + phaseDuration)
+          
+          tasks.push({
+            id: `phase-${idx}`,
+            name: phase.name,
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0],
+            progress: 0,
+            dependencies: idx > 0 ? `phase-${idx - 1}` : undefined
+          })
+          
+          currentStart = end
+        })
+      }
+      
+      // Add dependencies between sequential milestones
+      if (tasks.length > 1) {
+        for (let i = 1; i < tasks.length; i++) {
+          if (!tasks[i].dependencies) {
+            tasks[i].dependencies = tasks[i - 1].id
+          }
+        }
+      }
+      
+      // Create or update Gantt chart
+      if (ganttInstance.current) {
+        ganttInstance.current.refresh(tasks)
+      } else {
+        ganttInstance.current = new Gantt(ganttRef.current, tasks, {
+          view_mode: viewMode,
+          bar_height: 35,
+          bar_corner_radius: 3,
+          arrow_curve: 5,
+          padding: 18,
+          date_format: 'YYYY-MM-DD',
+          language: 'en',
+          custom_popup_html: function(task: any) {
+            return `
+              <div class="p-3">
+                <h5 class="font-semibold mb-2">${task.name}</h5>
+                <p class="text-sm text-gray-600">
+                  Start: ${new Date(task._start).toLocaleDateString()}<br/>
+                  End: ${new Date(task._end).toLocaleDateString()}<br/>
+                  Progress: ${task.progress}%
+                </p>
+              </div>
+            `
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error creating Gantt chart:', error)
+    }
+
+    // Cleanup
+    return () => {
+      ganttInstance.current = null
+    }
+  }, [baseline, viewMode])
+
+  if (!baseline?.timeline_baseline) {
+    return (
+      <div className="p-8 text-center text-gray-500 border-2 border-dashed rounded-lg">
+        <p>No timeline data available for Gantt chart</p>
+        <p className="text-sm mt-2">Timeline baseline must be extracted first</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full overflow-x-auto bg-white p-4 rounded-lg border">
+      <style jsx global>{`
+        .gantt-container {
+          font-family: inherit;
+        }
+        .gantt .bar-complete {
+          fill: #10b981;
+        }
+        .gantt .bar-in-progress {
+          fill: #3b82f6;
+        }
+        .gantt .bar-pending {
+          fill: #94a3b8;
+        }
+        .gantt .bar-wrapper:hover .bar {
+          opacity: 0.8;
+        }
+        .gantt-container .popup-wrapper {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+          padding: 0;
+          font-size: 0.875rem;
+        }
+      `}</style>
+      <svg ref={ganttRef} width="100%" height="400"></svg>
+    </div>
+  )
+}
+
+export default BaselineGanttChart
+
+
+
+import { useEffect, useRef } from 'react'
+import Gantt from 'frappe-gantt'
+import 'frappe-gantt/dist/frappe-gantt.css'
+
+interface GanttTask {
+  id: string
+  name: string
+  start: string
+  end: string
+  progress: number
+  dependencies?: string
+  custom_class?: string
+}
+
+interface BaselineGanttChartProps {
+  baseline: any
+  viewMode?: 'Quarter Day' | 'Half Day' | 'Day' | 'Week' | 'Month'
+}
+
+export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGanttChartProps) {
+  const ganttRef = useRef<SVGSVGElement>(null)
+  const ganttInstance = useRef<any>(null)
+
+  useEffect(() => {
+    if (!ganttRef.current || !baseline?.timeline_baseline) return
+
+    try {
+      // Transform baseline timeline to Gantt tasks
+      const tasks: GanttTask[] = []
+      
+      // Get project start date (from earliest milestone or today)
+      const today = new Date().toISOString().split('T')[0]
+      let projectStart = today
+      
+      // Extract milestones from timeline baseline
+      const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
+      
+      if (Array.isArray(milestones) && milestones.length > 0) {
+        milestones.forEach((milestone: any, idx: number) => {
+          // Handle different milestone formats
+          let milestoneName = ''
+          let milestoneDate = ''
+          let milestoneEnd = ''
+          let progress = 0
+          
+          if (typeof milestone === 'string') {
+            // Simple string format: "Complete Immediate Actions"
+            milestoneName = milestone
+            // Estimate dates based on index (each milestone ~1 month apart)
+            const startDate = new Date()
+            startDate.setMonth(startDate.getMonth() + idx)
+            milestoneDate = startDate.toISOString().split('T')[0]
+            
+            const endDate = new Date(startDate)
+            endDate.setMonth(endDate.getMonth() + 1)
+            milestoneEnd = endDate.toISOString().split('T')[0]
+          } else if (typeof milestone === 'object') {
+            // Object format with date, name, etc.
+            milestoneName = milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`
+            milestoneDate = milestone.date || milestone.start_date || milestone.target_date || today
+            milestoneEnd = milestone.end_date || milestone.date || today
+            progress = milestone.progress || milestone.completion || 0
+          }
+          
+          // Ensure end date is after start date
+          if (new Date(milestoneEnd) <= new Date(milestoneDate)) {
+            const end = new Date(milestoneDate)
+            end.setDate(end.getDate() + 30) // Default 30-day duration
+            milestoneEnd = end.toISOString().split('T')[0]
+          }
+          
+          tasks.push({
+            id: `milestone-${idx}`,
+            name: milestoneName,
+            start: milestoneDate,
+            end: milestoneEnd,
+            progress: typeof progress === 'number' ? progress : 0,
+            custom_class: progress >= 100 ? 'bar-complete' : progress > 0 ? 'bar-in-progress' : 'bar-pending'
+          })
+          
+          // Update project start if earlier
+          if (new Date(milestoneDate) < new Date(projectStart)) {
+            projectStart = milestoneDate
+          }
+        })
+      }
+      
+      // If no milestones, create phases from duration
+      if (tasks.length === 0) {
+        const duration = baseline.timeline_baseline.duration_months || 
+                        baseline.timeline_baseline.duration || 
+                        6 // Default 6 months
+        
+        const phases = [
+          { name: 'Phase 1: Foundation', percentage: 0.33 },
+          { name: 'Phase 2: Development', percentage: 0.33 },
+          { name: 'Phase 3: Deployment', percentage: 0.34 }
+        ]
+        
+        let currentStart = new Date()
+        phases.forEach((phase, idx) => {
+          const phaseDuration = Math.ceil(duration * phase.percentage)
+          const start = new Date(currentStart)
+          const end = new Date(currentStart)
+          end.setMonth(end.getMonth() + phaseDuration)
+          
+          tasks.push({
+            id: `phase-${idx}`,
+            name: phase.name,
+            start: start.toISOString().split('T')[0],
+            end: end.toISOString().split('T')[0],
+            progress: 0,
+            dependencies: idx > 0 ? `phase-${idx - 1}` : undefined
+          })
+          
+          currentStart = end
+        })
+      }
+      
+      // Add dependencies between sequential milestones
+      if (tasks.length > 1) {
+        for (let i = 1; i < tasks.length; i++) {
+          if (!tasks[i].dependencies) {
+            tasks[i].dependencies = tasks[i - 1].id
+          }
+        }
+      }
+      
+      // Create or update Gantt chart
+      if (ganttInstance.current) {
+        ganttInstance.current.refresh(tasks)
+      } else {
+        ganttInstance.current = new Gantt(ganttRef.current, tasks, {
+          view_mode: viewMode,
+          bar_height: 35,
+          bar_corner_radius: 3,
+          arrow_curve: 5,
+          padding: 18,
+          date_format: 'YYYY-MM-DD',
+          language: 'en',
+          custom_popup_html: function(task: any) {
+            return `
+              <div class="p-3">
+                <h5 class="font-semibold mb-2">${task.name}</h5>
+                <p class="text-sm text-gray-600">
+                  Start: ${new Date(task._start).toLocaleDateString()}<br/>
+                  End: ${new Date(task._end).toLocaleDateString()}<br/>
+                  Progress: ${task.progress}%
+                </p>
+              </div>
+            `
+          }
+        })
+      }
+    } catch (error) {
+      console.error('Error creating Gantt chart:', error)
+    }
+
+    // Cleanup
+    return () => {
+      ganttInstance.current = null
+    }
+  }, [baseline, viewMode])
+
+  if (!baseline?.timeline_baseline) {
+    return (
+      <div className="p-8 text-center text-gray-500 border-2 border-dashed rounded-lg">
+        <p>No timeline data available for Gantt chart</p>
+        <p className="text-sm mt-2">Timeline baseline must be extracted first</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full overflow-x-auto bg-white p-4 rounded-lg border">
+      <style jsx global>{`
+        .gantt-container {
+          font-family: inherit;
+        }
+        .gantt .bar-complete {
+          fill: #10b981;
+        }
+        .gantt .bar-in-progress {
+          fill: #3b82f6;
+        }
+        .gantt .bar-pending {
+          fill: #94a3b8;
+        }
+        .gantt .bar-wrapper:hover .bar {
+          opacity: 0.8;
+        }
+        .gantt-container .popup-wrapper {
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.5rem;
+          box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+          padding: 0;
+          font-size: 0.875rem;
+        }
+      `}</style>
+      <svg ref={ganttRef} width="100%" height="400"></svg>
+    </div>
+  )
+}
+
+export default BaselineGanttChart
+

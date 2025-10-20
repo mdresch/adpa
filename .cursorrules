@@ -21,11 +21,12 @@
 - Use JSONB columns for storing Markdown content in PostgreSQL
 
 ### 2. **Database-First Approach**
-- **ALWAYS use Supabase PostgreSQL as primary database** (serverless, SSL required)
+- **ALWAYS use Supabase PostgreSQL as primary database** (serverless, managed PostgreSQL with built-in auth and real-time)
 - Connection string stored in environment variables
 - Use parameterized queries to prevent SQL injection
 - UUID primary keys for all tables
 - JSONB for flexible content storage
+- Leverage Supabase's built-in features: Row-Level Security (RLS), real-time subscriptions, auto-generated REST APIs
 
 ### 3. **Development Environment**
 - **Docker is no longer used** for all development work
@@ -75,7 +76,7 @@
          ↓               ↓              ↓
   ┌──────────┐   ┌─────────────┐  ┌─────────┐
   │PostgreSQL│   │   Redis     │  │ AI APIs │
-  │  (Supabase)  │   │ (Cache/Jobs)│  │ Providers│
+  │ (Supabase)│  │ (Cache/Jobs)│  │ Providers│
   │ Port:5432│   │  Port:6379  │  │(External)│
   └──────────┘   └─────────────┘  └─────────┘
 ```
@@ -95,8 +96,9 @@
 - **Charts**: Recharts 3.2.1
 - **Markdown**: react-markdown + remark-gfm
 - **Real-time**: Socket.io Client
-- **Database**: @supabase/serverless, @vercel/postgres
+- **Database**: @supabase/supabase-js 2.x, @vercel/postgres
 - **Cache**: @vercel/kv (Redis)
+- **Supabase Client**: Full-featured client with auth, database, storage, and real-time subscriptions
 - **Package Manager**: pnpm 10.18.0
 
 #### Backend (`/server` directory)
@@ -173,23 +175,47 @@ settings             -- System and user settings
 git clone <repository-url>
 cd adpa
 
+# 2. Install dependencies
+pnpm install
+cd server && npm install && cd ..
 
-# 4. Check health
-Frontend: http://localhost:3000
-Backend:  http://localhost:5000/health
+# 3. Configure Supabase
+# Option A: Use cloud Supabase project
+# - Create project at https://supabase.com
+# - Copy connection details to .env files
 
+# Option B: Use local Supabase (requires Docker)
+supabase start
+# Copy local connection details to .env files
 
-# 5. View logs
+# 4. Start development servers
+# Frontend
+pnpm dev
+
+# Backend (in separate terminal)
+cd server && npm run dev
+
+# 5. Check health
+# Frontend: http://localhost:3000
+# Backend:  http://localhost:5000/health
+# Supabase Studio: http://localhost:54323 (if using local)
+
+# 6. View logs
+# Check terminal output or server/logs/combined.log
 ```
 
 ### Environment Configuration
 
 #### Frontend Environment (`.env.local` - root directory)
 ```bash
-# Neon PostgreSQL (Serverless)
-POSTGRES_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
-POSTGRES_PRISMA_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require&pgbouncer=true
-POSTGRES_URL_NON_POOLING=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
+# Supabase PostgreSQL (Serverless)
+NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
+
+# Direct Database Connection (for migrations/scripts)
+POSTGRES_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
+POSTGRES_PRISMA_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:6543/postgres?pgbouncer=true
+POSTGRES_URL_NON_POOLING=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:5432/postgres
 
 
 
@@ -213,13 +239,18 @@ NEXT_PUBLIC_WS_URL=http://localhost:5000
 NODE_ENV=development
 PORT=5000
 
-# Database (Neon PostgreSQL with SSL)
-DATABASE_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
-POSTGRES_URL=postgresql://user:password@host.neon.tech:5432/adpa_db?sslmode=require
-DB_HOST=host.neon.tech
+# Supabase Configuration
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Database (Supabase PostgreSQL with SSL)
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
+POSTGRES_URL=postgresql://postgres:[YOUR-PASSWORD]@db.your-project-ref.supabase.co:5432/postgres?sslmode=require
+DB_HOST=db.your-project-ref.supabase.co
 DB_PORT=5432
-DB_NAME=adpa_db
-DB_USER=your_user
+DB_NAME=postgres
+DB_USER=postgres
 DB_PASSWORD=your_password
 DB_SSL=true
 
@@ -343,6 +374,133 @@ adpa/
 
 ---
 
+## Supabase Integration
+
+### Key Supabase Features Used
+
+1. **PostgreSQL Database**
+   - Serverless Postgres with connection pooling (PgBouncer)
+   - Direct connections for migrations and long-running queries
+   - Built-in extensions: uuid-ossp, pg_trgm, pgcrypto
+
+2. **Row-Level Security (RLS)**
+   - Enforce data access policies at the database level
+   - User-based access control for all tables
+   - Example RLS policy:
+     ```sql
+     CREATE POLICY "Users can view their own data"
+     ON documents FOR SELECT
+     USING (auth.uid() = user_id);
+     ```
+
+3. **Real-time Subscriptions**
+   - Listen to database changes in real-time
+   - Alternative to Socket.io for certain use cases
+   - Example:
+     ```typescript
+     const subscription = supabase
+       .channel('documents')
+       .on('postgres_changes', {
+         event: '*',
+         schema: 'public',
+         table: 'documents'
+       }, payload => {
+         console.log('Document changed:', payload);
+       })
+       .subscribe();
+     ```
+
+4. **Storage**
+   - File uploads for document attachments
+   - Built-in CDN for serving files
+   - Access control policies for file operations
+
+5. **Auth (Optional Enhancement)**
+   - Built-in authentication system
+   - Currently using custom JWT, but can migrate to Supabase Auth
+   - Social providers, email/password, magic links
+
+### Local Development with Supabase CLI
+
+```bash
+# Install Supabase CLI
+npm install -g supabase
+
+# Initialize Supabase in project
+supabase init
+
+# Start local Supabase (requires Docker)
+supabase start
+
+# View local dashboard
+# Studio: http://localhost:54323
+# API: http://localhost:54321
+
+# Run migrations locally
+supabase db push
+
+# Create a new migration
+supabase migration new migration_name
+
+# Stop local Supabase
+supabase stop
+```
+
+### Supabase Client Usage
+
+```typescript
+// Initialize Supabase client (frontend)
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
+
+// Query with RLS automatically applied
+const { data, error } = await supabase
+  .from('documents')
+  .select('*')
+  .eq('project_id', projectId);
+
+// Real-time subscription
+const channel = supabase
+  .channel('doc-changes')
+  .on('postgres_changes', {
+    event: 'UPDATE',
+    schema: 'public',
+    table: 'documents'
+  }, handleUpdate)
+  .subscribe();
+
+// Upload file to storage
+const { data: uploadData, error: uploadError } = await supabase.storage
+  .from('documents')
+  .upload(`${projectId}/${filename}`, file);
+```
+
+### Migration from Previous Setup
+
+If migrating from Neon or another provider:
+
+1. **Export existing data**
+   ```bash
+   pg_dump $OLD_DATABASE_URL > migration.sql
+   ```
+
+2. **Import to Supabase**
+   ```bash
+   psql $SUPABASE_DATABASE_URL < migration.sql
+   ```
+
+3. **Update connection strings** in all `.env` files
+
+4. **Enable RLS policies** for enhanced security
+
+5. **Test all database operations** thoroughly
+
+---
+
 ## Key Features & Modules
 
 ### 1. **Multi-Provider AI Orchestration**
@@ -420,15 +578,182 @@ adpa/
 - **Features**: Repository management, issue tracking, PR creation
 - **API**: `POST /api/github/create-repo`, `GET /api/github/issues`
 
-### 6. **Real-Time Features**
+### 6. **Real-Time Features & WebSockets**
+
+ADPA supports **two real-time approaches** for different use cases:
+
+#### **A. Supabase Realtime** (Recommended for Database Changes)
+- **Connection**: Direct WebSocket to Supabase via `@supabase/supabase-js`
+- **Use Cases**:
+  - Database change notifications (documents, baselines, projects)
+  - User presence tracking (who's viewing/editing)
+  - Simple client-to-client broadcasts
+- **Features**:
+  - Built-in Row-Level Security (RLS) enforcement
+  - No backend code required
+  - Automatic reconnection
+  - Integrated with Supabase Auth
+- **Channels**:
+  - `postgres_changes` - Listen to table INSERT/UPDATE/DELETE
+  - `presence` - Track online users and their state
+  - `broadcast` - Send custom messages between clients
+
+**Example Usage:**
+```typescript
+// Listen to document changes with RLS
+const channel = supabase
+  .channel(`project:${projectId}`)
+  .on('postgres_changes', {
+    event: 'UPDATE',
+    schema: 'public',
+    table: 'documents',
+    filter: `project_id=eq.${projectId}`
+  }, (payload) => {
+    console.log('Document updated:', payload.new)
+    updateLocalState(payload.new)
+  })
+  .subscribe()
+
+// Track who's viewing a document
+await channel.track({
+  user_id: currentUser.id,
+  viewing_document: documentId,
+  cursor_position: { x: 100, y: 200 }
+})
+
+// Clean up
+return () => supabase.removeChannel(channel)
+```
+
+#### **B. Socket.io** (For Complex Business Logic)
 - **WebSocket Server**: Socket.io on Express server
 - **Client**: Socket.io Client in `contexts/WebSocketContext.tsx`
-- **Events**:
-  - `document:updated` - Document changes
-  - `job:status` - Background job progress
-  - `notification` - System notifications
-  - `analytics:update` - Real-time metrics
+- **Use Cases**:
+  - Backend-initiated events (job queue status, AI generation progress)
+  - Complex multi-step workflows requiring server logic
+  - Events requiring server-side validation or transformation
+  - Integration with Bull queues and background jobs
 - **Authentication**: JWT token validation on connection
+- **Events**:
+  - `document:updated` - Document changes (after business logic)
+  - `job:status` - Background job progress (Bull queue updates)
+  - `notification` - System notifications (server-generated)
+  - `analytics:update` - Real-time metrics (aggregated on server)
+  - `baseline:approved` - Approval workflow events
+  - `ai:generation:progress` - AI generation streaming
+
+**Example Usage:**
+```typescript
+// Backend - Emit job progress
+io.to(`user:${userId}`).emit('job:status', {
+  jobId,
+  status: 'processing',
+  progress: 45,
+  message: 'Generating document sections...'
+})
+
+// Frontend - Listen to job updates
+socket.on('job:status', (data) => {
+  updateJobProgress(data)
+})
+```
+
+#### **Decision Matrix: When to Use Which?**
+
+| Use Case | Use Supabase Realtime | Use Socket.io |
+|----------|----------------------|---------------|
+| Database row changed | ✅ **Yes** (direct CDC) | ❌ No |
+| User presence tracking | ✅ **Yes** (built-in) | ❌ No |
+| Simple client-to-client messages | ✅ **Yes** (broadcast) | ❌ No |
+| Job queue progress updates | ❌ No | ✅ **Yes** (Bull integration) |
+| AI generation streaming | ❌ No | ✅ **Yes** (server control) |
+| Server-side validation before broadcast | ❌ No | ✅ **Yes** (middleware) |
+| Complex business logic events | ❌ No | ✅ **Yes** (full control) |
+| Admin-only notifications | ❌ No | ✅ **Yes** (RBAC on server) |
+| Multi-step workflow coordination | ❌ No | ✅ **Yes** (stateful) |
+
+#### **Hybrid Approach (Recommended)**
+
+Use **both** systems together for optimal results:
+
+```typescript
+// contexts/RealtimeContext.tsx
+import { useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
+import { useWebSocket } from './WebSocketContext'
+
+export function useRealtime(documentId: string) {
+  const socket = useWebSocket()
+
+  useEffect(() => {
+    // 1. Supabase: Database changes
+    const dbChannel = supabase
+      .channel(`doc:${documentId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'documents',
+        filter: `id=eq.${documentId}`
+      }, (payload) => {
+        // RLS automatically enforced
+        updateDocument(payload.new)
+      })
+      .subscribe()
+
+    // 2. Supabase: User presence
+    dbChannel.on('presence', { event: 'sync' }, () => {
+      const users = dbChannel.presenceState()
+      updateOnlineUsers(users)
+    })
+
+    await dbChannel.track({
+      user_id: currentUser.id,
+      viewing: documentId,
+      joined_at: new Date().toISOString()
+    })
+
+    // 3. Socket.io: Business events
+    socket.on('document:ai-generation', (data) => {
+      showAIProgress(data.progress)
+    })
+
+    socket.on('document:export-ready', (data) => {
+      showDownloadNotification(data.url)
+    })
+
+    return () => {
+      supabase.removeChannel(dbChannel)
+      socket.off('document:ai-generation')
+      socket.off('document:export-ready')
+    }
+  }, [documentId, socket])
+}
+```
+
+#### **Performance Considerations**
+
+- **Supabase Realtime**: 
+  - Connection pooling handled automatically
+  - Multiplexing: Multiple subscriptions share one WebSocket
+  - Free tier: 200 concurrent connections, 2GB bandwidth/month
+  
+- **Socket.io**:
+  - Horizontal scaling with Redis adapter
+  - Room-based broadcasting for efficient targeting
+  - Connection state managed by Express server
+
+#### **Migration Strategy**
+
+**Phase 1: Current State**
+- All real-time via Socket.io
+
+**Phase 2: Gradual Adoption**
+- Database changes → Supabase Realtime
+- Keep complex events on Socket.io
+
+**Phase 3: Optimized**
+- Most real-time via Supabase
+- Socket.io for business logic only
 
 ### 7. **Background Job System**
 - **Queue**: Bull (Redis-backed)
@@ -567,6 +892,43 @@ await pool.query(
   'INSERT INTO documents (id, content) VALUES ($1, $2)',
   [id, pdfBuffer]
 );
+```
+
+#### Supabase Client Usage
+```typescript
+// ✅ GOOD - Using Supabase client with RLS
+const { data, error } = await supabase
+  .from('documents')
+  .select('*')
+  .eq('project_id', projectId)
+  .order('created_at', { ascending: false });
+
+if (error) throw error;
+
+// ✅ GOOD - Using service role for admin operations
+const { data: adminData, error: adminError } = await supabaseAdmin
+  .from('users')
+  .update({ role: 'admin' })
+  .eq('id', userId);
+
+// ❌ BAD - Bypassing RLS when not needed
+const { data } = await pool.query('SELECT * FROM documents'); // No user context
+
+// ✅ GOOD - Real-time subscription
+const channel = supabase
+  .channel(`project:${projectId}`)
+  .on('postgres_changes', {
+    event: 'UPDATE',
+    schema: 'public',
+    table: 'documents',
+    filter: `project_id=eq.${projectId}`
+  }, handleDocumentUpdate)
+  .subscribe();
+
+// Clean up on unmount
+return () => {
+  supabase.removeChannel(channel);
+};
 ```
 
 ### Testing Strategy
@@ -724,12 +1086,15 @@ try {
 ### Migrations
 
 ```powershell
-# Run all pending migrations (Neon)
+# Run all pending migrations (Supabase)
 cd server
 psql $env:DATABASE_URL -f migrations/001_initial_schema.sql
 
+# Or use the Supabase CLI
+supabase db push
+
 # Or use the PowerShell script
-.\run-migration-neon.ps1
+.\run-migration-supabase.ps1
 ```
 
 ### Common Queries
@@ -760,11 +1125,16 @@ LIMIT 20;
 ### Backup & Restore
 
 ```powershell
-# Backup Neon database
+# Backup Supabase database
 pg_dump $env:DATABASE_URL > backup_$(Get-Date -Format 'yyyy-MM-dd').sql
+
+# Using Supabase CLI
+supabase db dump > backup_$(Get-Date -Format 'yyyy-MM-dd').sql
 
 # Restore
 psql $env:DATABASE_URL < backup_2024-10-20.sql
+
+# Or use Supabase dashboard for point-in-time recovery (Pro plan)
 ```
 
 ---
@@ -869,22 +1239,23 @@ docker-compose up -d --build
 #### Development
 - Hot reload enabled
 - Debug logging
-- Local database (optional)
+- Local Supabase project (optional via `supabase start`)
 - CORS: `http://localhost:3000`
 
 #### Staging
 - Production build, debug logging
-- Staging database (Neon)
+- Staging Supabase project
 - CORS: staging domain
 - Test API keys
 
 #### Production
 - Optimized builds, minified assets
-- Production database (Neon with backups)
+- Production Supabase project (with automatic daily backups)
 - CORS: production domain only
 - Rate limiting enabled
 - Security headers enforced
-- Monitoring and alerting active
+- Monitoring and alerting active via Supabase dashboard
+- Row-Level Security (RLS) policies enabled for all tables
 
 ### Health Checks
 
@@ -1125,12 +1496,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 ```powershell
 # Check environment variables
 echo $env:DATABASE_URL
+echo $env:SUPABASE_URL
 
 # Test connection
 npm run test:db
 
-# Verify Neon is accessible
+# Verify Supabase is accessible
 psql $env:DATABASE_URL -c "SELECT 1;"
+
+# Check Supabase project status
+supabase status
 ```
 
 #### "Redis connection failed"
@@ -1201,6 +1576,8 @@ socket.onAny((event, ...args) => {
 ### External Resources
 - [Next.js Documentation](https://nextjs.org/docs)
 - [Express.js Guide](https://expressjs.com/en/guide/routing.html)
+- [Supabase Documentation](https://supabase.com/docs)
+- [Supabase JavaScript Client](https://supabase.com/docs/reference/javascript)
 - [PostgreSQL Docs](https://www.postgresql.org/docs/)
 - [Redis Documentation](https://redis.io/docs/)
 - [Socket.io Docs](https://socket.io/docs/)
@@ -1247,6 +1624,39 @@ pg_dump $env:DATABASE_URL > backup.sql
 tail -f server/logs/combined.log
 ```
 
+### Supabase CLI
+```bash
+# Start local Supabase (requires Docker)
+supabase start
+
+# Stop local Supabase
+supabase stop
+
+# View local Supabase status
+supabase status
+
+# Create new migration
+supabase migration new migration_name
+
+# Apply migrations to local
+supabase db push
+
+# Apply migrations to remote
+supabase db push --linked
+
+# Pull remote schema to local
+supabase db pull
+
+# Generate TypeScript types from database
+supabase gen types typescript --local > types/supabase.ts
+
+# View logs
+supabase logs
+
+# Link to cloud project
+supabase link --project-ref your-project-ref
+```
+
 ### Git Workflow
 ```powershell
 # Check status
@@ -1277,11 +1687,11 @@ git diff
 
 1. **Markdown is King**: ALL document content MUST be stored as Markdown in database. Export to PDF/DOCX only when needed.
 
-2. **Docker is Mandatory**: All development uses Docker. No manual local setup.
+2. **Development Flexibility**: Docker is no longer required for development. Direct connection to Supabase cloud or local Supabase CLI.
 
-3. **Supabase PostgreSQL**: Serverless PostgreSQL with SSL. Connection string in environment variables.
+3. **Supabase PostgreSQL**: Serverless managed PostgreSQL with built-in auth, storage, and real-time capabilities. Use Supabase client for optimal integration.
 
-4. **No Uncommitted Changes**: NEVER commit unless user explicitly requests. Always ask for approval.
+4. **Commit but Don't Push**: Commit changes locally but NEVER push unless explicitly requested by user. Always request approval before pushing.
 
 5. **TypeScript Strict Mode**: All code must be properly typed. No `any` without justification.
 
