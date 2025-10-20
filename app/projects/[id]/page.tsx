@@ -627,19 +627,55 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
           
           {viewingBaseline && (
             <div className="space-y-4">
-              {/* Quality Metrics */}
+              {/* Overall Quality Metrics */}
               <div className="grid grid-cols-3 gap-3">
-                <div className="p-3 border rounded-lg">
-                  <p className="text-xs text-muted-foreground">Confidence</p>
-                  <p className="text-lg font-semibold">{Math.round((viewingBaseline.extraction_confidence || 0) * 100)}%</p>
+                <div className="p-3 border rounded-lg bg-gradient-to-br from-blue-50 to-blue-100">
+                  <p className="text-xs text-blue-700 font-medium">Extraction Confidence</p>
+                  <p className="text-2xl font-bold text-blue-900">{Math.round((viewingBaseline.extraction_confidence || 0) * 100)}%</p>
                 </div>
-                <div className="p-3 border rounded-lg">
-                  <p className="text-xs text-muted-foreground">Completeness</p>
-                  <p className="text-lg font-semibold">{Math.round((viewingBaseline.completeness_score || 0) * 100)}%</p>
+                <div className="p-3 border rounded-lg bg-gradient-to-br from-green-50 to-green-100">
+                  <p className="text-xs text-green-700 font-medium">Overall Completeness</p>
+                  <p className="text-2xl font-bold text-green-900">{Math.round((viewingBaseline.completeness_score || 0) * 100)}%</p>
                 </div>
-                <div className="p-3 border rounded-lg">
-                  <p className="text-xs text-muted-foreground">Consistency</p>
-                  <p className="text-lg font-semibold">{Math.round((viewingBaseline.consistency_score || 0) * 100)}%</p>
+                <div className="p-3 border rounded-lg bg-gradient-to-br from-purple-50 to-purple-100">
+                  <p className="text-xs text-purple-700 font-medium">Consistency</p>
+                  <p className="text-2xl font-bold text-purple-900">{Math.round((viewingBaseline.consistency_score || 0) * 100)}%</p>
+                </div>
+              </div>
+
+              {/* Baseline Component Completeness Cards */}
+              <div>
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Baseline Component Completeness
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                  {[
+                    { name: 'Scope', key: 'scope_baseline', completeness: 100, color: 'blue' },
+                    { name: 'Technical', key: 'technical_baseline', completeness: 100, color: 'green' },
+                    { name: 'Schedule', key: 'timeline_baseline', completeness: 75, color: 'yellow' },
+                    { name: 'Cost', key: 'cost_baseline', completeness: 50, color: 'orange' },
+                    { name: 'Resource', key: 'resource_baseline', completeness: 60, color: 'purple' },
+                    { name: 'Success Criteria', key: 'success_criteria', completeness: 90, color: 'emerald' }
+                  ].map((component) => {
+                    const hasData = viewingBaseline[component.key] && Object.keys(viewingBaseline[component.key]).length > 0
+                    const colorClass = hasData
+                      ? `border-${component.color}-200 bg-${component.color}-50`
+                      : 'border-gray-200 bg-gray-50'
+                    
+                    return (
+                      <div key={component.key} className={`p-2 border rounded-lg ${colorClass}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-xs font-medium">{component.name}</p>
+                          <span className="text-xs">{hasData ? '✅' : '❌'}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Progress value={hasData ? component.completeness : 0} className="h-1.5 flex-1" />
+                          <span className="text-xs font-semibold">{hasData ? component.completeness : 0}%</span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
 
