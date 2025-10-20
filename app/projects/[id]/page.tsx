@@ -12,6 +12,7 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
+import { BaselineGanttChart } from "@/components/BaselineGanttChart"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
@@ -887,19 +888,29 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
                       Timeline Baseline
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm space-y-2">
+                  <CardContent className="text-sm space-y-4">
                     {viewingBaseline.timeline_baseline.project_duration && (
                       <div>
                         <p className="font-medium">Duration:</p>
                         <p className="text-muted-foreground">{viewingBaseline.timeline_baseline.project_duration}</p>
                       </div>
                     )}
+                    
+                    {/* Gantt Chart Visualization */}
+                    <div className="pt-4 border-t">
+                      <p className="font-medium mb-3">Visual Timeline:</p>
+                      <BaselineGanttChart baseline={viewingBaseline} viewMode="Month" />
+                    </div>
+                    
                     {viewingBaseline.timeline_baseline.key_milestones && (
-                      <div>
+                      <div className="pt-4 border-t">
                         <p className="font-medium mb-1">Key Milestones:</p>
                         <ul className="list-disc list-inside space-y-1">
                           {viewingBaseline.timeline_baseline.key_milestones.map((m: any, i: number) => (
-                            <li key={i}>{m.name || m}</li>
+                            <li key={i} className="text-muted-foreground">
+                              {typeof m === 'string' ? m : (m.name || `Milestone ${i + 1}`)}
+                              {m.target_date && ` - ${m.target_date}`}
+                            </li>
                           ))}
                         </ul>
                       </div>
