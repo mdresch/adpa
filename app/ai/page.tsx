@@ -209,6 +209,8 @@ Please create a document that considers the project context above and ensures co
         max_tokens: maxTokens[0],
         template_id: selectedTemplate || undefined,
         variables: Object.keys(variables).length > 0 ? variables : undefined,
+        project_id: saveMode === 'existing-project' && selectedProjectId ? selectedProjectId : undefined,
+        project_name: saveMode === 'existing-project' && selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name : undefined,
       }
 
       const response = await apiClient.generateContent(generateData)
