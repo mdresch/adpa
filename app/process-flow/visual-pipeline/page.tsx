@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { getApiBaseUrl } from '@/lib/api-url'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -203,7 +204,7 @@ export default function VisualPipelinePage() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+        const apiUrl = getApiBaseUrl()
         const [templatesRes, projectsRes] = await Promise.all([
           fetch(`${apiUrl}/pipeline/templates`, {
             headers: {

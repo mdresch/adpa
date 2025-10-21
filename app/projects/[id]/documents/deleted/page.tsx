@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import { getApiBaseUrl } from "@/lib/api-url"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -77,7 +78,7 @@ export default function DeletedDocumentsPage({ params }: { params: { id: string 
     try {
       setLoading(true)
       
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_URL = getApiBaseUrl()
       
       // Load project info
       const projectResponse = await fetch(`${API_URL}/projects/${projectId}`, {
@@ -124,7 +125,7 @@ export default function DeletedDocumentsPage({ params }: { params: { id: string 
   const handleRestore = async (documentId: string) => {
     try {
       setRestoring(documentId)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_URL}/documents/${documentId}/restore`, {
         method: 'POST',
@@ -169,7 +170,7 @@ export default function DeletedDocumentsPage({ params }: { params: { id: string 
 
     try {
       setPermanentlyDeleting(documentId)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const API_URL = getApiBaseUrl()
       
       const response = await fetch(`${API_URL}/documents/${documentId}/permanent`, {
         method: 'DELETE',
