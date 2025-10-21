@@ -1,8 +1,10 @@
 import { io, Socket } from "socket.io-client"
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
+// Ensure API_BASE_URL always ends with /api
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
+const API_BASE_URL = rawApiUrl.endsWith('/api') ? rawApiUrl : `${rawApiUrl}/api`
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || rawApiUrl.replace('/api', '')
 
 // Types
 export interface User {
