@@ -75,8 +75,20 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           } else if (typeof milestone === 'object') {
             // Object format with date, name, etc.
             milestoneName = milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`
-            milestoneDate = milestone.date || milestone.start_date || milestone.target_date || today
-            milestoneEnd = milestone.end_date || milestone.date || today
+            
+            // Extract date from potentially text-heavy fields
+            const rawDate = milestone.date || milestone.start_date || milestone.target_date || today
+            const rawEndDate = milestone.end_date || milestone.date || today
+            
+            // Parse date - extract YYYY-MM-DD format from text
+            const dateMatch = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
+            milestoneDate = dateMatch ? dateMatch[0] : today
+            
+            const endMatch = String(rawEndDate).match(/\d{4}-\d{2}-\d{2}/)
+            milestoneEnd = endMatch ? endMatch[0] : milestoneDate
+            
+            console.log(`Milestone ${idx}: "${milestoneName}" - Start: ${milestoneDate}, End: ${milestoneEnd}`)
+            
             progress = milestone.progress || milestone.completion || 0
           }
           
@@ -257,8 +269,8 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
   }
 
   // Extract milestones for table view
-  const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
-
+      const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
+      
   return (
     <div className="w-full bg-white dark:bg-slate-900 p-4 rounded-lg border space-y-4">
       {/* Table/Grid View */}
@@ -349,9 +361,9 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                   </div>
                   <div className={`px-3 py-1 ${colorClass} text-white text-xs rounded-full`}>
                     {idx + 1}
-                  </div>
-                </div>
-              )
+              </div>
+      </div>
+    )
             })
           ) : (
             <div className="text-slate-500 text-sm">No milestones to display</div>
