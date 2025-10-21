@@ -54,50 +54,43 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
       console.log('Extracted milestones:', milestones)
       
       if (Array.isArray(milestones) && milestones.length > 0) {
-        milestones.forEach((milestone: any, idx: number) => {
-          // Handle different milestone formats
+        // First pass: extract all milestone dates
+        const parsedMilestones = milestones.map((milestone: any, idx: number) => {
           let milestoneName = ''
           let milestoneDate = ''
-          let milestoneEnd = ''
           let progress = 0
           
           if (typeof milestone === 'string') {
-            // Simple string format: "Complete Immediate Actions"
             milestoneName = milestone
-            // Estimate dates based on index (each milestone ~1 month apart)
             const startDate = new Date()
             startDate.setMonth(startDate.getMonth() + idx)
             milestoneDate = startDate.toISOString().split('T')[0]
-            
-            const endDate = new Date(startDate)
-            endDate.setMonth(endDate.getMonth() + 1)
-            milestoneEnd = endDate.toISOString().split('T')[0]
           } else if (typeof milestone === 'object') {
-            // Object format with date, name, etc.
             milestoneName = milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`
-            
-            // Extract date from potentially text-heavy fields
             const rawDate = milestone.date || milestone.start_date || milestone.target_date || today
-            const rawEndDate = milestone.end_date || milestone.date || today
-            
-            // Parse date - extract YYYY-MM-DD format from text
             const dateMatch = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
             milestoneDate = dateMatch ? dateMatch[0] : today
-            
-            const endMatch = String(rawEndDate).match(/\d{4}-\d{2}-\d{2}/)
-            milestoneEnd = endMatch ? endMatch[0] : milestoneDate
-            
-            console.log(`Milestone ${idx}: "${milestoneName}" - Start: ${milestoneDate}, End: ${milestoneEnd}`)
-            
             progress = milestone.progress || milestone.completion || 0
           }
           
-          // Ensure end date is after start date
-          if (new Date(milestoneEnd) <= new Date(milestoneDate)) {
-            const end = new Date(milestoneDate)
-            end.setDate(end.getDate() + 30) // Default 30-day duration
+          return { name: milestoneName, date: milestoneDate, progress }
+        })
+        
+        // Second pass: calculate end dates based on next milestone
+        parsedMilestones.forEach((milestone, idx: number) => {
+          let milestoneEnd = ''
+          
+          if (idx < parsedMilestones.length - 1) {
+            // Use next milestone's date as end date
+            milestoneEnd = parsedMilestones[idx + 1].date
+          } else {
+            // Last milestone: add 7 days
+            const end = new Date(milestone.date)
+            end.setDate(end.getDate() + 7)
             milestoneEnd = end.toISOString().split('T')[0]
           }
+          
+          console.log(`Milestone ${idx}: "${milestone.name}" - Start: ${milestone.date}, End: ${milestoneEnd}`)
           
           // Assign color based on index for variety
           const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
@@ -105,17 +98,17 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           
           tasks.push({
             id: `milestone-${idx}`,
-            name: milestoneName,
-            start: milestoneDate,
+            name: milestone.name,
+            start: milestone.date,
             end: milestoneEnd,
-            progress: typeof progress === 'number' ? progress : 0,
-            custom_class: progress >= 100 ? 'bar-complete' : progress > 0 ? 'bar-in-progress' : 'bar-pending',
+            progress: milestone.progress,
+            custom_class: milestone.progress >= 100 ? 'bar-complete' : milestone.progress > 0 ? 'bar-in-progress' : 'bar-pending',
             color: taskColor
           } as any)
           
           // Update project start if earlier
-          if (new Date(milestoneDate) < new Date(projectStart)) {
-            projectStart = milestoneDate
+          if (new Date(milestone.date) < new Date(projectStart)) {
+            projectStart = milestone.date
           }
         })
       }
@@ -226,8 +219,21 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
         console.log(`SVG content: ${bars.length} bars, ${texts.length} text elements`)
       }
       
-      // FORCE BAR COLORS - Apply colors directly to ALL rect elements in bars
+      // FORCE BAR COLORS AND FIX BLACK BACKGROUND
       setTimeout(() => {
+        const svg = ganttContainerRef.current?.querySelector('svg')
+        if (!svg) return
+        
+        // Remove any black background rects that frappe-gantt might add
+        const allRects = svg.querySelectorAll('rect')
+        allRects.forEach((rect) => {
+          const fill = rect.getAttribute('fill')
+          if (fill === '#000000' || fill === 'black' || fill === '#000') {
+            console.log('Removing black rect:', rect)
+            rect.remove()
+          }
+        })
+        
         const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4']
         const barWrappers = ganttContainerRef.current?.querySelectorAll('.bar-wrapper')
         
@@ -280,7 +286,9 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
             <tr>
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">#</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Milestone</th>
-              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Target Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Start Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">End Date</th>
+              <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Duration</th>
               <th className="px-4 py-3 text-left font-semibold text-slate-700 dark:text-slate-200">Status</th>
             </tr>
           </thead>
@@ -290,9 +298,33 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                 const milestoneName = typeof milestone === 'string' 
                   ? milestone 
                   : (milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`)
-                const milestoneDate = typeof milestone === 'object' 
-                  ? (milestone.date || milestone.start_date || milestone.target_date || '-')
-                  : '-'
+                
+                // Parse clean dates
+                const rawDate = typeof milestone === 'object' 
+                  ? (milestone.date || milestone.start_date || milestone.target_date || '')
+                  : ''
+                const dateMatch = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
+                const startDate = dateMatch ? dateMatch[0] : '-'
+                
+                // Calculate end date (use next milestone or +7 days)
+                let endDate = '-'
+                if (idx < milestones.length - 1 && typeof milestones[idx + 1] === 'object') {
+                  const nextRawDate = milestones[idx + 1].date || milestones[idx + 1].start_date || milestones[idx + 1].target_date || ''
+                  const nextMatch = String(nextRawDate).match(/\d{4}-\d{2}-\d{2}/)
+                  endDate = nextMatch ? nextMatch[0] : '-'
+                } else if (startDate !== '-') {
+                  const end = new Date(startDate)
+                  end.setDate(end.getDate() + 7)
+                  endDate = end.toISOString().split('T')[0]
+                }
+                
+                // Calculate duration in days
+                let duration = '-'
+                if (startDate !== '-' && endDate !== '-') {
+                  const days = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24))
+                  duration = `${days} days`
+                }
+                
                 const progress = typeof milestone === 'object' 
                   ? (milestone.progress || milestone.completion || 0)
                   : 0
@@ -312,7 +344,9 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                       </div>
                     </td>
                     <td className="px-4 py-3 text-slate-900 dark:text-slate-100 font-medium">{milestoneName}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{milestoneDate}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{startDate}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{endDate}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{duration}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${statusColor}`}>
                         {statusText}
@@ -323,7 +357,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
               })
             ) : (
               <tr>
-                <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
                   No milestones available
                 </td>
               </tr>
@@ -370,9 +404,49 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           )}
         </div>
         
-        {/* Gantt Chart (experimental) */}
-        <div className="mt-4">
-          <h5 className="text-xs font-semibold text-slate-500 mb-2">Interactive Gantt Chart</h5>
+        {/* Horizontal Timeline Chart (replaces frappe-gantt) */}
+        <div className="mt-4 border rounded-lg p-4 bg-white">
+          <h5 className="text-sm font-semibold text-slate-700 mb-4">Timeline Chart</h5>
+          
+          <div className="space-y-3">
+            {Array.isArray(milestones) && milestones.length > 0 ? (
+              milestones.map((milestone: any, idx: number) => {
+                const milestoneName = typeof milestone === 'string' 
+                  ? milestone 
+                  : (milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`)
+                
+                const rawDate = typeof milestone === 'object' 
+                  ? (milestone.date || milestone.start_date || milestone.target_date || '')
+                  : ''
+                const dateMatch = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
+                const startDate = dateMatch ? dateMatch[0] : ''
+                
+                const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+                const colorClass = colors[idx % colors.length]
+                
+    return (
+                  <div key={idx} className="relative">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-1 h-full ${colorClass} rounded`}></div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm">{milestoneName}</span>
+                          <span className="text-xs text-slate-500">{startDate}</span>
+                        </div>
+                        <div className={`h-8 ${colorClass} rounded-lg shadow-sm opacity-80`} 
+                             style={{ width: `${Math.min(95, 20 + idx * 10)}%` }}>
+                        </div>
+                      </div>
+                    </div>
+      </div>
+    )
+              })
+            ) : null}
+          </div>
+        </div>
+
+      {/* REMOVED: frappe-gantt - causing black screen issues */}
+      <div className="hidden">
       <style jsx global>{`
         .gantt-container {
           font-family: inherit;
