@@ -26,12 +26,14 @@ const createPool = (host: string) => {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: databaseUrl,
-      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('supabase') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
+      // Force IPv4 to prevent IPv6 connection issues on Railway
+      family: 4,
     })
   }
   
@@ -63,12 +65,15 @@ export async function connectDatabase() {
     console.log(`🔌 Trying database connection via DATABASE_URL`)
     const testPool = new Pool({
       connectionString: databaseUrl,
-      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('supabase') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000, // Increased to 30 seconds for Railway
+      // Force IPv4 to prevent IPv6 connection issues on Railway
+      host: databaseUrl.match(/\/\/[^:]+:([^@]+)@([^:/]+)/)?.[2] || undefined,
+      family: 4, // Force IPv4 only (Railway doesn't support IPv6)
     })
     
     try {
