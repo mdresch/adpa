@@ -1759,15 +1759,26 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       try {
         console.log('🔄 [7/10] Attempting to enqueue job...')
-        const resp = await fetch('/api/jobs/ai-generate', {
+        const resp = await fetch('http://localhost:5000/api/ai/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
           body: JSON.stringify({
-            projectId,
             prompt: aiPrompt,
-            templateId: selectedTemplate,
-            name: documentName,
-            description: documentDescription,
+            provider: selectedProvider,
+            model: selectedModel,
+            temperature: aiTemperature,
+            template_id: selectedTemplate,
+            variables: {
+              project_id: projectId,
+              project_name: project?.name || 'Unknown Project',
+              template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Unknown Template',
+              framework: project?.framework || 'General'
+            },
+            project_id: projectId,
+            project_name: project?.name || 'Unknown Project',
           }),
         })
 
@@ -1775,24 +1786,31 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           const body = await resp.json()
           jobId = body.jobId
           console.log('✅ Job queued successfully:', jobId)
-          toast.success('Document generation job queued — you can monitor it in Jobs')
+          toast.success(`Document generation started! Job ID: ${jobId}`)
+          
+          // SUCCESS: Close dialog and let background worker create the document
+          console.log('✅ Job queued, closing dialog')
+          setDocumentName("")
+          setDocumentDescription("")
+          setSelectedTemplate("")
+          setCreateDialogOpen(false)
+          setCreatingDocument(false)
+          
+          // Refresh documents list after a short delay (worker needs time to process)
+          setTimeout(async () => {
+            await fetchDocuments()
+          }, 3000)
+          
+          return // EXIT - document will be created by background worker
         } else {
-          console.warn('⚠️ Failed to enqueue job (status ' + resp.status + '), falling back to direct generation')
+          console.error('❌ Failed to enqueue job (status ' + resp.status + ')')
+          throw new Error(`Job queue returned ${resp.status}`)
         }
       } catch (err) {
-        console.warn('⚠️ Failed to enqueue job (exception), falling back to direct generation:', err)
-      }
-
-      // If we enqueued a job, just close dialog and refresh list (document will be created by worker)
-      if (jobId) {
-        console.log('✅ Job queued, skipping direct generation')
-        setDocumentName("")
-        setDocumentDescription("")
-        setSelectedTemplate("")
-        setCreateDialogOpen(false)
-        await fetchDocuments()
+        console.error('❌ Failed to enqueue job:', err)
+        toast.error('Failed to start document generation. Please try again.')
         setCreatingDocument(false)
-        return
+        return // EXIT on error
       }
       
       console.log('🔄 [8/10] Job queue unavailable, proceeding with direct generation...')
