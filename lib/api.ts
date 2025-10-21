@@ -267,7 +267,7 @@ class ApiClient {
 
   // Authentication API
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string; message: string }>("/api/auth/login", {
+    const response = await this.request<{ user: User; token: string; message: string }>("/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     })
@@ -283,7 +283,7 @@ class ApiClient {
   }
 
   async demoLogin(): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string }>("/api/auth/demo", {
+    const response = await this.request<{ user: User; token: string }>("/auth/demo", {
       method: "POST",
     })
 
@@ -300,7 +300,7 @@ class ApiClient {
     name: string
     role?: string
   }): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string; message: string }>("/api/auth/register", {
+    const response = await this.request<{ user: User; token: string; message: string }>("/auth/register", {
       method: "POST",
       body: JSON.stringify(userData),
     })
@@ -316,7 +316,7 @@ class ApiClient {
   }
 
   async getCurrentUser(): Promise<User> {
-    const response = await this.request<{ user: User }>("/api/auth/me")
+    const response = await this.request<{ user: User }>("/auth/me")
     return response.user || response as any
   }
 
