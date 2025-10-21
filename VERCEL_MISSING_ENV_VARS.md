@@ -49,26 +49,14 @@ If you only have `ADPA_KV_URL` (legacy format), you may need to add the REST API
    - Used by: Frontend to connect to Express backend
 
 2. **JWT_SECRET**
-   - Value: Same as in your Railway backend (check Railway dashboard)
+   - Value: `adpa-secret-key-change-in-production-2025`
    - Environment: Production, Preview, Development
    - Used by: App authentication (different from Supabase JWT)
-   - Example: `your-super-secret-jwt-key-min-32-chars-long`
-
-### **Important for AI features:**
-
-3. **OPENAI_API_KEY** (if using OpenAI)
-   - Value: `sk-...`
-   - Environment: Production, Preview
-
-4. **GOOGLE_AI_API_KEY** (if using Google AI)
-   - Value: Your Google AI API key
-   - Environment: Production, Preview
-
-5. **ANTHROPIC_API_KEY** (if using Claude)
-   - Value: Your Anthropic API key
-   - Environment: Production, Preview
+   - **⚠️ CRITICAL**: Must match Railway backend exactly
 
 ### **Optional (for advanced features):**
+
+**Note:** AI API keys (OpenAI, Google AI, Anthropic) are stored in the database via the AI Providers UI, not as environment variables.
 
 6. **GITHUB_TOKEN** (for GitHub integration)
    - Value: `ghp_...`
