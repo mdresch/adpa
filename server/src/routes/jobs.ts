@@ -36,15 +36,15 @@ router.get("/",
           j.started_at, 
           j.completed_at, 
           j.created_at,
-          j.job_data,
+          j.data as job_data,
           j.result,
           p.name as project_name,
           t.name as template_name,
           d.name as document_name,
           d.id as document_id
         FROM jobs j
-        LEFT JOIN projects p ON (j.job_data->>'projectId')::uuid = p.id OR (j.job_data->'variables'->>'project_id')::uuid = p.id
-        LEFT JOIN templates t ON (j.job_data->>'template_id')::uuid = t.id
+        LEFT JOIN projects p ON (j.data->>'projectId')::uuid = p.id OR (j.data->'variables'->>'project_id')::uuid = p.id
+        LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
         LEFT JOIN documents d ON d.generation_metadata->>'job_id' = j.id::text
         WHERE j.created_by = $1
       `
