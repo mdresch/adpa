@@ -159,6 +159,10 @@ aiQueue.process("ai-generate", async (job) => {
       // FIX: project_id can be in job.data.projectId OR job.data.variables.project_id
       const projectId = job.data.projectId || job.data.variables?.project_id || null;
       
+      // Calculate content statistics
+      const wordCount = docContent.split(/\s+/).filter((word: string) => word.length > 0).length
+      const characterCount = docContent.length
+      
       // Build generation metadata for the document (matching frontend expected structure)
       const generationMetadata = {
         aiProcessing: {
@@ -187,17 +191,17 @@ aiQueue.process("ai-generate", async (job) => {
       
       const insertResult = await pool.query(
         `
-        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata)
-        VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
+        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count)
+        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9)
         RETURNING id
       `,
-        [projectId, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata)]
+        [projectId, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata), wordCount, characterCount]
       )
 
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
         createdDocumentRow = insertResult.rows[0]
-        logger.info(`Document created: ${createdDocumentId} (project: ${projectId || 'none'})`)
+        logger.info(`Document created: ${createdDocumentId} (project: ${projectId || 'none'}) - ${wordCount} words, ${characterCount} chars`)
       }
     } catch (docErr) {
       logger.error(`Failed to create document for job ${jobId}:`, docErr)
