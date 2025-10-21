@@ -1,11 +1,14 @@
 {
   "git": {
-    "deploymentEnabled": {
-      "adpa-project-charter": false
-    }
+    "deploymentEnabled": true
   },
   "github": {
-    "enabled": false,
-    "autoAlias": false
-  }
+    "enabled": true,
+    "autoAlias": true,
+    "silent": false,
+    "autoJobCancelation": true
+  },
+  "buildCommand": "pnpm run build",
+  "installCommand": "pnpm install",
+  "ignoreCommand": "git diff --quiet HEAD^ HEAD ./"
 }
