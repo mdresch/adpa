@@ -1759,7 +1759,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       try {
         console.log('🔄 [7/10] Attempting to enqueue job...')
-        const resp = await fetch('http://localhost:5000/api/ai/generate', {
+        const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/ai/generate`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
