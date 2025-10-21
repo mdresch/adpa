@@ -194,6 +194,27 @@ aiQueue.process("ai-generate", async (job) => {
       // Calculate content statistics
       const wordCount = docContent.split(/\s+/).filter((word: string) => word.length > 0).length
       const characterCount = docContent.length
+      const sentenceCount = (docContent.match(/[.!?]+/g) || []).length
+      const paragraphCount = (docContent.match(/\n\n/g) || []).length + 1
+      
+      // Calculate quality metrics using the document analysis utility
+      const { analyzeDocumentQuality } = await import('../utils/documentMetadata')
+      
+      // Create minimal metadata object for quality analysis
+      const tempMetadata = {
+        wordCount,
+        characterCount,
+        sentenceCount,
+        paragraphCount,
+        lineCount: (docContent.match(/\n/g) || []).length + 1,
+        estimatedReadingTime: Math.ceil(wordCount / 200) // 200 words per minute
+      } as any
+      
+      // Get source document count for research complexity calculation
+      const sourceDocCount = job.data?.documentIds?.length || 0
+      
+      // Calculate quality metrics
+      const qualityMetrics = analyzeDocumentQuality(docContent, tempMetadata, sourceDocCount)
       
       // Build generation metadata for the document (matching frontend expected structure)
       const generationMetadata = {
@@ -218,6 +239,20 @@ aiQueue.process("ai-generate", async (job) => {
           summary: result?.context_summary || null,
           warnings: result?.context_warnings || [],
           token_usage: result?.context_token_usage || null
+        },
+        qualityMetrics: {
+          overallQuality: qualityMetrics.overallQuality,
+          completeness: qualityMetrics.completeness,
+          structureScore: qualityMetrics.structureScore,
+          formattingScore: qualityMetrics.formattingScore,
+          contentDepth: qualityMetrics.contentDepth,
+          accuracy: qualityMetrics.accuracy,
+          consistency: qualityMetrics.consistency,
+          contextRelevance: qualityMetrics.contextRelevance,
+          professionalQuality: qualityMetrics.professionalQuality,
+          standardsCompliance: qualityMetrics.standardsCompliance,
+          complexityScore: qualityMetrics.complexityScore,
+          recommendations: qualityMetrics.recommendations
         }
       };
       
