@@ -171,6 +171,43 @@ aiQueue.process("ai-generate", async (job) => {
       // continue — document creation failure shouldn't block marking job as completed with AI result
     }
 
+    // CR-2026-001: Automatically validate document against project baseline
+    if (createdDocumentId && job.data?.projectId) {
+      try {
+        const { baselineService } = await import('./baselineService')
+        const rawContent = result?.content ? result.content : result
+        const documentContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
+        const docName = job.data?.name && job.data.name.trim() ? job.data.name.trim() : 'Generated Document'
+        
+        logger.info(`[Baseline Validation] Checking document ${createdDocumentId} against project ${job.data.projectId} baseline`)
+        const drifts = await baselineService.validateDocumentAgainstBaseline(
+          job.data.projectId,
+          createdDocumentId,
+          documentContent,
+          docName
+        )
+        
+        if (drifts.length > 0) {
+          logger.warn(`[Baseline Validation] Detected ${drifts.length} drift(s) in document ${createdDocumentId}`)
+          // Emit drift alert to project room
+          io.to(`project:${job.data.projectId}`).emit("baseline:drift", {
+            documentId: createdDocumentId,
+            driftCount: drifts.length,
+            drifts: drifts.map(d => ({
+              type: d.detection_type,
+              severity: d.drift_severity,
+              description: d.drift_description
+            }))
+          })
+        } else {
+          logger.info(`[Baseline Validation] No drift detected in document ${createdDocumentId}`)
+        }
+      } catch (baselineErr) {
+        logger.error(`[Baseline Validation] Failed to validate document ${createdDocumentId}:`, baselineErr)
+        // Don't fail the job if baseline validation fails
+      }
+    }
+
     // Save result to database including document id if created
     const finalResult = {
       ai: result,

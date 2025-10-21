@@ -3,7 +3,11 @@
 **CR ID:** CR-2026-001  
 **Version:** 1.0  
 **Date:** October 15, 2025  
-**Status:** ✅ Approved (October 19, 2025) — Funding approval by CFO: ⏳ Pending documentation
+**Status:** ✅ Approved & Authorized (October 19, 2025)  
+**Approved By:** Menno Drescher (Project Owner)  
+**Authorization:** Proceed with Phase 1 implementation immediately  
+**Test Plan:** [BASELINE_DRIFT_DETECTION_TEST_PLAN.md](../../06-features/BASELINE_DRIFT_DETECTION_TEST_PLAN.md)  
+**Production Approval:** ⏳ Pending test plan execution and UAT sign-off
 
 ---
 
@@ -326,6 +330,54 @@ Please approve:
 - Go/No-Go decision point after Phase 1 (baseline creation)
 - Patent detection requires legal team engagement
 - CFO funding approval contingent on receipt of constraints & requirements dossier (Scope, Cost, Schedule baselines and risks)
+- **Testing Gate:** Production deployment blocked until comprehensive test plan executed and approved (see section 9.1)
+
+### 9.1 Testing & Quality Gate
+
+**Pre-Production Testing Requirements:**
+
+All Phase 1 features must pass comprehensive testing before production approval:
+
+1. **Test Plan Execution** (3 weeks)
+   - Unit Testing: Backend services (85% coverage target)
+   - Integration Testing: API & database operations
+   - UI/UX Testing: Frontend baseline management interface
+   - End-to-End Testing: Full workflow validation
+   - Performance Testing: Load and stress tests
+   - Security Testing: Permission enforcement, input validation
+
+2. **User Acceptance Testing (UAT)**
+   - Session 1: Project Managers (3 participants, 1 hour)
+   - Session 2: Stakeholders (2 executives, CFO, 30 minutes)
+   - Acceptance Criteria:
+     * ≥ 80% of PMs rate extraction accuracy as "good" or "excellent"
+     * 100% successfully create and approve baseline
+     * Stakeholder confirmation of business value
+     * No critical UI bugs
+
+3. **Production Approval Checklist**
+   - [ ] All critical test cases passed (100%)
+   - [ ] ≥ 95% high-priority test cases passed
+   - [ ] No unresolved critical/high severity defects
+   - [ ] Performance benchmarks met (baseline extraction < 30s for 5 docs)
+   - [ ] Security audit passed (permission enforcement verified)
+   - [ ] UAT completed with stakeholder sign-off
+   - [ ] Documentation complete
+   - [ ] Rollback plan documented
+   - [ ] Support team trained
+
+**Quality Targets:**
+- Baseline extraction accuracy: ≥ 85%
+- Drift detection precision: ≥ 80%
+- API response time: < 500ms (reads), < 35s (extraction)
+- Zero critical security vulnerabilities
+
+**Go/No-Go Authority:**
+- Technical Lead (QA sign-off)
+- Project Owner (business value confirmation)
+- Product Manager (feature completeness)
+
+**Full Test Plan:** See [BASELINE_DRIFT_DETECTION_TEST_PLAN.md](../../06-features/BASELINE_DRIFT_DETECTION_TEST_PLAN.md)
 
 ---
 
@@ -384,6 +436,156 @@ See: `docs/roadmap/FUTURE_IMPROVEMENTS.md` Section 10.2-10.4
 **Next Step:** Present to executive sponsor for approval decision by November 1, 2025.
 
 ---
+
+## Baseline Attachments (For CFO Review)
+
+### A. Scope Baseline (v1.0)
+- Objective: Establish AI-powered baseline creation and drift detection across scope, technical, and timeline domains
+- In Scope (Phase 1–3):
+  - AI document corpus analysis; automatic extraction of scope/tech/timeline/success criteria
+  - Baseline version control & approval workflow
+  - Drift detection (scope/tech/timeline) + impact assessment + alerts
+  - Efficiency tracking and recommendations
+- Out of Scope:
+  - Full PM suite (use existing tools), time tracking, ERP/finance, contract management, autopilot execution, patent filing automation
+- Deliverables by Phase:
+  - P1: Baseline creation, extraction, versioning workflow
+  - P2: Drift detection engine + alerting + impact
+  - P3: Efficiency/value tracking + recommendations
+
+### B. Cost Baseline (v1.0)
+- Total: $400K (12 months)
+- Breakdown:
+  - Development: $320K (P1 $100K, P2 $80K, P3 $80K, P4 $60K)
+  - AI/LLM: $30K; Prior Art APIs: $20K; Infra: $10K; Training/Docs: $20K
+- Buffer: 15% schedule buffer (absorbed across phases); spend gated by monthly checkpoints
+
+### C. Schedule Baseline (v1.0)
+- Duration: 12 months (start Q1 2026)
+- Milestones:
+  - M3: Baseline creation for 5 pilot projects
+  - M5: Drift alerts live on pilots
+  - M7: Efficiency recommendations delivered
+  - M10: ≥1 patent opportunity flagged
+  - M12: Org-wide deployment
+- Checkpoints: Monthly Stop/Go with budget burn vs. value progress
+
+### D. Risk Baseline (v1.0)
+- Risks & Mitigations:
+  - AI accuracy <80% → Training data + human review + confidence scoring
+  - Low PM adoption → Early involvement + visible value in month 1
+  - API limits → Multi-provider + manual fallback
+  - Complex projects → Start simpler + iterate
+  - False positives (patent) → Legal review + thresholds
+  - Cost overruns → Phased plan + 15% buffer + checkpoints
+- Success Criteria:
+  - Month 3: 80% PM baseline satisfaction; Month 6: drift detected 2–4 weeks early; <20% false positives; $100K+ savings
+
+### E. CFO Funding Dossier – Ready for Review
+- Included: Scope/Cost/Schedule/Risk baselines (this section), ROI model ($1.05M–$3M/yr), dependencies, and conditions
+- Funding Release Condition: Approval of this dossier and confirmation of monthly checkpoint governance
+
+
+
+## Baseline Attachments (For CFO Review)
+
+### A. Scope Baseline (v1.0)
+- Objective: Establish AI-powered baseline creation and drift detection across scope, technical, and timeline domains
+- In Scope (Phase 1–3):
+  - AI document corpus analysis; automatic extraction of scope/tech/timeline/success criteria
+  - Baseline version control & approval workflow
+  - Drift detection (scope/tech/timeline) + impact assessment + alerts
+  - Efficiency tracking and recommendations
+- Out of Scope:
+  - Full PM suite (use existing tools), time tracking, ERP/finance, contract management, autopilot execution, patent filing automation
+- Deliverables by Phase:
+  - P1: Baseline creation, extraction, versioning workflow
+  - P2: Drift detection engine + alerting + impact
+  - P3: Efficiency/value tracking + recommendations
+
+### B. Cost Baseline (v1.0)
+- Total: $400K (12 months)
+- Breakdown:
+  - Development: $320K (P1 $100K, P2 $80K, P3 $80K, P4 $60K)
+  - AI/LLM: $30K; Prior Art APIs: $20K; Infra: $10K; Training/Docs: $20K
+- Buffer: 15% schedule buffer (absorbed across phases); spend gated by monthly checkpoints
+
+### C. Schedule Baseline (v1.0)
+- Duration: 12 months (start Q1 2026)
+- Milestones:
+  - M3: Baseline creation for 5 pilot projects
+  - M5: Drift alerts live on pilots
+  - M7: Efficiency recommendations delivered
+  - M10: ≥1 patent opportunity flagged
+  - M12: Org-wide deployment
+- Checkpoints: Monthly Stop/Go with budget burn vs. value progress
+
+### D. Risk Baseline (v1.0)
+- Risks & Mitigations:
+  - AI accuracy <80% → Training data + human review + confidence scoring
+  - Low PM adoption → Early involvement + visible value in month 1
+  - API limits → Multi-provider + manual fallback
+  - Complex projects → Start simpler + iterate
+  - False positives (patent) → Legal review + thresholds
+  - Cost overruns → Phased plan + 15% buffer + checkpoints
+- Success Criteria:
+  - Month 3: 80% PM baseline satisfaction; Month 6: drift detected 2–4 weeks early; <20% false positives; $100K+ savings
+
+### E. CFO Funding Dossier – Ready for Review
+- Included: Scope/Cost/Schedule/Risk baselines (this section), ROI model ($1.05M–$3M/yr), dependencies, and conditions
+- Funding Release Condition: Approval of this dossier and confirmation of monthly checkpoint governance
+
+
+
+## Baseline Attachments (For CFO Review)
+
+### A. Scope Baseline (v1.0)
+- Objective: Establish AI-powered baseline creation and drift detection across scope, technical, and timeline domains
+- In Scope (Phase 1–3):
+  - AI document corpus analysis; automatic extraction of scope/tech/timeline/success criteria
+  - Baseline version control & approval workflow
+  - Drift detection (scope/tech/timeline) + impact assessment + alerts
+  - Efficiency tracking and recommendations
+- Out of Scope:
+  - Full PM suite (use existing tools), time tracking, ERP/finance, contract management, autopilot execution, patent filing automation
+- Deliverables by Phase:
+  - P1: Baseline creation, extraction, versioning workflow
+  - P2: Drift detection engine + alerting + impact
+  - P3: Efficiency/value tracking + recommendations
+
+### B. Cost Baseline (v1.0)
+- Total: $400K (12 months)
+- Breakdown:
+  - Development: $320K (P1 $100K, P2 $80K, P3 $80K, P4 $60K)
+  - AI/LLM: $30K; Prior Art APIs: $20K; Infra: $10K; Training/Docs: $20K
+- Buffer: 15% schedule buffer (absorbed across phases); spend gated by monthly checkpoints
+
+### C. Schedule Baseline (v1.0)
+- Duration: 12 months (start Q1 2026)
+- Milestones:
+  - M3: Baseline creation for 5 pilot projects
+  - M5: Drift alerts live on pilots
+  - M7: Efficiency recommendations delivered
+  - M10: ≥1 patent opportunity flagged
+  - M12: Org-wide deployment
+- Checkpoints: Monthly Stop/Go with budget burn vs. value progress
+
+### D. Risk Baseline (v1.0)
+- Risks & Mitigations:
+  - AI accuracy <80% → Training data + human review + confidence scoring
+  - Low PM adoption → Early involvement + visible value in month 1
+  - API limits → Multi-provider + manual fallback
+  - Complex projects → Start simpler + iterate
+  - False positives (patent) → Legal review + thresholds
+  - Cost overruns → Phased plan + 15% buffer + checkpoints
+- Success Criteria:
+  - Month 3: 80% PM baseline satisfaction; Month 6: drift detected 2–4 weeks early; <20% false positives; $100K+ savings
+
+### E. CFO Funding Dossier – Ready for Review
+- Included: Scope/Cost/Schedule/Risk baselines (this section), ROI model ($1.05M–$3M/yr), dependencies, and conditions
+- Funding Release Condition: Approval of this dossier and confirmation of monthly checkpoint governance
+
+
 
 ## Baseline Attachments (For CFO Review)
 

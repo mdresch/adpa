@@ -242,60 +242,64 @@ export default function Projects() {
       
       // Check if there's a business case draft to save as a document
       const projectDraft = sessionStorage.getItem('project-draft')
+      console.log('🔍 Checking for project draft in sessionStorage:', {
+        hasDraft: !!projectDraft,
+        draftLength: projectDraft?.length
+      })
+      
       if (projectDraft) {
         try {
           const draft = JSON.parse(projectDraft)
           const content = draft.content || ''
           
+          console.log('🔍 Project draft parsed:', {
+            hasContent: !!content,
+            contentLength: content.length,
+            templateId: draft.templateId,
+            templateName: draft.templateName,
+            framework: draft.framework
+          })
+          
           // Create a document from the business case
           if (content && createdProject && createdProject.id) {
-            console.log('📄 Attempting to save business case as document...', {
-              projectId: createdProject.id,
-              contentLength: content.length,
-              templateId: draft.templateId
-            })
-            
-            // Create document via API (expects JSON, not file upload)
-            const documentData = {
-              name: `${newProject.name} - Business Case`,
-              content: content,
-              template_id: draft.templateId || null,
-              status: 'final'
-            }
-            
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/documents/project/${createdProject.id}`, {
-              method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(documentData)
-            })
-            
-            console.log('📄 Document API response:', {
-              status: response.status,
-              statusText: response.statusText,
-              ok: response.ok
-            })
-            
-            if (response.ok) {
-              const docData = await response.json()
-              console.log('✅ Document created successfully:', docData)
-              toast.success("Project and business case document created successfully!")
-            } else {
-              const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
-              console.error("❌ Document creation failed:", {
-                status: response.status,
-                statusText: response.statusText,
-                error: errorData
+            try {
+              console.log('📄 Attempting to save business case as document...', {
+                projectId: createdProject.id,
+                projectName: createdProject.name,
+                contentLength: content.length,
+                templateId: draft.templateId
               })
-              toast.error(`Project created, but business case document failed: ${errorData.error || errorData.message || 'Unknown error'}`)
+              
+              // Create document via API (expects JSON, not file upload)
+              const documentData = {
+                name: draft.templateName || `${newProject.name} - Business Case`,
+                content: content,
+                template_id: draft.templateId || null,
+                status: 'draft', // Changed from 'final' to 'draft'
+                metadata: draft.metadata || {}
+              }
+              
+              console.log('📄 Sending document data:', {
+                ...documentData,
+                content: `${content.substring(0, 100)}... (${content.length} chars total)`
+              })
+              
+              // Use apiClient instead of raw fetch to avoid URL duplication
+              const createdDocument = await apiClient.createDocument(createdProject.id, documentData)
+              
+              console.log('✅ Document created successfully:', createdDocument)
+              toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
+            } catch (docCreateError: any) {
+              console.error('❌ Document creation failed:', docCreateError)
+              toast.error(`Project created, but document failed to save: ${docCreateError.message || 'Unknown error'}`)
             }
           } else {
             console.log('⚠️ Skipping document creation:', {
               hasContent: !!content,
+              contentLength: content?.length,
               hasProject: !!createdProject,
-              hasProjectId: !!createdProject?.id
+              hasProjectId: !!createdProject?.id,
+              projectId: createdProject?.id
             })
             toast.success("Project created successfully!")
           }
@@ -303,10 +307,11 @@ export default function Projects() {
           // Clear the draft from session storage
           sessionStorage.removeItem('project-draft')
         } catch (docError) {
-          console.error("Failed to save business case as document:", docError)
-          toast.success("Project created! (Business case document could not be saved)")
+          console.error("❌ Failed to save business case as document:", docError)
+          toast.error("Project created, but initial document could not be saved. You can upload it manually.")
         }
       } else {
+        console.log('ℹ️ No project draft found in sessionStorage - creating project without initial document')
         toast.success("Project created successfully!")
       }
       
@@ -439,6 +444,9 @@ export default function Projects() {
       name: `${project.name} - Generated Document`,
       template_id: "",
       prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
+      provider: "Groq AI",
+      model: "llama-3.1-8b-instant",
+      temperature: 0.7
     })
     setGenerateDialogOpen(true)
     fetchTemplates()
@@ -1054,7 +1062,7 @@ export default function Projects() {
                                 id="manager"
                                 placeholder="Enter manager name"
                                 value={newProject.manager}
-                                onChange={(e) => setNewProject({...newProject, manager: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, manager: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1067,7 +1075,7 @@ export default function Projects() {
                               id="description"
                               placeholder="Describe the project objectives and scope"
                               value={newProject.description}
-                              onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProject({...newProject, description: e.target.value})}
                               className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             />
                           </div>
@@ -1080,7 +1088,7 @@ export default function Projects() {
                                 id="start-date"
                                 type="date"
                                 value={newProject.start_date}
-                                onChange={(e) => setNewProject({...newProject, start_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, start_date: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1092,7 +1100,7 @@ export default function Projects() {
                                 id="end-date"
                                 type="date"
                                 value={newProject.end_date}
-                                onChange={(e) => setNewProject({...newProject, end_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, end_date: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1104,7 +1112,7 @@ export default function Projects() {
                                 id="budget"
                                 placeholder="$0"
                                 value={newProject.budget}
-                                onChange={(e) => setNewProject({...newProject, budget: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, budget: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -1148,7 +1156,7 @@ export default function Projects() {
                             id="edit-project-name"
                             placeholder="Enter project name"
                             value={editingProject?.name || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, name: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, name: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             required
                           />
@@ -1214,7 +1222,7 @@ export default function Projects() {
                           id="edit-description"
                           placeholder="Describe the project objectives and scope"
                           value={editingProject?.description || ""}
-                          onChange={(e) => setEditingProject({...editingProject!, description: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditingProject({...editingProject!, description: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                         />
                       </div>
@@ -1227,7 +1235,7 @@ export default function Projects() {
                             id="edit-start-date"
                             type="date"
                             value={editingProject?.start_date || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, start_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, start_date: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -1239,7 +1247,7 @@ export default function Projects() {
                             id="edit-end-date"
                             type="date"
                             value={editingProject?.end_date || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, end_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, end_date: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -1251,7 +1259,7 @@ export default function Projects() {
                             id="edit-budget"
                             placeholder="$0"
                             value={editingProject?.budget?.toString() || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -1292,7 +1300,7 @@ export default function Projects() {
                           id="doc-name"
                           placeholder="Enter document name"
                           value={documentGenerationForm.name}
-                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
@@ -1333,14 +1341,12 @@ export default function Projects() {
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium">Template Status:</span>
                                   {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
-                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
                                     <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
                                       <>{statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}</>
                                     </Badge>
                                   )}
                                 </div>
                                 {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                  // @ts-expect-error - Badge accepts children via HTMLAttributes
                                   <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
                                     <>{healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}</>
                                   </Badge>
@@ -1410,7 +1416,7 @@ export default function Projects() {
                           id="generation-prompt"
                           placeholder="Describe what you want the document to contain..."
                           value={documentGenerationForm.prompt}
-                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           rows={4}
                           required
@@ -1474,7 +1480,7 @@ export default function Projects() {
                           id="upload-doc-name"
                           placeholder="Enter document name"
                           value={documentUploadForm.name}
-                          onChange={(e) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
@@ -1514,7 +1520,7 @@ export default function Projects() {
                           id="file-upload"
                           type="file"
                           accept=".pdf,.doc,.docx,.txt,.md"
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             const file = e.target.files?.[0] || null
                             setDocumentUploadForm({...documentUploadForm, file})
                           }}

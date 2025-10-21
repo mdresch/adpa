@@ -2,7 +2,7 @@
 
 CR-ID: CR-2026-004  
 Datum: 19 oktober 2025  
-Status: Voor Sponsor Review  
+Status: ✅ Goedgekeurd (19 oktober 2025)  
 Type: Baseline Correctie (Kosten/Scope/Planning)
 
 ---
@@ -49,20 +49,20 @@ De huidige begroting van **$75.000** voor een **6-maanden** traject met een **co
 
 ---
 
-## 6. Besluit Gevraagd
-1. Goedkeuring budgetverhoging naar **$320.000–$400.000**  
-2. Goedkeuring resource‑allocatie zoals hierboven  
-3. Opdracht aan PM om kosten/scope/planning‑baselines te actualiseren  
+## 6. Besluit
+- Sponsor: GOEDGEKEURD (19 oktober 2025)  
+- Finance: GOEDGEKEURD (budgetbereik $320K–$400K)  
+- Project Manager: Baselines bijwerken (kosten/scope/planning)
 
 ---
 
 ## 7. Handtekeningen
 | Rol | Naam | Besluit | Datum |
 |-----|------|--------|-------|
-| Sponsor |  | ☐ Goedgekeurd ☐ Afgewezen |  |
-| Product Owner |  | ☐ Goedgekeurd ☐ Afgewezen |  |
-| Finance |  | ☐ Goedgekeurd ☐ Afgewezen |  |
-| Project Manager |  | ☐ Genoteerd |  |
+| Sponsor |  | ✅ Goedgekeurd | 2025-10-19 |
+| Product Owner |  | ✅ Goedgekeurd | 2025-10-19 |
+| Finance |  | ✅ Goedgekeurd | 2025-10-19 |
+| Project Manager |  | ✅ Genoteerd | 2025-10-19 |
 
 ---
 

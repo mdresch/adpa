@@ -75,6 +75,14 @@ interface Template {
   last_validated_at?: string
 }
 
+interface Project {
+  id: string
+  name: string
+  description?: string
+  status?: string
+  document_count?: number
+}
+
 export default function AIPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
@@ -92,17 +100,26 @@ export default function AIPage() {
   const [result, setResult] = useState<any>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Project selection state
+  const [saveMode, setSaveMode] = useState<'new-project' | 'existing-project'>('new-project')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+  const [projectContext, setProjectContext] = useState<any>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [providersData, templatesData] = await Promise.all([
+        const [providersData, templatesData, projectsResponse] = await Promise.all([
           apiClient.getAIProviders(),
-          apiClient.getTemplates({ is_public: true, limit: 50 })
+          apiClient.getTemplates({ is_public: true, limit: 50 }),
+          apiClient.getProjects({ limit: 100 })
         ])
         
         setProviders(providersData)
         setTemplates(templatesData.templates)
+        // Extract projects array from response
+        setProjects(projectsResponse.projects || [])
         
         // Set default provider
         const activeProvider = providersData.find(p => p.is_active)
@@ -149,17 +166,51 @@ export default function AIPage() {
       return
     }
 
+    if (saveMode === 'existing-project' && !selectedProjectId) {
+      toast.error("Please select a project to save the document to")
+      return
+    }
+
     try {
       setIsGenerating(true)
       setResult(null)
 
+      // Fetch project context if saving to existing project
+      let enhancedPrompt = prompt
+      if (saveMode === 'existing-project' && selectedProjectId) {
+        try {
+          const context = await apiClient.request<any>(`/projects/${selectedProjectId}/context`)
+          setProjectContext(context)
+          
+          // Enhance prompt with project context
+          enhancedPrompt = `
+PROJECT CONTEXT:
+Project: ${context.name}
+Description: ${context.description || 'No description'}
+Status: ${context.status || 'Active'}
+Documents: ${context.documents?.map((d: any) => d.title).join(', ') || 'None'}
+Recent Changes: ${context.recent_changes?.length > 0 ? context.recent_changes.map((c: any) => `- ${c.title} (${c.change_type})`).join('\n') : 'None'}
+
+USER REQUEST:
+${prompt}
+
+Please create a document that considers the project context above and ensures consistency with existing project documentation.
+`
+        } catch (error) {
+          console.error("Failed to fetch project context:", error)
+          toast.warning("Continuing without project context")
+        }
+      }
+
       const generateData = {
-        prompt,
+        prompt: enhancedPrompt,
         provider: selectedProvider,
         temperature: temperature[0],
         max_tokens: maxTokens[0],
         template_id: selectedTemplate || undefined,
         variables: Object.keys(variables).length > 0 ? variables : undefined,
+        project_id: saveMode === 'existing-project' && selectedProjectId ? selectedProjectId : undefined,
+        project_name: saveMode === 'existing-project' && selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name : undefined,
       }
 
       const response = await apiClient.generateContent(generateData)
@@ -174,7 +225,22 @@ export default function AIPage() {
         // Immediate response
         setResult(response.result)
         setIsGenerating(false)
-        toast.success("AI generation completed!")
+        
+        // Check if document was auto-saved to project
+        if (response.savedToProject && response.projectId) {
+          const projectName = projects.find(p => p.id === response.projectId)?.name || 'Project'
+          toast.success("Document saved to project!", {
+            description: `Saved to ${projectName}. Click to view.`,
+            action: {
+              label: "View Project",
+              onClick: () => {
+                window.location.href = `/projects/${response.projectId}?tab=documents`
+              }
+            }
+          })
+        } else {
+          toast.success("AI generation completed!")
+        }
       }
     } catch (error) {
       console.error("AI generation failed:", error)
@@ -368,14 +434,12 @@ export default function AIPage() {
                                   <div className="flex items-center gap-2">
                                     <span className="text-sm font-medium">Template Status:</span>
                                     {selectedTemplateData.development_status && statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig] && (
-                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
                                       <Badge variant={statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig].variant}>
                                         <>{statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig].label}</>
                                       </Badge>
                                     )}
                                   </div>
                                   {selectedTemplateData.health_rating && healthConfig[selectedTemplateData.health_rating as keyof typeof healthConfig] && (
-                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
                                     <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplateData.health_rating as keyof typeof healthConfig].color}`}>
                                       <>{healthConfig[selectedTemplateData.health_rating as keyof typeof healthConfig].icon} {selectedTemplateData.health_rating}</>
                                     </Badge>
@@ -447,6 +511,88 @@ export default function AIPage() {
                                 rows={6}
                                 className="resize-none"
                               />
+                            </div>
+
+                            {/* Project Selection */}
+                            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                              <div className="flex items-center gap-2">
+                                <Plus className="h-4 w-4" />
+                                <Label className="text-base font-semibold">Save Generated Document To:</Label>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="radio"
+                                    id="new-project"
+                                    name="save-mode"
+                                    checked={saveMode === 'new-project'}
+                                    onChange={() => {
+                                      setSaveMode('new-project')
+                                      setSelectedProjectId("")
+                                    }}
+                                    className="h-4 w-4"
+                                  />
+                                  <Label htmlFor="new-project" className="font-normal cursor-pointer">
+                                    Create New Project
+                                  </Label>
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="radio"
+                                    id="existing-project"
+                                    name="save-mode"
+                                    checked={saveMode === 'existing-project'}
+                                    onChange={() => setSaveMode('existing-project')}
+                                    className="h-4 w-4"
+                                  />
+                                  <Label htmlFor="existing-project" className="font-normal cursor-pointer">
+                                    Save to Existing Project
+                                  </Label>
+                                </div>
+                                
+                                {/* Project Dropdown (shown when existing-project is selected) */}
+                                {saveMode === 'existing-project' && (
+                                  <div className="ml-6 space-y-2">
+                                    <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select a project..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {projects.length === 0 ? (
+                                          <div className="p-4 text-sm text-muted-foreground text-center">
+                                            No projects available. Create a new project first.
+                                          </div>
+                                        ) : (
+                                          projects.map(project => (
+                                            <SelectItem key={project.id} value={project.id}>
+                                              <div className="flex flex-col">
+                                                <span>{project.name}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {project.document_count || 0} documents
+                                                </span>
+                                              </div>
+                                            </SelectItem>
+                                          ))
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                    
+                                    {selectedProjectId && (
+                                      <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                        <p className="text-sm text-blue-900 dark:text-blue-100">
+                                          <strong>Document will be saved to:</strong>{' '}
+                                          {projects.find(p => p.id === selectedProjectId)?.name}
+                                        </p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                                          AI will include project context for better results
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </TabsContent>
 
@@ -560,7 +706,6 @@ export default function AIPage() {
                         {result && !isGenerating && (
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
-                              {/* @ts-expect-error - Badge accepts children via HTMLAttributes */}
                               <Badge variant="outline" className="text-green-600">
                                 <>
                                   <CheckCircle className="h-3 w-3 mr-1" />
@@ -616,25 +761,55 @@ export default function AIPage() {
                                     <div className="flex gap-2">
                                       <Button
                                         size="sm"
-                                        onClick={() => {
-                                          // Store the generated content in sessionStorage for the project creation page
-                                          sessionStorage.setItem('project-draft', JSON.stringify({
-                                            content: result.content || result.text,
-                                            templateId: selectedTemplate,
-                                            templateName: selectedTemplateData.name,
-                                            framework: selectedTemplateData.framework,
-                                            prompt: prompt,
-                                            metadata: result.metadata || {}
-                                          }))
-                                          // Set flag to auto-open create dialog
-                                          sessionStorage.setItem('auto-create-project', 'true')
-                                          // Redirect to projects page (which has the create dialog)
-                                          window.location.href = '/projects'
+                                        onClick={async () => {
+                                          if (saveMode === 'existing-project' && selectedProjectId) {
+                                            // Save to existing project
+                                            try {
+                                              const selectedProject = projects.find(p => p.id === selectedProjectId)
+                                              const templateName = selectedTemplateData?.name || 'AI Generated Document'
+                                              const documentTitle = `${templateName} - ${new Date().toLocaleDateString()}`
+                                              
+                                              await apiClient.request(`/projects/${selectedProjectId}/documents`, {
+                                                method: 'POST',
+                                                body: JSON.stringify({
+                                                  title: documentTitle,
+                                                  content: result.content || result.text,
+                                                  template_id: selectedTemplate || null,
+                                                  generation_metadata: {
+                                                    prompt: prompt,
+                                                    provider: selectedProvider,
+                                                    template: selectedTemplate,
+                                                    ...(result.metadata || {})
+                                                  }
+                                                })
+                                              })
+                                              
+                                              toast.success(`Document saved to project: ${selectedProject?.name}`)
+                                              window.location.href = `/projects/${selectedProjectId}?tab=documents`
+                                            } catch (error: any) {
+                                              console.error("Failed to save document:", error)
+                                              toast.error(error?.message || 'Failed to save document to project')
+                                            }
+                                          } else {
+                                            // Store the generated content in sessionStorage for the project creation page
+                                            sessionStorage.setItem('project-draft', JSON.stringify({
+                                              content: result.content || result.text,
+                                              templateId: selectedTemplate,
+                                              templateName: selectedTemplateData.name,
+                                              framework: selectedTemplateData.framework,
+                                              prompt: prompt,
+                                              metadata: result.metadata || {}
+                                            }))
+                                            // Set flag to auto-open create dialog
+                                            sessionStorage.setItem('auto-create-project', 'true')
+                                            // Redirect to projects page (which has the create dialog)
+                                            window.location.href = '/projects'
+                                          }
                                         }}
                                         className="bg-blue-600 hover:bg-blue-700 text-white"
                                       >
                                         <Plus className="h-4 w-4 mr-2" />
-                                        Create Project
+                                        {saveMode === 'existing-project' && selectedProjectId ? 'Save to Project' : 'Create Project'}
                                       </Button>
                                       <Button
                                         variant="outline"
@@ -699,7 +874,6 @@ export default function AIPage() {
                                 <div className={`h-2 w-2 rounded-full ${provider.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
                                 <span className="text-sm font-medium">{provider.name}</span>
                               </div>
-                              {/* @ts-expect-error - Badge accepts children via HTMLAttributes */}
                               <Badge variant={provider.is_active ? "default" : "secondary"}>
                                 <>{provider.is_active ? "Active" : "Inactive"}</>
                               </Badge>

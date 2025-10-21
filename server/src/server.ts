@@ -56,6 +56,7 @@ import pipelineRoutes from "./routes/pipeline"
 import documentGenerationRoutes from "./routes/documentGeneration"
 import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
+import baselinesRoutes from "./routes/baselines"
 
 const app = express()
 const server = createServer(app)
@@ -204,6 +205,7 @@ app.use("/api/content-structuring", contentStructuringRoutes)
 app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
+app.use("/api/baselines", baselinesRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
@@ -376,6 +378,12 @@ async function startServer() {
 // }
 
 export { app, io }
+
+
+
+
+
+
 
 
 
