@@ -253,7 +253,7 @@ class ApiClient {
 
   // Authentication API
   async login(email: string, password: string): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string; message: string }>("/auth/login", {
+    const response = await this.request<{ user: User; token: string; message: string }>("/api/auth/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     })
