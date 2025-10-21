@@ -276,7 +276,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
 
   // Extract milestones for table view
       const milestones = baseline.timeline_baseline.milestones || baseline.timeline_baseline.key_milestones || []
-      
+
   return (
     <div className="w-full bg-white dark:bg-slate-900 p-4 rounded-lg border space-y-4">
       {/* Table/Grid View */}
@@ -331,8 +331,8 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                 const statusColor = progress >= 100 ? 'bg-green-100 text-green-800' : progress > 0 ? 'bg-blue-100 text-blue-800' : 'bg-slate-100 text-slate-800'
                 const statusText = progress >= 100 ? 'Complete' : progress > 0 ? 'In Progress' : 'Pending'
                 
-                // Color indicator matching gantt bars
-                const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+                // Professional blue color palette
+                const colors = ['bg-blue-600', 'bg-blue-500', 'bg-sky-600', 'bg-sky-500', 'bg-indigo-600', 'bg-indigo-500']
                 const colorClass = colors[idx % colors.length]
                 
                 return (
@@ -381,7 +381,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                 ? (milestone.date || milestone.start_date || milestone.target_date || '')
                 : ''
               
-              const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+              const colors = ['bg-blue-600', 'bg-blue-500', 'bg-sky-600', 'bg-sky-500', 'bg-indigo-600', 'bg-indigo-500']
               const colorClass = colors[idx % colors.length]
               
               return (
@@ -446,7 +446,7 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                       : ''
                     const nextMatch = String(nextRawDate).match(/\d{4}-\d{2}-\d{2}/)
                     endDate = nextMatch ? nextMatch[0] : ''
-                  } else {
+      } else {
                     const end = new Date(startDate)
                     end.setDate(end.getDate() + 7)
                     endDate = end.toISOString().split('T')[0]
@@ -458,37 +458,48 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
                   const leftPercent = (offsetDays / totalDays) * 100
                   const widthPercent = (duration / totalDays) * 100
                   
-                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+                  const colors = ['bg-blue-600', 'bg-blue-500', 'bg-sky-600', 'bg-sky-500', 'bg-indigo-600', 'bg-indigo-500']
                   const colorClass = colors[idx % colors.length]
                   
-                  return (
+    return (
                     <div key={idx} className="relative mb-4">
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium text-xs text-slate-700">{milestoneName}</span>
                         <span className="text-xs text-slate-500">{duration} days</span>
                       </div>
-                      <div className="relative h-10 bg-slate-100 rounded">
+                      <div className="relative h-10 bg-slate-100 rounded group">
                         <div 
-                          className={`absolute h-full ${colorClass} rounded shadow-sm flex items-center px-2`}
+                          className={`absolute h-full ${colorClass} rounded shadow-sm flex items-center px-2 transition-all duration-200 hover:shadow-lg hover:scale-105 cursor-pointer`}
                           style={{ 
                             left: `${leftPercent}%`, 
                             width: `${widthPercent}%`,
                             minWidth: '40px'
                           }}
+                          title={`${milestoneName}\nStart: ${startDate}\nEnd: ${endDate}\nDuration: ${duration} days`}
                         >
                           <span className="text-white text-xs font-semibold truncate">{startDate} → {endDate}</span>
+                        </div>
+                        
+                        {/* Hover tooltip */}
+                        <div className="absolute left-0 top-12 hidden group-hover:block bg-slate-900 text-white text-xs rounded-lg p-3 shadow-xl z-50 min-w-[250px]">
+                          <div className="font-semibold mb-2">{milestoneName}</div>
+                          <div className="space-y-1 text-slate-300">
+                            <div>Start: {new Date(startDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                            <div>End: {new Date(endDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+                            <div className="pt-1 border-t border-slate-700">Duration: {duration} days</div>
+                          </div>
                         </div>
                       </div>
                     </div>
                   )
                 })}
-              </div>
-            )
+      </div>
+    )
           })()}
         </div>
 
-      {/* REMOVED: frappe-gantt - causing black screen issues */}
-      <div className="hidden">
+      {/* frappe-gantt hidden due to rendering issues - SVG has 0x0 dimensions */}
+      <div className="hidden" style={{ display: 'none' }}>
       <style jsx global>{`
         .gantt-container {
           font-family: inherit;

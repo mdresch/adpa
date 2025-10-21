@@ -407,7 +407,7 @@ export async function approveBaseline(baselineId: string, userId: string): Promi
         change_type = 'approved',
         change_description = 'Baseline approved and activated',
         changed_by = $5,
-        created_at = NOW()`,
+        changed_at = NOW()`,
       [baselineId, result.rows[0].version, 'approved', 'Baseline approved and activated', userId]
     )
 
