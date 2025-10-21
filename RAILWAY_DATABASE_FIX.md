@@ -83,7 +83,7 @@ SUPABASE_SERVICE_ROLE_KEY = your_service_role_key
 #### **And ensure JWT_SECRET is set:**
 
 ```bash
-JWT_SECRET = adpa-secret-key-change-in-production-2025
+JWT_SECRET = 3f8a2b1c-4e5d-6f7a-8b9c-0d1e2f3a4b5c
 ```
 
 **Note:** This MUST match the JWT_SECRET in Vercel (frontend) for authentication to work.
@@ -205,7 +205,7 @@ SUPABASE_ANON_KEY=your_anon_key_from_supabase_dashboard
 
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key_from_supabase_dashboard
 
-JWT_SECRET=adpa-secret-key-change-in-production-2025
+JWT_SECRET=3f8a2b1c-4e5d-6f7a-8b9c-0d1e2f3a4b5c
 
 DB_SSL=true
 ```

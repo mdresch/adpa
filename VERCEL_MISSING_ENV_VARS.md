@@ -6,7 +6,7 @@
 **⚠️ You need to add manually:** Only **2 variables**
 
 1. `NEXT_PUBLIC_API_URL` → Railway backend URL
-2. `JWT_SECRET` → `adpa-secret-key-change-in-production-2025`
+2. `JWT_SECRET` → `3f8a2b1c-4e5d-6f7a-8b9c-0d1e2f3a4b5c`
 
 Everything else (AI keys, integrations) is stored in the database!
 
@@ -62,7 +62,7 @@ If you only have `ADPA_KV_URL` (legacy format), you may need to add the REST API
    - **Action:** Get Railway backend URL from Railway → Settings → Domains
 
 2. **JWT_SECRET**
-   - Value: `adpa-secret-key-change-in-production-2025`
+   - Value: `3f8a2b1c-4e5d-6f7a-8b9c-0d1e2f3a4b5c`
    - Environment: **Production, Preview, Development**
    - Used by: App authentication (different from Supabase JWT)
    - **⚠️ CRITICAL**: Must match Railway backend **exactly**
