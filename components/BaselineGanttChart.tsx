@@ -408,41 +408,83 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
         <div className="mt-4 border rounded-lg p-4 bg-white">
           <h5 className="text-sm font-semibold text-slate-700 mb-4">Timeline Chart</h5>
           
-          <div className="space-y-3">
-            {Array.isArray(milestones) && milestones.length > 0 ? (
-              milestones.map((milestone: any, idx: number) => {
-                const milestoneName = typeof milestone === 'string' 
-                  ? milestone 
-                  : (milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`)
-                
-                const rawDate = typeof milestone === 'object' 
-                  ? (milestone.date || milestone.start_date || milestone.target_date || '')
-                  : ''
-                const dateMatch = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
-                const startDate = dateMatch ? dateMatch[0] : ''
-                
-                const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
-                const colorClass = colors[idx % colors.length]
-                
-    return (
-                  <div key={idx} className="relative">
-                    <div className="flex items-start gap-3">
-                      <div className={`w-1 h-full ${colorClass} rounded`}></div>
-                      <div className="flex-1">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-medium text-sm">{milestoneName}</span>
-                          <span className="text-xs text-slate-500">{startDate}</span>
-                        </div>
-                        <div className={`h-8 ${colorClass} rounded-lg shadow-sm opacity-80`} 
-                             style={{ width: `${Math.min(95, 20 + idx * 10)}%` }}>
+          {Array.isArray(milestones) && milestones.length > 0 && (() => {
+            // Calculate project date range
+            const allDates = milestones.map((m: any) => {
+              const rawDate = typeof m === 'object' ? (m.date || m.start_date || m.target_date || '') : ''
+              const match = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
+              return match ? new Date(match[0]) : null
+            }).filter(d => d !== null)
+            
+            if (allDates.length === 0) return null
+            
+            const projectStart = new Date(Math.min(...allDates.map(d => d!.getTime())))
+            const lastMilestoneDate = new Date(Math.max(...allDates.map(d => d!.getTime())))
+            const projectEnd = new Date(lastMilestoneDate)
+            projectEnd.setDate(projectEnd.getDate() + 7)
+            
+            const totalDays = Math.ceil((projectEnd.getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24))
+            
+            return (
+              <div className="space-y-3">
+                {milestones.map((milestone: any, idx: number) => {
+                  const milestoneName = typeof milestone === 'string' 
+                    ? milestone 
+                    : (milestone.name || milestone.milestone || milestone.title || `Milestone ${idx + 1}`)
+                  
+                  const rawDate = typeof milestone === 'object' 
+                    ? (milestone.date || milestone.start_date || milestone.target_date || '')
+                    : ''
+                  const dateMatch = String(rawDate).match(/\d{4}-\d{2}-\d{2}/)
+                  const startDate = dateMatch ? dateMatch[0] : ''
+                  
+                  // Calculate end date
+                  let endDate = ''
+                  if (idx < milestones.length - 1) {
+                    const nextRawDate = typeof milestones[idx + 1] === 'object' 
+                      ? (milestones[idx + 1].date || milestones[idx + 1].start_date || milestones[idx + 1].target_date || '')
+                      : ''
+                    const nextMatch = String(nextRawDate).match(/\d{4}-\d{2}-\d{2}/)
+                    endDate = nextMatch ? nextMatch[0] : ''
+                  } else {
+                    const end = new Date(startDate)
+                    end.setDate(end.getDate() + 7)
+                    endDate = end.toISOString().split('T')[0]
+                  }
+                  
+                  // Calculate duration and position
+                  const duration = endDate ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24)) : 0
+                  const offsetDays = Math.ceil((new Date(startDate).getTime() - projectStart.getTime()) / (1000 * 60 * 60 * 24))
+                  const leftPercent = (offsetDays / totalDays) * 100
+                  const widthPercent = (duration / totalDays) * 100
+                  
+                  const colors = ['bg-blue-500', 'bg-purple-500', 'bg-green-500', 'bg-orange-500', 'bg-red-500', 'bg-cyan-500']
+                  const colorClass = colors[idx % colors.length]
+                  
+                  return (
+                    <div key={idx} className="relative mb-4">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="font-medium text-xs text-slate-700">{milestoneName}</span>
+                        <span className="text-xs text-slate-500">{duration} days</span>
+                      </div>
+                      <div className="relative h-10 bg-slate-100 rounded">
+                        <div 
+                          className={`absolute h-full ${colorClass} rounded shadow-sm flex items-center px-2`}
+                          style={{ 
+                            left: `${leftPercent}%`, 
+                            width: `${widthPercent}%`,
+                            minWidth: '40px'
+                          }}
+                        >
+                          <span className="text-white text-xs font-semibold truncate">{startDate} → {endDate}</span>
                         </div>
                       </div>
                     </div>
-      </div>
-    )
-              })
-            ) : null}
-          </div>
+                  )
+                })}
+              </div>
+            )
+          })()}
         </div>
 
       {/* REMOVED: frappe-gantt - causing black screen issues */}
