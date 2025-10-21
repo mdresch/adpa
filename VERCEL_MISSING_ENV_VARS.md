@@ -1,5 +1,17 @@
 # Vercel Environment Variables Status
 
+## 🎯 Quick Summary
+
+**✅ Already configured by Supabase & Upstash:** 14+ variables  
+**⚠️ You need to add manually:** Only **2 variables**
+
+1. `NEXT_PUBLIC_API_URL` → Railway backend URL
+2. `JWT_SECRET` → `adpa-secret-key-change-in-production-2025`
+
+Everything else (AI keys, integrations) is stored in the database!
+
+---
+
 ## ✅ Already Set (by Integrations)
 
 These are automatically configured and **don't need manual setup**:
@@ -39,32 +51,33 @@ If you only have `ADPA_KV_URL` (legacy format), you may need to add the REST API
 
 ---
 
-## ⚠️ MISSING - Must Add Manually to Vercel
+## ⚠️ REQUIRED - Must Add Manually to Vercel
 
-### **Critical (App won't work without these):**
+### **Critical (Only 2 variables needed!):**
 
 1. **NEXT_PUBLIC_API_URL**
-   - Value: `https://your-railway-backend.up.railway.app` (or your backend URL)
-   - Environment: Production, Preview, Development
+   - Value: `https://your-railway-backend.up.railway.app` (see Railway dashboard)
+   - Environment: **Production, Preview, Development**
    - Used by: Frontend to connect to Express backend
+   - **Action:** Get Railway backend URL from Railway → Settings → Domains
 
 2. **JWT_SECRET**
    - Value: `adpa-secret-key-change-in-production-2025`
-   - Environment: Production, Preview, Development
+   - Environment: **Production, Preview, Development**
    - Used by: App authentication (different from Supabase JWT)
-   - **⚠️ CRITICAL**: Must match Railway backend exactly
+   - **⚠️ CRITICAL**: Must match Railway backend **exactly**
 
 ### **Optional (for advanced features):**
 
-**Note:** AI API keys (OpenAI, Google AI, Anthropic) are stored in the database via the AI Providers UI, not as environment variables.
-
-6. **GITHUB_TOKEN** (for GitHub integration)
+6. **GITHUB_TOKEN** (for GitHub integration, if using)
    - Value: `ghp_...`
    - Environment: Production, Preview
 
-7. **CONFLUENCE_CLIENT_ID** / **CONFLUENCE_CLIENT_SECRET**
-8. **SHAREPOINT_CLIENT_ID** / **SHAREPOINT_CLIENT_SECRET**
-9. **ADOBE_CLIENT_ID** / **ADOBE_CLIENT_SECRET**
+**Note:** The following are stored in the database via their respective integration UIs, **not as environment variables**:
+- ✅ AI API keys (OpenAI, Google AI, Anthropic) → via AI Providers page
+- ✅ Confluence credentials → via Integrations page
+- ✅ SharePoint credentials → via Integrations page  
+- ✅ Adobe PDF Services credentials → via Integrations page
 
 ---
 
