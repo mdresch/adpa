@@ -123,44 +123,41 @@ router.post(
       project_id: Joi.string().uuid().required(),
       document_ids: Joi.array().items(Joi.string().uuid()).optional(),
       ai_provider: Joi.string().optional(),
-      ai_model: Joi.string().optional()
+      ai_model: Joi.string().optional(),
+      project_name: Joi.string().optional()
     })
   ),
   async (req, res) => {
     try {
-      const { project_id, document_ids, ai_provider, ai_model } = req.body
+      const { project_id, document_ids, ai_provider, ai_model, project_name } = req.body
       const userId = (req as any).user.id
+      const { v4: uuidv4 } = await import('uuid')
+      const { addJob } = await import('../services/queueService')
 
-      logger.info(`Extracting baseline for project ${project_id}`)
+      logger.info(`Queueing baseline extraction for project ${project_id}`)
+      
+      const jobId = uuidv4()
 
-      // Extract baseline using AI
-      const extractionResult = await baselineService.extractBaselineFromCorpus(
-        project_id,
+      // Queue the baseline extraction job
+      await addJob('baseline-extract', {
+        jobId,
         userId,
-        {
-          includeDocumentIds: document_ids,
-          aiProvider: ai_provider,
-          aiModel: ai_model
-        }
-      )
-
-      // Create baseline in database
-      const corpus = document_ids || (await baselineService.getProjectDocumentCorpus(project_id)).map(d => d.id)
-      const baseline = await baselineService.createBaseline(
         project_id,
-        userId,
-        extractionResult,
-        corpus
-      )
+        document_ids,
+        ai_provider,
+        ai_model,
+        project_name
+      })
 
       res.json({
         success: true,
-        baseline,
-        message: 'Baseline extracted successfully'
+        jobId,
+        message: 'Baseline extraction started! We will notify you when complete.',
+        status: 'queued'
       })
     } catch (error: any) {
-      logger.error('Error extracting baseline:', error)
-      res.status(500).json({ error: error.message || 'Failed to extract baseline' })
+      logger.error('Error queueing baseline extraction:', error)
+      res.status(500).json({ error: error.message || 'Failed to queue baseline extraction' })
     }
   }
 )

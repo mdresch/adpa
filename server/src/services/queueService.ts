@@ -90,6 +90,22 @@ const pipelineQueueOptions = {
 
 export const pipelineQueue = new Bull("pipeline-processing", pipelineQueueOptions)
 
+const baselineQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 100, // Keep baseline jobs for audit
+    removeOnFail: 50,
+    attempts: 2,
+    backoff: {
+      type: "exponential",
+      delay: 3000,
+    },
+    timeout: 300000, // 5 minutes timeout for baseline extraction
+  },
+}
+
+export const baselineQueue = new Bull("baseline-processing", baselineQueueOptions)
+
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
   const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data
@@ -410,6 +426,97 @@ documentQueue.process("document-convert", async (job) => {
   }
 })
 
+// Baseline extraction job processor
+baselineQueue.process("baseline-extract", async (job) => {
+  const { jobId, userId, project_id, document_ids, ai_provider, ai_model, project_name } = job.data
+
+  try {
+    // Update job status to processing
+    await updateJobStatus(jobId, "processing", 10)
+    
+    logger.info(`Starting baseline extraction for project ${project_id}`)
+    
+    // Extract baseline using AI (this takes 3-10 seconds)
+    const { baselineService } = await import('./baselineService')
+    
+    await updateJobStatus(jobId, "processing", 30)
+    
+    const extractionResult = await baselineService.extractBaselineFromCorpus(
+      project_id,
+      userId,
+      {
+        includeDocumentIds: document_ids,
+        aiProvider: ai_provider,
+        aiModel: ai_model
+      }
+    )
+    
+    await updateJobStatus(jobId, "processing", 70)
+    
+    // Create baseline in database
+    const corpus = document_ids || (await baselineService.getProjectDocumentCorpus(project_id)).map((d: any) => d.id)
+    const baseline = await baselineService.createBaseline(
+      project_id,
+      userId,
+      extractionResult,
+      corpus
+    )
+    
+    await updateJobStatus(jobId, "processing", 90)
+    
+    // Update job to completed
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [JSON.stringify({ baseline_id: baseline.id, baseline }), jobId]
+    )
+    
+    // Emit success notification
+    io.emit("job:completed", {
+      jobId,
+      userId,
+      status: "completed",
+      message: `Baseline extracted successfully for ${project_name || 'project'}`,
+      projectId: project_id,
+      baselineId: baseline.id,
+    })
+    
+    // Emit baseline:created event to project room
+    io.to(`project:${project_id}`).emit("baseline:created", {
+      baselineId: baseline.id,
+      projectId: project_id,
+      projectName: project_name,
+    })
+    
+    logger.info(`Baseline extraction job completed: ${jobId}`)
+    
+    return { baseline_id: baseline.id, baseline }
+  } catch (error) {
+    logger.error(`Baseline extraction job failed: ${jobId}`, error)
+    
+    // Update job with error
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [error instanceof Error ? error.message : "Unknown error", jobId]
+    )
+    
+    // Emit failure notification
+    io.emit("job:failed", {
+      jobId,
+      userId,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Unknown error",
+      message: `Failed to extract baseline for ${project_name || 'project'}`,
+      projectId: project_id,
+    })
+    
+    throw error
+  }
+})
+
 // Job management functions
 export async function addJob(type: string, data: any, options?: any): Promise<string> {
   try {
@@ -435,6 +542,9 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
         break
       case "pipeline-processing":
         queue = pipelineQueue
+        break
+      case "baseline-extract":
+        queue = baselineQueue
         break
       default:
         throw new Error(`Unknown job type: ${type}`)

@@ -211,26 +211,52 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
 
     setExtracting(true)
     try {
-      await apiClient.request('/baselines/extract', {
+      const response = await apiClient.request('/baselines/extract', {
         method: 'POST',
         body: JSON.stringify({
           project_id: projectId,
-          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined,
+          project_name: project?.name
         })
       })
 
-      toast.success('Baseline extracted successfully!')
+      // Close dialog immediately - user can continue working!
+      toast.success('Baseline extraction started! You will be notified when complete.')
       setShowExtractDialog(false)
       setSelectedDocuments([])
-      await fetchBaselines()
-      await fetchBaseline()
+      
+      // Show job ID for reference
+      if (response.jobId) {
+        toast.info(`Job ID: ${response.jobId}`, { duration: 3000 })
+      }
     } catch (error: any) {
-      console.error('Error extracting baseline:', error)
-      toast.error(error?.message || 'Failed to extract baseline')
+      console.error('Error queueing baseline extraction:', error)
+      toast.error(error?.message || 'Failed to start baseline extraction')
     } finally {
       setExtracting(false)
     }
   }
+  
+  // Listen for baseline:created event to refresh when job completes
+  useEffect(() => {
+    const { getSocket } = apiClient
+    const socket = getSocket()
+    
+    if (socket) {
+      socket.on('baseline:created', (data: any) => {
+        if (data.projectId === projectId) {
+          // Refresh baseline data when new baseline is created
+          fetchBaselines()
+          fetchBaseline()
+          toast.success('Baseline extraction complete!')
+        }
+      })
+      
+      return () => {
+        socket.off('baseline:created')
+      }
+    }
+  }, [projectId])
 
   const handleApproveBaseline = async (baselineId: string) => {
     try {

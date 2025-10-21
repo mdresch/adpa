@@ -140,12 +140,40 @@ export function NotificationCenter() {
       })
     })
 
+    // Baseline created
+    socket.on('baseline:created', (data) => {
+      addNotification({
+        type: 'success',
+        title: 'Baseline Extracted',
+        message: `Baseline created for ${data.projectName || 'project'}`,
+        metadata: { projectId: data.projectId },
+        actionUrl: `/projects/${data.projectId}?tab=baseline`,
+        actionLabel: 'View Baseline'
+      })
+      
+      toast.success('Baseline extraction complete!')
+    })
+
+    // Baseline drift detected
+    socket.on('baseline:drift', (data) => {
+      addNotification({
+        type: 'warning',
+        title: 'Baseline Drift Detected',
+        message: `${data.driftCount} deviation(s) detected in project documents`,
+        metadata: { projectId: data.projectId },
+        actionUrl: `/projects/${data.projectId}?tab=baseline`,
+        actionLabel: 'Review Drifts'
+      })
+    })
+
     return () => {
       socket.off('job:completed')
       socket.off('job:failed')
       socket.off('document:created')
       socket.off('baseline:approved')
       socket.off('export:ready')
+      socket.off('baseline:created')
+      socket.off('baseline:drift')
     }
   }, [socket])
 
