@@ -16,7 +16,9 @@ router.get("/", authenticateToken, async (req, res) => {
 
     let query = `
       SELECT p.*, u.name as owner_name, u.email as owner_email,
-             COUNT(d.id) as document_count
+             COUNT(d.id) as document_count,
+             MAX(d.updated_at) as last_document_activity,
+             GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
       LEFT JOIN documents d ON p.id = d.project_id
@@ -44,7 +46,7 @@ router.get("/", authenticateToken, async (req, res) => {
       params.push(`%${search}%`)
     }
 
-    query += ` GROUP BY p.id, u.name, u.email ORDER BY p.created_at DESC`
+    query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST`
 
     paramCount++
     query += ` LIMIT $${paramCount}`

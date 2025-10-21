@@ -1118,6 +1118,18 @@ export default function ProjectDetail() {
     total: 0,
     pages: 0,
   })
+  const [documentStats, setDocumentStats] = useState<{
+    totalDocuments: number
+    counts: {
+      draft: number
+      published: number
+      review: number
+      archived: number
+    }
+  }>({
+    totalDocuments: 0,
+    counts: { draft: 0, published: 0, review: 0, archived: 0 }
+  })
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [creatingDocument, setCreatingDocument] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState("")
@@ -1266,12 +1278,38 @@ export default function ProjectDetail() {
         total: 0,
         pages: 0,
       })
+      
+      // Fetch stats for accurate counts (not affected by pagination)
+      await fetchDocumentStats()
     } catch (error) {
       console.error("Failed to fetch documents:", error)
       // Don't show error toast for documents, just use empty array
       setDocuments([])
     } finally {
       setDocumentsLoading(false)
+    }
+  }
+  
+  // Fetch document statistics (total counts by status)
+  const fetchDocumentStats = async () => {
+    try {
+      const stats = await apiClient.request(`/documents/project/${projectId}/stats`)
+      setDocumentStats({
+        totalDocuments: stats.totalDocuments || 0,
+        counts: {
+          draft: stats.counts?.draft || stats.byStatus?.draft || 0,
+          published: stats.counts?.published || stats.byStatus?.published || 0,
+          review: stats.counts?.underReview || stats.byStatus?.review || 0,
+          archived: stats.counts?.archived || stats.byStatus?.archived || 0,
+        }
+      })
+    } catch (error) {
+      console.error("Failed to fetch document stats:", error)
+      // Fallback to paginated count if stats fail
+      setDocumentStats({
+        totalDocuments: documentsPagination.total || 0,
+        counts: { draft: 0, published: 0, review: 0, archived: 0 }
+      })
     }
   }
 
@@ -3484,7 +3522,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground">Total Documents</p>
-                          <p className="text-2xl font-bold">{documents.length}</p>
+                          <p className="text-2xl font-bold">{documentStats.totalDocuments}</p>
                         </div>
                         <FileText className="h-8 w-8 text-blue-500" />
                       </div>
@@ -3495,7 +3533,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground">Draft</p>
-                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'draft').length}</p>
+                          <p className="text-2xl font-bold">{documentStats.counts.draft}</p>
                         </div>
                         <Edit className="h-8 w-8 text-orange-500" />
                       </div>
@@ -3506,7 +3544,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground">Published</p>
-                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'published').length}</p>
+                          <p className="text-2xl font-bold">{documentStats.counts.published}</p>
                         </div>
                         <CheckCircle className="h-8 w-8 text-emerald-500" />
                       </div>
@@ -3517,7 +3555,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-muted-foreground">In Review</p>
-                          <p className="text-2xl font-bold">{documents.filter(d => d.status === 'review').length}</p>
+                          <p className="text-2xl font-bold">{documentStats.counts.review}</p>
                         </div>
                         <Clock className="h-8 w-8 text-purple-500" />
                       </div>
@@ -3746,7 +3784,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                       <FileText className="h-4 w-4 text-muted-foreground" />
                     </CardHeader>
                     <CardContent>
-                      <div className="text-2xl font-bold">{documents.length}</div>
+                      <div className="text-2xl font-bold">{documentStats.totalDocuments}</div>
                       <p className="text-xs text-muted-foreground">Generated docs</p>
                     </CardContent>
                   </Card>
@@ -3768,10 +3806,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                         <PieChart>
                           <Pie
                             data={[
-                              { name: 'Draft', value: documents.filter(d => d.status === 'draft').length, fill: '#f97316' },
-                              { name: 'Review', value: documents.filter(d => d.status === 'review').length, fill: '#a855f7' },
-                              { name: 'Published', value: documents.filter(d => d.status === 'published').length, fill: '#10b981' },
-                              { name: 'Archived', value: documents.filter(d => d.status === 'archived').length, fill: '#6b7280' },
+                              { name: 'Draft', value: documentStats.counts.draft, fill: '#f97316' },
+                              { name: 'Review', value: documentStats.counts.review, fill: '#a855f7' },
+                              { name: 'Published', value: documentStats.counts.published, fill: '#10b981' },
+                              { name: 'Archived', value: documentStats.counts.archived, fill: '#6b7280' },
                             ]}
                             cx="50%"
                             cy="50%"
@@ -3794,42 +3832,102 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                         <BarChart3 className="h-5 w-5 text-primary" />
                         Project Health Indicators
                       </CardTitle>
-                      <CardDescription>Key project metrics at a glance</CardDescription>
+                      <CardDescription>PMBOK-aligned project performance metrics</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {/* Documentation Completion Rate */}
                       <div>
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Schedule Performance</span>
-                          <Badge variant={progress >= 80 ? "default" : progress >= 50 ? "secondary" : "destructive"}>
-                            {progress >= 80 ? "On Track" : progress >= 50 ? "At Risk" : "Behind"}
-                          </Badge>
+                          <span className="text-sm font-medium">Documentation Completion</span>
+                          <div className="text-right">
+                            <Badge variant={documentStats.counts.published / Math.max(documentStats.totalDocuments, 1) >= 0.7 ? "default" : "secondary"}>
+                              {documentStats.counts.published} / {documentStats.totalDocuments}
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {Math.round((documentStats.counts.published / Math.max(documentStats.totalDocuments, 1)) * 100)}% Complete
+                            </p>
+                          </div>
+                        </div>
+                        <Progress value={(documentStats.counts.published / Math.max(documentStats.totalDocuments, 1)) * 100} className="h-2" />
+                      </div>
+                      
+                      {/* Document Quality (Draft vs Published ratio) */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Document Quality Index</span>
+                          <div className="text-right">
+                            <Badge variant={documentStats.counts.draft / Math.max(documentStats.totalDocuments, 1) <= 0.3 ? "default" : "secondary"}>
+                              {documentStats.counts.draft} Draft
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {Math.round(((documentStats.counts.published + documentStats.counts.review) / Math.max(documentStats.totalDocuments, 1)) * 100)}% Finalized
+                            </p>
+                          </div>
+                        </div>
+                        <Progress value={((documentStats.counts.published + documentStats.counts.review) / Math.max(documentStats.totalDocuments, 1)) * 100} className="h-2" />
+                      </div>
+                      
+                      {/* Stakeholder Engagement */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Stakeholder Engagement</span>
+                          <div className="text-right">
+                            <Badge variant={stakeholders.length >= 5 ? "default" : stakeholders.length >= 3 ? "secondary" : "destructive"}>
+                              {stakeholders.length} Identified
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {stakeholders.filter(s => s.engagement_approach === 'manage_closely').length} High Priority
+                            </p>
+                          </div>
+                        </div>
+                        <Progress value={Math.min(stakeholders.length * 10, 100)} className="h-2" />
+                      </div>
+                      
+                      {/* Project Timeline Health */}
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium">Timeline Health</span>
+                          <div className="text-right">
+                            <Badge variant={(() => {
+                              if (!project.start_date || !project.end_date) return "secondary"
+                              const now = new Date()
+                              const start = new Date(project.start_date)
+                              const end = new Date(project.end_date)
+                              const totalDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                              const elapsedDays = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                              const timeProgress = (elapsedDays / totalDays) * 100
+                              const workProgress = progress
+                              
+                              if (workProgress >= timeProgress) return "default" // On track or ahead
+                              if (workProgress >= timeProgress - 10) return "secondary" // Slightly behind
+                              return "destructive" // Significantly behind
+                            })()}>
+                              {(() => {
+                                if (!project.start_date || !project.end_date) return "Not Set"
+                                const now = new Date()
+                                const start = new Date(project.start_date)
+                                const end = new Date(project.end_date)
+                                const totalDays = (end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                                const elapsedDays = (now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)
+                                const timeProgress = (elapsedDays / totalDays) * 100
+                                const workProgress = progress
+                                
+                                if (workProgress >= timeProgress) return "On Schedule"
+                                if (workProgress >= timeProgress - 10) return "At Risk"
+                                return "Behind Schedule"
+                              })()}
+                            </Badge>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {project.start_date && project.end_date ? (() => {
+                                const now = new Date()
+                                const end = new Date(project.end_date)
+                                const daysRemaining = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+                                return daysRemaining > 0 ? `${daysRemaining} days left` : `${Math.abs(daysRemaining)} days overdue`
+                              })() : 'No timeline set'}
+                            </p>
+                          </div>
                         </div>
                         <Progress value={progress} className="h-2" />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Documentation Complete</span>
-                          <Badge variant={documents.filter(d => d.status === 'published').length >= 5 ? "default" : "secondary"}>
-                            {documents.filter(d => d.status === 'published').length} Published
-                          </Badge>
-                        </div>
-                        <Progress value={(documents.filter(d => d.status === 'published').length / Math.max(documents.length, 1)) * 100} className="h-2" />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Team Engagement</span>
-                          <Badge variant="default">{project.team_members?.length || 0} Members</Badge>
-                        </div>
-                        <Progress value={Math.min((project.team_members?.length || 0) * 20, 100)} className="h-2" />
-                      </div>
-                      <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="text-sm font-medium">Stakeholder Coverage</span>
-                          <Badge variant={stakeholders.length >= 3 ? "default" : "secondary"}>
-                            {stakeholders.length} Stakeholders
-                          </Badge>
-                        </div>
-                        <Progress value={Math.min(stakeholders.length * 20, 100)} className="h-2" />
                       </div>
                     </CardContent>
                   </Card>
