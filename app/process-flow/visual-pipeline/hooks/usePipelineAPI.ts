@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { getApiBaseUrl } from '@/lib/api-url'
 
 interface PipelineJob {
   jobId: string
@@ -35,8 +36,6 @@ interface PipelineRequest {
   }
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-
 export function usePipelineAPI() {
   const [jobs, setJobs] = useState<PipelineJob[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -49,7 +48,7 @@ export function usePipelineAPI() {
 
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/start`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/start`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -87,7 +86,7 @@ export function usePipelineAPI() {
   const getJobStatus = useCallback(async (jobId: string): Promise<PipelineJob> => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/status`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -121,7 +120,7 @@ export function usePipelineAPI() {
   const cancelJob = useCallback(async (jobId: string): Promise<void> => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/cancel`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/cancel`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -153,7 +152,7 @@ export function usePipelineAPI() {
 
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/jobs`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/jobs`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -190,7 +189,7 @@ export function usePipelineAPI() {
   const getPipelineMetrics = useCallback(async () => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/metrics`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/metrics`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -213,7 +212,7 @@ export function usePipelineAPI() {
   const getStageDetails = useCallback(async (jobId: string, stageId: string) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/stage/${stageId}`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/stage/${stageId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -236,7 +235,7 @@ export function usePipelineAPI() {
   const retryStage = useCallback(async (jobId: string, stageId: string): Promise<void> => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/stage/${stageId}/retry`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/stage/${stageId}/retry`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -261,7 +260,7 @@ export function usePipelineAPI() {
   const getJobLogs = useCallback(async (jobId: string) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/logs`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/logs`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -284,7 +283,7 @@ export function usePipelineAPI() {
   const getStageLogs = useCallback(async (jobId: string, stageId: string) => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/stage/${stageId}/logs`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/stage/${stageId}/logs`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -307,7 +306,7 @@ export function usePipelineAPI() {
   const exportJobResults = useCallback(async (jobId: string, format: string = 'json') => {
     try {
       const token = localStorage.getItem('auth_token')
-      const response = await fetch(`${API_URL}/pipeline/job/${jobId}/export?format=${format}`, {
+      const response = await fetch(`${getApiBaseUrl()}/pipeline/job/${jobId}/export?format=${format}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

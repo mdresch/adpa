@@ -482,7 +482,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
   // Fetch comprehensive stats (across all documents)
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/documents/project/${projectId}/stats`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl(`/documents/project/${projectId}/stats`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }

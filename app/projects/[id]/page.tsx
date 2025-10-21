@@ -1759,10 +1759,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       try {
         console.log('🔄 [7/10] Attempting to enqueue job...')
-        // Normalize API URL to prevent double slashes
-        const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
-        const cleanUrl = rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
-        const apiUrl = `${cleanUrl}/api/ai/generate`
+        const { getApiUrl } = await import('@/lib/api-url')
+        const apiUrl = getApiUrl('/ai/generate')
         console.log('📡 API URL:', apiUrl)
         const resp = await fetch(apiUrl, {
           method: 'POST',

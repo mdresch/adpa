@@ -13,6 +13,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { Settings, Plus, Trash2, CheckCircle, AlertCircle, Zap, Eye, TestTube, BarChart3, Clock, Activity } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
+import { getApiUrl as getApiUrlUtil } from '@/lib/api-url'
 import {
   Dialog,
   DialogContent,
@@ -44,9 +45,7 @@ const googleProviderStub = {
 }
 
 export default function AIProviders() {
-  // Use the same API base as the main API client
-  const apiBase = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
-  const apiUrl = (path: string) => `${apiBase}${path}`
+  const apiUrl = (path: string) => getApiUrlUtil(path)
 
   // Initialize API client with token
   useEffect(() => {

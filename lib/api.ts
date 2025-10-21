@@ -1,18 +1,13 @@
 import { io, Socket } from "socket.io-client"
+import { getApiBaseUrl, getWsUrl } from "./api-url"
 
 // API Configuration
-// Handle NEXT_PUBLIC_API_URL with or without /api suffix
-const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000"
-// Remove trailing slashes and /api if present, then add /api once
-const cleanUrl = rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
-const API_BASE_URL = `${cleanUrl}/api`
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || cleanUrl
+const API_BASE_URL = getApiBaseUrl()
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || getWsUrl()
 
 // Debug logging for production
 if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
   console.log('🔧 API Debug:', {
-    rawApiUrl,
-    cleanUrl,
     API_BASE_URL,
     WS_URL
   })
