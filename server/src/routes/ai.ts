@@ -63,8 +63,8 @@ router.post("/generate",
       const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
       log.info('🔀 [BACKEND-6/10] Generation mode:', useContext ? 'Context-Aware' : 'Direct')
       
-      // Generate unique job ID
-      const jobId = `job-${Date.now()}-${Math.random().toString(36).substring(7)}`
+      // Generate unique job ID (UUID format required by database)
+      const jobId = uuidv4()
       log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
       
       // Add job to queue

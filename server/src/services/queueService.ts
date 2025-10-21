@@ -148,23 +148,30 @@ aiQueue.process("ai-generate", async (job) => {
       // Determine document name and content; prefer user-provided name/description
       const docNameProvided = job.data?.name && job.data.name.trim() ? job.data.name.trim() : null
       const docDescProvided = job.data?.description && job.data.description.trim() ? job.data.description.trim() : null
-      const docName = docNameProvided || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
+      // FIX: Use template_name from variables if available
+      const templateName = job.data?.variables?.template_name || job.data?.template_name || null
+      const docName = docNameProvided || templateName || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
       const rawContent = result?.content ? result.content : result
-      // Attach description into metadata if provided
-      const docContent = docDescProvided ? { text: typeof rawContent === 'string' ? rawContent : rawContent, description: docDescProvided } : rawContent
+      // FIX: Store content as plain Markdown text, not JSON-stringified
+      // The content should be stored directly as a string for proper markdown rendering
+      const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
 
+      // FIX: project_id can be in job.data.projectId OR job.data.variables.project_id
+      const projectId = job.data.projectId || job.data.variables?.project_id || null;
+      
       const insertResult = await pool.query(
         `
         INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by)
         VALUES ($1, $2, $3, $4, $5, $6, $6)
         RETURNING id
       `,
-        [job.data.projectId || null, docName, JSON.stringify(docContent), template_id || null, 'draft', userId || null]
+        [projectId, docName, docContent, template_id || null, 'draft', userId || null]
       )
 
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
         createdDocumentRow = insertResult.rows[0]
+        logger.info(`Document created: ${createdDocumentId} (project: ${projectId || 'none'})`)
       }
     } catch (docErr) {
       logger.error(`Failed to create document for job ${jobId}:`, docErr)
@@ -172,16 +179,18 @@ aiQueue.process("ai-generate", async (job) => {
     }
 
     // CR-2026-001: Automatically validate document against project baseline
-    if (createdDocumentId && job.data?.projectId) {
+    // FIX: Check both projectId locations
+    const projectIdForValidation = job.data?.projectId || job.data?.variables?.project_id;
+    if (createdDocumentId && projectIdForValidation) {
       try {
         const { baselineService } = await import('./baselineService')
         const rawContent = result?.content ? result.content : result
         const documentContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
         const docName = job.data?.name && job.data.name.trim() ? job.data.name.trim() : 'Generated Document'
         
-        logger.info(`[Baseline Validation] Checking document ${createdDocumentId} against project ${job.data.projectId} baseline`)
+        logger.info(`[Baseline Validation] Checking document ${createdDocumentId} against project ${projectIdForValidation} baseline`)
         const drifts = await baselineService.validateDocumentAgainstBaseline(
-          job.data.projectId,
+          projectIdForValidation,
           createdDocumentId,
           documentContent,
           docName
@@ -190,7 +199,7 @@ aiQueue.process("ai-generate", async (job) => {
         if (drifts.length > 0) {
           logger.warn(`[Baseline Validation] Detected ${drifts.length} drift(s) in document ${createdDocumentId}`)
           // Emit drift alert to project room
-          io.to(`project:${job.data.projectId}`).emit("baseline:drift", {
+          io.to(`project:${projectIdForValidation}`).emit("baseline:drift", {
             documentId: createdDocumentId,
             driftCount: drifts.length,
             drifts: drifts.map(d => ({
@@ -235,8 +244,10 @@ aiQueue.process("ai-generate", async (job) => {
     try {
       if (createdDocumentRow) {
         // Emit only to the project room so clients who joined that room receive the event
-        if (job.data?.projectId) {
-          io.to(`project:${job.data.projectId}`).emit("document:created", { document: createdDocumentRow })
+        // FIX: Check both projectId locations
+        const projectIdForEmit = job.data?.projectId || job.data?.variables?.project_id;
+        if (projectIdForEmit) {
+          io.to(`project:${projectIdForEmit}`).emit("document:created", { document: createdDocumentRow })
         }
       }
     } catch (emitErr) {
