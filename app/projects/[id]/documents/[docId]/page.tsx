@@ -1093,19 +1093,37 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Sentences:</span>
                                   <span className="text-sm font-medium">
-                                    {document?.generation_metadata?.contentMetrics?.sentences || "N/A"}
+                                    {(() => {
+                                      // Priority 1: Use raw sentence_count from top-level column
+                                      const sentenceCount = document?.sentence_count || 
+                                                           document?.generation_metadata?.contentMetrics?.sentences || 
+                                                           0
+                                      return sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"
+                                    })()}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Paragraphs:</span>
                                   <span className="text-sm font-medium">
-                                    {document?.generation_metadata?.contentMetrics?.paragraphs || "N/A"}
+                                    {(() => {
+                                      // Priority 1: Use raw paragraph_count from top-level column
+                                      const paragraphCount = document?.paragraph_count || 
+                                                            document?.generation_metadata?.contentMetrics?.paragraphs || 
+                                                            0
+                                      return paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"
+                                    })()}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Avg Words/Sentence:</span>
                                   <span className="text-sm font-medium">
-                                    {document?.generation_metadata?.contentMetrics?.averageWordsPerSentence || "N/A"}
+                                    {(() => {
+                                      // Calculate from actual values
+                                      const wc = document?.word_count || document?.generation_metadata?.wordCount || 0
+                                      const sc = document?.sentence_count || document?.generation_metadata?.contentMetrics?.sentences || 0
+                                      const avg = (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : null
+                                      return avg ? avg : "N/A"
+                                    })()}
                                   </span>
                                 </div>
                                 

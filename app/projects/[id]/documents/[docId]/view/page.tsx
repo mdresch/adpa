@@ -1482,7 +1482,7 @@ The ADPA system represents a significant advancement in document processing auto
                     )}
 
                     {/* Content Metrics */}
-                    {(document as any).generation_metadata?.contentMetrics && (
+                    {((document as any).word_count || (document as any).generation_metadata?.contentMetrics) && (
                       <AnimatedCard>
                         <CardHeader>
                           <CardTitle className="flex items-center space-x-2">
@@ -1495,31 +1495,41 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Word Count:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.words}
+                                {((document as any).word_count || (document as any).generation_metadata?.contentMetrics?.words || 0).toLocaleString('en-US')}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Characters:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.characters}
+                                {((document as any).character_count || (document as any).generation_metadata?.contentMetrics?.characters || 0).toLocaleString('en-US')}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Sentences:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.sentences}
+                                {(() => {
+                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentences || 0
+                                  return sc > 0 ? sc.toLocaleString('en-US') : 'N/A'
+                                })()}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Paragraphs:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.paragraphs}
+                                {(() => {
+                                  const pc = (document as any).paragraph_count || (document as any).generation_metadata?.contentMetrics?.paragraphs || 0
+                                  return pc > 0 ? pc.toLocaleString('en-US') : 'N/A'
+                                })()}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Avg Words/Sentence:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.averageWordsPerSentence}
+                                {(() => {
+                                  const wc = (document as any).word_count || (document as any).generation_metadata?.contentMetrics?.words || 0
+                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentences || 0
+                                  return (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : 'N/A'
+                                })()}
                               </span>
                           </div>
                         </div>
