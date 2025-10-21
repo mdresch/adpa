@@ -262,22 +262,39 @@ aiQueue.process("ai-generate", async (job) => {
       [JSON.stringify(finalResult), jobId]
     )
 
-    // Emit real-time update
+    // Emit real-time update with rich notification data
+    const templateName = job.data?.variables?.template_name || job.data?.template_name || null
+    const projectName = job.data?.variables?.project_name || job.data?.projectName || null
+    const documentName = templateName || 'Document'
+    
     io.emit("job:completed", {
       jobId,
       userId,
       status: "completed",
       result: finalResult,
+      message: `${documentName} generated successfully`,
+      documentId: createdDocumentId,
+      projectId: projectId,
+      provider: job.data?.provider,
+      model: job.data?.model,
     })
 
     // If a document was created, emit a document-created event so frontends can refresh
     try {
-      if (createdDocumentRow) {
+      if (createdDocumentId) {
         // Emit only to the project room so clients who joined that room receive the event
         // FIX: Check both projectId locations
         const projectIdForEmit = job.data?.projectId || job.data?.variables?.project_id;
         if (projectIdForEmit) {
-          io.to(`project:${projectIdForEmit}`).emit("document:created", { document: createdDocumentRow })
+          io.to(`project:${projectIdForEmit}`).emit("document:created", { 
+            document: createdDocumentRow,
+            documentId: createdDocumentId,
+            documentName: documentName,
+            projectId: projectIdForEmit,
+            projectName: projectName,
+            provider: job.data?.provider,
+            model: job.data?.model,
+          })
         }
       }
     } catch (emitErr) {
@@ -300,12 +317,20 @@ aiQueue.process("ai-generate", async (job) => {
       [error instanceof Error ? error.message : "Unknown error", jobId]
     )
 
-    // Emit real-time update
+    // Emit real-time update with rich notification data
+    const templateName = job.data?.variables?.template_name || job.data?.template_name || null
+    const projectName = job.data?.variables?.project_name || job.data?.projectName || null
+    const documentName = templateName || 'Document'
+    
     io.emit("job:failed", {
       jobId,
       userId,
       status: "failed",
       error: error instanceof Error ? error.message : "Unknown error",
+      message: `Failed to generate ${documentName}`,
+      projectId: job.data?.projectId || job.data?.variables?.project_id,
+      provider: job.data?.provider,
+      model: job.data?.model,
     })
 
     throw error
