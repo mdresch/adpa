@@ -1416,6 +1416,12 @@ export default function ProjectDetail() {
     
     console.log('🚀 [1/10] handleCreateDocument called')
     
+    // CRITICAL FIX: Prevent duplicate submissions
+    if (creatingDocument) {
+      console.warn('⚠️ [GUARD] Already creating document, ignoring duplicate call')
+      return
+    }
+    
     if (!documentName.trim()) {
       console.error('❌ [VALIDATION] Document name is empty')
       toast.error("Document name is required")

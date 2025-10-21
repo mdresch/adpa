@@ -106,6 +106,22 @@ const baselineQueueOptions = {
 
 export const baselineQueue = new Bull("baseline-processing", baselineQueueOptions)
 
+const processFlowQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 25,
+    attempts: 2,
+    backoff: {
+      type: "exponential",
+      delay: 5000,
+    },
+    timeout: 600000, // 10 minutes timeout for process flow
+  },
+}
+
+export const processFlowQueue = new Bull("process-flow-processing", processFlowQueueOptions)
+
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
   const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data

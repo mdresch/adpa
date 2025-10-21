@@ -63,9 +63,26 @@ router.post("/generate",
       const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
       log.info('🔀 [BACKEND-6/10] Generation mode:', useContext ? 'Context-Aware' : 'Direct')
       
+      // CRITICAL FIX: Prevent duplicate submissions within 10 seconds
+      const dedupeKey = `ai-gen:${req.user?.id}:${template_id}:${req.body.project_id}`
+      const recentJobId = await cache.get(dedupeKey)
+      
+      if (recentJobId) {
+        log.warn('⚠️ [DEDUPE] Duplicate request detected, returning existing job ID:', recentJobId)
+        return res.json({
+          message: "Document generation already in progress",
+          jobId: recentJobId,
+          status: "queued",
+          deduplicated: true
+        })
+      }
+      
       // Generate unique job ID (UUID format required by database)
       const jobId = uuidv4()
       log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
+      
+      // Store job ID for deduplication (10 second window)
+      await cache.set(dedupeKey, jobId, 'EX', 10)
       
       // Add job to queue
       const jobData = {
