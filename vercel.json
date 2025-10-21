@@ -9,6 +9,5 @@
     "autoJobCancelation": true
   },
   "buildCommand": "pnpm run build",
-  "installCommand": "pnpm install",
-  "ignoreCommand": "exit 1"
+  "installCommand": "pnpm install"
 }
