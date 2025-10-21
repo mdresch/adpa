@@ -159,13 +159,28 @@ aiQueue.process("ai-generate", async (job) => {
       // FIX: project_id can be in job.data.projectId OR job.data.variables.project_id
       const projectId = job.data.projectId || job.data.variables?.project_id || null;
       
+      // Build generation metadata for the document
+      const generationMetadata = {
+        provider: result?.provider || provider,
+        model: result?.model || model,
+        temperature: temperature || 0.7,
+        tokens_used: result?.usage?.total_tokens || 0,
+        prompt_tokens: result?.usage?.prompt_tokens || 0,
+        completion_tokens: result?.usage?.completion_tokens || 0,
+        generated_at: new Date().toISOString(),
+        job_id: jobId,
+        context_summary: result?.context_summary || null,
+        context_warnings: result?.context_warnings || [],
+        context_token_usage: result?.context_token_usage || null
+      };
+      
       const insertResult = await pool.query(
         `
-        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $6)
+        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
         RETURNING id
       `,
-        [projectId, docName, docContent, template_id || null, 'draft', userId || null]
+        [projectId, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata)]
       )
 
       if (insertResult.rows.length > 0) {
