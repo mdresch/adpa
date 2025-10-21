@@ -159,19 +159,30 @@ aiQueue.process("ai-generate", async (job) => {
       // FIX: project_id can be in job.data.projectId OR job.data.variables.project_id
       const projectId = job.data.projectId || job.data.variables?.project_id || null;
       
-      // Build generation metadata for the document
+      // Build generation metadata for the document (matching frontend expected structure)
       const generationMetadata = {
-        provider: result?.provider || provider,
-        model: result?.model || model,
-        temperature: temperature || 0.7,
-        tokens_used: result?.usage?.total_tokens || 0,
-        prompt_tokens: result?.usage?.prompt_tokens || 0,
-        completion_tokens: result?.usage?.completion_tokens || 0,
-        generated_at: new Date().toISOString(),
-        job_id: jobId,
-        context_summary: result?.context_summary || null,
-        context_warnings: result?.context_warnings || [],
-        context_token_usage: result?.context_token_usage || null
+        aiProcessing: {
+          provider: result?.provider || provider,
+          model: result?.model || model,
+          temperature: temperature || 0.7,
+          tokens: {
+            input: result?.usage?.prompt_tokens || 0,
+            output: result?.usage?.completion_tokens || 0,
+            total: result?.usage?.total_tokens || 0,
+            cost: 'N/A' // Calculate if cost data available
+          }
+        },
+        generation: {
+          generated_at: new Date().toISOString(),
+          job_id: jobId,
+          status: 'completed',
+          duration: null // Will be calculated if we have timing data
+        },
+        context: {
+          summary: result?.context_summary || null,
+          warnings: result?.context_warnings || [],
+          token_usage: result?.context_token_usage || null
+        }
       };
       
       const insertResult = await pool.query(
