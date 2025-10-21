@@ -611,10 +611,13 @@ export default function JobMonitorPage() {
                               </Card>
                               {selectedJob === job.id && (
                                 <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                  <h4 className="font-semibold mb-4">Job Details</h4>
+                                  
+                                  {/* Basic Info */}
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
                                     <div>
                                       <p className="text-muted-foreground">Job ID</p>
-                                      <p className="font-mono break-all">{job.id}</p>
+                                      <p className="font-mono text-xs break-all">{job.id}</p>
                                     </div>
                                     <div>
                                       <p className="text-muted-foreground">Queue</p>
@@ -637,6 +640,50 @@ export default function JobMonitorPage() {
                                       <p className="font-medium capitalize">{job.status}</p>
                                     </div>
                                   </div>
+                                  
+                                  {/* AI-Specific Metadata */}
+                                  {(job as any).metadata && (job as any).metadata.provider && (
+                                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                      <h5 className="text-sm font-semibold mb-3">AI Processing Details</h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                        <div>
+                                          <p className="text-muted-foreground">Provider</p>
+                                          <p className="font-medium">{(job as any).metadata.provider || "-"}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground">Model</p>
+                                          <p className="font-medium">{(job as any).metadata.model || "-"}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground">Temperature</p>
+                                          <p className="font-medium">{(job as any).metadata.temperature || "-"}</p>
+                                        </div>
+                                        {(job as any).metadata.tokens && (
+                                          <div>
+                                            <p className="text-muted-foreground">Tokens Used</p>
+                                            <p className="font-medium">{(job as any).metadata.tokens.total_tokens || (job as any).metadata.tokens.totalTokens || "-"}</p>
+                                          </div>
+                                        )}
+                                        {(job as any).metadata.template_name && (
+                                          <div>
+                                            <p className="text-muted-foreground">Template</p>
+                                            <p className="font-medium">{(job as any).metadata.template_name}</p>
+                                          </div>
+                                        )}
+                                        {(job as any).metadata.document_id && (
+                                          <div>
+                                            <p className="text-muted-foreground">Generated Document</p>
+                                            <a 
+                                              href={`/projects/${(job as any).metadata.project_id}/documents/${(job as any).metadata.document_id}`}
+                                              className="font-medium text-blue-600 hover:underline"
+                                            >
+                                              View Document
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                   {job.logs && job.logs.length > 0 && (
                                     <div className="mt-4">
                                       <p className="text-sm text-muted-foreground mb-2">Logs</p>

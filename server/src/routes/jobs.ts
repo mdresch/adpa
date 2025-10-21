@@ -27,9 +27,26 @@ router.get("/",
       const offset = (Number(page) - 1) * Number(limit)
 
       let query = `
-        SELECT id, type, status, progress, error_message, started_at, completed_at, created_at
-        FROM jobs
-        WHERE created_by = $1
+        SELECT 
+          j.id, 
+          j.type, 
+          j.status, 
+          j.progress, 
+          j.error_message, 
+          j.started_at, 
+          j.completed_at, 
+          j.created_at,
+          j.job_data,
+          j.result,
+          p.name as project_name,
+          t.name as template_name,
+          d.name as document_name,
+          d.id as document_id
+        FROM jobs j
+        LEFT JOIN projects p ON (j.job_data->>'projectId')::uuid = p.id OR (j.job_data->'variables'->>'project_id')::uuid = p.id
+        LEFT JOIN templates t ON (j.job_data->>'template_id')::uuid = t.id
+        LEFT JOIN documents d ON d.generation_metadata->>'job_id' = j.id::text
+        WHERE j.created_by = $1
       `
 
       const params: any[] = [req.user?.id]
@@ -72,8 +89,48 @@ router.get("/",
       const countResult = await pool.query(countQuery, countParams)
       const total = Number.parseInt(countResult.rows[0].count)
 
+      // Format jobs with enriched data
+      const enrichedJobs = result.rows.map(job => {
+        const jobData = job.job_data || {}
+        
+        // Build descriptive job name
+        let jobName = job.document_name || job.template_name || jobData.template_name || jobData.name || `${job.type} Job`
+        if (job.project_name) {
+          jobName += ` - ${job.project_name}`
+        }
+        
+        return {
+          id: job.id,
+          name: jobName,
+          type: job.type,
+          status: job.status,
+          progress: job.progress || 0,
+          error: job.error_message,
+          startTime: job.started_at,
+          completedTime: job.completed_at,
+          queuedTime: job.created_at,
+          priority: jobData.priority || 'medium',
+          queue: job.type === 'ai-generate' ? 'ai-processing' : job.type,
+          worker: jobData.worker || 'Unassigned',
+          logs: jobData.logs || [],
+          // Additional metadata for AI jobs
+          metadata: {
+            provider: jobData.provider,
+            model: jobData.model,
+            temperature: jobData.temperature,
+            template_id: jobData.template_id,
+            template_name: job.template_name || jobData.variables?.template_name,
+            project_id: jobData.projectId || jobData.variables?.project_id,
+            project_name: job.project_name,
+            document_id: job.document_id,
+            document_name: job.document_name,
+            tokens: jobData.tokens || job.result?.usage,
+          }
+        }
+      })
+      
       res.json({
-        jobs: result.rows,
+        jobs: enrichedJobs,
         pagination: {
           page: Number(page),
           limit: Number(limit),
