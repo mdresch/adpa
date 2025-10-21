@@ -8,6 +8,16 @@ const cleanUrl = rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
 const API_BASE_URL = `${cleanUrl}/api`
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || cleanUrl
 
+// Debug logging for production
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+  console.log('🔧 API Debug:', {
+    rawApiUrl,
+    cleanUrl,
+    API_BASE_URL,
+    WS_URL
+  })
+}
+
 // Types
 export interface User {
   id: string
