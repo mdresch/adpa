@@ -3,10 +3,11 @@
 ## 🎯 Quick Summary
 
 **✅ Already configured by Supabase & Upstash:** 14+ variables  
-**⚠️ You need to add manually:** Only **2 variables**
+**⚠️ You need to add/fix manually:** **3 variables**
 
 1. `NEXT_PUBLIC_API_URL` → Railway backend URL
 2. `JWT_SECRET` → `3f8a2b1c-4e5d-6f7a-8b9c-0d1e2f3a4b5c`
+3. `SUPABASE_SERVICE_ROLE_KEY` → Fix empty value (get from Supabase Dashboard)
 
 Everything else (AI keys, integrations) is stored in the database!
 
@@ -27,11 +28,22 @@ These are automatically configured and **don't need manual setup**:
 ✅ POSTGRES_DATABASE                 (all envs)
 ✅ SUPABASE_URL                      (all envs)
 ✅ SUPABASE_ANON_KEY                 (all envs)
-✅ SUPABASE_SERVICE_ROLE_KEY         (prod/preview)
-✅ SUPABASE_JWT_SECRET               (prod/preview)
+⚠️ SUPABASE_SERVICE_ROLE_KEY         (variable exists but VALUE IS EMPTY!)
+⚠️ SUPABASE_JWT_SECRET               (might be empty)
 ✅ NEXT_PUBLIC_SUPABASE_URL          (all envs)
 ✅ NEXT_PUBLIC_SUPABASE_ANON_KEY     (all envs)
 ```
+
+**⚠️ ACTION REQUIRED:** The Supabase integration created `SUPABASE_SERVICE_ROLE_KEY` but didn't populate it!
+
+**How to fix:**
+1. Go to Supabase Dashboard → Settings → API
+2. Copy the `service_role` key (marked as "secret")
+3. Go to Vercel → Environment Variables
+4. Edit `SUPABASE_SERVICE_ROLE_KEY` and paste the key
+5. Save for all environments
+
+See: **GET_SUPABASE_SERVICE_ROLE_KEY.md** for detailed instructions.
 
 ### **Upstash (Redis/KV)**
 ```
@@ -53,7 +65,7 @@ If you only have `ADPA_KV_URL` (legacy format), you may need to add the REST API
 
 ## ⚠️ REQUIRED - Must Add Manually to Vercel
 
-### **Critical (Only 2 variables needed!):**
+### **Critical (3 variables needed):**
 
 1. **NEXT_PUBLIC_API_URL**
    - Value: `https://your-railway-backend.up.railway.app` (see Railway dashboard)
@@ -66,6 +78,13 @@ If you only have `ADPA_KV_URL` (legacy format), you may need to add the REST API
    - Environment: **Production, Preview, Development**
    - Used by: App authentication (different from Supabase JWT)
    - **⚠️ CRITICAL**: Must match Railway backend **exactly**
+
+3. **SUPABASE_SERVICE_ROLE_KEY** (fix empty value)
+   - Value: Get from Supabase Dashboard → Settings → API (service_role key)
+   - Environment: **Production, Preview, Development**
+   - Used by: Backend admin operations, bypass RLS when needed
+   - **Action:** Edit the existing empty variable in Vercel and paste the key
+   - **See:** `GET_SUPABASE_SERVICE_ROLE_KEY.md` for step-by-step instructions
 
 ### **Optional (for advanced features):**
 
