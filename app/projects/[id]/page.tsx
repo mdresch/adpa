@@ -1759,7 +1759,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
       try {
         console.log('🔄 [7/10] Attempting to enqueue job...')
-        const resp = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'}/api/ai/generate`, {
+        // Normalize API URL to prevent double slashes
+        const rawApiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+        const cleanUrl = rawApiUrl.replace(/\/api\/?$/, '').replace(/\/$/, '')
+        const apiUrl = `${cleanUrl}/api/ai/generate`
+        console.log('📡 API URL:', apiUrl)
+        const resp = await fetch(apiUrl, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -1790,15 +1795,15 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           
           // SUCCESS: Close dialog and let background worker create the document
           console.log('✅ Job queued, closing dialog')
-          setDocumentName("")
-          setDocumentDescription("")
-          setSelectedTemplate("")
-          setCreateDialogOpen(false)
+        setDocumentName("")
+        setDocumentDescription("")
+        setSelectedTemplate("")
+        setCreateDialogOpen(false)
           setCreatingDocument(false)
           
           // Refresh documents list after a short delay (worker needs time to process)
           setTimeout(async () => {
-            await fetchDocuments()
+        await fetchDocuments()
           }, 3000)
           
           return // EXIT - document will be created by background worker
