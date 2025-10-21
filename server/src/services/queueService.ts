@@ -258,11 +258,11 @@ aiQueue.process("ai-generate", async (job) => {
       
       const insertResult = await pool.query(
         `
-        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count)
-        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9)
+        INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count)
+        VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11)
         RETURNING id
       `,
-        [projectId, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata), wordCount, characterCount]
+        [projectId, docName, docContent, template_id || null, 'draft', userId || null, JSON.stringify(generationMetadata), wordCount, characterCount, sentenceCount, paragraphCount]
       )
 
       if (insertResult.rows.length > 0) {
