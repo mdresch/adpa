@@ -312,6 +312,43 @@ async function startServer() {
       console.log("📊 Connecting to database...")
       await connectDatabase()
       console.log("✅ Database connected successfully")
+      
+      // Auto-create document_summaries table if it doesn't exist
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS document_summaries (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+            compression_method VARCHAR(50) NOT NULL,
+            compression_level DECIMAL(3,2) NOT NULL,
+            target_tokens INTEGER NOT NULL,
+            original_content TEXT NOT NULL,
+            original_tokens INTEGER NOT NULL,
+            compressed_content TEXT NOT NULL,
+            compressed_tokens INTEGER NOT NULL,
+            compression_ratio DECIMAL(5,4) NOT NULL,
+            ai_provider VARCHAR(100),
+            ai_model VARCHAR(100),
+            template_context JSONB,
+            template_context_hash VARCHAR(64),
+            document_version INTEGER NOT NULL DEFAULT 1,
+            is_valid BOOLEAN NOT NULL DEFAULT true,
+            times_reused INTEGER NOT NULL DEFAULT 0,
+            last_reused_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT document_summaries_unique_cache UNIQUE (document_id, compression_method, compression_level, template_context_hash)
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_document_id ON document_summaries(document_id);
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_valid ON document_summaries(is_valid) WHERE is_valid = true;
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_method ON document_summaries(compression_method);
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_reuse ON document_summaries(times_reused DESC);
+        `)
+        console.log("✅ document_summaries table ready (auto-migration)")
+      } catch (migrationError) {
+        console.warn("⚠️  Could not create document_summaries table:", migrationError)
+      }
     } catch (dbError) {
       console.warn(
         "⚠️  Database connection failed, starting server without database:",

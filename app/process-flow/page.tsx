@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,6 +79,7 @@ const healthConfig = {
 }
 
 export default function ProcessFlowWorkflow() {
+  const router = useRouter()
   const apiUrl = (path: string) => getApiUrlUtil(path)
 
   // Initialize API client with token
@@ -798,6 +800,25 @@ export default function ProcessFlowWorkflow() {
       console.log('API response received:', response)
 
       if (response.success) {
+        // Check if this is the new async response format (with jobId)
+        if (response.data.jobId) {
+          // New async format - job queued
+          console.log('Process-flow job queued:', response.data.jobId)
+          
+          toast.success('Document generation started!', {
+            description: response.data.message || 'Check the Jobs page to monitor progress.',
+            duration: 5000
+          })
+          
+          // Redirect to jobs page after a short delay
+          setTimeout(() => {
+            router.push('/jobs')
+          }, 2000)
+          
+          return
+        }
+        
+        // Old synchronous format (legacy support)
         console.log('Backend response:', response)
         console.log('Backend steps:', response.data.steps)
         const backendSteps = response.data.steps || []

@@ -225,12 +225,18 @@ class ApiClient {
         // Create an error object that includes the response data for better error handling
         const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
         ;(error as any).response = { data, status: response.status }
+        ;(error as any).status = response.status
         throw error
       }
 
       return data
-    } catch (error) {
-      console.error(`API request failed: ${endpoint}`, error)
+    } catch (error: any) {
+      // Don't log 404s if suppressNotFoundError is set (expected "not found" scenarios)
+      const shouldSuppressLog = (options as any).suppressNotFoundError && error?.status === 404
+      
+      if (!shouldSuppressLog) {
+        console.error(`API request failed: ${endpoint}`, error)
+      }
       throw error
     }
   }

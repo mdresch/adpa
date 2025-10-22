@@ -93,10 +93,31 @@ router.get("/",
       const enrichedJobs = result.rows.map(job => {
         const jobData = job.job_data || {}
         
-        // Build descriptive job name
-        let jobName = job.document_name || job.template_name || jobData.template_name || jobData.name || `${job.type} Job`
-        if (job.project_name) {
-          jobName += ` - ${job.project_name}`
+        // Build descriptive job name: "Document Name - Project Name" or fallback to template/type
+        let jobName = ''
+        
+        // Priority 1: Document name (most specific)
+        const docName = job.document_name || jobData.documentName
+        
+        // Priority 2: Template name (for new documents being generated)
+        const templateName = job.template_name || jobData.template_name || jobData.variables?.template_name
+        
+        // Priority 3: Generic name
+        const genericName = jobData.name || `${job.type} Job`
+        
+        // Build name with project context
+        if (docName && job.project_name) {
+          jobName = `${docName} - ${job.project_name}`
+        } else if (templateName && job.project_name) {
+          jobName = `${templateName} - ${job.project_name}`
+        } else if (docName) {
+          jobName = docName
+        } else if (templateName) {
+          jobName = templateName
+        } else if (job.project_name) {
+          jobName = `${genericName} - ${job.project_name}`
+        } else {
+          jobName = genericName
         }
         
         return {
@@ -125,6 +146,13 @@ router.get("/",
             document_id: job.document_id,
             document_name: job.document_name,
             tokens: jobData.tokens || job.result?.usage,
+            // Process-flow specific progress fields
+            currentStep: jobData.currentStep,
+            compressionProgress: jobData.compressionProgress,
+            currentDocument: jobData.currentDocument,
+            stepProgress: jobData.stepProgress,
+            activeDocuments: jobData.activeDocuments || [],
+            parallelCount: jobData.activeDocuments?.length || 0
           }
         }
       })
@@ -269,55 +297,58 @@ router.post("/:id/cancel",
   }
 )
 
-// Retry failed job
-router.post("/:id/retry", 
+// Retry failed job - REMOVED DUPLICATE (see line 464 for working version that handles stuck jobs)
+
+// Clean up stuck cancelled jobs from queues (admin only)
+router.post("/cleanup",
   authenticateToken,
-  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  requirePermission("jobs.manage"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { id } = req.params
-
-      // Get original job
-      const jobResult = await pool.query(
-        "SELECT * FROM jobs WHERE id = $1",
-        [id]
+      // Get all cancelled jobs from database
+      const cancelledJobs = await pool.query(
+        `SELECT id, type FROM jobs WHERE status = 'cancelled'`
       )
-
-      if (jobResult.rows.length === 0) {
-        return res.status(404).json({ error: "Job not found" })
+      
+      let cleanedCount = 0
+      
+      // Import queues
+      const { aiQueue, documentQueue, pipelineQueue, processFlowQueue } = await import("../services/queueService")
+      
+      // Remove from all queues
+      for (const job of cancelledJobs.rows) {
+        const jobId = job.id
+        
+        // Check each queue
+        const queues = [
+          { name: 'aiQueue', queue: aiQueue },
+          { name: 'documentQueue', queue: documentQueue },
+          { name: 'pipelineQueue', queue: pipelineQueue },
+          { name: 'processFlowQueue', queue: processFlowQueue }
+        ]
+        
+        for (const { name, queue } of queues) {
+          const bullJob = await queue.getJob(jobId)
+          if (bullJob) {
+            await bullJob.remove()
+            log.info(`Removed job ${jobId} from ${name}`)
+            cleanedCount++
+          }
+        }
       }
-
-      const originalJob = jobResult.rows[0]
-
-      if (originalJob.created_by !== req.user?.id && req.user?.role !== "admin") {
-        return res.status(403).json({ error: "Access denied" })
-      }
-
-      if (originalJob.status !== "failed") {
-        return res.status(400).json({ error: "Only failed jobs can be retried" })
-      }
-
-      // Create new job with same data
-      const newJobId = uuidv4()
-      const jobData = {
-        ...originalJob.data,
-        jobId: newJobId,
-        userId: req.user?.id,
-      }
-
-      await addJob(originalJob.type, jobData)
-
-  const log = childLogger({ requestId: (req as any).requestId })
-  log.info(`Job retried: ${id} -> ${newJobId} by ${req.user?.email}`)
-
+      
+      log.info(`Cleaned up ${cleanedCount} stuck jobs from queues`)
+      
       res.json({
-        message: "Job retried successfully",
-        newJobId,
+        success: true,
+        message: `Cleaned up ${cleanedCount} stuck jobs`,
+        cancelledJobsChecked: cancelledJobs.rows.length
       })
+      
     } catch (error) {
-      const log = childLogger({ requestId: (req as any).requestId })
-      log.error("Retry job error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      log.error("Cleanup jobs error:", error)
+      res.status(500).json({ error: "Failed to cleanup jobs" })
     }
   }
 )

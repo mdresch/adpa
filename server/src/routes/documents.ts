@@ -130,6 +130,72 @@ router.post("/:id/feedback",
   }
 )
 
+// Get all cached summaries for a document (different compression levels)
+router.get("/:id/summaries",
+  authenticateToken,
+  validateParams(Joi.object({ id: schemas.uuid })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+      
+      // Check if document_summaries table exists
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_name = 'document_summaries'
+        ) as exists
+      `)
+      
+      if (!tableCheck.rows[0].exists) {
+        return res.json({
+          success: true,
+          summaries: [],
+          message: 'Summary caching not yet enabled. Run migration to enable.'
+        })
+      }
+      
+      // Get all summaries for this document, grouped by compression level
+      const result = await pool.query(
+        `SELECT 
+          id,
+          compression_method,
+          compression_level,
+          original_tokens,
+          compressed_tokens,
+          compression_ratio,
+          compressed_content,
+          ai_provider,
+          ai_model,
+          times_reused,
+          last_reused_at,
+          is_valid,
+          created_at,
+          updated_at
+        FROM document_summaries
+        WHERE document_id = $1
+        ORDER BY compression_level ASC, created_at DESC`,
+        [id]
+      )
+      
+      log.info(`Retrieved ${result.rows.length} summaries for document: ${id}`)
+      
+      res.json({
+        success: true,
+        summaries: result.rows,
+        count: result.rows.length
+      })
+      
+    } catch (error) {
+      log.error("Error fetching summaries:", error)
+      res.status(500).json({ 
+        success: false,
+        error: "Failed to fetch summaries" 
+      })
+    }
+  }
+)
+
 // Get all documents (for export functionality)
 router.get("/", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })

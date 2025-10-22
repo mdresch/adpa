@@ -160,10 +160,16 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   // Fetch active baseline
   const fetchBaseline = async () => {
     try {
-      const response = await apiClient.request<{ baseline: any }>(`/baselines/project/${projectId}/active`)
+      const response = await apiClient.request<{ baseline: any }>(
+        `/baselines/project/${projectId}/active`,
+        { suppressNotFoundError: true } as any // 404 is expected when no baseline exists yet
+      )
       setBaseline(response.baseline)
     } catch (error: any) {
-      if (error?.status !== 404) {
+      // 404 is expected when no baseline has been created yet - gracefully handle it
+      if (error?.status === 404) {
+        setBaseline(null) // Ensure baseline is null when not found
+      } else {
         console.error('Error fetching baseline:', error)
       }
     }
@@ -172,10 +178,18 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   // Fetch all baselines
   const fetchBaselines = async () => {
     try {
-      const response = await apiClient.request<{ baselines: any[] }>(`/baselines/project/${projectId}`)
+      const response = await apiClient.request<{ baselines: any[] }>(
+        `/baselines/project/${projectId}`,
+        { suppressNotFoundError: true } as any // 404 is expected when no baselines exist yet
+      )
       setBaselines(response.baselines || [])
-    } catch (error) {
+    } catch (error: any) {
+      // 404 is expected when no baselines have been created yet
+      if (error?.status === 404) {
+        setBaselines([]) // Empty array when none found
+      } else {
       console.error('Error fetching baselines:', error)
+      }
     }
   }
 
@@ -215,8 +229,8 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
         method: 'POST',
         body: JSON.stringify({
           project_id: projectId,
-          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined,
-          project_name: project?.name
+          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+          // Backend will look up project_name from database
         })
       })
 

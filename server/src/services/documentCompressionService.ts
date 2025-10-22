@@ -46,6 +46,112 @@ export interface CompressedDocument {
 
 class DocumentCompressionService {
   /**
+   * Check cache for existing summary
+   */
+  private async getCachedSummary(
+    documentId: string,
+    compressionMethod: string,
+    compressionLevel: number,
+    templateContext?: any
+  ): Promise<CompressedDocument | null> {
+    try {
+      const result = await pool.query(
+        `SELECT * FROM document_summaries 
+         WHERE document_id = $1 
+           AND compression_method = $2 
+           AND compression_level = $3 
+           AND template_context IS NOT DISTINCT FROM $4
+           AND is_valid = true
+         ORDER BY created_at DESC 
+         LIMIT 1`,
+        [documentId, compressionMethod, compressionLevel, templateContext ? JSON.stringify(templateContext) : null]
+      )
+      
+      if (result.rows.length > 0) {
+        const cached = result.rows[0]
+        
+        // Update reuse statistics
+        await pool.query(
+          `UPDATE document_summaries 
+           SET times_reused = times_reused + 1, 
+               last_reused_at = CURRENT_TIMESTAMP 
+           WHERE id = $1`,
+          [cached.id]
+        )
+        
+        logger.info(`📦 [CACHE-HIT] Reusing cached summary for document ${documentId} (${compressionMethod}, reused ${cached.times_reused + 1} times)`)
+        
+        return {
+          originalContent: cached.original_content,
+          compressedContent: cached.compressed_content,
+          originalTokens: cached.original_tokens,
+          compressedTokens: cached.compressed_tokens,
+          compressionRatio: parseFloat(cached.compression_ratio),
+          method: cached.compression_method
+        }
+      }
+      
+      logger.info(`🔍 [CACHE-MISS] No cached summary found for document ${documentId}`)
+      return null
+    } catch (error) {
+      logger.error('Error checking cache:', error)
+      return null
+    }
+  }
+  
+  /**
+   * Save summary to cache
+   */
+  private async saveSummaryToCache(
+    documentId: string,
+    result: CompressedDocument,
+    compressionMethod: string,
+    compressionLevel: number,
+    aiProvider?: string,
+    aiModel?: string,
+    templateContext?: any
+  ): Promise<void> {
+    try {
+      await pool.query(
+        `INSERT INTO document_summaries (
+          document_id, compression_method, compression_level,
+          original_content, original_tokens,
+          compressed_content, compressed_tokens, compression_ratio,
+          target_tokens, ai_provider, ai_model, template_context
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (document_id, compression_method, compression_level, template_context) 
+        DO UPDATE SET
+          compressed_content = EXCLUDED.compressed_content,
+          compressed_tokens = EXCLUDED.compressed_tokens,
+          compression_ratio = EXCLUDED.compression_ratio,
+          ai_provider = EXCLUDED.ai_provider,
+          ai_model = EXCLUDED.ai_model,
+          updated_at = CURRENT_TIMESTAMP,
+          is_valid = true`,
+        [
+          documentId,
+          compressionMethod,
+          compressionLevel,
+          result.originalContent,
+          result.originalTokens,
+          result.compressedContent,
+          result.compressedTokens,
+          result.compressionRatio,
+          Math.ceil(result.originalTokens * compressionLevel),
+          aiProvider || null,
+          aiModel || null,
+          templateContext ? JSON.stringify(templateContext) : null
+        ]
+      )
+      
+      logger.info(`💾 [CACHE-SAVE] Saved summary to cache for document ${documentId}`)
+    } catch (error) {
+      logger.error('Error saving to cache:', error)
+      // Don't fail the operation if caching fails
+    }
+  }
+  
+  /**
    * Compress a document based on the specified compression level
    */
   async compressDocument(
@@ -274,28 +380,28 @@ class DocumentCompressionService {
       // Create a detailed summarization prompt
       const summarizationPrompt = this.createSummarizationPrompt(content, targetCharacters, options)
 
-      // Get the first active AI provider from database
+      // Get the highest priority active provider to start the fallback chain
       const providerResult = await pool.query(
-        "SELECT name FROM ai_providers WHERE is_active = true ORDER BY priority ASC NULLS LAST, name ASC LIMIT 1"
+        "SELECT provider_type FROM ai_providers WHERE is_active = true ORDER BY priority ASC NULLS LAST LIMIT 1"
       )
       
-      if (providerResult.rows.length === 0) {
-        throw new Error('No active AI providers available for document summarization')
-      }
+      const startingProvider = providerResult.rows.length > 0 ? providerResult.rows[0].provider_type : 'google'
       
-      const activeProvider = providerResult.rows[0].name
-      
+      // Build AI request for summarization
       const aiRequest = {
         prompt: summarizationPrompt,
-        provider: activeProvider,
-        model: 'gemini-2.5-flash', // Use Google AI model (fast and efficient)
+        provider: startingProvider, // Use highest priority provider, fallback will try others
+        model: 'gemini-2.5-flash', // Use fast model
         temperature: 0.3, // Lower temperature for more consistent summarization
         max_tokens: targetTokens + 100 // Add buffer for prompt tokens
       }
 
       logger.info(`Summarizing document: ${originalTokens} tokens → ${targetTokens} tokens (${(options.compressionLevel * 100).toFixed(0)}%)`)
+      logger.info(`🔄 Starting with provider: ${startingProvider}, using automatic fallback chain (priority order from database)`)
 
-      const aiResponse = await aiService.generate(aiRequest)
+      // Use generateWithFallback - automatically tries providers in priority order until one succeeds
+      // This prevents 503 overload errors by distributing load across multiple providers
+      const aiResponse = await aiService.generateWithFallback(aiRequest)
       const compressedContent = aiResponse.content.trim()
 
       const compressedTokens = Math.ceil(compressedContent.length / 4)

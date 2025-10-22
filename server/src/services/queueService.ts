@@ -54,6 +54,12 @@ const aiQueueOptions = {
       type: "exponential",
       delay: 2000,
     },
+    timeout: 600000, // 10 minutes timeout for AI generation
+  },
+  settings: {
+    lockDuration: 600000, // 10 minutes lock (AI generation can take time)
+    stallInterval: 30000, // Check for stalls every 30 seconds
+    maxStalledCount: 2, // Allow 2 stalls before failing
   },
 }
 
@@ -86,6 +92,11 @@ const pipelineQueueOptions = {
     },
     timeout: 600000, // 10 minutes timeout for pipeline jobs
   },
+  settings: {
+    lockDuration: 600000, // 10 minutes lock
+    stallInterval: 30000, // Check every 30 seconds
+    maxStalledCount: 2,
+  },
 }
 
 export const pipelineQueue = new Bull("pipeline-processing", pipelineQueueOptions)
@@ -114,9 +125,14 @@ const processFlowQueueOptions = {
     attempts: 2,
     backoff: {
       type: "exponential",
-      delay: 5000,
+      delay: 10000,
     },
-    timeout: 600000, // 10 minutes timeout for process flow
+    timeout: 3600000, // 60 minutes timeout for process flow (compression is slow with many docs)
+  },
+  settings: {
+    lockDuration: 3600000, // 60 minutes lock (24 documents × 2 min each = ~48 min)
+    stallInterval: 60000, // Check every 60 seconds (less aggressive)
+    maxStalledCount: 3, // Allow 3 stalls before failing
   },
 }
 
@@ -216,6 +232,45 @@ aiQueue.process("ai-generate", async (job) => {
       // Calculate quality metrics
       const qualityMetrics = analyzeDocumentQuality(docContent, tempMetadata, sourceDocCount)
       
+      // Calculate AI cost based on token usage and provider
+      const calculateAICost = (provider: string, model: string, inputTokens: number, outputTokens: number): string => {
+        // Pricing per 1M tokens (as of 2024)
+        const pricing: Record<string, { input: number, output: number }> = {
+          'openai-gpt-4': { input: 30, output: 60 },
+          'openai-gpt-4-turbo': { input: 10, output: 30 },
+          'openai-gpt-3.5-turbo': { input: 0.50, output: 1.50 },
+          'google-gemini-pro': { input: 0.50, output: 1.50 },
+          'google-gemini-1.5-pro': { input: 3.50, output: 10.50 },
+          'mistral-small': { input: 1, output: 3 },
+          'mistral-medium': { input: 2.7, output: 8.1 },
+          'mistral-large': { input: 4, output: 12 },
+          'anthropic-claude-3-opus': { input: 15, output: 75 },
+          'anthropic-claude-3-sonnet': { input: 3, output: 15 },
+          'anthropic-claude-3-haiku': { input: 0.25, output: 1.25 }
+        }
+        
+        const key = `${provider.toLowerCase()}-${model.toLowerCase()}`.replace(/\s+/g, '-')
+        const rates = pricing[key] || { input: 1, output: 3 } // Default fallback
+        
+        const inputCost = (inputTokens / 1_000_000) * rates.input
+        const outputCost = (outputTokens / 1_000_000) * rates.output
+        const totalCost = inputCost + outputCost
+        
+        return totalCost < 0.01 ? '$0.00' : `$${totalCost.toFixed(4)}`
+      }
+      
+      // Calculate processing duration from job data
+      const jobStartTime = job.data.started_at ? new Date(job.data.started_at) : new Date(job.timestamp)
+      const jobEndTime = new Date()
+      const processingTimeMs = jobEndTime.getTime() - jobStartTime.getTime()
+      const processingTimeSec = (processingTimeMs / 1000).toFixed(2)
+      
+      // Prepare token data
+      const inputTokens = result?.usage?.prompt_tokens || result?.usage?.input_tokens || 0
+      const outputTokens = result?.usage?.completion_tokens || result?.usage?.output_tokens || 0
+      const totalTokens = result?.usage?.total_tokens || (inputTokens + outputTokens)
+      const estimatedCost = calculateAICost(provider, model || 'unknown', inputTokens, outputTokens)
+      
       // Build generation metadata for the document (matching frontend expected structure)
       const generationMetadata = {
         aiProcessing: {
@@ -223,22 +278,33 @@ aiQueue.process("ai-generate", async (job) => {
           model: result?.model || model,
           temperature: temperature || 0.7,
           tokens: {
-            input: result?.usage?.prompt_tokens || 0,
-            output: result?.usage?.completion_tokens || 0,
-            total: result?.usage?.total_tokens || 0,
-            cost: 'N/A' // Calculate if cost data available
-          }
+            input: inputTokens,
+            output: outputTokens,
+            total: totalTokens,
+            cost: estimatedCost
+          },
+          processingTime: `${processingTimeSec}s`,
+          processingTimeMs: processingTimeMs
         },
         generation: {
           generated_at: new Date().toISOString(),
           job_id: jobId,
           status: 'completed',
-          duration: null // Will be calculated if we have timing data
+          duration: processingTimeMs,
+          durationFormatted: `${processingTimeSec}s`
         },
         context: {
           summary: result?.context_summary || null,
           warnings: result?.context_warnings || [],
           token_usage: result?.context_token_usage || null
+        },
+        contentMetrics: {
+          wordCount,
+          characterCount,
+          sentenceCount,
+          paragraphCount,
+          avgWordsPerSentence: sentenceCount > 0 ? (wordCount / sentenceCount).toFixed(1) : 'N/A',
+          readingTime: `${Math.ceil(wordCount / 200)} min`
         },
         qualityMetrics: {
           overallQuality: qualityMetrics.overallQuality,
@@ -253,7 +319,11 @@ aiQueue.process("ai-generate", async (job) => {
           standardsCompliance: qualityMetrics.standardsCompliance,
           complexityScore: qualityMetrics.complexityScore,
           recommendations: qualityMetrics.recommendations
-        }
+        },
+        sourceDocuments: job.data?.documentIds?.map((docId: string, idx: number) => ({
+          id: docId,
+          order: idx + 1
+        })) || []
       };
       
       const insertResult = await pool.query(
@@ -539,13 +609,22 @@ documentQueue.process("document-convert", async (job) => {
 
 // Baseline extraction job processor
 baselineQueue.process("baseline-extract", async (job) => {
-  const { jobId, userId, project_id, document_ids, ai_provider, ai_model, project_name } = job.data
+  const { jobId, userId, project_id, document_ids, ai_provider, ai_model } = job.data
+  let { project_name } = job.data
 
   try {
     // Update job status to processing and assign worker
     await updateJobStatus(jobId, "processing", 10, WORKER_ID)
     
-    logger.info(`Starting baseline extraction for project ${project_id}`)
+    // Look up project name if not provided
+    if (!project_name && project_id) {
+      const projectResult = await pool.query('SELECT name FROM projects WHERE id = $1', [project_id])
+      if (projectResult.rows.length > 0) {
+        project_name = projectResult.rows[0].name
+      }
+    }
+    
+    logger.info(`Starting baseline extraction for project ${project_id} (${project_name || 'Unknown'})`)
     
     // Extract baseline using AI (this takes 3-10 seconds)
     const { baselineService } = await import('./baselineService')
@@ -628,18 +707,287 @@ baselineQueue.process("baseline-extract", async (job) => {
   }
 })
 
+// Process Flow job processor
+processFlowQueue.process("process-flow", async (job) => {
+  const { jobId, userId, config } = job.data
+
+  try {
+    // Safety check: ensure pool is available
+    if (!pool) {
+      logger.error(`Process-flow job ${jobId}: Database connection pool is not available`)
+      // Can't update status without pool, fail gracefully
+      throw new Error('Database connection pool is not available')
+    }
+    
+    // Update job status to processing
+    await updateJobStatus(jobId, "processing", 5, WORKER_ID)
+    
+    // Get project name for better job identification
+    let projectName = 'Unknown Project'
+    let documentName = config.documentName || config.templateName || 'Process Flow Document'
+    try {
+      const projectResult = await pool.query(
+        'SELECT name FROM projects WHERE id = $1',
+        [config.projectId]
+      )
+      if (projectResult.rows.length > 0) {
+        projectName = projectResult.rows[0].name
+      }
+    } catch (error) {
+      logger.warn(`Could not fetch project name for ${config.projectId}`)
+    }
+    
+    logger.info(`Starting process-flow job ${jobId} for project: ${projectName} (${config.projectId})`)
+    
+    // Update job data with initial steps
+    const totalSteps = config.includeStakeholders ? 7 : 6
+    await pool.query(
+      `UPDATE jobs 
+       SET data = jsonb_set(
+         COALESCE(data, '{}'::jsonb), 
+         '{currentStep}', 
+         to_jsonb($1::text)
+       )
+       WHERE id = $2`,
+      ['Initializing workflow...', jobId]
+    )
+    
+    // Get the ProcessFlowService
+    const ProcessFlowService = (await import('./processFlowService')).default
+    const processFlowService = new ProcessFlowService(pool)
+    
+    await updateJobStatus(jobId, "processing", 10)
+    
+    // Create a progress callback to update job status during processing
+    const updateStepProgress = async (stepName: string, stepNumber: number, totalSteps: number) => {
+      const progress = Math.floor(10 + (stepNumber / totalSteps) * 80) // 10% to 90%
+      
+      await pool.query(
+        `UPDATE jobs 
+         SET data = jsonb_set(
+           jsonb_set(
+             COALESCE(data, '{}'::jsonb), 
+             '{currentStep}', 
+             to_jsonb($1::text)
+           ),
+           '{stepProgress}',
+           to_jsonb($2::int)
+         ),
+         progress = $3
+         WHERE id = $4`,
+        [stepName, stepNumber, progress, jobId]
+      )
+      
+      // Emit real-time step update
+      io.emit("job:step-update", {
+        jobId,
+        userId,
+        currentStep: stepName,
+        stepNumber,
+        totalSteps,
+        progress
+      })
+      
+      logger.info(`Process-flow job ${jobId}: Step ${stepNumber}/${totalSteps} - ${stepName}`)
+    }
+    
+    // Track documents with their start times across batches
+    const documentStartTimes = new Map<string, number>()
+    
+    // Create progress callback for document compression
+    const onCompressionProgress = async (stepName: string, current: number, total: number, details?: any) => {
+      // Calculate progress: 10% (init) + up to 70% for compression + 20% for finalization
+      const compressionProgress = Math.floor(10 + (current / total) * 70)
+      
+      // Track document start time when first seen
+      if (details?.documentId && !documentStartTimes.has(details.documentId)) {
+        documentStartTimes.set(details.documentId, Date.now())
+      }
+      
+      // Get provider assignments from details (passed from processFlowService)
+      const providerAssignments = details?.providerAssignments || []
+      const assignedProvider = details?.assignedProvider
+      
+      // Build message showing current processing status
+      const stepMessage = providerAssignments.length > 0
+        ? `AI providers processing ${providerAssignments.length} document${providerAssignments.length > 1 ? 's' : ''} (${current}/${total} completed)`
+        : `${stepName}: ${current}/${total} - ${details?.documentName || 'processing...'}`
+      
+      await pool.query(
+        `UPDATE jobs 
+         SET data = jsonb_set(
+           jsonb_set(
+             jsonb_set(
+               jsonb_set(
+                 COALESCE(data, '{}'::jsonb), 
+                 '{currentStep}', 
+                 to_jsonb($1::text)
+               ),
+               '{compressionProgress}',
+               to_jsonb($2::jsonb)
+             ),
+             '{currentDocument}',
+             to_jsonb($3::jsonb)
+           ),
+           '{providerAssignments}',
+           to_jsonb($6::jsonb)
+         ),
+         progress = $4
+         WHERE id = $5`,
+        [
+          stepMessage, 
+          JSON.stringify({ current, total, percentage: Math.floor((current / total) * 100) }),
+          JSON.stringify(details || {}),
+          compressionProgress,
+          jobId,
+          JSON.stringify(providerAssignments)
+        ]
+      )
+      
+      // Emit real-time update with provider assignments
+      io.emit("job:step-update", {
+        jobId,
+        userId,
+        currentStep: stepMessage,
+        compressionProgress: { current, total, percentage: Math.floor((current / total) * 100) },
+        currentDocument: details,
+        providerAssignments,
+        parallelCount: providerAssignments.length,
+        progress: compressionProgress,
+        projectId: config?.projectId,
+        projectName,
+        documentName,
+        templateName: config?.templateName
+      })
+    }
+    
+    await updateStepProgress('Initializing workflow', 1, totalSteps)
+    
+    // Run the workflow processing with progress callback
+    const configWithCallback = {
+      ...config,
+      onProgress: onCompressionProgress
+    }
+    
+    const result = await processFlowService.startWorkflowProcessing(configWithCallback)
+    
+    await updateJobStatus(jobId, "processing", 95)
+    await updateStepProgress('Finalizing document...', totalSteps, totalSteps)
+    
+    // Update job to completed with detailed result
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'completed', 
+           result = $1, 
+           progress = 100, 
+           completed_at = CURRENT_TIMESTAMP,
+           data = jsonb_set(
+             COALESCE(data, '{}'::jsonb),
+             '{currentStep}',
+             to_jsonb('Completed'::text)
+           )
+       WHERE id = $2`,
+      [JSON.stringify({
+        workflowId: result.workflowId,
+        documentId: result.savedDocument.id,
+        documentName: result.savedDocument.name,
+        stepsCompleted: result.steps.length,
+        steps: result.steps,
+        finalDocumentLength: result.finalDocument.length,
+        totalTokens: result.steps.reduce((sum, step) => sum + step.tokens, 0)
+      }), jobId]
+    )
+    
+    // Emit success notification
+    io.emit("job:completed", {
+      jobId,
+      userId,
+      status: "completed",
+      message: `Process flow workflow completed: ${result.savedDocument.name}`,
+      projectId: config.projectId,
+      documentId: result.savedDocument.id,
+      documentName: result.savedDocument.name
+    })
+    
+    logger.info(`Process-flow job completed: ${jobId}`)
+    
+  } catch (error: any) {
+    logger.error(`Process-flow job failed: ${jobId}`, error)
+    
+    // Only update database if pool is available
+    if (pool) {
+      await pool.query(
+        `UPDATE jobs 
+         SET status = 'failed', 
+             error_message = $1, 
+             completed_at = CURRENT_TIMESTAMP,
+             data = jsonb_set(
+               COALESCE(data, '{}'::jsonb),
+               '{currentStep}',
+               to_jsonb('Failed'::text)
+             )
+         WHERE id = $2`,
+        [error.message || "Process-flow job failed", jobId]
+      )
+    }
+    
+    io.emit("job:failed", {
+      jobId,
+      userId,
+      status: "failed",
+      error: error.message || "Process-flow job failed",
+      projectId: config?.projectId,
+    })
+    
+    throw error
+  }
+})
+
 // Job management functions
 export async function addJob(type: string, data: any, options?: any): Promise<string> {
   try {
     const jobId = data.jobId
     
-    // Save job to database
+    // Extract project info for process-flow jobs
+    let projectId = null
+    let projectName = null
+    let templateName = null
+    
+    if (type === 'process-flow' && data.config?.projectId) {
+      projectId = data.config.projectId
+      
+      // Look up project name from database
+      try {
+        const projectResult = await pool.query(
+          'SELECT name FROM projects WHERE id = $1',
+          [projectId]
+        )
+        if (projectResult.rows.length > 0) {
+          projectName = projectResult.rows[0].name
+        }
+        
+        // Look up template name if templateId is provided
+        if (data.config?.templateId) {
+          const templateResult = await pool.query(
+            'SELECT name FROM templates WHERE id = $1',
+            [data.config.templateId]
+          )
+          if (templateResult.rows.length > 0) {
+            templateName = templateResult.rows[0].name
+          }
+        }
+      } catch (err) {
+        logger.warn('Failed to lookup project/template name for job:', err)
+      }
+    }
+    
+    // Save job to database with project context
     await pool.query(
       `
-      INSERT INTO jobs (id, type, status, data, created_by)
-      VALUES ($1, $2, 'pending', $3, $4)
+      INSERT INTO jobs (id, type, status, data, created_by, project_id, project_name, template_name)
+      VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
     `,
-      [jobId, type, JSON.stringify(data), data.userId]
+      [jobId, type, JSON.stringify(data), data.userId, projectId, projectName, templateName]
     )
 
     // Add to appropriate queue
@@ -656,6 +1004,9 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
         break
       case "baseline-extract":
         queue = baselineQueue
+        break
+      case "process-flow":
+        queue = processFlowQueue
         break
       default:
         throw new Error(`Unknown job type: ${type}`)
@@ -711,7 +1062,6 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
     }
 
     if (status === "processing" && progress === 10) {
-      paramCount++
       updateFields.push(`started_at = CURRENT_TIMESTAMP`)
       
       // Update data JSONB to include worker_id
@@ -745,28 +1095,56 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
 
 export async function cancelJob(jobId: string): Promise<boolean> {
   try {
-    // Try to remove from all queues
+    // Try to remove from ALL queues (including process-flow queue)
     const aiJob = await aiQueue.getJob(jobId)
     if (aiJob) {
       await aiJob.remove()
+      logger.info(`Removed job ${jobId} from aiQueue`)
     }
 
     const docJob = await documentQueue.getJob(jobId)
     if (docJob) {
       await docJob.remove()
+      logger.info(`Removed job ${jobId} from documentQueue`)
+    }
+
+    const pipelineJob = await pipelineQueue.getJob(jobId)
+    if (pipelineJob) {
+      await pipelineJob.remove()
+      logger.info(`Removed job ${jobId} from pipelineQueue`)
+    }
+
+    const processFlowJob = await processFlowQueue.getJob(jobId)
+    if (processFlowJob) {
+      await processFlowJob.remove()
+      logger.info(`Removed job ${jobId} from processFlowQueue`)
     }
 
     // Update database
     await pool.query(
       `
       UPDATE jobs 
-      SET status = 'cancelled', completed_at = CURRENT_TIMESTAMP
+      SET status = 'cancelled', 
+          completed_at = CURRENT_TIMESTAMP,
+          data = jsonb_set(
+            COALESCE(data, '{}'::jsonb),
+            '{currentStep}',
+            to_jsonb('Cancelled by user'::text)
+          )
       WHERE id = $1 AND status IN ('pending', 'processing')
     `,
       [jobId]
     )
 
     logger.info(`Job cancelled: ${jobId}`)
+    
+    // Emit WebSocket event to notify UI
+    io.emit("job:cancelled", {
+      jobId,
+      status: "cancelled",
+      timestamp: new Date().toISOString()
+    })
+    
     return true
   } catch (error) {
     logger.error(`Failed to cancel job: ${jobId}`, error)

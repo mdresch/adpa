@@ -7,6 +7,7 @@
 
 import { generateText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
+import { createMistral } from "@ai-sdk/mistral"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 
@@ -212,6 +213,24 @@ class AIService {
       logger.info(`⏸️ [AI-BACKOFF] Skipped ${skipped} provider(s) in backoff period`)
     }
     
+    // Auto-disable providers with insufficient funds
+    const autoDisableProvider = async (providerType: string, reason: string) => {
+      try {
+        await pool.query(
+          `UPDATE ai_providers 
+           SET is_active = false, 
+               updated_at = CURRENT_TIMESTAMP
+           WHERE provider_type = $1 AND is_active = true`,
+          [providerType]
+        )
+        logger.warn(`🚫 [AI-AUTO-DISABLE] Provider ${providerType} has been automatically deactivated`)
+        logger.warn(`💳 [AI-AUTO-DISABLE] Reason: ${reason}`)
+        logger.info(`💡 [AI-AUTO-DISABLE] Reactivate at http://localhost:3000/ai-providers once credits are topped up`)
+      } catch (error) {
+        logger.error(`Failed to auto-disable provider ${providerType}:`, error)
+      }
+    }
+    
     if (providers.length === 0) {
       throw new Error('All active providers are currently in backoff period. Please try again later.')
     }
@@ -236,8 +255,30 @@ class AIService {
       } catch (error: any) {
         logger.warn(`⚠️ [AI-FALLBACK] Provider ${provider} failed: ${error.message}`)
         
-        // Record failure and apply backoff
-        this.recordProviderFailure(provider)
+        // Check if error is due to insufficient funds/credits or capacity exceeded
+        const errorMessage = error.message?.toLowerCase() || ''
+        const isInsufficientFunds = 
+          errorMessage.includes('insufficient funds') ||
+          errorMessage.includes('insufficient_funds') ||
+          errorMessage.includes('no credits') ||
+          errorMessage.includes('out of credits') ||
+          errorMessage.includes('credit limit') ||
+          errorMessage.includes('service tier capacity exceeded') ||
+          errorMessage.includes('capacity exceeded') ||
+          errorMessage.includes('rate limit exceeded') ||
+          errorMessage.includes('too many requests') ||
+          error.statusCode === 402 || // Payment Required
+          error.statusCode === 429 || // Too Many Requests
+          error.type === 'insufficient_funds' ||
+          error.code === 'rate_limit_exceeded'
+        
+        if (isInsufficientFunds) {
+          logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
+          await autoDisableProvider(provider, `Insufficient capacity: ${error.message}`)
+        } else {
+          // Record failure and apply backoff for other errors
+          this.recordProviderFailure(provider)
+        }
         
         lastError = error
         
@@ -424,6 +465,60 @@ class AIService {
               prompt_tokens: Math.ceil(promptLength / 4),
               completion_tokens: Math.ceil(text.length / 4),
               total_tokens: estimatedTokens,
+            },
+          }
+        }
+        
+        // FALLBACK: Try direct Mistral AI
+        if (providerType === 'mistral') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Mistral AI...')
+          
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          if (!directApiKey) {
+            throw new Error('Direct Mistral AI API key not found in provider configuration')
+          }
+          
+          logger.info('✅ [AI-SERVICE] Direct Mistral AI API key found')
+          
+          const mistral = createMistral({ apiKey: directApiKey })
+          
+          // Use appropriate Mistral model (not Google model!)
+          const mistralModels = ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b', 'open-mixtral-8x7b']
+          const modelName = mistralModels.includes(request.model || '') 
+            ? request.model 
+            : 'mistral-small-latest' // Default to small (free tier)
+          
+          logger.info(`🚀 [AI-SERVICE] Calling direct Mistral AI with model: ${modelName}`)
+          
+          const mistralResult = await generateText({
+            model: mistral(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info('✅ [AI-SERVICE-7/8] Direct Mistral AI generation successful!')
+          logger.info('📝 [AI-SERVICE] Content length:', mistralResult.text.length, 'chars')
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: mistralResult.usage?.totalTokens || 0,
+          })
+          
+          logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+          
+          return {
+            content: mistralResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: mistralResult.usage?.promptTokens || 0,
+              completion_tokens: mistralResult.usage?.completionTokens || 0,
+              total_tokens: mistralResult.usage?.totalTokens || 0,
             },
           }
         }
