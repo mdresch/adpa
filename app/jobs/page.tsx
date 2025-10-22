@@ -385,7 +385,7 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Update jobs with real-time data
+  // Update jobs with real-time data from WebSocket
   useEffect(() => {
     setJobs(prevJobs =>
       prevJobs.map(job => {
@@ -397,6 +397,67 @@ export default function JobMonitorPage() {
       })
     )
   }, [jobUpdates])
+
+  // Listen for real-time job progress updates
+  useEffect(() => {
+    const { getSocket } = apiClient
+    const socket = getSocket()
+    
+    if (socket) {
+      // Listen for job progress updates
+      socket.on('job:status', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: data.status,
+                  progress: data.progress || job.progress
+                }
+              : job
+          )
+        )
+      })
+
+      // Listen for job completion
+      socket.on('job:completed', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: 'completed',
+                  progress: 100,
+                  completedTime: new Date().toISOString()
+                }
+              : job
+          )
+        )
+      })
+
+      // Listen for job failure
+      socket.on('job:failed', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: 'failed',
+                  error: data.error,
+                  completedTime: new Date().toISOString()
+                }
+              : job
+          )
+        )
+      })
+
+      return () => {
+        socket.off('job:status')
+        socket.off('job:completed')
+        socket.off('job:failed')
+      }
+    }
+  }, [])
 
   const filteredJobs = (jobs.length > 0 ? jobs : mockJobs).filter((job) => {
     const matchesSearch = (job.name || job.id).toLowerCase().includes(searchTerm.toLowerCase())
@@ -558,6 +619,51 @@ export default function JobMonitorPage() {
                   </AnimatedGridItem>
                 </AnimatedGrid>
 
+                {/* Real-Time Active Jobs Status Bar */}
+                {jobs.filter(j => j.status === 'processing' || j.status === 'running').length > 0 && (
+                  <Card className="glass border-0 shadow-lg border-l-4 border-l-blue-500 animate-fade-in">
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2 text-lg">
+                        <Activity className="h-5 w-5 text-blue-500 animate-pulse" />
+                        <span>Active Jobs in Progress</span>
+                        <Badge className="bg-blue-500">{jobs.filter(j => j.status === 'processing' || j.status === 'running').length}</Badge>
+                      </CardTitle>
+                      <CardDescription>Real-time progress tracking with live updates</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {jobs
+                        .filter(j => (j.status === 'processing' || j.status === 'running') && j.progress >= 0)
+                        .map(job => (
+                          <div key={job.id} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">{job.name}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {job.worker !== 'Unassigned' ? `Worker: ${job.worker.substring(0, 25)}...` : '⏳ Waiting for worker assignment...'}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-blue-600">{job.progress}%</p>
+                                <p className="text-xs text-muted-foreground font-medium">
+                                  {job.progress <= 10 && "⚡ Starting job..."}
+                                  {job.progress > 10 && job.progress <= 30 && "📚 Gathering context..."}
+                                  {job.progress > 30 && job.progress <= 50 && "🤖 AI generating..."}
+                                  {job.progress > 50 && job.progress <= 90 && "⚙️ Processing..."}
+                                  {job.progress > 90 && job.progress < 100 && "✨ Finalizing..."}
+                                </p>
+                              </div>
+                            </div>
+                            <Progress value={job.progress} className="h-3 transition-all duration-500" />
+                            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Queue: {job.queue}</span>
+                              <span>Type: {job.type}</span>
+                            </div>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Main Content */}
                 <Card className="glass border-0 shadow-lg">
                   <CardHeader>
@@ -626,13 +732,23 @@ export default function JobMonitorPage() {
                                         <Badge variant="outline">{job.queue}</Badge>
                                       </div>
 
-                                      {job.status === "running" && (
+                                      {(job.status === "running" || job.status === "processing") && job.progress > 0 && job.progress < 100 && (
                                         <div className="space-y-2">
                                           <div className="flex items-center justify-between text-sm">
-                                            <span>Progress</span>
-                                            <span>{job.progress}%</span>
+                                            <span className="flex items-center space-x-2">
+                                              <Activity className="h-3 w-3 animate-pulse text-blue-500" />
+                                              <span>Progress</span>
+                                            </span>
+                                            <span className="font-semibold text-blue-600">{job.progress}%</span>
                                           </div>
                                           <Progress value={job.progress} className="h-2" />
+                                          <p className="text-xs text-muted-foreground">
+                                            {job.progress <= 10 && "Starting job..."}
+                                            {job.progress > 10 && job.progress <= 30 && "Gathering context..."}
+                                            {job.progress > 30 && job.progress <= 50 && "AI generating content..."}
+                                            {job.progress > 50 && job.progress <= 90 && "Processing response..."}
+                                            {job.progress > 90 && job.progress < 100 && "Finalizing..."}
+                                          </p>
                                         </div>
                                       )}
 

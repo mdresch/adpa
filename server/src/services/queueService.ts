@@ -660,8 +660,8 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
       // Update data JSONB to include worker_id
       if (workerId) {
         paramCount++
-        updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', $${paramCount}::jsonb)`)
-        params.push(JSON.stringify(workerId))
+        updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', to_jsonb($${paramCount}::text))`)
+        params.push(workerId)
       }
     }
 
