@@ -1,13 +1,34 @@
 "use client"
 
-import { Search, Settings, Sun, Moon } from "lucide-react"
+import { Search, Settings, Sun, Moon, Activity, CheckCircle, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
 import { useTheme } from "next-themes"
 import { NotificationCenter } from "./notification-center"
+import { useEffect, useState } from "react"
+import { apiClient } from "@/lib/api"
+import Link from "next/link"
 
 export function Header() {
   const { theme, setTheme } = useTheme()
+  const [metrics, setMetrics] = useState<any>({})
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/metrics')
+        setMetrics(response)
+      } catch (error) {
+        // Silently fail, header should still work
+      }
+    }
+
+    fetchMetrics()
+    // Refresh every 30 seconds
+    const interval = setInterval(fetchMetrics, 30000)
+    return () => clearInterval(interval)
+  }, [])
 
   return (
     <header className="flex items-center justify-between px-6 py-4 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 shadow-sm">
@@ -22,6 +43,33 @@ export function Header() {
       </div>
 
       <div className="flex items-center space-x-3">
+        {/* Job Queue Stats */}
+        {metrics.totalActive > 0 && (
+          <Link href="/jobs">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="relative hover:bg-slate-100 dark:hover:bg-slate-700 transition-all duration-200"
+            >
+              <Activity className="h-4 w-4 text-blue-500 animate-pulse" />
+              <Badge className="ml-2 bg-blue-500 text-white">{metrics.totalActive}</Badge>
+              <span className="ml-2 text-xs text-muted-foreground hidden md:inline">active jobs</span>
+            </Button>
+          </Link>
+        )}
+
+        {/* Success Rate Indicator */}
+        {metrics.successRate && (
+          <div className="hidden lg:flex items-center space-x-2 px-3 py-1.5 rounded-md bg-slate-50 dark:bg-slate-800">
+            {metrics.successRate >= 90 ? (
+              <CheckCircle className="h-3 w-3 text-green-500" />
+            ) : (
+              <XCircle className="h-3 w-3 text-yellow-500" />
+            )}
+            <span className="text-xs font-medium">{metrics.successRate}% success</span>
+          </div>
+        )}
+
         {/* Theme Toggle */}
         <Button
           variant="ghost"
