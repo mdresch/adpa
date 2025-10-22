@@ -111,7 +111,7 @@ router.get("/",
           queuedTime: job.created_at,
           priority: jobData.priority || 'medium',
           queue: job.type === 'ai-generate' ? 'ai-processing' : job.type,
-          worker: jobData.worker || 'Unassigned',
+          worker: jobData.worker_id || jobData.worker || 'Unassigned',
           logs: jobData.logs || [],
           // Additional metadata for AI jobs
           metadata: {

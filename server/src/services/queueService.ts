@@ -127,8 +127,8 @@ aiQueue.process("ai-generate", async (job) => {
   const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data
 
   try {
-    // Update job status to processing
-    await updateJobStatus(jobId, "processing", 10)
+    // Update job status to processing and assign worker
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID)
 
     // Generate content using AI service. Use ContextAwareAIService if job provides contextual identifiers
     const useContext = !!job.data.use_context || !!job.data.projectId || !!job.data.documentIds || !!job.data.template_id
@@ -411,7 +411,7 @@ documentQueue.process("document-convert", async (job) => {
   const { jobId, userId, documentId, format } = job.data
 
   try {
-    await updateJobStatus(jobId, "processing", 20)
+    await updateJobStatus(jobId, "processing", 20, WORKER_ID)
 
     // Get document
     const docResult = await pool.query("SELECT * FROM documents WHERE id = $1", [documentId])
@@ -485,8 +485,8 @@ baselineQueue.process("baseline-extract", async (job) => {
   const { jobId, userId, project_id, document_ids, ai_provider, ai_model, project_name } = job.data
 
   try {
-    // Update job status to processing
-    await updateJobStatus(jobId, "processing", 10)
+    // Update job status to processing and assign worker
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID)
     
     logger.info(`Starting baseline extraction for project ${project_id}`)
     
@@ -638,7 +638,10 @@ export async function getJobStatus(jobId: string): Promise<any> {
   }
 }
 
-export async function updateJobStatus(jobId: string, status: string, progress?: number): Promise<void> {
+// Generate unique worker ID for this process
+const WORKER_ID = `worker-${process.pid}-${Date.now()}`
+
+export async function updateJobStatus(jobId: string, status: string, progress?: number, workerId?: string): Promise<void> {
   try {
     const updateFields = ["status = $2"]
     const params = [jobId, status]
@@ -653,6 +656,13 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
     if (status === "processing" && progress === 10) {
       paramCount++
       updateFields.push(`started_at = CURRENT_TIMESTAMP`)
+      
+      // Update data JSONB to include worker_id
+      if (workerId) {
+        paramCount++
+        updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', $${paramCount}::jsonb)`)
+        params.push(JSON.stringify(workerId))
+      }
     }
 
     await pool.query(
