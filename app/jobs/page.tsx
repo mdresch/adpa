@@ -435,14 +435,38 @@ export default function JobMonitorPage() {
                       Monitor and manage background jobs, queues, and workers
                     </p>
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <Button variant="outline" size="sm">
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh
+                  <div className="flex items-center space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await apiClient.request('/jobs/clean-stalled', { method: 'POST' })
+                          toast.success('Stalled jobs cleaned')
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error('Failed to clean stalled jobs')
+                        }
+                      }}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Clean Stalled
                     </Button>
-                    <Button size="sm">
-                      <Play className="h-4 w-4 mr-2" />
-                      Start All
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const result = await apiClient.request('/jobs/retry-all-failed', { method: 'POST' }) as any
+                          toast.success(`Retried ${result.retriedCount} failed jobs`)
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error('Failed to retry jobs')
+                        }
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry All Failed
                     </Button>
                   </div>
                 </div>
@@ -670,9 +694,23 @@ export default function JobMonitorPage() {
                                         >
                                           View Logs
                                         </DropdownMenuItem>
-                                        {job.status === "running" && <DropdownMenuItem>Pause Job</DropdownMenuItem>}
-                                        {job.status === "failed" && <DropdownMenuItem>Retry Job</DropdownMenuItem>}
-                                        <DropdownMenuItem className="text-red-600">Cancel Job</DropdownMenuItem>
+                                        {(job.status === "failed" || job.status === "processing") && (
+                                          <DropdownMenuItem
+                                            onSelect={async (e) => {
+                                              e.preventDefault()
+                                              try {
+                                                const result = await apiClient.request(`/jobs/${job.id}/retry`, { method: 'POST' }) as any
+                                                toast.success(`Job retried! New job: ${result.newJobId?.substring(0, 8)}...`)
+                                                window.location.reload()
+                                              } catch (error) {
+                                                toast.error('Failed to retry job')
+                                              }
+                                            }}
+                                          >
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            {job.status === "processing" ? "Retry Stuck Job" : "Retry Job"}
+                                          </DropdownMenuItem>
+                                        )}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
