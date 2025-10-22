@@ -27,6 +27,7 @@ import aiProvidersRoutes from "./routes/ai-providers"
 import aiFailoverRoutes from "./routes/ai-failover"
 import analyticsRoutes from "./routes/analytics"
 import jobRoutes from "./routes/jobs"
+import queueStatsRoutes from "./routes/queue-stats"
 import securityRoutes from "./routes/security"
 import integrationRoutes from "./routes/integrations"
 import confluenceRoutes from "./routes/confluenceRoutes"
@@ -175,6 +176,7 @@ app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/ai-failover", aiFailoverRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
+app.use("/api/queue-stats", queueStatsRoutes)
 app.use("/api/security", securityRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)

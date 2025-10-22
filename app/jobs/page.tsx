@@ -289,8 +289,14 @@ export default function JobMonitorPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
+  const [queues, setQueues] = useState<any[]>([])
+  const [workers, setWorkers] = useState<any[]>([])
+  const [metrics, setMetrics] = useState<any>({})
   const [loading, setLoading] = useState(true)
+  const [loadingQueues, setLoadingQueues] = useState(true)
+  const [loadingWorkers, setLoadingWorkers] = useState(true)
 
+  // Fetch jobs
   useEffect(() => {
     const fetchJobs = async () => {
       try {
@@ -319,6 +325,66 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
+  // Fetch queue statistics
+  useEffect(() => {
+    const fetchQueues = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/overview')
+        setQueues(response.queues || [])
+      } catch (error) {
+        console.error("Failed to fetch queue stats:", error)
+        setQueues(mockQueues) // Fallback to mock
+      } finally {
+        setLoadingQueues(false)
+      }
+    }
+
+    fetchQueues()
+
+    // Refresh every 10 seconds (more frequent for queue stats)
+    const interval = setInterval(fetchQueues, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Fetch worker statistics
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/workers')
+        setWorkers(response.workers || [])
+      } catch (error) {
+        console.error("Failed to fetch worker stats:", error)
+        setWorkers(mockWorkers) // Fallback to mock
+      } finally {
+        setLoadingWorkers(false)
+      }
+    }
+
+    fetchWorkers()
+
+    // Refresh every 5 seconds (real-time worker status)
+    const interval = setInterval(fetchWorkers, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Fetch aggregate metrics
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/metrics')
+        setMetrics(response)
+      } catch (error) {
+        console.error("Failed to fetch queue metrics:", error)
+      }
+    }
+
+    fetchMetrics()
+
+    // Refresh every 15 seconds
+    const interval = setInterval(fetchMetrics, 15000)
+    return () => clearInterval(interval)
+  }, [])
+
   // Update jobs with real-time data
   useEffect(() => {
     setJobs(prevJobs =>
@@ -338,13 +404,16 @@ export default function JobMonitorPage() {
     return matchesSearch && matchesStatus
   })
 
+  // Calculate stats from real data or metrics
   const stats = {
-    totalJobs: mockJobs.length,
-    runningJobs: mockJobs.filter((j) => j.status === "running").length,
-    completedJobs: mockJobs.filter((j) => j.status === "completed").length,
-    failedJobs: mockJobs.filter((j) => j.status === "failed").length,
-    queuedJobs: mockJobs.filter((j) => j.status === "queued").length,
-    activeWorkers: mockWorkers.filter((w) => w.status === "active").length,
+    totalJobs: metrics.totalJobs || jobs.length,
+    runningJobs: metrics.totalActive || jobs.filter((j) => j.status === "processing").length,
+    completedJobs: metrics.totalCompleted || jobs.filter((j) => j.status === "completed").length,
+    failedJobs: metrics.totalFailed || jobs.filter((j) => j.status === "failed").length,
+    queuedJobs: metrics.totalWaiting || jobs.filter((j) => j.status === "pending").length,
+    activeWorkers: metrics.activeWorkers || workers.filter((w) => w.status === "active").length,
+    successRate: metrics.successRate || 0,
+    queueHealth: metrics.queueHealth || 'unknown'
   }
 
   return (
@@ -710,8 +779,14 @@ export default function JobMonitorPage() {
                       </TabsContent>
 
                       <TabsContent value="queues" className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {mockQueues.map((queue, index) => (
+                        {loadingQueues && queues.length === 0 ? (
+                          <div className="text-center py-8">
+                            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                            <p className="text-muted-foreground mt-2">Loading queue statistics...</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {(queues.length > 0 ? queues : mockQueues).map((queue, index) => (
                             <AnimatedGridItemWithDelay
                               key={queue.name}
                               className="animate-fade-in-up"
@@ -752,13 +827,20 @@ export default function JobMonitorPage() {
                                 </CardContent>
                               </Card>
                             </AnimatedGridItemWithDelay>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </TabsContent>
 
                       <TabsContent value="workers" className="space-y-4">
-                        <div className="space-y-4">
-                          {mockWorkers.map((worker, index) => (
+                        {loadingWorkers && workers.length === 0 ? (
+                          <div className="text-center py-8">
+                            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                            <p className="text-muted-foreground mt-2">Loading worker statistics...</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {(workers.length > 0 ? workers : mockWorkers).map((worker, index) => (
                             <AnimatedGridItemWithDelay
                               key={worker.id}
                               className="animate-fade-in-up"
@@ -866,8 +948,9 @@ export default function JobMonitorPage() {
                                 </CardContent>
                               </Card>
                             </AnimatedGridItemWithDelay>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </TabsContent>
                     </Tabs>
                   </CardContent>
