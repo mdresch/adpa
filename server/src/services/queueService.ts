@@ -334,6 +334,9 @@ aiQueue.process("ai-generate", async (job) => {
     const projectName = job.data?.variables?.project_name || job.data?.projectName || null
     const documentName = templateName || 'Document'
     
+    // FIX: Get projectId from job data (not from scoped variable)
+    const projectIdForNotification = job.data?.projectId || job.data?.variables?.project_id || null
+    
     io.emit("job:completed", {
       jobId,
       userId,
@@ -341,7 +344,7 @@ aiQueue.process("ai-generate", async (job) => {
       result: finalResult,
       message: `${documentName} generated successfully`,
       documentId: createdDocumentId,
-      projectId: projectId,
+      projectId: projectIdForNotification,
       provider: job.data?.provider,
       model: job.data?.model,
     })
