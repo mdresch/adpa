@@ -329,6 +329,44 @@ aiQueue.process("ai-generate", async (job) => {
       [JSON.stringify(finalResult), jobId]
     )
 
+    // ⭐ CREATE AUDIT LOG FOR AI ANALYTICS ⭐
+    // This ensures the AI Analytics dashboard shows correct generation counts
+    try {
+      // Get provider ID for audit log (needed by analytics queries)
+      const providerResult = await pool.query(
+        'SELECT id FROM ai_providers WHERE name = $1 LIMIT 1',
+        [provider]
+      )
+      
+      if (providerResult.rows.length > 0) {
+        await pool.query(
+          `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            userId || null,
+            'ai_generate', // This action is what the analytics query counts
+            'ai_provider',
+            providerResult.rows[0].id,
+            JSON.stringify({
+              prompt_length: prompt?.length || 0,
+              provider,
+              model,
+              template_id,
+              document_id: createdDocumentId,
+              job_id: jobId,
+              usage: result?.usage || {},
+              success: true,
+              response_time: result?.response_time || 0
+            })
+          ]
+        )
+        logger.info(`✅ Audit log created for AI generation (job: ${jobId})`)
+      }
+    } catch (auditErr) {
+      logger.error(`Failed to create audit log for job ${jobId}:`, auditErr)
+      // Don't fail the job if audit logging fails
+    }
+
     // Emit real-time update with rich notification data
     const templateName = job.data?.variables?.template_name || job.data?.template_name || null
     const projectName = job.data?.variables?.project_name || job.data?.projectName || null
