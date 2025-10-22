@@ -269,6 +269,25 @@ aiQueue.process("ai-generate", async (job) => {
         createdDocumentId = insertResult.rows[0].id
         createdDocumentRow = insertResult.rows[0]
         logger.info(`Document created: ${createdDocumentId} (project: ${projectId || 'none'}) - ${wordCount} words, ${characterCount} chars`)
+        
+        // ⭐ INCREMENT TEMPLATE USAGE COUNT ⭐
+        // This updates the template's usage statistics for analytics
+        if (template_id) {
+          try {
+            await pool.query(
+              `UPDATE templates 
+               SET usage_count = usage_count + 1,
+                   last_used_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = $1`,
+              [template_id]
+            )
+            logger.info(`✅ Template usage incremented: ${template_id}`)
+          } catch (templateErr) {
+            logger.error(`Failed to increment template usage for ${template_id}:`, templateErr)
+            // Don't fail the job if template update fails
+          }
+        }
       }
     } catch (docErr) {
       logger.error(`Failed to create document for job ${jobId}:`, docErr)
