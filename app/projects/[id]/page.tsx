@@ -239,8 +239,7 @@ function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
   
   // Listen for baseline:created event to refresh when job completes
   useEffect(() => {
-    const { getSocket } = apiClient
-    const socket = getSocket()
+    const socket = apiClient.getSocket()
     
     if (socket) {
       socket.on('baseline:created', (data: any) => {

@@ -400,8 +400,7 @@ export default function JobMonitorPage() {
 
   // Listen for real-time job progress updates
   useEffect(() => {
-    const { getSocket } = apiClient
-    const socket = getSocket()
+    const socket = apiClient.getSocket()
     
     if (socket) {
       // Listen for job progress updates
