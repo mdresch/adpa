@@ -167,20 +167,38 @@ ADPA handles the documentation. Experts handle the expertise.
 
 ---
 
-## Try It Yourself
+## Let's Work Together
 
-We're opening ADPA to a limited number of pilot partners who want to:
-- Reduce documentation time by 600x
-- Maintain compliance standards automatically
-- Prove ROI through transparent metrics
+**I'm actively seeking opportunities to bring this value to organizations.** Here's how we can work together:
 
-**Interested?** Connect with me on LinkedIn or visit [your-website.com] to learn more.
+### **Option 1: Paid Pilot Partnership**
+- Test ADPA in your environment (2-4 week pilot)
+- Generate 50-100 documents to prove ROI
+- Receive full implementation support
+- Transparent pricing based on value delivered
+
+### **Option 2: Consulting Engagement**
+- Help you implement similar AI solutions
+- Digital transformation strategy and execution
+- Process optimization and automation
+- Measured by productivity gains (not billable hours)
+
+### **Option 3: Full-Time Role**
+- Join your organization to lead AI/digital initiatives
+- Bring ADPA with me (or build custom solutions)
+- Roles: AI/ML Product Management, Digital Transformation, Solutions Architecture, Strategic Technology Leadership
+
+**Full transparency:** I'm not contracted and actively seeking work. ADPA is both a solution to a real problem AND a demonstration of what I bring: technical execution, business thinking, and measurable results.
+
+**Interested in any of the above?** Connect with me on LinkedIn or DM me directly. Let's talk about how we can work together.
 
 ---
 
 ## About the Author
 
-Menno Drescher is a Managed Service Professional at various assignments for clients and currently seeking appointment with a company, leading the development of ADPA—an AI-powered document generation platform for enterprise project management and business analysis. With 25 years of experience in Finance, Human Resources and ICT, he is passionate about using AI to eliminate busywork and amplify human expertise.
+Menno Drescher is a Managed Service Professional with 25 years of experience in Finance, Human Resources, and ICT. **Currently not contracted and actively seeking his next role**, he built ADPA—an AI-powered document generation platform for enterprise project management and business analysis—to demonstrate how AI can eliminate busywork and amplify human expertise. His diverse background across Finance, HR, and ICT uniquely positions him to solve cross-functional business problems with innovative technical solutions.
+
+**Available for full-time roles in:** AI/ML Product Management, Digital Transformation, Enterprise Solutions Architecture, or Strategic Technology Leadership.
 
 ---
 

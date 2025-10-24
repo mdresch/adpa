@@ -305,6 +305,13 @@ I'm not trying to build a startup here. I'm trying to:
 - **DM me** - Happy to do a live demo (15 min, no sales pitch, just showing how it works)
 - **I'll share:** The actual code, the real metrics, the messy parts
 
+**If your organization could benefit from this:**
+- **Pilot partnership:** Test ADPA in your environment (I'm open to paid pilots)
+- **Consulting engagement:** Help implement similar solutions in your org
+- **Full-time role:** If your company needs someone who builds solutions like this, let's talk
+
+**Full transparency:** I'm actively seeking work and need to generate revenue. This isn't just a side project—it's a demonstration of what I bring to an organization: problem identification, technical execution, and measurable business impact.
+
 ---
 
 ## Final Thoughts
@@ -323,7 +330,9 @@ I've been building in public(-ish) for 4 months now. The results are exciting, b
 
 ## About Me
 
-I'm Menno Drescher, a Managed Service Professional with 25 years of experience across Finance, Human Resources, and ICT. Currently seeking my next appointment with a company where I can make a strategic impact, I built ADPA because I was tired of spending 40% of my time formatting Word documents instead of solving actual problems and amplifying human expertise.
+I'm Menno Drescher, a Managed Service Professional with 25 years of experience across Finance, Human Resources, and ICT. **I'm currently not contracted and actively searching for my next opportunity** with a company where I can make a strategic impact. 
+
+While between assignments, I built ADPA because I was tired of spending 40% of my time formatting Word documents instead of solving actual problems and amplifying human expertise. This project showcases what I bring: technical execution, business thinking, and the drive to solve real problems.
 
 **This post isn't a product launch.** It's a "hey, I built something interesting, what do you think?" 
 
@@ -332,6 +341,7 @@ I'm Menno Drescher, a Managed Service Professional with 25 years of experience a
 - You have feedback on the approach
 - You want to see how it works
 - You think I'm completely wrong (I want to know why!)
+- **Your company could use someone who builds solutions like this**
 
 ---
 
