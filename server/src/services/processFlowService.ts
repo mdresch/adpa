@@ -1646,6 +1646,15 @@ class ProcessFlowService {
     aiMetadata?: any
   ): Promise<{id: string, name: string}> {
     try {
+      // Debug: Log what aiMetadata we received
+      logger.info('🔍 [SAVE-DOC] Received aiMetadata:', {
+        hasMetadata: !!aiMetadata,
+        provider: aiMetadata?.provider,
+        model: aiMetadata?.model,
+        hasUsage: !!aiMetadata?.usage,
+        usage: aiMetadata?.usage
+      })
+      
       // Generate document name based on template and timestamp
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const documentName = `${template.name} - Generated ${timestamp}`
