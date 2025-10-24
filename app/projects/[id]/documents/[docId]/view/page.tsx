@@ -1920,12 +1920,13 @@ The ADPA system represents a significant advancement in document processing auto
                         </CardHeader>
                         <CardContent>
                           <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
-                            <ReactMarkdown 
-                              remarkPlugins={[remarkGfm]}
-                              className="prose prose-sm dark:prose-invert max-w-none"
-                            >
-                              {summary.compressed_content}
-                            </ReactMarkdown>
+                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                              >
+                                {summary.compressed_content}
+                              </ReactMarkdown>
+                            </div>
                           </div>
                           
                           <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
