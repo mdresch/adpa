@@ -310,26 +310,37 @@ export default function JobMonitorPage() {
     const fetchJobs = async () => {
       try {
         const response = await apiClient.getJobs({ limit: 50 })
-        setJobs(
-          response.jobs.map((job: any) => ({
-            ...job, // Spread all job fields first
-            name: job.name ?? "", // Then set defaults only if missing
-            priority: job.priority ?? "medium",
-            queue: job.queue ?? "",
-            logs: job.logs ?? [],
-            // Extract project and document names from metadata to top level
-            projectName: job.metadata?.project_name || job.projectName,
-            documentName: job.metadata?.document_name || job.documentName,
-            metadata: {
-              ...(job.metadata || {}), // Preserve existing metadata
-              // Ensure progress fields are included
-              currentStep: job.metadata?.currentStep,
-              compressionProgress: job.metadata?.compressionProgress,
-              currentDocument: job.metadata?.currentDocument,
-              providerAssignments: job.metadata?.providerAssignments || []
-            }
-          }))
-        )
+        const mappedJobs = response.jobs.map((job: any) => ({
+          ...job, // Spread all job fields first
+          name: job.name ?? "", // Then set defaults only if missing
+          priority: job.priority ?? "medium",
+          queue: job.queue ?? "",
+          logs: job.logs ?? [],
+          // Extract project and document names from metadata to top level
+          projectName: job.metadata?.project_name || job.projectName,
+          documentName: job.metadata?.document_name || job.documentName,
+          metadata: {
+            ...(job.metadata || {}), // Preserve existing metadata
+            // Ensure progress fields are included
+            currentStep: job.metadata?.currentStep,
+            compressionProgress: job.metadata?.compressionProgress,
+            currentDocument: job.metadata?.currentDocument,
+            providerAssignments: job.metadata?.providerAssignments || []
+          }
+        }))
+        
+        // Debug: Check if job names are being set correctly
+        if (mappedJobs.length > 0) {
+          console.log('🔍 [JOBS-DEBUG] First job from API:',{
+            id: mappedJobs[0].id,
+            name: mappedJobs[0].name,
+            type: mappedJobs[0].type,
+            projectName: mappedJobs[0].projectName,
+            documentName: mappedJobs[0].documentName
+          })
+        }
+        
+        setJobs(mappedJobs)
       } catch (error) {
         console.error("Failed to fetch jobs:", error)
         toast.error("Failed to load jobs")
