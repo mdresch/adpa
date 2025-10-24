@@ -1563,9 +1563,32 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                           </div>
                                         )}
                                         {totalManualHours > 0 && (
-                                          <div className="text-xs text-muted-foreground italic mt-1">
-                                            💰 Saved ~{Math.round(totalManualHours * 10) / 10} hours of expert time
-                                          </div>
+                                          <>
+                                            <div className="text-xs text-muted-foreground italic mt-1">
+                                              💰 Saved ~{Math.round(totalManualHours * 10) / 10} hours of expert time
+                                            </div>
+                                            {(() => {
+                                              // Get reading time from content metrics
+                                              const readingTimeMin = (document as any)?.generation_metadata?.contentMetrics?.readingTime || 
+                                                                    Math.ceil(wordCount / 250)
+                                              const readingTimeDisplay = readingTimeMin >= 60 
+                                                ? `${Math.round(readingTimeMin / 60 * 10) / 10} hours` 
+                                                : `${readingTimeMin} minutes`
+                                              
+                                              const roi = Math.round((totalManualHours * 60) / readingTimeMin)
+                                              
+                                              return (
+                                                <div className="text-xs font-medium text-purple-600 mt-1">
+                                                  📖 Result reading time: ~{readingTimeDisplay}
+                                                  {roi > 0 && (
+                                                    <span className="ml-1 text-purple-500">
+                                                      ({roi}x ROI)
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </>
                                         )}
                                       </div>
                                     )
