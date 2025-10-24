@@ -5,7 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', 'server', '.env') })
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.DATABASE_URL?.includes('neon.tech') || process.env.DATABASE_URL?.includes('supabase.co')
+  ssl: process.env.DATABASE_URL?.includes('supabase.co')
     ? { rejectUnauthorized: false }
     : false
 });
@@ -66,7 +66,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', 'server', '.env') })
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.DATABASE_URL?.includes('neon.tech') || process.env.DATABASE_URL?.includes('supabase.co')
+  ssl: process.env.DATABASE_URL?.includes('supabase.co')
     ? { rejectUnauthorized: false }
     : false
 });
@@ -127,7 +127,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', 'server', '.env') })
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.DATABASE_URL?.includes('neon.tech') || process.env.DATABASE_URL?.includes('supabase.co')
+  ssl: process.env.DATABASE_URL?.includes('supabase.co')
     ? { rejectUnauthorized: false }
     : false
 });
@@ -188,7 +188,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', 'server', '.env') })
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.DATABASE_URL?.includes('neon.tech') || process.env.DATABASE_URL?.includes('supabase.co')
+  ssl: process.env.DATABASE_URL?.includes('supabase.co')
     ? { rejectUnauthorized: false }
     : false
 });

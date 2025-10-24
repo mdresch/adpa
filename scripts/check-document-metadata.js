@@ -15,7 +15,7 @@ if (!connectionString) {
 
 const pool = new Pool({
   connectionString,
-  ssl: connectionString.includes('neon.tech') ? { rejectUnauthorized: false } : false
+  ssl: connectionString.includes('supabase.co') ? { rejectUnauthorized: false } : false
 });
 
 async function checkDocument() {
