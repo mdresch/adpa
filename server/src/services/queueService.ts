@@ -200,8 +200,8 @@ aiQueue.process("ai-generate", async (job) => {
       const templateName = job.data?.variables?.template_name || job.data?.template_name || null
       const docName = docNameProvided || templateName || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
       const rawContent = result?.content ? result.content : result
-      // FIX: Store content as plain Markdown text, not JSON-stringified
-      // The content should be stored directly as a string for proper markdown rendering
+      // Content should be plain Markdown text for proper rendering
+      // JSON.stringify is used as a safe fallback only if AI returns non-string content
       const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
 
       // FIX: project_id can be in job.data.projectId OR job.data.variables.project_id
@@ -371,6 +371,7 @@ aiQueue.process("ai-generate", async (job) => {
       try {
         const { baselineService } = await import('./baselineService')
         const rawContent = result?.content ? result.content : result
+        // Content should be plain Markdown; JSON.stringify as safe fallback for non-string content
         const documentContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
         const docName = job.data?.name && job.data.name.trim() ? job.data.name.trim() : 'Generated Document'
         
