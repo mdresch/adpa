@@ -1178,8 +1178,8 @@ export default function ProjectDetail() {
   
   // AI Provider selection for document generation
   const [aiProviders, setAiProviders] = useState<any[]>([])
-  const [selectedProvider, setSelectedProvider] = useState("Groq AI")
-  const [selectedModel, setSelectedModel] = useState("llama-3.1-8b-instant")
+  const [selectedProvider, setSelectedProvider] = useState("Mistral AI")
+  const [selectedModel, setSelectedModel] = useState("mistral-large-latest")
   const [aiTemperature, setAiTemperature] = useState(0.7)
   const [updating, setUpdating] = useState(false)
   
