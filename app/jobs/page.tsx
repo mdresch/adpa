@@ -329,17 +329,6 @@ export default function JobMonitorPage() {
           }
         }))
         
-        // Debug: Check if job names are being set correctly
-        if (mappedJobs.length > 0) {
-          console.log('🔍 [JOBS-DEBUG] First job from API:',{
-            id: mappedJobs[0].id,
-            name: mappedJobs[0].name,
-            type: mappedJobs[0].type,
-            projectName: mappedJobs[0].projectName,
-            documentName: mappedJobs[0].documentName
-          })
-        }
-        
         setJobs(mappedJobs)
       } catch (error) {
         console.error("Failed to fetch jobs:", error)
