@@ -7,7 +7,7 @@ const redisConnectionMethods = [
 ]
 
 const createRedisConfig = (host: string) => {
-  // If REDIS_URL is provided (e.g., from Upstash), use it directly
+  // If REDIS_URL is provided (e.g., from Railway), use it directly
   if (process.env.REDIS_URL) {
     const config: any = {
       url: process.env.REDIS_URL,

@@ -19,7 +19,7 @@ function parseBullRedisConfig() {
     }
   }
   
-  // Parse Upstash/cloud Redis URL (rediss://default:password@host:port)
+  // Parse Railway/cloud Redis URL (rediss://default:password@host:port)
   try {
     const url = new URL(redisUrl)
     return {
@@ -130,7 +130,7 @@ const processFlowQueueOptions = {
     timeout: 3600000, // 60 minutes timeout for process flow (compression is slow with many docs)
   },
   settings: {
-    lockDuration: 3600000, // 60 minutes lock (24 documents × 2 min each = ~48 min)
+    lockDuration: 3600000, // 60 minutes lock for long-running process flow (handles dynamic document sets with AI compression and caching)
     stallInterval: 60000, // Check every 60 seconds (less aggressive)
     maxStalledCount: 3, // Allow 3 stalls before failing
   },
