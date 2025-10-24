@@ -1,12 +1,12 @@
 # From 7 Hours to 43 Seconds: How ADPA Transformed Enterprise Document Generation
 
-*By [Your Name] | [Date] | 12 min read*
+*By Menno Drescher | 24 October 2025 | 12 min read*
 
 ---
 
 ## Introduction: The $1,080,000 Problem
 
-Last month, I sat in a meeting with a frustrated VP of Project Management at a mid-size consulting firm. Her team was drowning in documentation.
+Last while back, I sat in a meeting with a frustrated VP of Project Management at a mid-size consulting firm. Her team was drowning in documentation.
 
 "We have 12 senior consultants," she explained, "and they're spending 40% of their time writing reports instead of solving client problems. It's costing us **millions** in lost productivity."
 
@@ -340,7 +340,7 @@ We're accepting **25 pilot partners** who want to:
 - Use PMBOK, BABOK, or DMBOK frameworks
 - Willing to provide feedback and case study data
 
-**Interested?** Email [your-email] or book a demo at [your-website.com]
+**Interested?** Email menno.drescher@gmail.com or try ADPA at https://adpa-lnovpfb7f-menno-dreschers-projects.vercel.app
 
 ---
 

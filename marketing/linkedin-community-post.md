@@ -339,9 +339,14 @@ While between assignments, I built ADPA because I was tired of spending 40% of m
 **Connect with me if:**
 - You're solving similar problems
 - You have feedback on the approach
-- You want to see how it works
+- You want to see how it works (DM me for a demo!)
 - You think I'm completely wrong (I want to know why!)
 - **Your company could use someone who builds solutions like this**
+
+**Contact:**
+- **LinkedIn DM:** Send me a message
+- **Email:** menno.drescher@gmail.com
+- **Try ADPA:** https://adpa-lnovpfb7f-menno-dreschers-projects.vercel.app
 
 ---
 

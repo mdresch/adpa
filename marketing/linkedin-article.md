@@ -190,7 +190,12 @@ ADPA handles the documentation. Experts handle the expertise.
 
 **Full transparency:** I'm not contracted and actively seeking work. ADPA is both a solution to a real problem AND a demonstration of what I bring: technical execution, business thinking, and measurable results.
 
-**Interested in any of the above?** Connect with me on LinkedIn or DM me directly. Let's talk about how we can work together.
+**Interested in any of the above?** 
+- **Connect:** https://linkedin.com/in/menno-drescher (or DM me directly)
+- **Email:** menno.drescher@gmail.com
+- **Try ADPA:** https://adpa-lnovpfb7f-menno-dreschers-projects.vercel.app
+
+Let's talk about how we can work together.
 
 ---
 
