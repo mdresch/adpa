@@ -1401,10 +1401,22 @@ class ProcessFlowService {
       steps[stepIndex].status = 'processing'
       logger.info('Step 7: Generating final document using AI provider')
       
+      // Track AI generation time
+      const aiStartTime = Date.now()
+      
       // Generate the actual document using AI (with metadata)
       const aiGenerationResult = await this.generateDocumentWithAI(injectedContent, template, config)
+      
+      const aiEndTime = Date.now()
+      const aiProcessingTimeMs = aiEndTime - aiStartTime
+      const aiProcessingTimeSec = (aiProcessingTimeMs / 1000).toFixed(1)
+      
       const aiGeneratedDocument = typeof aiGenerationResult === 'string' ? aiGenerationResult : aiGenerationResult.content
-      const aiMetadata = typeof aiGenerationResult === 'object' ? aiGenerationResult : null
+      const aiMetadata = typeof aiGenerationResult === 'object' ? {
+        ...aiGenerationResult,
+        processingTime: aiProcessingTimeSec + 's',
+        processingTimeMs: aiProcessingTimeMs
+      } : null
       const aiGeneratedTokens = this.estimateTokenCount(aiGeneratedDocument)
       
       steps[stepIndex].tokens = aiGeneratedTokens
@@ -1655,6 +1667,12 @@ class ProcessFlowService {
       const inputTokens = aiMetadata?.usage?.prompt_tokens || 0
       const outputTokens = aiMetadata?.usage?.completion_tokens || totalTokens
       
+      // Calculate content statistics
+      const wordCount = finalContent.split(/\s+/).filter(word => word.length > 0).length
+      const characterCount = finalContent.length
+      const sentenceCount = finalContent.split(/[.!?]+/).filter(s => s.trim().length > 0).length
+      const paragraphCount = finalContent.split(/\n\n+/).filter(p => p.trim().length > 0).length
+      
       // Helper function to calculate AI cost
       const calculateCost = (provider: string, inputTokens: number, outputTokens: number): number => {
         const pricing: any = {
@@ -1702,7 +1720,8 @@ class ProcessFlowService {
             cost: calculateCost(aiMetadata.provider, inputTokens, outputTokens)
           },
           status: 'success',
-          processingTime: aiMetadata.processingTime || 'N/A'
+          processingTime: aiMetadata.processingTime || 'N/A',
+          processingTimeMs: aiMetadata.processingTimeMs || 0
         } : {
           provider: 'N/A',
           model: 'N/A',
@@ -1714,11 +1733,21 @@ class ProcessFlowService {
             cost: 0
           },
           status: 'unknown',
-          processingTime: 'N/A'
+          processingTime: 'N/A',
+          processingTimeMs: 0
         },
         generation: {
-          status: 'success',
-          duration: aiMetadata?.processingTime || 0
+          status: aiMetadata ? 'success' : 'unknown',
+          duration: aiMetadata?.processingTimeMs || 0,
+          durationFormatted: aiMetadata?.processingTime || 'N/A'
+        },
+        contentMetrics: {
+          words: wordCount,
+          characters: characterCount,
+          sentences: sentenceCount,
+          paragraphs: paragraphCount,
+          avgWordsPerSentence: sentenceCount > 0 ? Math.round(wordCount / sentenceCount) : 0,
+          readingTime: Math.ceil(wordCount / 200) // 200 words per minute average
         }
       }
       

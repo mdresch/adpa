@@ -1113,11 +1113,19 @@ The ADPA system represents a significant advancement in document processing auto
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <div>
                               <span className="text-muted-foreground">Words:</span>
-                              <span className="ml-2 font-medium">{document.word_count || 0}</span>
+                              <span className="ml-2 font-medium">
+                                {(document.word_count || 
+                                  (document as any).generation_metadata?.contentMetrics?.words || 
+                                  0).toLocaleString()}
+                              </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Characters:</span>
-                              <span className="ml-2 font-medium">{document.character_count || 0}</span>
+                              <span className="ml-2 font-medium">
+                                {(document.character_count || 
+                                  (document as any).generation_metadata?.contentMetrics?.characters || 
+                                  0).toLocaleString()}
+                              </span>
                             </div>
                           </div>
                         </div>
