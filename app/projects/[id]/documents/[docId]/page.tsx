@@ -690,15 +690,31 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Framework</Label>
-                          <p className="text-sm">{document?.template_framework || "Not specified"}</p>
+                          <p className="text-sm">
+                            {document?.template_framework || 
+                             (document as any)?.generation_metadata?.framework || 
+                             document?.framework || 
+                             "Not specified"}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">File Size</Label>
-                          <p className="text-sm">{formatFileSize(document?.file_size || 0)}</p>
+                          <p className="text-sm">
+                            {formatFileSize(
+                              document?.file_size || 
+                              (document?.content ? new Blob([document.content]).size : 0)
+                            )}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Word Count</Label>
-                          <p className="text-sm">{document?.word_count?.toLocaleString() || "N/A"}</p>
+                          <p className="text-sm">
+                            {(
+                              document?.word_count || 
+                              (document as any)?.generation_metadata?.contentMetrics?.words || 
+                              0
+                            ).toLocaleString()}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Last Updated</Label>
@@ -996,7 +1012,23 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Processing Time</span>
                           <span className="text-sm font-medium">
-                            {document?.generation_metadata?.generation?.duration || document?.metadata?.processing_time || "N/A"}
+                            {(() => {
+                              // Try formatted version first
+                              const formatted = document?.generation_metadata?.aiProcessing?.processingTime || 
+                                               document?.generation_metadata?.generation?.durationFormatted
+                              if (formatted) return formatted
+                              
+                              // Fall back to raw milliseconds and format
+                              const rawMs = document?.generation_metadata?.aiProcessing?.processingTimeMs || 
+                                           document?.generation_metadata?.generation?.duration ||
+                                           document?.metadata?.processing_time
+                              
+                              if (typeof rawMs === 'number' && rawMs > 0) {
+                                return (rawMs / 1000).toFixed(1) + 's'
+                              }
+                              
+                              return "N/A"
+                            })()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -1118,10 +1150,18 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                   <span className="text-sm text-muted-foreground">Avg Words/Sentence:</span>
                                   <span className="text-sm font-medium">
                                     {(() => {
-                                      // Calculate from actual values
-                                      const wc = document?.word_count || document?.generation_metadata?.wordCount || 0
-                                      const sc = document?.sentence_count || document?.generation_metadata?.contentMetrics?.sentences || 0
-                                      const avg = (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : null
+                                      // Try generation_metadata first (most accurate)
+                                      const avgFromMeta = document?.generation_metadata?.contentMetrics?.avgWordsPerSentence
+                                      if (avgFromMeta) return avgFromMeta
+                                      
+                                      // Calculate from actual values as fallback
+                                      const wc = document?.word_count || 
+                                                document?.generation_metadata?.contentMetrics?.words || 
+                                                0
+                                      const sc = document?.sentence_count || 
+                                                document?.generation_metadata?.contentMetrics?.sentences || 
+                                                0
+                                      const avg = (wc > 0 && sc > 0) ? Math.round(wc / sc) : null
                                       return avg ? avg : "N/A"
                                     })()}
                                   </span>
