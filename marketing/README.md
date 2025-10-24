@@ -70,15 +70,29 @@ This marketing package contains **everything you need** to launch ADPA's marketi
 
 ---
 
-## 🎯 Quick Start (5 Minutes)
+## 🚀 QUICK START (2 Minutes)
 
-**Don't have time to read everything? Start here:**
+### **⚡ FASTEST PATH → START_HERE.md**
+
+**If you only read ONE file, read this:**
+👉 **`START_HERE.md`** ← Complete launch plan + revenue strategy
+
+**Then do these 3 things:**
+1. **TONIGHT:** Read `REVENUE_OPPORTUNITIES.md` (20 min)
+2. **TONIGHT:** Update LinkedIn profile (15 min)
+3. **TOMORROW 9 AM:** Post `linkedin-community-post.md`
+
+**That's it. Revenue conversations start within 48 hours.**
+
+---
+
+## 📚 Alternative Start (If You Want Details):
 
 1. **Read this:** `PLATFORM_STRATEGY.md` (15 min) - Understand WHY LinkedIn
-2. **Do this:** Copy `linkedin-article.md` → Publish on LinkedIn (10 min)
+2. **Do this:** Copy `linkedin-community-post.md` → Publish on LinkedIn (10 min)
 3. **Then this:** Follow Day 1-7 in `QUICK_START_GUIDE.md` (30 min/day)
 
-**That's it. You'll see results within 7 days.**
+**You'll see results within 7 days.**
 
 ---
 
