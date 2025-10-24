@@ -320,28 +320,10 @@ The ADPA system represents a significant advancement in document processing auto
       setIsLoading(true)
       try {
         // Fetch document from API
-        console.log('%c🌐 [API-CALL] Fetching document from backend...', 'background: #FF00FF; color: white; font-size: 16px; padding: 10px;')
-        console.log('%c📡 Endpoint 1:', 'background: #9C27B0; color: white; font-weight: bold; padding: 5px;', `/projects/${projectId}/documents/${documentId}`)
-        console.log('%c📡 Endpoint 2:', 'background: #9C27B0; color: white; font-weight: bold; padding: 5px;', `/projects/${projectId}/documents/${documentId}/versions`)
-        
         const [documentResponse, versionsResponse] = await Promise.all([
           apiClient.get(`/projects/${projectId}/documents/${documentId}`),
           apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
         ])
-        
-        console.log('%c✅ [API-CALL] Backend responded!', 'background: #4CAF50; color: white; font-size: 16px; padding: 10px;')
-        
-        console.log('%c🚨🚨🚨 METADATA DEBUG START 🚨🚨🚨', 'background: #ff0000; color: #ffffff; font-size: 20px; padding: 10px;')
-        console.log('%c📦 Raw API Response:', 'background: #4CAF50; color: white; font-weight: bold; padding: 5px;', documentResponse)
-        console.log('%c❓ Has generation_metadata?', 'background: #2196F3; color: white; font-weight: bold; padding: 5px;', !!documentResponse?.generation_metadata)
-        console.log('%c📋 generation_metadata type:', 'background: #FF9800; color: white; font-weight: bold; padding: 5px;', typeof documentResponse?.generation_metadata)
-        if (documentResponse?.generation_metadata) {
-          console.log('%c🔑 generation_metadata keys:', 'background: #9C27B0; color: white; font-weight: bold; padding: 5px;', Object.keys(documentResponse.generation_metadata))
-          console.log('%c📄 generation_metadata content:', 'background: #00BCD4; color: white; font-weight: bold; padding: 5px;', documentResponse.generation_metadata)
-        } else {
-          console.log('%c❌ NO METADATA FOUND!', 'background: #f44336; color: white; font-size: 16px; font-weight: bold; padding: 10px;')
-        }
-        console.log('%c🚨🚨🚨 METADATA DEBUG END 🚨🚨🚨', 'background: #ff0000; color: #ffffff; font-size: 20px; padding: 10px;')
         
         const documentData = documentResponse
         const versionsData = versionsResponse || []
@@ -381,11 +363,6 @@ The ADPA system represents a significant advancement in document processing auto
                                documentData.generation_metadata?.source_documents || 
                                []
         
-        console.log('📚 Source documents found in metadata:', sourceDocuments.length)
-        if (sourceDocuments.length > 0) {
-          console.log('  Source documents:', sourceDocuments.map((d: any) => d.title).join(', '))
-        }
-        
         setDocument({
           ...documentData, 
           content: contentString,
@@ -402,7 +379,6 @@ The ADPA system represents a significant advancement in document processing auto
         console.error("Failed to load document:", error)
         
         // Fallback to mock data if API fails (for development/demo purposes)
-        console.log("Falling back to mock data for demonstration")
         setDocument(mockDocument)
         setVersions(mockVersions)
         setEditedContent(mockDocument.content)
