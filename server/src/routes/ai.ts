@@ -82,7 +82,7 @@ router.post("/generate",
       log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
       
       // Store job ID for deduplication (10 second window)
-      await cache.set(dedupeKey, jobId, 'EX', 10)
+      await cache.set(dedupeKey, jobId, 10)
       
       // Add job to queue
       const jobData = {
