@@ -4,8 +4,12 @@
 const { Pool } = require('pg');
 
 async function checkMetadata() {
+  if (!process.env.DATABASE_URL) {
+    throw new Error('DATABASE_URL environment variable is not set. Please provide a valid database connection string.');
+  }
+  
   const pool = new Pool({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:QueIQ4Klopman$@db.blxzjbxczpmmgiwbtmdo.supabase.com:6543/postgres?pgbouncer=true'
+    connectionString: process.env.DATABASE_URL
   });
 
   try {
