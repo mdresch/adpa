@@ -313,9 +313,9 @@ export default function JobMonitorPage() {
         const mappedJobs = response.jobs.map((job: any) => ({
           ...job, // Spread all job fields first
           name: job.name ?? "", // Then set defaults only if missing
-          priority: job.priority ?? "medium",
-          queue: job.queue ?? "",
-          logs: job.logs ?? [],
+            priority: job.priority ?? "medium",
+            queue: job.queue ?? "",
+            logs: job.logs ?? [],
           // Extract project and document names from metadata to top level
           projectName: job.metadata?.project_name || job.projectName,
           documentName: job.metadata?.document_name || job.documentName,
@@ -795,7 +795,7 @@ export default function JobMonitorPage() {
                                         <div className="flex-1">
                                           <h3 className="font-semibold text-lg">{job.name}</h3>
                                           <div className="flex items-center gap-2 mt-1">
-                                            <p className="text-sm text-muted-foreground">ID: {job.id}</p>
+                                          <p className="text-sm text-muted-foreground">ID: {job.id}</p>
                                             {job.projectName && (
                                               <>
                                                 <span className="text-muted-foreground">•</span>
