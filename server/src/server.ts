@@ -337,7 +337,7 @@ async function startServer() {
             last_reused_at TIMESTAMP,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            CONSTRAINT document_summaries_unique_cache UNIQUE (document_id, compression_method, compression_level, template_context_hash)
+            CONSTRAINT document_summaries_unique_cache_v2 UNIQUE (document_id, compression_method, compression_level, template_context_hash)
           );
           
           CREATE INDEX IF NOT EXISTS idx_document_summaries_document_id ON document_summaries(document_id);

@@ -5,8 +5,8 @@ import { getApiBaseUrl, getWsUrl } from "./api-url"
 const API_BASE_URL = getApiBaseUrl()
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || getWsUrl()
 
-// Debug logging for production
-if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+// Debug logging only in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
   console.log('🔧 API Debug:', {
     API_BASE_URL,
     WS_URL
