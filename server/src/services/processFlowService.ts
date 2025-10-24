@@ -824,15 +824,9 @@ class ProcessFlowService {
         }
       } catch (error: any) {
         logger.error(`❌ [Provider: ${assignedProvider || 'auto'}] Failed to compress document ${currentDoc}: ${error.message}`)
-        
-        // Remove provider assignment on failure
-        if (assignedProvider) {
-          providerAssignments.delete(assignedProvider)
-        }
-        
         return null
       } finally {
-        // Clean up provider assignment when done
+        // Clean up provider assignment when done (runs on both success and error)
         if (assignedProvider) {
           providerAssignments.delete(assignedProvider)
         }
