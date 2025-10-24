@@ -225,7 +225,8 @@ class AIService {
         )
         logger.warn(`🚫 [AI-AUTO-DISABLE] Provider ${providerType} has been automatically deactivated`)
         logger.warn(`💳 [AI-AUTO-DISABLE] Reason: ${reason}`)
-        logger.info(`💡 [AI-AUTO-DISABLE] Reactivate at http://localhost:3000/ai-providers once credits are topped up`)
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+        logger.info(`💡 [AI-AUTO-DISABLE] Reactivate at ${frontendUrl}/ai-providers once credits are topped up`)
       } catch (error) {
         logger.error(`Failed to auto-disable provider ${providerType}:`, error)
       }
