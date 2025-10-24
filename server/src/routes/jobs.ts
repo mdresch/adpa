@@ -38,12 +38,12 @@ router.get("/",
           j.created_at,
           j.data as job_data,
           j.result,
-          p.name as project_name,
-          t.name as template_name,
-          d.name as document_name,
+          COALESCE(j.project_name, p.name) as project_name,
+          COALESCE(j.template_name, t.name) as template_name,
+          COALESCE(j.document_name, d.name) as document_name,
           d.id as document_id
         FROM jobs j
-        LEFT JOIN projects p ON (j.data->>'projectId')::uuid = p.id OR (j.data->'variables'->>'project_id')::uuid = p.id
+        LEFT JOIN projects p ON j.project_id = p.id OR (j.data->>'projectId')::uuid = p.id OR (j.data->'variables'->>'project_id')::uuid = p.id
         LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
         LEFT JOIN documents d ON d.generation_metadata->>'job_id' = j.id::text
         WHERE j.created_by = $1
