@@ -1700,22 +1700,30 @@ class ProcessFlowService {
           provider: aiMetadata.provider,
           model: aiMetadata.model,
           temperature: 0.3,
-          inputTokens,
-          outputTokens,
-          totalTokens,
-          estimatedCost: calculateCost(aiMetadata.provider, inputTokens, outputTokens),
+          tokens: {
+            input: inputTokens,
+            output: outputTokens,
+            total: totalTokens,
+            cost: calculateCost(aiMetadata.provider, inputTokens, outputTokens)
+          },
           status: 'success',
           processingTime: aiMetadata.processingTime || 'N/A'
         } : {
           provider: 'N/A',
           model: 'N/A',
           temperature: 0.3,
-          inputTokens: 0,
-          outputTokens: 0,
-          totalTokens: 0,
-          estimatedCost: 0,
+          tokens: {
+            input: 0,
+            output: 0,
+            total: 0,
+            cost: 0
+          },
           status: 'unknown',
           processingTime: 'N/A'
+        },
+        generation: {
+          status: 'success',
+          duration: aiMetadata?.processingTime || 0
         }
       }
       
