@@ -289,7 +289,7 @@ export default function VisualPipelinePage() {
     setStageDetailsDialogOpen(true)
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const apiUrl = getApiBaseUrl()
       const token = localStorage.getItem('auth_token')
       
       const response = await fetch(`${apiUrl}/pipeline/job/${selectedJob.jobId}/stage/${stageId}`, {
