@@ -618,7 +618,6 @@ The ADPA system represents a significant advancement in document processing auto
     
     try {
       const response = await apiClient.request(
-        `GET`,
         `/documents/${documentId}/summaries`
       )
       
