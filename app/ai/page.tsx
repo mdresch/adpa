@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -84,6 +85,7 @@ interface Project {
 }
 
 export default function AIPage() {
+  const router = useRouter()
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
@@ -160,7 +162,7 @@ export default function AIPage() {
             action: {
               label: "View Document",
               onClick: () => {
-                window.location.href = `/projects/${projectId}?tab=documents&highlight=${documentId}`
+                router.push(`/projects/${projectId}?tab=documents&highlight=${documentId}`)
               }
             }
           })

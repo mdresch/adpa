@@ -13,7 +13,9 @@ require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 async function updateContentMetrics() {
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+    ssl: process.env.DB_SSL === 'true' || process.env.DATABASE_URL?.includes('supabase')
+      ? { rejectUnauthorized: true }
+      : false
   });
 
   try {

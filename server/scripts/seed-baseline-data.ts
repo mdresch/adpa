@@ -12,7 +12,9 @@ dotenv.config({ path: path.join(__dirname, '../.env') })
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : undefined
+  ssl: process.env.DB_SSL === 'true' || process.env.DATABASE_URL?.includes('supabase')
+    ? { rejectUnauthorized: true }
+    : false
 })
 
 async function seedBaselineData() {
