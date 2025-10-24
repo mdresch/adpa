@@ -323,7 +323,7 @@ I've been building in public(-ish) for 4 months now. The results are exciting, b
 
 ## About Me
 
-I'm [Your Name], [Your Role] at [Your Company/Project]. I've been in [your domain] for [X years], and I built ADPA because I was tired of spending 40% of my time formatting Word documents instead of solving actual problems.
+I'm Menno Drescher, a Managed Service Professional with 25 years of experience across Finance, Human Resources, and ICT. Currently seeking my next appointment with a company where I can make a strategic impact, I built ADPA because I was tired of spending 40% of my time formatting Word documents instead of solving actual problems and amplifying human expertise.
 
 **This post isn't a product launch.** It's a "hey, I built something interesting, what do you think?" 
 

@@ -180,7 +180,7 @@ We're opening ADPA to a limited number of pilot partners who want to:
 
 ## About the Author
 
-[Your Name] is [Your Title] at [Your Company], leading the development of ADPA—an AI-powered document generation platform for enterprise project management and business analysis. With [X years] of experience in [your domain], [he/she/they] is passionate about using AI to eliminate busywork and amplify human expertise.
+Menno Drescher is a Managed Service Professional at various assignments for clients and currently seeking appointment with a company, leading the development of ADPA—an AI-powered document generation platform for enterprise project management and business analysis. With 25 years of experience in Finance, Human Resources and ICT, he is passionate about using AI to eliminate busywork and amplify human expertise.
 
 ---
 

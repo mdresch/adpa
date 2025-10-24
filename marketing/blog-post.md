@@ -346,7 +346,11 @@ We're accepting **25 pilot partners** who want to:
 
 ## About the Author
 
-[Your Bio - 2-3 paragraphs about your background, why you built ADPA, your vision for the future of knowledge work]
+Menno Drescher is a Managed Service Professional with 25 years of experience spanning Finance, Human Resources, and ICT. Throughout his career across various client assignments, he witnessed firsthand how talented professionals were drowning in documentation busywork—spending 40% of their time formatting compliance documents instead of solving strategic problems.
+
+Currently seeking his next appointment with a forward-thinking company, Menno built ADPA to solve this fundamental problem: how can we amplify human expertise by eliminating mechanical knowledge work? Drawing on his diverse background across Finance, HR, and ICT, he understood that the real value professionals bring isn't in document formatting—it's in judgment, strategy, and relationship building.
+
+ADPA represents his vision for the future of knowledge work: AI handling the mechanical tasks (reading context, maintaining compliance, generating structured content) while humans focus on what they do best (strategic thinking, problem-solving, innovation). With ADPA demonstrating 600x productivity improvements, Menno is proving that AI isn't about replacing expertise—it's about liberating it.
 
 ---
 
