@@ -75,10 +75,10 @@ export function NotificationCenter() {
           documentId: data.documentId,
           projectId: data.projectId,
         },
-        actionUrl: data.documentId 
+        actionUrl: data.documentId && data.projectId
           ? `/projects/${data.projectId}/documents/${data.documentId}`
           : `/jobs`,
-        actionLabel: data.documentId ? 'View Document' : 'View Job'
+        actionLabel: data.documentId && data.projectId ? 'View Document' : 'View Job'
       })
       
       // Also show toast for immediate feedback
@@ -111,8 +111,10 @@ export function NotificationCenter() {
           provider: data.provider,
           model: data.model,
         },
-        actionUrl: `/projects/${data.projectId}/documents/${data.documentId}`,
-        actionLabel: 'View Document'
+        actionUrl: data.projectId && data.documentId 
+          ? `/projects/${data.projectId}/documents/${data.documentId}`
+          : undefined,
+        actionLabel: data.projectId && data.documentId ? 'View Document' : undefined
       })
     })
 
@@ -123,8 +125,8 @@ export function NotificationCenter() {
         title: 'Baseline Approved',
         message: `Project baseline has been approved`,
         metadata: { projectId: data.projectId },
-        actionUrl: `/projects/${data.projectId}?tab=baseline`,
-        actionLabel: 'View Baseline'
+        actionUrl: data.projectId ? `/projects/${data.projectId}?tab=baseline` : undefined,
+        actionLabel: data.projectId ? 'View Baseline' : undefined
       })
     })
 
@@ -147,8 +149,8 @@ export function NotificationCenter() {
         title: 'Baseline Extracted',
         message: `Baseline created for ${data.projectName || 'project'}`,
         metadata: { projectId: data.projectId },
-        actionUrl: `/projects/${data.projectId}?tab=baseline`,
-        actionLabel: 'View Baseline'
+        actionUrl: data.projectId ? `/projects/${data.projectId}?tab=baseline` : undefined,
+        actionLabel: data.projectId ? 'View Baseline' : undefined
       })
       
       toast.success('Baseline extraction complete!')
@@ -161,8 +163,8 @@ export function NotificationCenter() {
         title: 'Baseline Drift Detected',
         message: `${data.driftCount} deviation(s) detected in project documents`,
         metadata: { projectId: data.projectId },
-        actionUrl: `/projects/${data.projectId}?tab=baseline`,
-        actionLabel: 'Review Drifts'
+        actionUrl: data.projectId ? `/projects/${data.projectId}?tab=baseline` : undefined,
+        actionLabel: data.projectId ? 'Review Drifts' : undefined
       })
     })
 
