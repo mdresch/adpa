@@ -1,6 +1,7 @@
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { pool } from '../database/connection'
+import crypto from 'crypto'
 
 export interface DocumentCompressionOptions {
   compressionLevel: number // 0.1 to 1.0
@@ -55,16 +56,21 @@ class DocumentCompressionService {
     templateContext?: any
   ): Promise<CompressedDocument | null> {
     try {
+      // Calculate hash for template context to match new constraint
+      const templateContextHash = templateContext 
+        ? crypto.createHash('md5').update(JSON.stringify(templateContext)).digest('hex')
+        : null
+
       const result = await pool.query(
         `SELECT * FROM document_summaries 
          WHERE document_id = $1 
            AND compression_method = $2 
            AND compression_level = $3 
-           AND template_context IS NOT DISTINCT FROM $4
+           AND template_context_hash IS NOT DISTINCT FROM $4
            AND is_valid = true
          ORDER BY created_at DESC 
          LIMIT 1`,
-        [documentId, compressionMethod, compressionLevel, templateContext ? JSON.stringify(templateContext) : null]
+        [documentId, compressionMethod, compressionLevel, templateContextHash]
       )
       
       if (result.rows.length > 0) {
@@ -112,20 +118,26 @@ class DocumentCompressionService {
     templateContext?: any
   ): Promise<void> {
     try {
+      // Calculate hash for template context to match new constraint
+      const templateContextHash = templateContext 
+        ? crypto.createHash('md5').update(JSON.stringify(templateContext)).digest('hex')
+        : null
+
       await pool.query(
         `INSERT INTO document_summaries (
           document_id, compression_method, compression_level,
           original_content, original_tokens,
           compressed_content, compressed_tokens, compression_ratio,
-          target_tokens, ai_provider, ai_model, template_context
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-        ON CONFLICT (document_id, compression_method, compression_level, template_context) 
+          target_tokens, ai_provider, ai_model, template_context, template_context_hash
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT (document_id, compression_method, compression_level, template_context_hash) 
         DO UPDATE SET
           compressed_content = EXCLUDED.compressed_content,
           compressed_tokens = EXCLUDED.compressed_tokens,
           compression_ratio = EXCLUDED.compression_ratio,
           ai_provider = EXCLUDED.ai_provider,
           ai_model = EXCLUDED.ai_model,
+          template_context = EXCLUDED.template_context,
           updated_at = CURRENT_TIMESTAMP,
           is_valid = true`,
         [
@@ -140,7 +152,8 @@ class DocumentCompressionService {
           Math.ceil(result.originalTokens * compressionLevel),
           aiProvider || null,
           aiModel || null,
-          templateContext ? JSON.stringify(templateContext) : null
+          templateContext ? JSON.stringify(templateContext) : null,
+          templateContextHash
         ]
       )
       
