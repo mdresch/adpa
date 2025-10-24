@@ -1696,7 +1696,7 @@ The ADPA system represents a significant advancement in document processing auto
                             </p>
                           ) : (
                             (document.source_documents || []).map((doc: any, idx: number) => (
-                              <div key={doc.id} className="flex items-center justify-between p-3 rounded border hover:bg-accent transition-colors">
+                              <div key={doc.id || doc.title || idx} className="flex items-center justify-between p-3 rounded border hover:bg-accent transition-colors">
                                 <div className="flex items-center space-x-3 flex-1">
                                   <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
                                     {doc.priority_rank || idx + 1}
