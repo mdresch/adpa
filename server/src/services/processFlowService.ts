@@ -1646,15 +1646,6 @@ class ProcessFlowService {
     aiMetadata?: any
   ): Promise<{id: string, name: string}> {
     try {
-      // Debug: Log what aiMetadata we received
-      logger.info('🔍 [SAVE-DOC] Received aiMetadata:', {
-        hasMetadata: !!aiMetadata,
-        provider: aiMetadata?.provider,
-        model: aiMetadata?.model,
-        hasUsage: !!aiMetadata?.usage,
-        usage: aiMetadata?.usage
-      })
-      
       // Generate document name based on template and timestamp
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const documentName = `${template.name} - Generated ${timestamp}`
@@ -1690,11 +1681,15 @@ class ProcessFlowService {
       
       // Create generation_metadata (AI-specific info for display)
       const generationMetadata = {
-        sourceDocuments: compressedDocuments.map(doc => ({
+        source_documents: compressedDocuments.map((doc, index) => ({
           id: doc.document.documentId,
+          title: doc.document.name,
           name: doc.document.name,
+          status: 'compressed',
+          priority_rank: index + 1,
           originalTokens: doc.document.estimatedTokens,
-          compressedTokens: doc.compressedTokens
+          compressedTokens: doc.compressedTokens,
+          compressionRatio: ((doc.compressedTokens / doc.document.estimatedTokens) * 100).toFixed(1) + '%'
         })),
         aiProcessing: aiMetadata ? {
           provider: aiMetadata.provider,
