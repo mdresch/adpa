@@ -4,6 +4,7 @@
  */
 
 import { Pool } from 'pg'
+import crypto from 'crypto'
 import { logger } from '../utils/logger'
 import { documentCompressionService, DocumentCompressionOptions } from './documentCompressionService'
 
@@ -582,7 +583,7 @@ class ProcessFlowService {
     let usedTokens = 0
 
     logger.info(`Starting individual document compression: ${prioritizedDocuments.length} documents, ${availableTokens.toLocaleString()} available tokens`)
-    
+
     // Get all available AI providers to determine batch size
     let availableProviders: Array<{ provider_type: string }> = []
     let BATCH_SIZE = 5 // Default safe batch size
@@ -662,35 +663,34 @@ class ProcessFlowService {
           })
         }
 
-        // Get document content from database
-        const docResult = await this.pool.query(
-          'SELECT content FROM documents WHERE id = $1',
-          [doc.id]
-        )
+      // Get document content from database
+      const docResult = await this.pool.query(
+        'SELECT content FROM documents WHERE id = $1',
+        [doc.id]
+      )
 
-        if (docResult.rows.length === 0) {
-          logger.warn(`Document not found in database: ${doc.id}`)
+      if (docResult.rows.length === 0) {
+        logger.warn(`Document not found in database: ${doc.id}`)
           return null
-        }
+      }
 
-        const content = docResult.rows[0].content
-        if (!content) {
-          logger.warn(`Document has no content: ${doc.id}`)
+      const content = docResult.rows[0].content
+      if (!content) {
+        logger.warn(`Document has no content: ${doc.id}`)
           return null
-        }
+      }
 
-        // Calculate target tokens for this document
-        const originalTokens = this.estimateTokenCount(content)
-        const targetTokens = Math.ceil(originalTokens * compressionLevel)
-        
-        logger.info(`Document ${index + 1}: ${originalTokens.toLocaleString()} tokens → target ${targetTokens.toLocaleString()} tokens (${(compressionLevel * 100).toFixed(0)}%)`)
+      // Calculate target tokens for this document
+      const originalTokens = this.estimateTokenCount(content)
+      const targetTokens = Math.ceil(originalTokens * compressionLevel)
+      
+      logger.info(`Document ${index + 1}: ${originalTokens.toLocaleString()} tokens → target ${targetTokens.toLocaleString()} tokens (${(compressionLevel * 100).toFixed(0)}%)`)
 
         // Check cache first for AI summarization
         let compressed: any
         if (compressionMethod === 'summarize') {
           try {
             // Generate hash of template context for lookup
-            const crypto = require('crypto')
             const templateContextStr = templateContext ? JSON.stringify(templateContext) : ''
             const templateContextHash = crypto.createHash('md5').update(templateContextStr).digest('hex')
             
@@ -745,13 +745,13 @@ class ProcessFlowService {
         if (!compressed) {
           logger.info(`🔍 [CACHE-MISS] Compressing with AI...`)
           
-          const compressionOptions: DocumentCompressionOptions = {
-            compressionLevel,
-            preserveStructure: true,
-            preserveKeywords: true,
-            method: compressionMethod as 'truncate' | 'summarize' | 'smart' | 'keyword',
-            templateContext: templateContext
-          }
+      const compressionOptions: DocumentCompressionOptions = {
+        compressionLevel,
+        preserveStructure: true,
+        preserveKeywords: true,
+        method: compressionMethod as 'truncate' | 'summarize' | 'smart' | 'keyword',
+        templateContext: templateContext
+      }
 
           compressed = await documentCompressionService.compressDocument(content, compressionOptions)
           
@@ -759,7 +759,6 @@ class ProcessFlowService {
           if (compressionMethod === 'summarize') {
             try {
               // Generate hash of template context to avoid index size limit
-              const crypto = require('crypto')
               const templateContextStr = templateContext ? JSON.stringify(templateContext) : ''
               const templateContextHash = crypto.createHash('md5').update(templateContextStr).digest('hex')
               
@@ -811,17 +810,17 @@ class ProcessFlowService {
         logger.info(`✅ Document ${currentDoc} compressed: ${compressed.compressedTokens.toLocaleString()} tokens (${(compressed.compressionRatio * 100).toFixed(1)}% of original)`)
         
         return {
-          document: doc,
-          compressedContent: compressed.compressedContent,
-          compressedTokens: compressed.compressedTokens,
-          compressionDetails: {
-            originalTokens,
+            document: doc,
+            compressedContent: compressed.compressedContent,
             compressedTokens: compressed.compressedTokens,
-            compressionRatio: compressed.compressionRatio,
-            method: compressed.method,
-            targetTokens,
-            actualCompression: (compressed.compressedTokens / originalTokens * 100).toFixed(1) + '%'
-          }
+            compressionDetails: {
+              originalTokens,
+              compressedTokens: compressed.compressedTokens,
+              compressionRatio: compressed.compressionRatio,
+              method: compressed.method,
+              targetTokens,
+              actualCompression: (compressed.compressedTokens / originalTokens * 100).toFixed(1) + '%'
+            }
         }
       } catch (error: any) {
         logger.error(`❌ [Provider: ${assignedProvider || 'auto'}] Failed to compress document ${currentDoc}: ${error.message}`)
@@ -886,7 +885,7 @@ class ProcessFlowService {
       const totalProcessed = workerResults.reduce((sum, count) => sum + count, 0)
       logger.info(`✅ All workers completed: ${totalProcessed} documents processed by ${availableProviders.length} providers`)
       
-    } else {
+          } else {
       // Fallback: Traditional batch processing for non-AI methods
       for (let batchStart = 0; batchStart < prioritizedDocuments.length; batchStart += BATCH_SIZE) {
         if (usedTokens >= availableTokens) {
