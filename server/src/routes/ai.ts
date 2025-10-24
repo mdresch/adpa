@@ -6,7 +6,7 @@ import { validate, validateParams, schemas } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { aiService } from "../services/aiService"
 import { ContextAwareAIService, generateWithContext } from "../modules/context/integration"
-import { addJob } from "../services/queueService"
+import * as queueService from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
 import { openaiConnector } from "../modules/ai/openai"
 import { googleConnector } from "../modules/ai/google"
@@ -56,69 +56,69 @@ router.post("/generate",
       }
       log.info('✅ [BACKEND-4/10] Provider validated:', providerCheck.rows[0].name)
 
-      // For extremely long requests (>20K chars or >10K tokens), we could use job queue
-      // But for now, use direct generation for all requests (Redis queueing is optional)
-      // This allows comprehensive prompts up to 20,000 characters
-      if (prompt.length > 20000 || (max_tokens && max_tokens > 10000)) {
-        log.info('🔄 [BACKEND-5/10] Extremely long request detected, but using direct generation (job queue disabled)')
-        // Job queueing temporarily disabled - proceed to direct generation
-      } else {
-        log.info('🔄 [BACKEND-5/10] Standard/long request, using direct generation')
-      }
-
-      // For quick requests, process immediately
-      // If client requested context-aware generation or provided contextual identifiers, use ContextAwareAIService
+      // Use job queue for ALL document generation to enable background processing
+      // This allows users to continue working while documents are generated
+      log.info('🔄 [BACKEND-5/10] Using background job queue for generation')
+      
       const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
       log.info('🔀 [BACKEND-6/10] Generation mode:', useContext ? 'Context-Aware' : 'Direct')
-
-      let result
-      if (useContext) {
-        log.info('🎯 [BACKEND-7/10] Starting context-aware generation...')
-        result = await ContextAwareAIService.generateWithContext({
-          prompt,
-          provider,
-          model,
-          temperature,
-          max_tokens,
-          template_id,
-          variables,
-          user_id: req.user?.id,
-          project_id: req.body.project_id,
-          document_ids: req.body.document_ids,
-          include_integrations: req.body.include_integrations,
-          custom_context: req.body.custom_context,
+      
+      // CRITICAL FIX: Prevent duplicate submissions within 10 seconds
+      const dedupeKey = `ai-gen:${req.user?.id}:${template_id}:${req.body.project_id}`
+      const recentJobId = await cache.get(dedupeKey)
+      
+      if (recentJobId) {
+        log.warn('⚠️ [DEDUPE] Duplicate request detected, returning existing job ID:', recentJobId)
+        return res.json({
+          message: "Document generation already in progress",
+          jobId: recentJobId,
+          status: "queued",
+          deduplicated: true
         })
-        log.info('✅ [BACKEND-8/10] Context-aware generation completed')
-      } else {
-        log.info('🤖 [BACKEND-7/10] Starting direct AI generation...')
-        result = await aiService.generate({
-          prompt,
-          provider,
-          model,
-          temperature,
-          max_tokens,
-          template_id,
-          variables,
-        })
-        log.info('✅ [BACKEND-8/10] Direct generation completed')
       }
       
-      log.info('📊 [BACKEND-9/10] Generation result:', {
-        hasContent: !!(result.content || result.text),
-        contentLength: (result.content || result.text || '').length,
-        hasUsage: !!result.usage,
-        tokens: result.usage?.total_tokens || result.usage?.totalTokens || 0
+      // Generate unique job ID (UUID format required by database)
+      const jobId = uuidv4()
+      log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
+      
+      // Store job ID for deduplication (10 second window)
+      await cache.set(dedupeKey, jobId, 'EX', 10)
+      
+      // Add job to queue
+      const jobData = {
+        jobId,
+        userId: req.user?.id,
+        prompt,
+        provider,
+        model,
+        temperature,
+        max_tokens,
+        template_id,
+        variables,
+        use_context: useContext,
+        projectId: req.body.project_id,
+        projectName: req.body.project_name,
+        documentIds: req.body.document_ids,
+        include_integrations: req.body.include_integrations,
+        custom_context: req.body.custom_context,
+      }
+      
+      await queueService.addJob('ai-generate', jobData)
+      log.info('✅ [BACKEND-8/10] Job added to queue')
+      
+      // Return immediately with job ID
+      log.info('🎉 [BACKEND-9/10] Returning job ID to client')
+      
+      res.json({
+        message: "Document generation started",
+        jobId,
+        status: "queued"
       })
-
-  // Update usage stats
-      if (result.usage) {
-        await aiService.updateUsageStats(provider, result.usage)
-      }
-
-      // Calculate comprehensive metadata
-      const generationEnd = new Date()
-      const content = result.content || result.text || ''
       
+      log.info('✅ [BACKEND-10/10] Response sent - generation will continue in background')
+      return // Exit early, job will process asynchronously
+      
+      // The code below is unreachable but kept for reference
       const metadata = calculateDocumentMetadata(
         content,
         result,

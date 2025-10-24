@@ -690,15 +690,31 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Framework</Label>
-                          <p className="text-sm">{document?.template_framework || "Not specified"}</p>
+                          <p className="text-sm">
+                            {document?.template_framework || 
+                             (document as any)?.generation_metadata?.framework || 
+                             document?.framework || 
+                             "Not specified"}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">File Size</Label>
-                          <p className="text-sm">{formatFileSize(document?.file_size || 0)}</p>
+                          <p className="text-sm">
+                            {formatFileSize(
+                              document?.file_size || 
+                              (document?.content ? new Blob([document.content]).size : 0)
+                            )}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Word Count</Label>
-                          <p className="text-sm">{document?.word_count?.toLocaleString() || "N/A"}</p>
+                          <p className="text-sm">
+                            {(
+                              document?.word_count || 
+                              (document as any)?.generation_metadata?.contentMetrics?.words || 
+                              0
+                            ).toLocaleString()}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Last Updated</Label>
@@ -996,7 +1012,23 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Processing Time</span>
                           <span className="text-sm font-medium">
-                            {document?.generation_metadata?.generation?.duration || document?.metadata?.processing_time || "N/A"}
+                            {(() => {
+                              // Try formatted version first
+                              const formatted = document?.generation_metadata?.aiProcessing?.processingTime || 
+                                               document?.generation_metadata?.generation?.durationFormatted
+                              if (formatted) return formatted
+                              
+                              // Fall back to raw milliseconds and format
+                              const rawMs = document?.generation_metadata?.aiProcessing?.processingTimeMs || 
+                                           document?.generation_metadata?.generation?.duration ||
+                                           document?.metadata?.processing_time
+                              
+                              if (typeof rawMs === 'number' && rawMs > 0) {
+                                return (rawMs / 1000).toFixed(1) + 's'
+                              }
+                              
+                              return "N/A"
+                            })()}
                           </span>
                         </div>
                         <div className="flex justify-between items-center">
@@ -1093,19 +1125,45 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Sentences:</span>
                                   <span className="text-sm font-medium">
-                                    {document?.generation_metadata?.contentMetrics?.sentences || "N/A"}
+                                    {(() => {
+                                      // Priority 1: Use raw sentence_count from top-level column
+                                      const sentenceCount = document?.sentence_count || 
+                                                           document?.generation_metadata?.contentMetrics?.sentences || 
+                                                           0
+                                      return sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"
+                                    })()}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Paragraphs:</span>
                                   <span className="text-sm font-medium">
-                                    {document?.generation_metadata?.contentMetrics?.paragraphs || "N/A"}
+                                    {(() => {
+                                      // Priority 1: Use raw paragraph_count from top-level column
+                                      const paragraphCount = document?.paragraph_count || 
+                                                            document?.generation_metadata?.contentMetrics?.paragraphs || 
+                                                            0
+                                      return paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"
+                                    })()}
                                   </span>
                                 </div>
                                 <div className="flex justify-between items-center">
                                   <span className="text-sm text-muted-foreground">Avg Words/Sentence:</span>
                                   <span className="text-sm font-medium">
-                                    {document?.generation_metadata?.contentMetrics?.averageWordsPerSentence || "N/A"}
+                                    {(() => {
+                                      // Try generation_metadata first (most accurate)
+                                      const avgFromMeta = document?.generation_metadata?.contentMetrics?.avgWordsPerSentence
+                                      if (avgFromMeta) return avgFromMeta
+                                      
+                                      // Calculate from actual values as fallback
+                                      const wc = document?.word_count || 
+                                                document?.generation_metadata?.contentMetrics?.words || 
+                                                0
+                                      const sc = document?.sentence_count || 
+                                                document?.generation_metadata?.contentMetrics?.sentences || 
+                                                0
+                                      const avg = (wc > 0 && sc > 0) ? Math.round(wc / sc) : null
+                                      return avg ? avg : "N/A"
+                                    })()}
                                   </span>
                                 </div>
                                 
@@ -1289,56 +1347,159 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         <Separator />
                         
                         <div className="space-y-2">
-                          <div className="flex justify-between items-center p-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
-                            <span className="text-sm font-semibold text-red-700">Complexity Score</span>
-                            <div className="flex items-center space-x-2">
-                              <div className="w-16 bg-gray-200 rounded-full h-2">
-                                <div 
-                                  className="bg-red-600 h-2 rounded-full" 
-                                  style={{ width: `${document?.generation_metadata?.qualityMetrics?.complexityScore || 0}%` }}
-                                ></div>
+                          {(() => {
+                            // Calculate complexity score for display (same logic as below)
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
+                            const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
+                            const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
+                            const overallQuality = (document as any)?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                            
+                            let complexity = 0
+                            if (wordCount > 5000) complexity += 30
+                            else if (wordCount > 3000) complexity += 25
+                            else if (wordCount > 1500) complexity += 20
+                            else if (wordCount > 800) complexity += 15
+                            else complexity += 10
+                            
+                            const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
+                            if (avgWordsPerParagraph > 100) complexity += 25
+                            else if (avgWordsPerParagraph > 70) complexity += 20
+                            else if (avgWordsPerParagraph > 50) complexity += 15
+                            else complexity += 10
+                            
+                            if (sourceDocuments.length > 10) complexity += 20
+                            else if (sourceDocuments.length > 5) complexity += 15
+                            else if (sourceDocuments.length > 3) complexity += 10
+                            else if (sourceDocuments.length > 0) complexity += 5
+                            
+                            if (framework && framework !== 'Not specified') complexity += 15
+                            
+                            if (overallQuality > 85) complexity += 10
+                            else if (overallQuality > 70) complexity += 7
+                            else if (overallQuality > 50) complexity += 5
+                            
+                            complexity = Math.min(100, Math.max(0, complexity))
+                            
+                            return (
+                              <div className="flex justify-between items-center p-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
+                                <span className="text-sm font-semibold text-red-700">Complexity Score</span>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-16 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-red-600 h-2 rounded-full" 
+                                      style={{ width: `${complexity}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-sm font-bold text-red-700">{complexity}%</span>
+                                </div>
                               </div>
-                              <span className="text-sm font-bold text-red-700">{document?.generation_metadata?.qualityMetrics?.complexityScore || 0}%</span>
-                            </div>
-                          </div>
+                            )
+                          })()}
                           
                           {/* Complexity Time Estimate with Research Breakdown */}
                           {(() => {
-                            const complexity = document?.generation_metadata?.qualityMetrics?.complexityScore || 0
-                            const research = document?.generation_metadata?.researchComplexity
+                            // Get source documents from generation_metadata
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            const sourceDocCount = sourceDocuments.length
                             
+                            // Calculate total words in source documents
+                            const totalSourceWords = sourceDocuments.reduce((sum: number, doc: any) => {
+                              // Estimate words from tokens (1 token ≈ 0.75 words)
+                              const estimatedWords = Math.round((doc.originalTokens || 0) * 0.75)
+                              return sum + estimatedWords
+                            }, 0)
+                            
+                            // Calculate reading time (250 words/min average)
+                            const readingTimeMinutes = Math.round(totalSourceWords / 250)
+                            const readingTimeHours = Math.round(readingTimeMinutes / 60 * 10) / 10
+                            
+                            // Get generated document metrics
+                            const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
+                            const sentences = (document as any)?.generation_metadata?.contentMetrics?.sentences || 0
+                            const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
+                            
+                            // Calculate complexity score based on document characteristics
+                            let complexity = 0
+                            
+                            // Base complexity from word count (0-30 points)
+                            if (wordCount > 5000) complexity += 30
+                            else if (wordCount > 3000) complexity += 25
+                            else if (wordCount > 1500) complexity += 20
+                            else if (wordCount > 800) complexity += 15
+                            else complexity += 10
+                            
+                            // Structure complexity (0-25 points)
+                            const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
+                            if (avgWordsPerParagraph > 100) complexity += 25 // Very long paragraphs = complex
+                            else if (avgWordsPerParagraph > 70) complexity += 20
+                            else if (avgWordsPerParagraph > 50) complexity += 15
+                            else complexity += 10
+                            
+                            // Source document complexity (0-20 points)
+                            if (sourceDocCount > 10) complexity += 20
+                            else if (sourceDocCount > 5) complexity += 15
+                            else if (sourceDocCount > 3) complexity += 10
+                            else if (sourceDocCount > 0) complexity += 5
+                            
+                            // Framework compliance adds complexity (0-15 points)
+                            const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
+                            if (framework && framework !== 'Not specified') complexity += 15
+                            
+                            // Quality metrics contribution (0-10 points)
+                            const overallQuality = (document as any)?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                            if (overallQuality > 85) complexity += 10
+                            else if (overallQuality > 70) complexity += 7
+                            else if (overallQuality > 50) complexity += 5
+                            
+                            // Ensure complexity is 0-100
+                            complexity = Math.min(100, Math.max(0, complexity))
+                            
+                            // Determine complexity level and writing time estimate
                             let level = 'Simple'
-                            let writingTime = '2-4 hours'
+                            let writingTimeMin = 2
+                            let writingTimeMax = 4
                             let color = 'text-green-600'
                             let bgColor = 'bg-green-50'
                             let borderColor = 'border-green-200'
                             
                             if (complexity >= 76) {
                               level = 'Very Complex'
-                              writingTime = '2-4 days (16-32 hours)'
+                              writingTimeMin = 16
+                              writingTimeMax = 32
                               color = 'text-red-600'
                               bgColor = 'bg-red-50'
                               borderColor = 'border-red-200'
                             } else if (complexity >= 51) {
                               level = 'Complex'
-                              writingTime = '1-2 days (8-16 hours)'
+                              writingTimeMin = 8
+                              writingTimeMax = 16
                               color = 'text-orange-600'
                               bgColor = 'bg-orange-50'
                               borderColor = 'border-orange-200'
                             } else if (complexity >= 26) {
                               level = 'Moderate'
-                              writingTime = '4-8 hours'
+                              writingTimeMin = 4
+                              writingTimeMax = 8
                               color = 'text-yellow-600'
                               bgColor = 'bg-yellow-50'
                               borderColor = 'border-yellow-200'
                             }
                             
-                            // Calculate research time based on source documents
-                            const sourceDocCount = research?.sourceDocuments || 0
-                            const readingTimeHours = research?.estimatedReadingTimeHours || 0
+                            const writingTime = writingTimeMax >= 16 
+                              ? `${writingTimeMin / 8}-${writingTimeMax / 8} days (${writingTimeMin}-${writingTimeMax} hours)`
+                              : `${writingTimeMin}-${writingTimeMax} hours`
+                            
+                            // Format reading time display
                             const readingTimeDisplay = readingTimeHours >= 8 
-                              ? `${Math.round(readingTimeHours / 8)} day${readingTimeHours >= 16 ? 's' : ''}` 
-                              : `${Math.round(readingTimeHours)} hour${readingTimeHours !== 1 ? 's' : ''}`
+                              ? `${Math.round(readingTimeHours / 8 * 10) / 10} day${readingTimeHours >= 16 ? 's' : ''}` 
+                              : `${readingTimeHours} hour${readingTimeHours !== 1 ? 's' : ''}`
+                            
+                            // Calculate total manual effort
+                            const totalManualHours = readingTimeHours + (writingTimeMin + writingTimeMax) / 2
+                            const totalManualDisplay = totalManualHours >= 8
+                              ? `${Math.round(totalManualHours / 8 * 10) / 10} days`
+                              : `${Math.round(totalManualHours * 10) / 10} hours`
                             
                             return (
                               <div className={`p-3 ${bgColor} rounded-lg border ${borderColor}`}>
@@ -1368,16 +1529,72 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                                 <Separator className="my-2" />
                                 <div className="flex justify-between items-center">
                                   <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
-                                  <span className={`text-sm font-bold ${color}`}>
-                                    {sourceDocCount > 0 ? `${readingTimeDisplay} + ${writingTime}` : writingTime}
-                                  </span>
+                                  <span className={`text-sm font-bold ${color}`}>{totalManualDisplay}</span>
                                 </div>
                                 
-                                {document?.generation_metadata?.generation?.duration && (
-                                  <div className="text-xs text-muted-foreground italic mt-2 pt-2 border-t">
-                                    ⚡ AI generated in {document.generation_metadata.generation.duration}
-                                  </div>
-                                )}
+                                {(() => {
+                                  // Get AI generation time (formatted)
+                                  const aiTime = (document as any)?.generation_metadata?.aiProcessing?.processingTime || 
+                                                (document as any)?.generation_metadata?.generation?.durationFormatted
+                                  
+                                  // Get raw milliseconds for speedup calculation
+                                  const aiTimeMs = (document as any)?.generation_metadata?.aiProcessing?.processingTimeMs || 
+                                                  (document as any)?.generation_metadata?.generation?.duration || 0
+                                  
+                                  if (aiTime || aiTimeMs) {
+                                    const displayTime = aiTime || (aiTimeMs > 0 ? `${(aiTimeMs / 1000).toFixed(1)}s` : 'N/A')
+                                    
+                                    // Calculate speedup
+                                    const aiHours = aiTimeMs / 1000 / 60 / 60
+                                    const speedup = totalManualHours > 0 && aiHours > 0 
+                                      ? Math.round(totalManualHours / aiHours) 
+                                      : 0
+                                    
+                                    return (
+                                      <div className="mt-2 pt-2 border-t space-y-1">
+                                        <div className="flex justify-between items-center text-xs">
+                                          <span className="text-muted-foreground">⚡ AI Generation Time:</span>
+                                          <span className="font-bold text-green-600">{displayTime}</span>
+                                        </div>
+                                        {speedup > 0 && (
+                                          <div className="flex justify-between items-center text-xs">
+                                            <span className="text-muted-foreground">🚀 Productivity Gain:</span>
+                                            <span className="font-bold text-blue-600">{speedup}x faster</span>
+                                          </div>
+                                        )}
+                                        {totalManualHours > 0 && (
+                                          <>
+                                            <div className="text-xs text-muted-foreground italic mt-1">
+                                              💰 Saved ~{Math.round(totalManualHours * 10) / 10} hours of expert time
+                                            </div>
+                                            {(() => {
+                                              // Get reading time from content metrics
+                                              const readingTimeMin = (document as any)?.generation_metadata?.contentMetrics?.readingTime || 
+                                                                    Math.ceil(wordCount / 250)
+                                              const readingTimeDisplay = readingTimeMin >= 60 
+                                                ? `${Math.round(readingTimeMin / 60 * 10) / 10} hours` 
+                                                : `${readingTimeMin} minutes`
+                                              
+                                              const roi = Math.round((totalManualHours * 60) / readingTimeMin)
+                                              
+                                              return (
+                                                <div className="text-xs font-medium text-purple-600 mt-1">
+                                                  📖 Result reading time: ~{readingTimeDisplay}
+                                                  {roi > 0 && (
+                                                    <span className="ml-1 text-purple-500">
+                                                      ({roi}x ROI)
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </>
+                                        )}
+                                      </div>
+                                    )
+                                  }
+                                  return null
+                                })()}
                               </div>
                             )
                           })()}

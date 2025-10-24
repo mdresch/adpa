@@ -6,7 +6,7 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: (process.env.DATABASE_URL || process.env.POSTGRES_URL)?.includes('neon.tech') 
+  ssl: (process.env.DATABASE_URL || process.env.POSTGRES_URL)?.includes('supabase.co') 
     ? { rejectUnauthorized: false } 
     : false
 });

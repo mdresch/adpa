@@ -7,6 +7,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -104,6 +107,9 @@ export default function ProjectDocumentViewer() {
   const [editedContent, setEditedContent] = useState("")
   const [showVersions, setShowVersions] = useState(false)
   const [showComments, setShowComments] = useState(false)
+  const [showSummaries, setShowSummaries] = useState(false)
+  const [summaries, setSummaries] = useState<any[]>([])
+  const [loadingSummaries, setLoadingSummaries] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
@@ -314,28 +320,10 @@ The ADPA system represents a significant advancement in document processing auto
       setIsLoading(true)
       try {
         // Fetch document from API
-        console.log('%c🌐 [API-CALL] Fetching document from backend...', 'background: #FF00FF; color: white; font-size: 16px; padding: 10px;')
-        console.log('%c📡 Endpoint 1:', 'background: #9C27B0; color: white; font-weight: bold; padding: 5px;', `/projects/${projectId}/documents/${documentId}`)
-        console.log('%c📡 Endpoint 2:', 'background: #9C27B0; color: white; font-weight: bold; padding: 5px;', `/projects/${projectId}/documents/${documentId}/versions`)
-        
         const [documentResponse, versionsResponse] = await Promise.all([
           apiClient.get(`/projects/${projectId}/documents/${documentId}`),
           apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
         ])
-        
-        console.log('%c✅ [API-CALL] Backend responded!', 'background: #4CAF50; color: white; font-size: 16px; padding: 10px;')
-        
-        console.log('%c🚨🚨🚨 METADATA DEBUG START 🚨🚨🚨', 'background: #ff0000; color: #ffffff; font-size: 20px; padding: 10px;')
-        console.log('%c📦 Raw API Response:', 'background: #4CAF50; color: white; font-weight: bold; padding: 5px;', documentResponse)
-        console.log('%c❓ Has generation_metadata?', 'background: #2196F3; color: white; font-weight: bold; padding: 5px;', !!documentResponse?.generation_metadata)
-        console.log('%c📋 generation_metadata type:', 'background: #FF9800; color: white; font-weight: bold; padding: 5px;', typeof documentResponse?.generation_metadata)
-        if (documentResponse?.generation_metadata) {
-          console.log('%c🔑 generation_metadata keys:', 'background: #9C27B0; color: white; font-weight: bold; padding: 5px;', Object.keys(documentResponse.generation_metadata))
-          console.log('%c📄 generation_metadata content:', 'background: #00BCD4; color: white; font-weight: bold; padding: 5px;', documentResponse.generation_metadata)
-        } else {
-          console.log('%c❌ NO METADATA FOUND!', 'background: #f44336; color: white; font-size: 16px; font-weight: bold; padding: 10px;')
-        }
-        console.log('%c🚨🚨🚨 METADATA DEBUG END 🚨🚨🚨', 'background: #ff0000; color: #ffffff; font-size: 20px; padding: 10px;')
         
         const documentData = documentResponse
         const versionsData = versionsResponse || []
@@ -375,11 +363,6 @@ The ADPA system represents a significant advancement in document processing auto
                                documentData.generation_metadata?.source_documents || 
                                []
         
-        console.log('📚 Source documents found in metadata:', sourceDocuments.length)
-        if (sourceDocuments.length > 0) {
-          console.log('  Source documents:', sourceDocuments.map((d: any) => d.title).join(', '))
-        }
-        
         setDocument({
           ...documentData, 
           content: contentString,
@@ -396,7 +379,6 @@ The ADPA system represents a significant advancement in document processing auto
         console.error("Failed to load document:", error)
         
         // Fallback to mock data if API fails (for development/demo purposes)
-        console.log("Falling back to mock data for demonstration")
         setDocument(mockDocument)
         setVersions(mockVersions)
         setEditedContent(mockDocument.content)
@@ -606,6 +588,32 @@ The ADPA system represents a significant advancement in document processing auto
     }
   }
 
+  const fetchSummaries = async () => {
+    setLoadingSummaries(true)
+    setShowSummaries(true)
+    
+    try {
+      const response = await apiClient.request(
+        `/documents/${documentId}/summaries`
+      )
+      
+      if (response.summaries) {
+        setSummaries(response.summaries)
+        if (response.summaries.length === 0) {
+          toast.info("No cached summaries yet. They will be created when you run process-flow jobs.")
+        } else {
+          toast.success(`Found ${response.summaries.length} cached summaries!`)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch summaries:", error)
+      toast.error("Failed to load summaries")
+      setSummaries([])
+    } finally {
+      setLoadingSummaries(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex">
@@ -712,6 +720,14 @@ The ADPA system represents a significant advancement in document processing auto
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />
                         Comments ({document.comments?.length || 0})
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={fetchSummaries}
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        View Summaries
                       </Button>
                     </div>
                   </div>
@@ -1073,11 +1089,19 @@ The ADPA system represents a significant advancement in document processing auto
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <div>
                               <span className="text-muted-foreground">Words:</span>
-                              <span className="ml-2 font-medium">{document.word_count || 0}</span>
+                              <span className="ml-2 font-medium">
+                                {(document.word_count || 
+                                  (document as any).generation_metadata?.contentMetrics?.words || 
+                                  0).toLocaleString()}
+                              </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Characters:</span>
-                              <span className="ml-2 font-medium">{document.character_count || 0}</span>
+                              <span className="ml-2 font-medium">
+                                {(document.character_count || 
+                                  (document as any).generation_metadata?.contentMetrics?.characters || 
+                                  0).toLocaleString()}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1179,8 +1203,11 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Processing Time:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata?.generation?.duration || 
-                                 document.processing_time || 'N/A'}
+                                {(document as any).generation_metadata?.aiProcessing?.processingTime || 
+                                 (document as any).generation_metadata?.generation?.durationFormatted ||
+                                 ((document as any).generation_metadata?.generation?.duration ? 
+                                   `${((document as any).generation_metadata.generation.duration / 1000).toFixed(2)}s` : 
+                                   'N/A')}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -1482,7 +1509,7 @@ The ADPA system represents a significant advancement in document processing auto
                     )}
 
                     {/* Content Metrics */}
-                    {(document as any).generation_metadata?.contentMetrics && (
+                    {((document as any).word_count || (document as any).generation_metadata?.contentMetrics) && (
                       <AnimatedCard>
                         <CardHeader>
                           <CardTitle className="flex items-center space-x-2">
@@ -1495,31 +1522,46 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Word Count:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.words}
+                                {((document as any).word_count || (document as any).generation_metadata?.contentMetrics?.words || 0).toLocaleString('en-US')}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Characters:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.characters}
+                                {((document as any).character_count || (document as any).generation_metadata?.contentMetrics?.characters || 0).toLocaleString('en-US')}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Sentences:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.sentences}
+                                {(() => {
+                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentences || 0
+                                  return sc > 0 ? sc.toLocaleString('en-US') : 'N/A'
+                                })()}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Paragraphs:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.paragraphs}
+                                {(() => {
+                                  const pc = (document as any).paragraph_count || (document as any).generation_metadata?.contentMetrics?.paragraphs || 0
+                                  return pc > 0 ? pc.toLocaleString('en-US') : 'N/A'
+                                })()}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Avg Words/Sentence:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata.contentMetrics.averageWordsPerSentence}
+                                {(() => {
+                                  // Try pre-calculated value first
+                                  const preCalc = (document as any).generation_metadata?.contentMetrics?.avgWordsPerSentence
+                                  if (preCalc && preCalc !== 'N/A') return preCalc
+                                  
+                                  // Otherwise calculate it
+                                  const wc = (document as any).word_count || (document as any).generation_metadata?.contentMetrics?.wordCount || 0
+                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentenceCount || 0
+                                  return (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : 'N/A'
+                                })()}
                               </span>
                           </div>
                         </div>
@@ -1630,7 +1672,7 @@ The ADPA system represents a significant advancement in document processing auto
                             </p>
                           ) : (
                             (document.source_documents || []).map((doc: any, idx: number) => (
-                              <div key={doc.id} className="flex items-center justify-between p-3 rounded border hover:bg-accent transition-colors">
+                              <div key={doc.id || doc.title || idx} className="flex items-center justify-between p-3 rounded border hover:bg-accent transition-colors">
                                 <div className="flex items-center space-x-3 flex-1">
                                   <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
                                     {doc.priority_rank || idx + 1}
@@ -1767,6 +1809,132 @@ The ADPA system represents a significant advancement in document processing auto
           </PageTransition>
         </main>
       </div>
+      
+      {/* Summaries Dialog */}
+      <Dialog open={showSummaries} onOpenChange={setShowSummaries}>
+        <DialogContent className="max-w-5xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Document Summaries - {document?.title}
+            </DialogTitle>
+            <DialogDescription>
+              View cached AI-generated summaries at different compression levels. These are reused in process-flow jobs to save time and API costs.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="h-[60vh] pr-4">
+            {loadingSummaries ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading summaries...</p>
+                </div>
+              </div>
+            ) : summaries.length === 0 ? (
+              <div className="text-center py-12">
+                <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Summaries Yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  Summaries will be automatically created when you run process-flow jobs with AI compression.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Once created, they'll be cached and reused to save time (~60s AI call becomes instant!)
+                </p>
+              </div>
+            ) : (
+              <Tabs defaultValue={summaries[0]?.compression_level?.toString() || "0.2"} className="w-full">
+                <TabsList className="grid grid-cols-auto gap-2 mb-4">
+                  {Array.from(new Set(summaries.map(s => s.compression_level)))
+                    .sort((a, b) => a - b)
+                    .map((level) => (
+                      <TabsTrigger key={level} value={level.toString()}>
+                        {(level * 100).toFixed(0)}% Compression
+                      </TabsTrigger>
+                    ))}
+                </TabsList>
+                
+                {Array.from(new Set(summaries.map(s => s.compression_level))).map((level) => {
+                  const summary = summaries.find(s => s.compression_level === level)
+                  if (!summary) return null
+                  
+                  return (
+                    <TabsContent key={level} value={level.toString()} className="space-y-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Summary Statistics</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Compression Level</p>
+                            <p className="text-2xl font-bold">{(summary.compression_level * 100).toFixed(0)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Original Tokens</p>
+                            <p className="text-2xl font-bold">{summary.original_tokens.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Compressed Tokens</p>
+                            <p className="text-2xl font-bold">{summary.compressed_tokens.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Times Reused</p>
+                            <p className="text-2xl font-bold text-green-600">{summary.times_reused || 0}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg">Compressed Content</CardTitle>
+                            <div className="flex items-center gap-2">
+                              {summary.ai_provider && (
+                                <Badge variant="outline">
+                                  {summary.ai_provider}
+                                </Badge>
+                              )}
+                              {summary.is_valid ? (
+                                <Badge variant="default" className="bg-green-600">Valid</Badge>
+                              ) : (
+                                <Badge variant="destructive">Invalid</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
+                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                              >
+                                {summary.compressed_content}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
+                            <div>
+                              <span className="font-medium">Created:</span>{' '}
+                              {new Date(summary.created_at).toLocaleString()}
+                            </div>
+                            {summary.last_reused_at && (
+                              <div>
+                                <span className="font-medium">Last Reused:</span>{' '}
+                                {new Date(summary.last_reused_at).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  )
+                })}
+              </Tabs>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

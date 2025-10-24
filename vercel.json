@@ -1,14 +1,4 @@
 {
-  "git": {
-    "deploymentEnabled": true
-  },
-  "github": {
-    "enabled": true,
-    "autoAlias": true,
-    "silent": false,
-    "autoJobCancelation": true
-  },
-  "buildCommand": "pnpm run build",
-  "installCommand": "pnpm install",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD ./"
+  "buildCommand": "npm run build",
+  "installCommand": "npm install"
 }

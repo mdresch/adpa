@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -84,6 +85,7 @@ interface Project {
 }
 
 export default function AIPage() {
+  const router = useRouter()
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
@@ -146,14 +148,40 @@ export default function AIPage() {
         setIsGenerating(false)
         setResult(jobUpdate.result)
         setCurrentJobId(null)
-        toast.success("AI generation completed!")
+        
+        // Check if document was saved to project
+        const documentId = jobUpdate.result?.documentId
+        const projectId = jobUpdate.result?.projectId || 
+                         (saveMode === 'existing-project' ? selectedProjectId : null)
+        
+        if (documentId && projectId) {
+          const projectName = projects.find(p => p.id === projectId)?.name || 'Project'
+          toast.success("Document generated and saved!", {
+            description: `Your document has been saved to ${projectName}. Click to view.`,
+            duration: 8000,
+            action: {
+              label: "View Document",
+              onClick: () => {
+                router.push(`/projects/${projectId}?tab=documents&highlight=${documentId}`)
+              }
+            }
+          })
+        } else {
+          toast.success("Document generation completed!", {
+            description: "Your generated content is ready.",
+            duration: 5000
+          })
+        }
       } else if (jobUpdate.status === "failed") {
         setIsGenerating(false)
         setCurrentJobId(null)
-        toast.error("AI generation failed: " + jobUpdate.error)
+        toast.error("Document generation failed", {
+          description: jobUpdate.error || "An error occurred during generation",
+          duration: 8000
+        })
       }
     }
-  }, [currentJobId, jobUpdates])
+  }, [currentJobId, jobUpdates, projects, saveMode, selectedProjectId])
 
   const handleGenerate = async () => {
     if (!selectedProvider) {
@@ -215,32 +243,28 @@ Please create a document that considers the project context above and ensures co
 
       const response = await apiClient.generateContent(generateData)
 
+      // All generation is now async (background job queue)
       if (response.jobId) {
-        // Long-running job
         setCurrentJobId(response.jobId)
-        toast.info("AI generation started", {
-          description: "This may take a few moments..."
+        setIsGenerating(false) // Allow user to continue working
+        
+        const projectName = saveMode === 'existing-project' && selectedProjectId 
+          ? projects.find(p => p.id === selectedProjectId)?.name 
+          : 'new project'
+        
+        toast.success("Document generation started", {
+          description: `Generating in background. You can continue working and will be notified when complete. ${projectName !== 'new project' ? `Document will be saved to ${projectName}.` : ''}`,
+          duration: 5000
         })
+        
+        // Reset form to allow starting another generation
+        setPrompt("")
+        setResult(null)
       } else {
-        // Immediate response
+        // Fallback for immediate response (shouldn't happen with new backend)
         setResult(response.result)
         setIsGenerating(false)
-        
-        // Check if document was auto-saved to project
-        if (response.savedToProject && response.projectId) {
-          const projectName = projects.find(p => p.id === response.projectId)?.name || 'Project'
-          toast.success("Document saved to project!", {
-            description: `Saved to ${projectName}. Click to view.`,
-            action: {
-              label: "View Project",
-              onClick: () => {
-                window.location.href = `/projects/${response.projectId}?tab=documents`
-              }
-            }
-          })
-        } else {
-          toast.success("AI generation completed!")
-        }
+        toast.success("AI generation completed!")
       }
     } catch (error) {
       console.error("AI generation failed:", error)

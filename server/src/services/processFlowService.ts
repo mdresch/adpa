@@ -4,6 +4,7 @@
  */
 
 import { Pool } from 'pg'
+import crypto from 'crypto'
 import { logger } from '../utils/logger'
 import { documentCompressionService, DocumentCompressionOptions } from './documentCompressionService'
 
@@ -51,6 +52,8 @@ export interface WorkflowConfiguration {
   includeMetadata: boolean
   includeRelationships: boolean
   includeStakeholders: boolean
+  // Optional progress callback for real-time updates
+  onProgress?: (stepName: string, current: number, total: number, details?: any) => Promise<void> | void
 }
 
 class ProcessFlowService {
@@ -572,7 +575,8 @@ class ProcessFlowService {
     metadataTokens: number = 0,
     compressionMethod: string = 'summarize',
     templateContext?: { name: string, description: string, content: string, system_prompt?: string, template_paragraphs?: any[] },
-    stakeholderTokens: number = 0
+    stakeholderTokens: number = 0,
+    onProgress?: (stepName: string, current: number, total: number, details?: any) => Promise<void> | void
   ): Promise<Array<{document: DocumentPriority, compressedContent: string, compressedTokens: number, compressionDetails: any}>> {
     const availableTokens = maxTokens - templateTokens - metadataTokens - stakeholderTokens
     const compressedDocuments: Array<{document: DocumentPriority, compressedContent: string, compressedTokens: number, compressionDetails: any}> = []
@@ -580,13 +584,84 @@ class ProcessFlowService {
 
     logger.info(`Starting individual document compression: ${prioritizedDocuments.length} documents, ${availableTokens.toLocaleString()} available tokens`)
 
-    for (const [index, doc] of prioritizedDocuments.entries()) {
-      if (usedTokens >= availableTokens) {
-        logger.info(`Context window full after ${index} documents. Used ${usedTokens.toLocaleString()}/${availableTokens.toLocaleString()} tokens`)
-        break
+    // Get all available AI providers to determine batch size
+    let availableProviders: Array<{ provider_type: string }> = []
+    let BATCH_SIZE = 5 // Default safe batch size
+    
+    if (compressionMethod !== 'summarize') {
+      // Non-AI methods (truncate, keyword, smart) are instant - process all at once!
+      BATCH_SIZE = Math.min(prioritizedDocuments.length, 50)
+      logger.info(`🚀 Using NON-AI compression (${compressionMethod}) - processing ALL ${BATCH_SIZE} documents in parallel!`)
+    } else {
+      // AI summarization with automatic fallback - get count of active providers
+      try {
+        const providerResult = await this.pool.query(
+          `SELECT provider_type FROM ai_providers 
+           WHERE is_active = true 
+           ORDER BY priority ASC`
+        )
+        
+        availableProviders = providerResult.rows
+        
+        if (availableProviders.length > 0) {
+          // Batch size = number of providers (each document tries all providers via fallback)
+          BATCH_SIZE = availableProviders.length
+          
+          const providerNames = availableProviders.map(p => p.provider_type).join(' → ')
+          logger.info(`🎯 Multi-Provider Fallback Strategy: ${availableProviders.length} providers in fallback chain`)
+          logger.info(`📊 Fallback sequence: ${providerNames}`)
+          logger.info(`⚡ Processing ${BATCH_SIZE} documents in parallel - each uses full fallback chain!`)
+        } else {
+          logger.warn('No active AI providers found, using default batch size: 1')
+          BATCH_SIZE = 1
+        }
+      } catch (error) {
+        logger.warn(`Could not fetch AI providers, using default batch size: ${BATCH_SIZE}`)
       }
-
-      logger.info(`Compressing document ${index + 1}/${prioritizedDocuments.length}: ${doc.name || doc.title || doc.id}`)
+    }
+    
+    const totalDocs = prioritizedDocuments.length
+    logger.info(`🚀 Using parallel processing with batch size of ${BATCH_SIZE} documents (${Math.ceil(totalDocs / BATCH_SIZE)} batches total)`)
+    logger.info(`⚡ Expected speedup: ${BATCH_SIZE}x faster than sequential processing!`)
+    
+    // Track which documents each provider is actively processing
+    const providerAssignments = new Map<string, { docIndex: number, docName: string, startTime: number }>()
+    
+    // Helper function to compress a single document with specific provider assignment
+    const compressDocument = async (doc: DocumentPriority, index: number, assignedProvider?: string) => {
+      const currentDoc = index + 1
+      
+      try {
+        // Track provider assignment
+        if (assignedProvider) {
+          providerAssignments.set(assignedProvider, {
+            docIndex: currentDoc,
+            docName: doc.name || doc.title || doc.id,
+            startTime: Date.now()
+          })
+        }
+        
+        logger.info(`[Provider: ${assignedProvider || 'auto'}] Compressing document ${currentDoc}/${totalDocs}: ${doc.name || doc.title || doc.id}`)
+        
+        // Build active documents array showing which provider is processing which document
+        const activeDocsArray = Array.from(providerAssignments.entries()).map(([provider, info]) => ({
+          provider,
+          name: info.docName,
+          duration: Math.floor((Date.now() - info.startTime) / 1000),
+          docIndex: info.docIndex
+        }))
+        
+        // Report progress to callback with provider assignments
+        if (onProgress) {
+          await onProgress(`Compressing documents`, currentDoc, totalDocs, {
+            documentName: doc.name || doc.title || doc.id,
+            documentId: doc.id,
+            usedTokens,
+            availableTokens,
+            assignedProvider,
+            providerAssignments: activeDocsArray
+          })
+        }
 
       // Get document content from database
       const docResult = await this.pool.query(
@@ -596,13 +671,13 @@ class ProcessFlowService {
 
       if (docResult.rows.length === 0) {
         logger.warn(`Document not found in database: ${doc.id}`)
-        continue
+          return null
       }
 
       const content = docResult.rows[0].content
       if (!content) {
         logger.warn(`Document has no content: ${doc.id}`)
-        continue
+          return null
       }
 
       // Calculate target tokens for this document
@@ -611,7 +686,65 @@ class ProcessFlowService {
       
       logger.info(`Document ${index + 1}: ${originalTokens.toLocaleString()} tokens → target ${targetTokens.toLocaleString()} tokens (${(compressionLevel * 100).toFixed(0)}%)`)
 
-      // Enhanced compression with template context
+        // Check cache first for AI summarization
+        let compressed: any
+        if (compressionMethod === 'summarize') {
+          try {
+            // Generate hash of template context for lookup
+            const templateContextStr = templateContext ? JSON.stringify(templateContext) : ''
+            const templateContextHash = crypto.createHash('md5').update(templateContextStr).digest('hex')
+            
+            // Try to get cached summary using hash
+            const cachedResult = await this.pool.query(
+              `SELECT * FROM document_summaries 
+               WHERE document_id = $1 
+                 AND compression_method = $2 
+                 AND compression_level = $3 
+                 AND template_context_hash = $4
+                 AND is_valid = true
+               ORDER BY created_at DESC 
+               LIMIT 1`,
+              [doc.id, compressionMethod, compressionLevel, templateContextHash]
+            )
+            
+            if (cachedResult.rows.length > 0) {
+              const cached = cachedResult.rows[0]
+              
+              // Update reuse statistics
+              await this.pool.query(
+                `UPDATE document_summaries 
+                 SET times_reused = times_reused + 1, 
+                     last_reused_at = CURRENT_TIMESTAMP 
+                 WHERE id = $1`,
+                [cached.id]
+              )
+              
+              logger.info(`📦 [CACHE-HIT] Reusing cached summary (reused ${cached.times_reused + 1} times) - instant vs ~60s AI call`)
+              
+              compressed = {
+                originalContent: cached.original_content,
+                compressedContent: cached.compressed_content,
+                originalTokens: cached.original_tokens,
+                compressedTokens: cached.compressed_tokens,
+                compressionRatio: parseFloat(cached.compression_ratio),
+                method: cached.compression_method
+              }
+            }
+          } catch (cacheError: any) {
+            // Cache table doesn't exist yet or other error - gracefully continue without cache
+            if (cacheError.code === '42P01') { // Relation does not exist
+              logger.info(`💡 [CACHE] document_summaries table not yet created - skipping cache (run migration to enable caching)`)
+            } else {
+              logger.warn(`⚠️ [CACHE] Cache lookup failed: ${cacheError.message}`)
+            }
+            // Continue without cache
+          }
+        }
+        
+        // If not cached, compress now
+        if (!compressed) {
+          logger.info(`🔍 [CACHE-MISS] Compressing with AI...`)
+          
       const compressionOptions: DocumentCompressionOptions = {
         compressionLevel,
         preserveStructure: true,
@@ -620,12 +753,63 @@ class ProcessFlowService {
         templateContext: templateContext
       }
 
-      try {
-        const compressed = await documentCompressionService.compressDocument(content, compressionOptions)
+          compressed = await documentCompressionService.compressDocument(content, compressionOptions)
+          
+          // Save to cache for future reuse (AI summarizations only)
+          if (compressionMethod === 'summarize') {
+            try {
+              // Generate hash of template context to avoid index size limit
+              const templateContextStr = templateContext ? JSON.stringify(templateContext) : ''
+              const templateContextHash = crypto.createHash('md5').update(templateContextStr).digest('hex')
+              
+              await this.pool.query(
+                `INSERT INTO document_summaries (
+                  document_id, compression_method, compression_level,
+                  original_content, original_tokens,
+                  compressed_content, compressed_tokens, compression_ratio,
+                  target_tokens, ai_provider, ai_model, template_context, template_context_hash
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                ON CONFLICT (document_id, compression_method, compression_level, template_context_hash) 
+                DO UPDATE SET
+                  compressed_content = EXCLUDED.compressed_content,
+                  compressed_tokens = EXCLUDED.compressed_tokens,
+                  compression_ratio = EXCLUDED.compression_ratio,
+                  template_context = EXCLUDED.template_context,
+                  updated_at = CURRENT_TIMESTAMP,
+                  is_valid = true`,
+                [
+                  doc.id,
+                  compressionMethod,
+                  compressionLevel,
+                  content,
+                  originalTokens,
+                  compressed.compressedContent,
+                  compressed.compressedTokens,
+                  compressed.compressionRatio,
+                  targetTokens,
+                  assignedProvider || null,
+                  null, // model - could extract from AI response
+                  templateContext ? JSON.stringify(templateContext) : null,
+                  templateContextHash
+                ]
+              )
+              
+              logger.info(`💾 [CACHE-SAVE] Saved summary to cache for future reuse (hash: ${templateContextHash.substring(0, 8)}...)`)
+            } catch (cacheError: any) {
+              // Gracefully handle cache save failures
+              if (cacheError.code === '42P01') { // Relation does not exist
+                logger.info(`💡 [CACHE] document_summaries table not yet created - skipping cache save (run migration to enable caching)`)
+              } else {
+                logger.warn(`⚠️ [CACHE] Failed to save to cache: ${cacheError.message}`)
+              }
+              // Don't fail the operation if caching fails
+            }
+          }
+        }
         
-        // Check if compressed document fits in remaining space
-        if (usedTokens + compressed.compressedTokens <= availableTokens) {
-          compressedDocuments.push({
+        logger.info(`✅ Document ${currentDoc} compressed: ${compressed.compressedTokens.toLocaleString()} tokens (${(compressed.compressionRatio * 100).toFixed(1)}% of original)`)
+        
+        return {
             document: doc,
             compressedContent: compressed.compressedContent,
             compressedTokens: compressed.compressedTokens,
@@ -637,49 +821,89 @@ class ProcessFlowService {
               targetTokens,
               actualCompression: (compressed.compressedTokens / originalTokens * 100).toFixed(1) + '%'
             }
-          })
-          usedTokens += compressed.compressedTokens
+        }
+      } catch (error: any) {
+        logger.error(`❌ [Provider: ${assignedProvider || 'auto'}] Failed to compress document ${currentDoc}: ${error.message}`)
+        return null
+      } finally {
+        // Clean up provider assignment when done (runs on both success and error)
+        if (assignedProvider) {
+          providerAssignments.delete(assignedProvider)
+        }
+      }
+    }
+
+    // Dynamic work queue: Each provider continuously processes documents
+    if (compressionMethod === 'summarize' && availableProviders.length > 0) {
+      logger.info(`🔄 Starting dynamic work queue with ${availableProviders.length} provider workers`)
+      
+      // Create a queue of document indices
+      const documentQueue: number[] = []
+      for (let i = 0; i < prioritizedDocuments.length; i++) {
+        documentQueue.push(i)
+      }
+      
+      // Create a worker for each provider
+      const providerWorkers = availableProviders.map(async (provider) => {
+        const providerType = provider.provider_type
+        let documentsProcessed = 0
+        
+        logger.info(`🏃 Worker [${providerType}] started`)
+        
+        // Process documents until queue is empty or context full
+        while (documentQueue.length > 0 && usedTokens < availableTokens) {
+          const docIndex = documentQueue.shift()!
+          const doc = prioritizedDocuments[docIndex]
           
-          logger.info(`✅ Document ${index + 1} compressed successfully: ${compressed.compressedTokens.toLocaleString()} tokens (${(compressed.compressionRatio * 100).toFixed(1)}% of original)`)
-        } else {
-          // Try with higher compression to fit in remaining space
-          const remainingTokens = availableTokens - usedTokens
-          const higherCompression = Math.max(0.1, remainingTokens / originalTokens)
+          logger.info(`📋 Worker [${providerType}] picked up document ${docIndex + 1}/${totalDocs} (${documentQueue.length} remaining in queue)`)
           
-          if (higherCompression >= 0.1) {
-            logger.info(`Trying higher compression for document ${index + 1}: ${(higherCompression * 100).toFixed(0)}% to fit ${remainingTokens.toLocaleString()} remaining tokens`)
-            
-            const higherCompressionOptions = {
-              ...compressionOptions,
-              compressionLevel: higherCompression
-            }
-            
-            const higherCompressed = await documentCompressionService.compressDocument(content, higherCompressionOptions)
-            
-            compressedDocuments.push({
-              document: doc,
-              compressedContent: higherCompressed.compressedContent,
-              compressedTokens: higherCompressed.compressedTokens,
-              compressionDetails: {
-                originalTokens,
-                compressedTokens: higherCompressed.compressedTokens,
-                compressionRatio: higherCompressed.compressionRatio,
-                method: higherCompressed.method,
-                targetTokens: Math.ceil(originalTokens * higherCompression),
-                actualCompression: (higherCompressed.compressedTokens / originalTokens * 100).toFixed(1) + '%',
-                note: 'Higher compression applied to fit context window'
-              }
-            })
-            usedTokens += higherCompressed.compressedTokens
-            
-            logger.info(`✅ Document ${index + 1} compressed with higher compression: ${higherCompressed.compressedTokens.toLocaleString()} tokens (${(higherCompressed.compressionRatio * 100).toFixed(1)}% of original)`)
-          } else {
-            logger.warn(`❌ Document ${index + 1} too large to fit in remaining context window: ${originalTokens.toLocaleString()} tokens, only ${remainingTokens.toLocaleString()} tokens available`)
+          const result = await compressDocument(doc, docIndex, providerType)
+          
+          if (result && usedTokens + result.compressedTokens <= availableTokens) {
+            compressedDocuments.push(result)
+            usedTokens += result.compressedTokens
+            documentsProcessed++
+            logger.info(`✅ Worker [${providerType}] completed document ${docIndex + 1} (${documentsProcessed} total)`)
+          } else if (result && result.compressedTokens > 0) {
+            logger.warn(`⚠️ Worker [${providerType}] skipping document (would exceed budget): ${result.document.name}`)
+            break // Stop this worker if budget exceeded
           }
         }
-      } catch (error) {
-        logger.error(`❌ Failed to compress document ${index + 1}: ${error.message}`)
-        // Continue with next document
+        
+        logger.info(`🏁 Worker [${providerType}] finished: ${documentsProcessed} documents processed`)
+        return documentsProcessed
+      })
+      
+      // Wait for all workers to complete
+      const workerResults = await Promise.all(providerWorkers)
+      const totalProcessed = workerResults.reduce((sum, count) => sum + count, 0)
+      logger.info(`✅ All workers completed: ${totalProcessed} documents processed by ${availableProviders.length} providers`)
+      
+          } else {
+      // Fallback: Traditional batch processing for non-AI methods
+      for (let batchStart = 0; batchStart < prioritizedDocuments.length; batchStart += BATCH_SIZE) {
+        if (usedTokens >= availableTokens) {
+          logger.info(`Context window full after ${batchStart} documents. Used ${usedTokens.toLocaleString()}/${availableTokens.toLocaleString()} tokens`)
+          break
+        }
+        
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, prioritizedDocuments.length)
+        const batch = prioritizedDocuments.slice(batchStart, batchEnd)
+        
+        logger.info(`📦 Processing batch ${Math.floor(batchStart / BATCH_SIZE) + 1}: documents ${batchStart + 1}-${batchEnd}`)
+        
+        const batchResults = await Promise.all(
+          batch.map((doc, batchIndex) => compressDocument(doc, batchStart + batchIndex))
+        )
+        
+        for (const result of batchResults) {
+          if (result && usedTokens + result.compressedTokens <= availableTokens) {
+            compressedDocuments.push(result)
+            usedTokens += result.compressedTokens
+          } else if (result && result.compressedTokens > 0) {
+            logger.warn(`⚠️ Skipping document: ${result.document.name} (${result.compressedTokens.toLocaleString()} tokens)`)
+          }
+        }
       }
     }
 
@@ -1070,7 +1294,8 @@ class ProcessFlowService {
         metadataTokens,
         config.compressionMethod,
         templateContext,
-        stakeholderTokens
+        stakeholderTokens,
+        config.onProgress // Pass through progress callback
       )
       
       const compressedTokens = compressedDocuments.reduce((sum, doc) => sum + doc.compressedTokens, 0)
@@ -1169,8 +1394,22 @@ class ProcessFlowService {
       steps[stepIndex].status = 'processing'
       logger.info('Step 7: Generating final document using AI provider')
       
-      // Generate the actual document using AI
-      const aiGeneratedDocument = await this.generateDocumentWithAI(injectedContent, template, config)
+      // Track AI generation time
+      const aiStartTime = Date.now()
+      
+      // Generate the actual document using AI (with metadata)
+      const aiGenerationResult = await this.generateDocumentWithAI(injectedContent, template, config)
+      
+      const aiEndTime = Date.now()
+      const aiProcessingTimeMs = aiEndTime - aiStartTime
+      const aiProcessingTimeSec = (aiProcessingTimeMs / 1000).toFixed(1)
+      
+      const aiGeneratedDocument = typeof aiGenerationResult === 'string' ? aiGenerationResult : aiGenerationResult.content
+      const aiMetadata = typeof aiGenerationResult === 'object' ? {
+        ...aiGenerationResult,
+        processingTime: aiProcessingTimeSec + 's',
+        processingTimeMs: aiProcessingTimeMs
+      } : null
       const aiGeneratedTokens = this.estimateTokenCount(aiGeneratedDocument)
       
       steps[stepIndex].tokens = aiGeneratedTokens
@@ -1190,13 +1429,14 @@ class ProcessFlowService {
       
       logger.info('Workflow processing completed successfully')
       
-      // Save the final document to the project
+      // Save the final document to the project (with AI metadata)
       const savedDocument = await this.saveGeneratedDocument(
         aiGeneratedDocument,
         config,
         template,
         project,
-        compressedDocuments
+        compressedDocuments,
+        aiMetadata
       )
       
       logger.info(`Generated document saved with ID: ${savedDocument.id}`)
@@ -1284,7 +1524,15 @@ class ProcessFlowService {
       }
       
       logger.info(`AI document generation completed successfully`)
-      return response.content
+      
+      // Return full response with metadata (provider, model, usage, etc.)
+      return {
+        content: response.content,
+        provider: response.provider || providerType,
+        model: response.model || modelName,
+        usage: response.usage,
+        metadata: response.metadata
+      }
       
     } catch (error) {
       logger.error('Error generating document with AI:', error)
@@ -1399,14 +1647,39 @@ class ProcessFlowService {
     config: WorkflowConfiguration,
     template: any,
     project: any,
-    compressedDocuments: any[]
+    compressedDocuments: any[],
+    aiMetadata?: any
   ): Promise<{id: string, name: string}> {
     try {
       // Generate document name based on template and timestamp
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const documentName = `${template.name} - Generated ${timestamp}`
       
-      // Create document metadata
+      // Calculate token counts
+      const totalTokens = aiMetadata?.usage?.total_tokens || Math.ceil(finalContent.length / 4)
+      const inputTokens = aiMetadata?.usage?.prompt_tokens || 0
+      const outputTokens = aiMetadata?.usage?.completion_tokens || totalTokens
+      
+      // Calculate content statistics
+      const wordCount = finalContent.split(/\s+/).filter(word => word.length > 0).length
+      const characterCount = finalContent.length
+      const sentenceCount = finalContent.split(/[.!?]+/).filter(s => s.trim().length > 0).length
+      const paragraphCount = finalContent.split(/\n\n+/).filter(p => p.trim().length > 0).length
+      
+      // Helper function to calculate AI cost
+      const calculateCost = (provider: string, inputTokens: number, outputTokens: number): number => {
+        const pricing: any = {
+          'openai': { input: 0.01 / 1000, output: 0.03 / 1000 },
+          'google': { input: 0.00025 / 1000, output: 0.00125 / 1000 },
+          'mistral': { input: 0.001 / 1000, output: 0.003 / 1000 },
+          'groq': { input: 0.00027 / 1000, output: 0.00027 / 1000 },
+          'anthropic': { input: 0.008 / 1000, output: 0.024 / 1000 }
+        }
+        const rates = pricing[provider?.toLowerCase()] || { input: 0.001 / 1000, output: 0.003 / 1000 }
+        return (inputTokens * rates.input) + (outputTokens * rates.output)
+      }
+      
+      // Create document metadata (general workflow info)
       const metadata = {
         generatedBy: 'Process Flow Workflow',
         templateId: config.templateId,
@@ -1414,17 +1687,64 @@ class ProcessFlowService {
         compressionMethod: config.compressionMethod,
         compressionLevel: config.compressionLevel,
         priorityStrategy: config.priorityStrategy,
-        sourceDocuments: compressedDocuments.map(doc => ({
-          id: doc.document.documentId,
-          name: doc.document.name,
-          originalTokens: doc.document.estimatedTokens,
-          compressedTokens: doc.compressedTokens
-        })),
-        generatedAt: new Date().toISOString(),
-        totalTokens: Math.ceil(finalContent.length / 4)
+        totalTokens
       }
       
-      // Insert document into database
+      // Create generation_metadata (AI-specific info for display)
+      const generationMetadata = {
+        source_documents: compressedDocuments.map((doc, index) => ({
+          id: doc.document.documentId,
+          title: doc.document.name,
+          name: doc.document.name,
+          status: 'compressed',
+          priority_rank: index + 1,
+          originalTokens: doc.document.estimatedTokens,
+          compressedTokens: doc.compressedTokens,
+          compressionRatio: ((doc.compressedTokens / doc.document.estimatedTokens) * 100).toFixed(1) + '%'
+        })),
+        aiProcessing: aiMetadata ? {
+          provider: aiMetadata.provider,
+          model: aiMetadata.model,
+          temperature: 0.3,
+          tokens: {
+            input: inputTokens,
+            output: outputTokens,
+            total: totalTokens,
+            cost: calculateCost(aiMetadata.provider, inputTokens, outputTokens)
+          },
+          status: 'success',
+          processingTime: aiMetadata.processingTime || 'N/A',
+          processingTimeMs: aiMetadata.processingTimeMs || 0
+        } : {
+          provider: 'N/A',
+          model: 'N/A',
+          temperature: 0.3,
+          tokens: {
+            input: 0,
+            output: 0,
+            total: 0,
+            cost: 0
+          },
+          status: 'unknown',
+          processingTime: 'N/A',
+          processingTimeMs: 0
+        },
+        generation: {
+          status: aiMetadata ? 'success' : 'unknown',
+          duration: aiMetadata?.processingTimeMs || 0,
+          durationFormatted: aiMetadata?.processingTime || 'N/A'
+        },
+        contentMetrics: {
+          words: wordCount,
+          characters: characterCount,
+          sentences: sentenceCount,
+          paragraphs: paragraphCount,
+          avgWordsPerSentence: sentenceCount > 0 ? Math.round(wordCount / sentenceCount) : 0,
+          readingTime: Math.ceil(wordCount / 200) // 200 words per minute average
+        }
+      }
+      
+      // Insert document into database with both metadata and generation_metadata
       const result = await this.pool.query(`
         INSERT INTO documents (
           id, 
@@ -1435,6 +1755,7 @@ class ProcessFlowService {
           status, 
           framework, 
           metadata,
+          generation_metadata,
           created_at, 
           updated_at
         ) VALUES (
@@ -1446,6 +1767,7 @@ class ProcessFlowService {
           'draft', 
           $5, 
           $6,
+          $7,
           NOW(), 
           NOW()
         ) RETURNING id, name
@@ -1455,7 +1777,8 @@ class ProcessFlowService {
         config.projectId,
         config.templateId,
         project.framework || 'ADPA',
-        JSON.stringify(metadata)
+        JSON.stringify(metadata),
+        JSON.stringify(generationMetadata)
       ])
       
       const savedDocument = result.rows[0]

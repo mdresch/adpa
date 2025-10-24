@@ -27,9 +27,26 @@ router.get("/",
       const offset = (Number(page) - 1) * Number(limit)
 
       let query = `
-        SELECT id, type, status, progress, error_message, started_at, completed_at, created_at
-        FROM jobs
-        WHERE created_by = $1
+        SELECT 
+          j.id, 
+          j.type, 
+          j.status, 
+          j.progress, 
+          j.error_message, 
+          j.started_at, 
+          j.completed_at, 
+          j.created_at,
+          j.data as job_data,
+          j.result,
+          COALESCE(j.project_name, p.name) as project_name,
+          COALESCE(j.template_name, t.name) as template_name,
+          COALESCE(j.document_name, d.name) as document_name,
+          d.id as document_id
+        FROM jobs j
+        LEFT JOIN projects p ON j.project_id = p.id OR (j.data->>'projectId')::uuid = p.id OR (j.data->'variables'->>'project_id')::uuid = p.id
+        LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
+        LEFT JOIN documents d ON d.generation_metadata->>'job_id' = j.id::text
+        WHERE j.created_by = $1
       `
 
       const params: any[] = [req.user?.id]
@@ -72,8 +89,76 @@ router.get("/",
       const countResult = await pool.query(countQuery, countParams)
       const total = Number.parseInt(countResult.rows[0].count)
 
+      // Format jobs with enriched data
+      const enrichedJobs = result.rows.map(job => {
+        const jobData = job.job_data || {}
+        
+        // Build descriptive job name: "Document Name - Project Name" or fallback to template/type
+        let jobName = ''
+        
+        // Priority 1: Document name (most specific)
+        const docName = job.document_name || jobData.documentName
+        
+        // Priority 2: Template name (for new documents being generated)
+        const templateName = job.template_name || jobData.template_name || jobData.variables?.template_name
+        
+        // Priority 3: Generic name
+        const genericName = jobData.name || `${job.type} Job`
+        
+        // Build name with project context
+        if (docName && job.project_name) {
+          jobName = `${docName} - ${job.project_name}`
+        } else if (templateName && job.project_name) {
+          jobName = `${templateName} - ${job.project_name}`
+        } else if (docName) {
+          jobName = docName
+        } else if (templateName) {
+          jobName = templateName
+        } else if (job.project_name) {
+          jobName = `${genericName} - ${job.project_name}`
+        } else {
+          jobName = genericName
+        }
+        
+        return {
+          id: job.id,
+          name: jobName,
+          type: job.type,
+          status: job.status,
+          progress: job.progress || 0,
+          error: job.error_message,
+          startTime: job.started_at,
+          completedTime: job.completed_at,
+          queuedTime: job.created_at,
+          priority: jobData.priority || 'medium',
+          queue: job.type === 'ai-generate' ? 'ai-processing' : job.type,
+          worker: jobData.worker_id || jobData.worker || 'Unassigned',
+          logs: jobData.logs || [],
+          // Additional metadata for AI jobs
+          metadata: {
+            provider: jobData.provider,
+            model: jobData.model,
+            temperature: jobData.temperature,
+            template_id: jobData.template_id,
+            template_name: job.template_name || jobData.variables?.template_name,
+            project_id: jobData.projectId || jobData.variables?.project_id,
+            project_name: job.project_name,
+            document_id: job.document_id,
+            document_name: job.document_name,
+            tokens: jobData.tokens || job.result?.usage,
+            // Process-flow specific progress fields
+            currentStep: jobData.currentStep,
+            compressionProgress: jobData.compressionProgress,
+            currentDocument: jobData.currentDocument,
+            stepProgress: jobData.stepProgress,
+            activeDocuments: jobData.activeDocuments || [],
+            parallelCount: jobData.activeDocuments?.length || 0
+          }
+        }
+      })
+      
       res.json({
-        jobs: result.rows,
+        jobs: enrichedJobs,
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -212,55 +297,58 @@ router.post("/:id/cancel",
   }
 )
 
-// Retry failed job
-router.post("/:id/retry", 
+// Retry failed job - REMOVED DUPLICATE (see line 464 for working version that handles stuck jobs)
+
+// Clean up stuck cancelled jobs from queues (admin only)
+router.post("/cleanup",
   authenticateToken,
-  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  requirePermission("jobs.manage"),
   async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { id } = req.params
-
-      // Get original job
-      const jobResult = await pool.query(
-        "SELECT * FROM jobs WHERE id = $1",
-        [id]
+      // Get all cancelled jobs from database
+      const cancelledJobs = await pool.query(
+        `SELECT id, type FROM jobs WHERE status = 'cancelled'`
       )
-
-      if (jobResult.rows.length === 0) {
-        return res.status(404).json({ error: "Job not found" })
+      
+      let cleanedCount = 0
+      
+      // Import queues
+      const { aiQueue, documentQueue, pipelineQueue, processFlowQueue } = await import("../services/queueService")
+      
+      // Remove from all queues
+      for (const job of cancelledJobs.rows) {
+        const jobId = job.id
+        
+        // Check each queue
+        const queues = [
+          { name: 'aiQueue', queue: aiQueue },
+          { name: 'documentQueue', queue: documentQueue },
+          { name: 'pipelineQueue', queue: pipelineQueue },
+          { name: 'processFlowQueue', queue: processFlowQueue }
+        ]
+        
+        for (const { name, queue } of queues) {
+          const bullJob = await queue.getJob(jobId)
+          if (bullJob) {
+            await bullJob.remove()
+            log.info(`Removed job ${jobId} from ${name}`)
+            cleanedCount++
+          }
+        }
       }
-
-      const originalJob = jobResult.rows[0]
-
-      if (originalJob.created_by !== req.user?.id && req.user?.role !== "admin") {
-        return res.status(403).json({ error: "Access denied" })
-      }
-
-      if (originalJob.status !== "failed") {
-        return res.status(400).json({ error: "Only failed jobs can be retried" })
-      }
-
-      // Create new job with same data
-      const newJobId = uuidv4()
-      const jobData = {
-        ...originalJob.data,
-        jobId: newJobId,
-        userId: req.user?.id,
-      }
-
-      await addJob(originalJob.type, jobData)
-
-  const log = childLogger({ requestId: (req as any).requestId })
-  log.info(`Job retried: ${id} -> ${newJobId} by ${req.user?.email}`)
-
+      
+      log.info(`Cleaned up ${cleanedCount} stuck jobs from queues`)
+      
       res.json({
-        message: "Job retried successfully",
-        newJobId,
+        success: true,
+        message: `Cleaned up ${cleanedCount} stuck jobs`,
+        cancelledJobsChecked: cancelledJobs.rows.length
       })
+      
     } catch (error) {
-      const log = childLogger({ requestId: (req as any).requestId })
-      log.error("Retry job error:", error)
-      res.status(500).json({ error: "Internal server error" })
+      log.error("Cleanup jobs error:", error)
+      res.status(500).json({ error: "Failed to cleanup jobs" })
     }
   }
 )
@@ -399,6 +487,231 @@ router.get("/admin/all",
     }
   }
 )
+
+/**
+ * POST /api/jobs/:id/retry
+ * Retry a specific failed or stalled job
+ */
+router.post(
+  "/:id/retry",
+  authenticateToken,
+  requirePermission("jobs.create"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      const { id } = req.params
+      
+      // Get the job
+      const jobResult = await pool.query(
+        "SELECT * FROM jobs WHERE id = $1 AND created_by = $2",
+        [id, req.user?.id]
+      )
+      
+      if (jobResult.rows.length === 0) {
+        return res.status(404).json({ error: "Job not found" })
+      }
+      
+      const job = jobResult.rows[0]
+      
+      // Can retry failed jobs or stuck processing jobs
+      if (job.status !== 'failed' && job.status !== 'processing') {
+        return res.status(400).json({ error: "Can only retry failed or stuck jobs" })
+      }
+      
+      // Create new job with same data
+      const { v4: uuidv4 } = await import('uuid')
+      const { addJob } = await import('../services/queueService')
+      
+      const newJobId = uuidv4()
+      const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : job.data
+      
+      const newJobData = {
+        ...jobData,
+        jobId: newJobId,
+        retryOf: id,
+        retryCount: (jobData.retryCount || 0) + 1
+      }
+      
+      // Mark old job as cancelled
+      await pool.query(
+        "UPDATE jobs SET status = 'cancelled', error_message = 'Retried manually' WHERE id = $1",
+        [id]
+      )
+      
+      // Add new job to queue
+      await addJob(job.type, newJobData)
+      
+      log.info(`Job ${id} retried as ${newJobId}`)
+      
+      res.json({
+        success: true,
+        message: "Job queued for retry",
+        newJobId,
+        originalJobId: id
+      })
+    } catch (error) {
+      log.error("Retry job error:", error)
+      res.status(500).json({ error: "Failed to retry job" })
+    }
+  }
+)
+
+/**
+ * POST /api/jobs/retry-all-failed
+ * Retry all failed jobs for the current user
+ */
+router.post(
+  "/retry-all-failed",
+  authenticateToken,
+  requirePermission("jobs.create"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      const { v4: uuidv4 } = await import('uuid')
+      const { addJob } = await import('../services/queueService')
+      
+      // Get all failed jobs for user
+      const jobsResult = await pool.query(
+        `SELECT * FROM jobs 
+         WHERE status = 'failed' 
+         AND created_by = $1
+         ORDER BY created_at DESC
+         LIMIT 50`,
+        [req.user?.id]
+      )
+      
+      if (jobsResult.rows.length === 0) {
+        return res.json({
+          success: true,
+          message: "No failed jobs to retry",
+          retriedCount: 0
+        })
+      }
+      
+      const retriedJobs = []
+      
+      for (const job of jobsResult.rows) {
+        try {
+          // Create new job with same data
+          const newJobId = uuidv4()
+          const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : job.data
+          
+          const newJobData = {
+            ...jobData,
+            jobId: newJobId,
+            retryOf: job.id,
+            retryCount: (jobData.retryCount || 0) + 1
+          }
+          
+          // Mark old job as cancelled
+          await pool.query(
+            "UPDATE jobs SET status = 'cancelled', error_message = 'Retried in bulk' WHERE id = $1",
+            [job.id]
+          )
+          
+          // Add to queue
+          await addJob(job.type, newJobData)
+          
+          retriedJobs.push({
+            originalJobId: job.id,
+            newJobId,
+            type: job.type
+          })
+          
+          log.info(`Retried job ${job.id} as ${newJobId}`)
+        } catch (err) {
+          log.error(`Failed to retry job ${job.id}:`, err)
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Retried ${retriedJobs.length} failed jobs`,
+        retriedCount: retriedJobs.length,
+        totalFailed: jobsResult.rows.length,
+        retriedJobs
+      })
+    } catch (error) {
+      log.error("Retry all failed jobs error:", error)
+      res.status(500).json({ error: "Failed to retry jobs" })
+    }
+  }
+)
+
+/**
+ * POST /api/jobs/clean-stalled
+ * Clean up stalled jobs (stuck in processing after backend restart)
+ */
+router.post(
+  "/clean-stalled",
+  authenticateToken,
+  requirePermission("jobs.create"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      // Find jobs stuck in processing for more than 10 minutes
+      const stalledResult = await pool.query(
+        `SELECT * FROM jobs 
+         WHERE status = 'processing' 
+         AND created_by = $1
+         AND started_at < NOW() - INTERVAL '10 minutes'
+         ORDER BY started_at DESC`,
+        [req.user?.id]
+      )
+      
+      if (stalledResult.rows.length === 0) {
+        return res.json({
+          success: true,
+          message: "No stalled jobs found",
+          cleanedCount: 0
+        })
+      }
+      
+      const cleanedJobs = []
+      
+      for (const job of stalledResult.rows) {
+        try {
+          // Mark as failed
+          await pool.query(
+            `UPDATE jobs 
+             SET status = 'failed', 
+                 error_message = 'Job stalled - backend restart detected',
+                 completed_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
+            [job.id]
+          )
+          
+          cleanedJobs.push({
+            jobId: job.id,
+            type: job.type,
+            stalledDuration: Math.floor(
+              (Date.now() - new Date(job.started_at).getTime()) / 1000 / 60
+            ) + ' minutes'
+          })
+          
+          log.info(`Cleaned stalled job ${job.id}`)
+        } catch (err) {
+          log.error(`Failed to clean stalled job ${job.id}:`, err)
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Cleaned ${cleanedJobs.length} stalled jobs`,
+        cleanedCount: cleanedJobs.length,
+        totalStalled: stalledResult.rows.length,
+        cleanedJobs
+      })
+    } catch (error) {
+      log.error("Clean stalled jobs error:", error)
+      res.status(500).json({ error: "Failed to clean stalled jobs" })
+    }
+  }
+)
+
 
 export default router
 

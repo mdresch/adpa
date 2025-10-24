@@ -1,8 +1,17 @@
 import { io, Socket } from "socket.io-client"
+import { getApiBaseUrl, getWsUrl } from "./api-url"
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
+const API_BASE_URL = getApiBaseUrl()
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || getWsUrl()
+
+// Debug logging only in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔧 API Debug:', {
+    API_BASE_URL,
+    WS_URL
+  })
+}
 
 // Types
 export interface User {
@@ -188,7 +197,11 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`
+    // FIX: Handle trailing/leading slashes to prevent double slashes
+    const baseURL = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${baseURL}${cleanEndpoint}`
+    
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
@@ -212,12 +225,20 @@ class ApiClient {
         // Create an error object that includes the response data for better error handling
         const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
         ;(error as any).response = { data, status: response.status }
+        ;(error as any).status = response.status
         throw error
       }
 
       return data
-    } catch (error) {
-      console.error(`API request failed: ${endpoint}`, error)
+    } catch (error: any) {
+      // Don't log expected errors if suppressNotFoundError is set
+      // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
+      const shouldSuppressLog = (options as any).suppressNotFoundError && 
+        (error?.status === 404 || error?.status === 401 || error?.status === 403)
+      
+      if (!shouldSuppressLog) {
+        console.error(`API request failed: ${endpoint}`, error)
+      }
       throw error
     }
   }

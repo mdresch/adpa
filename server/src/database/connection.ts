@@ -26,12 +26,14 @@ const createPool = (host: string) => {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: databaseUrl,
-      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
+      // Force IPv4 to prevent IPv6 connection issues on Railway
+      family: 4,
     })
   }
   
@@ -45,8 +47,8 @@ const createPool = (host: string) => {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
-    // SSL configuration for Neon and other cloud providers
-    ssl: host.includes('neon.tech') || host.includes('azure') || process.env.DB_SSL === "true" 
+    // SSL configuration for Supabase and other cloud providers
+    ssl: host.includes('supabase.co') || host.includes('azure') || process.env.DB_SSL === "true" 
       ? { rejectUnauthorized: false } 
       : false,
   })
@@ -61,15 +63,39 @@ export async function connectDatabase() {
   // If DATABASE_URL is provided, try it first
   if (databaseUrl) {
     console.log(`🔌 Trying database connection via DATABASE_URL`)
-    const testPool = new Pool({
-      connectionString: databaseUrl,
-      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+    
+    // Parse connection string to extract components
+    // This allows us to force IPv4 by explicitly setting the family option
+    let poolConfig: any = {
+      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 30000, // Increased to 30 seconds for Railway
-    })
+      connectionTimeoutMillis: 30000,
+    }
+    
+    // Parse URL to force IPv4
+    try {
+      const dbUrl = new URL(databaseUrl)
+      poolConfig = {
+        ...poolConfig,
+        host: dbUrl.hostname,
+        port: parseInt(dbUrl.port) || 5432,
+        database: dbUrl.pathname.slice(1).split('?')[0],
+        user: dbUrl.username,
+        password: dbUrl.password,
+        // CRITICAL: Force IPv4 only - Railway doesn't support IPv6
+        family: 4,
+      }
+      console.log(`🔧 Forcing IPv4 connection to: ${dbUrl.hostname}`)
+    } catch (e) {
+      // Fallback to connectionString if URL parsing fails
+      console.warn('⚠️  Could not parse DATABASE_URL, using connectionString (may fail on Railway)')
+      poolConfig.connectionString = databaseUrl
+    }
+    
+    const testPool = new Pool(poolConfig)
     
     try {
       const client = await Promise.race([

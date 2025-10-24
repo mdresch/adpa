@@ -664,8 +664,11 @@ export default function Projects() {
 
   // Sort by most recently updated first
   const sortedProjects = [...filteredProjects].sort((a, b) => {
-    const aTime = a.updated_at ? new Date(a.updated_at).getTime() : 0
-    const bTime = b.updated_at ? new Date(b.updated_at).getTime() : 0
+    // Sort by last_activity (most recent document or project update)
+    const aTime = (a as any).last_activity ? new Date((a as any).last_activity).getTime() : 
+                  a.updated_at ? new Date(a.updated_at).getTime() : 0
+    const bTime = (b as any).last_activity ? new Date((b as any).last_activity).getTime() : 
+                  b.updated_at ? new Date(b.updated_at).getTime() : 0
     return bTime - aTime
   })
 
@@ -1731,7 +1734,7 @@ export default function Projects() {
                               <div className="flex items-center space-x-2">
                                 <Clock className="h-3 w-3 text-slate-400" />
                                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  {new Date(project.updated_at).toLocaleDateString()}
+                                  Last activity: {new Date((project as any).last_activity || project.updated_at).toLocaleDateString()}
                                 </span>
                               </div>
                               <motion.div

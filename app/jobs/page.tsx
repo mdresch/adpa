@@ -44,6 +44,10 @@ import {
   MemoryStickIcon as Memory,
   Wifi,
   WifiOff,
+  Eye,
+  FileText,
+  AlertCircle,
+  Trash,
 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useAuth } from "@/contexts/AuthContext"
@@ -67,6 +71,9 @@ type Job = {
   worker?: string
   logs: string[]
   error?: string
+  projectName?: string
+  documentName?: string
+  metadata?: any
 }
 import { toast } from "sonner"
 
@@ -288,22 +295,41 @@ export default function JobMonitorPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [selectedJob, setSelectedJob] = useState<string | null>(null)
+  const [selectedWorker, setSelectedWorker] = useState<string | null>(null)
+  const [viewingLogs, setViewingLogs] = useState<string | null>(null)
   const [jobs, setJobs] = useState<Job[]>([])
+  const [queues, setQueues] = useState<any[]>([])
+  const [workers, setWorkers] = useState<any[]>([])
+  const [metrics, setMetrics] = useState<any>({})
   const [loading, setLoading] = useState(true)
+  const [loadingQueues, setLoadingQueues] = useState(true)
+  const [loadingWorkers, setLoadingWorkers] = useState(true)
 
+  // Fetch jobs
   useEffect(() => {
     const fetchJobs = async () => {
       try {
         const response = await apiClient.getJobs({ limit: 50 })
-        setJobs(
-          response.jobs.map((job: any) => ({
-            ...job,
-            name: job.name ?? "",
+        const mappedJobs = response.jobs.map((job: any) => ({
+          ...job, // Spread all job fields first
+          name: job.name ?? "", // Then set defaults only if missing
             priority: job.priority ?? "medium",
             queue: job.queue ?? "",
             logs: job.logs ?? [],
-          }))
-        )
+          // Extract project and document names from metadata to top level
+          projectName: job.metadata?.project_name || job.projectName,
+          documentName: job.metadata?.document_name || job.documentName,
+          metadata: {
+            ...(job.metadata || {}), // Preserve existing metadata
+            // Ensure progress fields are included
+            currentStep: job.metadata?.currentStep,
+            compressionProgress: job.metadata?.compressionProgress,
+            currentDocument: job.metadata?.currentDocument,
+            providerAssignments: job.metadata?.providerAssignments || []
+          }
+        }))
+        
+        setJobs(mappedJobs)
       } catch (error) {
         console.error("Failed to fetch jobs:", error)
         toast.error("Failed to load jobs")
@@ -319,7 +345,76 @@ export default function JobMonitorPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // Update jobs with real-time data
+  // Fetch queue statistics
+  useEffect(() => {
+    const fetchQueues = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/overview', { suppressNotFoundError: true } as any)
+        setQueues(response.queues || [])
+      } catch (error: any) {
+        // Gracefully fallback to mock data if stats endpoint unavailable
+        if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
+        console.error("Failed to fetch queue stats:", error)
+        }
+        setQueues(mockQueues) // Fallback to mock
+      } finally {
+        setLoadingQueues(false)
+      }
+    }
+
+    fetchQueues()
+
+    // Refresh every 10 seconds (more frequent for queue stats)
+    const interval = setInterval(fetchQueues, 10000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Fetch worker statistics
+  useEffect(() => {
+    const fetchWorkers = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/workers', { suppressNotFoundError: true } as any)
+        setWorkers(response.workers || [])
+      } catch (error: any) {
+        // Gracefully fallback to mock data if stats endpoint unavailable
+        if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
+        console.error("Failed to fetch worker stats:", error)
+        }
+        setWorkers(mockWorkers) // Fallback to mock
+      } finally {
+        setLoadingWorkers(false)
+      }
+    }
+
+    fetchWorkers()
+
+    // Refresh every 5 seconds (real-time worker status)
+    const interval = setInterval(fetchWorkers, 5000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Fetch aggregate metrics
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const response = await apiClient.request('/queue-stats/metrics', { suppressNotFoundError: true } as any)
+        setMetrics(response)
+      } catch (error: any) {
+        // Gracefully handle unavailable metrics endpoint
+        if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
+        console.error("Failed to fetch queue metrics:", error)
+        }
+      }
+    }
+
+    fetchMetrics()
+
+    // Refresh every 15 seconds
+    const interval = setInterval(fetchMetrics, 15000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Update jobs with real-time data from WebSocket
   useEffect(() => {
     setJobs(prevJobs =>
       prevJobs.map(job => {
@@ -332,19 +427,108 @@ export default function JobMonitorPage() {
     )
   }, [jobUpdates])
 
+  // Listen for real-time job progress updates
+  useEffect(() => {
+    const socket = apiClient.getSocket()
+    
+    if (socket) {
+      // Listen for job progress updates
+      socket.on('job:status', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: data.status,
+                  progress: data.progress || job.progress
+                }
+              : job
+          )
+        )
+      })
+
+      // Listen for job completion
+      socket.on('job:completed', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: 'completed',
+                  progress: 100,
+                  completedTime: new Date().toISOString()
+                }
+              : job
+          )
+        )
+      })
+
+      // Listen for job failure
+      socket.on('job:failed', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: 'failed',
+                  error: data.error,
+                  completedTime: new Date().toISOString()
+                }
+              : job
+          )
+        )
+      })
+      
+      // Listen for step-by-step updates (process-flow compression progress)
+      socket.on('job:step-update', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  progress: data.progress || job.progress,
+                  projectName: data.projectName || job.projectName,
+                  documentName: data.documentName || job.documentName,
+                  metadata: {
+                    ...job.metadata,
+                    currentStep: data.currentStep,
+                    compressionProgress: data.compressionProgress,
+                    currentDocument: data.currentDocument,
+                    activeDocuments: data.activeDocuments || [],
+                    providerAssignments: data.providerAssignments || [],
+                    parallelCount: data.parallelCount || 0
+                  }
+                }
+              : job
+          )
+        )
+      })
+
+      return () => {
+        socket.off('job:status')
+        socket.off('job:completed')
+        socket.off('job:failed')
+        socket.off('job:step-update')
+      }
+    }
+  }, [])
+
   const filteredJobs = (jobs.length > 0 ? jobs : mockJobs).filter((job) => {
     const matchesSearch = (job.name || job.id).toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "all" || job.status === statusFilter
     return matchesSearch && matchesStatus
   })
 
+  // Calculate stats from real data or metrics
   const stats = {
-    totalJobs: mockJobs.length,
-    runningJobs: mockJobs.filter((j) => j.status === "running").length,
-    completedJobs: mockJobs.filter((j) => j.status === "completed").length,
-    failedJobs: mockJobs.filter((j) => j.status === "failed").length,
-    queuedJobs: mockJobs.filter((j) => j.status === "queued").length,
-    activeWorkers: mockWorkers.filter((w) => w.status === "active").length,
+    totalJobs: metrics.totalJobs || jobs.length,
+    runningJobs: metrics.totalActive || jobs.filter((j) => j.status === "processing").length,
+    completedJobs: metrics.totalCompleted || jobs.filter((j) => j.status === "completed").length,
+    failedJobs: metrics.totalFailed || jobs.filter((j) => j.status === "failed").length,
+    queuedJobs: metrics.totalWaiting || jobs.filter((j) => j.status === "pending").length,
+    activeWorkers: metrics.activeWorkers || workers.filter((w) => w.status === "active").length,
+    successRate: metrics.successRate || 0,
+    queueHealth: metrics.queueHealth || 'unknown'
   }
 
   return (
@@ -366,14 +550,54 @@ export default function JobMonitorPage() {
                       Monitor and manage background jobs, queues, and workers
                     </p>
                   </div>
-                  <div className="flex items-center space-x-4">
-                    <Button variant="outline" size="sm">
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Refresh
+                  <div className="flex items-center space-x-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const result = await apiClient.request('POST', '/jobs/cleanup') as any
+                          toast.success(`Cleaned up ${result.cleanedCount || 0} stuck cancelled jobs`)
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error('Failed to cleanup cancelled jobs')
+                        }
+                      }}
+                    >
+                      <Trash className="h-4 w-4 mr-2" />
+                      Clean Cancelled
                     </Button>
-                    <Button size="sm">
-                      <Play className="h-4 w-4 mr-2" />
-                      Start All
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await apiClient.request('/jobs/clean-stalled', { method: 'POST' })
+                          toast.success('Stalled jobs cleaned')
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error('Failed to clean stalled jobs')
+                        }
+                      }}
+                    >
+                      <AlertTriangle className="h-4 w-4 mr-2" />
+                      Clean Stalled
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const result = await apiClient.request('/jobs/retry-all-failed', { method: 'POST' }) as any
+                          toast.success(`Retried ${result.retriedCount} failed jobs`)
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error('Failed to retry jobs')
+                        }
+                      }}
+                    >
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Retry All Failed
                     </Button>
                   </div>
                 </div>
@@ -465,6 +689,51 @@ export default function JobMonitorPage() {
                   </AnimatedGridItem>
                 </AnimatedGrid>
 
+                {/* Real-Time Active Jobs Status Bar */}
+                {jobs.filter(j => j.status === 'processing' || j.status === 'running').length > 0 && (
+                  <Card className="glass border-0 shadow-lg border-l-4 border-l-blue-500 animate-fade-in">
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2 text-lg">
+                        <Activity className="h-5 w-5 text-blue-500 animate-pulse" />
+                        <span>Active Jobs in Progress</span>
+                        <Badge className="bg-blue-500">{jobs.filter(j => j.status === 'processing' || j.status === 'running').length}</Badge>
+                      </CardTitle>
+                      <CardDescription>Real-time progress tracking with live updates</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {jobs
+                        .filter(j => (j.status === 'processing' || j.status === 'running') && j.progress >= 0)
+                        .map(job => (
+                          <div key={job.id} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">{job.name}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {job.worker !== 'Unassigned' ? `Worker: ${job.worker.substring(0, 25)}...` : '⏳ Waiting for worker assignment...'}
+                                </p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-2xl font-bold text-blue-600">{job.progress}%</p>
+                                <p className="text-xs text-muted-foreground font-medium">
+                                  {job.progress <= 10 && "⚡ Starting job..."}
+                                  {job.progress > 10 && job.progress <= 30 && "📚 Gathering context..."}
+                                  {job.progress > 30 && job.progress <= 50 && "🤖 AI generating..."}
+                                  {job.progress > 50 && job.progress <= 90 && "⚙️ Processing..."}
+                                  {job.progress > 90 && job.progress < 100 && "✨ Finalizing..."}
+                                </p>
+                              </div>
+                            </div>
+                            <Progress value={job.progress} className="h-3 transition-all duration-500" />
+                            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                              <span>Queue: {job.queue}</span>
+                              <span>Type: {job.type}</span>
+                            </div>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                )}
+
                 {/* Main Content */}
                 <Card className="glass border-0 shadow-lg">
                   <CardHeader>
@@ -523,9 +792,27 @@ export default function JobMonitorPage() {
                                         <div className={`p-2 rounded-lg border ${getStatusColor(job.status)}`}>
                                           {getStatusIcon(job.status)}
                                         </div>
-                                        <div>
+                                        <div className="flex-1">
                                           <h3 className="font-semibold text-lg">{job.name}</h3>
+                                          <div className="flex items-center gap-2 mt-1">
                                           <p className="text-sm text-muted-foreground">ID: {job.id}</p>
+                                            {job.projectName && (
+                                              <>
+                                                <span className="text-muted-foreground">•</span>
+                                                <p className="text-sm text-blue-600 dark:text-blue-400">
+                                                  📁 {job.projectName}
+                                                </p>
+                                              </>
+                                            )}
+                                            {job.documentName && (
+                                              <>
+                                                <span className="text-muted-foreground">•</span>
+                                                <p className="text-sm text-purple-600 dark:text-purple-400">
+                                                  📄 {job.documentName}
+                                                </p>
+                                              </>
+                                            )}
+                                          </div>
                                         </div>
                                         <Badge variant="outline" className={getPriorityColor(job.priority)}>
                                           {job.priority}
@@ -533,13 +820,124 @@ export default function JobMonitorPage() {
                                         <Badge variant="outline">{job.queue}</Badge>
                                       </div>
 
-                                      {job.status === "running" && (
+                                      {(job.status === "running" || job.status === "processing") && job.progress > 0 && job.progress < 100 && (
                                         <div className="space-y-2">
                                           <div className="flex items-center justify-between text-sm">
-                                            <span>Progress</span>
-                                            <span>{job.progress}%</span>
+                                            <span className="flex items-center space-x-2">
+                                              <Activity className="h-3 w-3 animate-pulse text-blue-500" />
+                                              <span>Progress</span>
+                                            </span>
+                                            <span className="font-semibold text-blue-600">{job.progress}%</span>
                                           </div>
                                           <Progress value={job.progress} className="h-2" />
+                                          <p className="text-xs text-muted-foreground">
+                                            {/* Show current step if available (process-flow jobs) */}
+                                            {(job.metadata as any)?.currentStep || (
+                                              <>
+                                            {job.progress <= 10 && "Starting job..."}
+                                            {job.progress > 10 && job.progress <= 30 && "Gathering context..."}
+                                            {job.progress > 30 && job.progress <= 50 && "AI generating content..."}
+                                            {job.progress > 50 && job.progress <= 90 && "Processing response..."}
+                                            {job.progress > 90 && job.progress < 100 && "Finalizing..."}
+                                              </>
+                                            )}
+                                          </p>
+                                          
+                                          {/* Show compression progress for process-flow jobs */}
+                                          {(job.metadata as any)?.compressionProgress && (
+                                            <div className="mt-2 space-y-2">
+                                              <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted-foreground">Document Compression</span>
+                                                <span className="font-medium text-blue-600">
+                                                  {(job.metadata as any).compressionProgress.current}/
+                                                  {(job.metadata as any).compressionProgress.total}
+                                                </span>
+                                              </div>
+                                              <Progress 
+                                                value={(job.metadata as any).compressionProgress.percentage} 
+                                                className="h-1.5" 
+                                              />
+                                              
+                                              {/* Show parallel processing indicator */}
+                                              {(job.metadata as any)?.parallelCount > 1 && (
+                                                <div className="flex items-center gap-2 text-xs">
+                                                  <Badge variant="secondary" className="text-xs">
+                                                    ⚡ {(job.metadata as any).parallelCount} parallel
+                                                  </Badge>
+                                                  <span className="text-muted-foreground">
+                                                    {(job.metadata as any).parallelCount}x faster
+                                                  </span>
+                                                </div>
+                                              )}
+                                              
+                                              {/* Show provider assignments for AI compression */}
+                                              {(job.metadata as any)?.providerAssignments && (job.metadata as any).providerAssignments.length > 0 && (
+                                                <div className="space-y-2 mt-2 p-3 rounded-lg bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border border-blue-200 dark:border-blue-800">
+                                                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                                                    <Activity className="h-3 w-3 animate-pulse" />
+                                                    AI Provider Work Queue ({(job.metadata as any).providerAssignments.length} active)
+                                                  </p>
+                                                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                                                    {(job.metadata as any).providerAssignments.map((assignment: any, idx: number) => (
+                                                      <div key={idx} className="flex items-center gap-2 text-xs p-2 rounded-md bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900 shadow-sm">
+                                                        <div className="flex items-center gap-2 flex-1">
+                                                          <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 font-mono bg-gradient-to-r from-blue-500 to-purple-500 text-white border-0">
+                                                            {assignment.provider}
+                                                          </Badge>
+                                                          <div className="flex-1 min-w-0">
+                                                            <p className="truncate text-blue-900 dark:text-blue-100 font-medium">
+                                                              Doc #{assignment.docIndex}: {assignment.name}
+                                                            </p>
+                                                          </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 text-muted-foreground whitespace-nowrap">
+                                                          <Clock className="h-3 w-3" />
+                                                          {assignment.duration}s
+                                                        </div>
+                                                      </div>
+                                                    ))}
+                                                  </div>
+                                                  <p className="text-[10px] text-muted-foreground italic text-center pt-1 border-t border-blue-200 dark:border-blue-800">
+                                                    Each provider processes documents independently with automatic failover
+                                                  </p>
+                                                </div>
+                                              )}
+                                              
+                                              {/* Fallback: Show active documents (old format) */}
+                                              {!(job.metadata as any)?.providerAssignments && (job.metadata as any)?.activeDocuments && (job.metadata as any).activeDocuments.length > 0 && (
+                                                <div className="space-y-1 mt-2 p-2 rounded-lg bg-blue-50/50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                                                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 flex items-center gap-1">
+                                                    <Activity className="h-3 w-3 animate-pulse" />
+                                                    Processing {(job.metadata as any).activeDocuments.length} document{(job.metadata as any).activeDocuments.length > 1 ? 's' : ''} now:
+                                                  </p>
+                                                  <div className="space-y-1 max-h-32 overflow-y-auto">
+                                                    {(job.metadata as any).activeDocuments.slice(0, 10).map((doc: any, idx: number) => (
+                                                      <div key={idx} className="flex items-center justify-between text-xs p-1.5 rounded bg-white dark:bg-slate-900 border border-blue-100 dark:border-blue-900">
+                                                        <span className="truncate flex-1 text-blue-900 dark:text-blue-100">
+                                                          {idx + 1}. {doc.name}
+                                                        </span>
+                                                        <span className="text-muted-foreground ml-2 whitespace-nowrap">
+                                                          {doc.duration}s
+                                                        </span>
+                                                      </div>
+                                                    ))}
+                                                    {(job.metadata as any).activeDocuments.length > 10 && (
+                                                      <p className="text-xs text-muted-foreground text-center">
+                                                        +{(job.metadata as any).activeDocuments.length - 10} more...
+                                                      </p>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              )}
+                                              
+                                              {/* Fallback to single document display */}
+                                              {(!job.metadata as any)?.activeDocuments && (job.metadata as any)?.currentDocument?.documentName && (
+                                                <p className="text-xs text-muted-foreground italic truncate">
+                                                  Compressing: {(job.metadata as any).currentDocument.documentName}
+                                                </p>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
                                       )}
 
@@ -596,14 +994,47 @@ export default function JobMonitorPage() {
                                         <DropdownMenuItem
                                           onSelect={(e) => {
                                             e.preventDefault()
-                                            setSelectedJob(prev => (prev === job.id ? null : job.id))
+                                            setViewingLogs(prev => (prev === job.id ? null : job.id))
                                           }}
                                         >
+                                          <FileText className="h-4 w-4 mr-2" />
                                           View Logs
                                         </DropdownMenuItem>
-                                        {job.status === "running" && <DropdownMenuItem>Pause Job</DropdownMenuItem>}
-                                        {job.status === "failed" && <DropdownMenuItem>Retry Job</DropdownMenuItem>}
-                                        <DropdownMenuItem className="text-red-600">Cancel Job</DropdownMenuItem>
+                                        {(job.status === "failed" || job.status === "processing") && (
+                                          <DropdownMenuItem
+                                            onSelect={async (e) => {
+                                              e.preventDefault()
+                                              try {
+                                                const result = await apiClient.request(`/jobs/${job.id}/retry`, { method: 'POST' }) as any
+                                                toast.success(`Job retried! New job: ${result.newJobId?.substring(0, 8)}...`)
+                                                window.location.reload()
+                                              } catch (error) {
+                                                toast.error('Failed to retry job')
+                                              }
+                                            }}
+                                          >
+                                            <RefreshCw className="h-4 w-4 mr-2" />
+                                            {job.status === "processing" ? "Retry Stuck Job" : "Retry Job"}
+                                          </DropdownMenuItem>
+                                        )}
+                                        {(job.status === "pending" || job.status === "processing") && (
+                                          <DropdownMenuItem
+                                            onSelect={async (e) => {
+                                              e.preventDefault()
+                                              try {
+                                                await apiClient.request(`/jobs/${job.id}/cancel`, { method: 'POST' })
+                                                toast.success('Job cancelled successfully')
+                                                window.location.reload()
+                                              } catch (error: any) {
+                                                toast.error(error?.message || 'Failed to cancel job')
+                                              }
+                                            }}
+                                            className="text-red-600"
+                                          >
+                                            <XCircle className="h-4 w-4 mr-2" />
+                                            Cancel Job
+                                          </DropdownMenuItem>
+                                        )}
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
@@ -611,10 +1042,13 @@ export default function JobMonitorPage() {
                               </Card>
                               {selectedJob === job.id && (
                                 <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/60 dark:bg-slate-900/40 p-4">
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                                  <h4 className="font-semibold mb-4">Job Details</h4>
+                                  
+                                  {/* Basic Info */}
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm mb-4">
                                     <div>
                                       <p className="text-muted-foreground">Job ID</p>
-                                      <p className="font-mono break-all">{job.id}</p>
+                                      <p className="font-mono text-xs break-all">{job.id}</p>
                                     </div>
                                     <div>
                                       <p className="text-muted-foreground">Queue</p>
@@ -637,6 +1071,50 @@ export default function JobMonitorPage() {
                                       <p className="font-medium capitalize">{job.status}</p>
                                     </div>
                                   </div>
+                                  
+                                  {/* AI-Specific Metadata */}
+                                  {(job as any).metadata && (job as any).metadata.provider && (
+                                    <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                                      <h5 className="text-sm font-semibold mb-3">AI Processing Details</h5>
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                                        <div>
+                                          <p className="text-muted-foreground">Provider</p>
+                                          <p className="font-medium">{(job as any).metadata.provider || "-"}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground">Model</p>
+                                          <p className="font-medium">{(job as any).metadata.model || "-"}</p>
+                                        </div>
+                                        <div>
+                                          <p className="text-muted-foreground">Temperature</p>
+                                          <p className="font-medium">{(job as any).metadata.temperature || "-"}</p>
+                                        </div>
+                                        {(job as any).metadata.tokens && (
+                                          <div>
+                                            <p className="text-muted-foreground">Tokens Used</p>
+                                            <p className="font-medium">{(job as any).metadata.tokens.total_tokens || (job as any).metadata.tokens.totalTokens || "-"}</p>
+                                          </div>
+                                        )}
+                                        {(job as any).metadata.template_name && (
+                                          <div>
+                                            <p className="text-muted-foreground">Template</p>
+                                            <p className="font-medium">{(job as any).metadata.template_name}</p>
+                                          </div>
+                                        )}
+                                        {(job as any).metadata.document_id && (
+                                          <div>
+                                            <p className="text-muted-foreground">Generated Document</p>
+                                            <a 
+                                              href={`/projects/${(job as any).metadata.project_id}/documents/${(job as any).metadata.document_id}`}
+                                              className="font-medium text-blue-600 hover:underline"
+                                            >
+                                              View Document
+                                            </a>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                   {job.logs && job.logs.length > 0 && (
                                     <div className="mt-4">
                                       <p className="text-sm text-muted-foreground mb-2">Logs</p>
@@ -657,14 +1135,92 @@ export default function JobMonitorPage() {
                                   )}
                                 </div>
                               )}
+                              
+                              {/* Logs Viewer - Terminal Style */}
+                              {viewingLogs === job.id && (
+                                <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-900 p-0 overflow-hidden">
+                                  <div className="flex items-center justify-between bg-slate-800 px-4 py-2 border-b border-slate-700">
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex gap-1.5">
+                                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                                      </div>
+                                      <span className="text-xs font-mono text-slate-300">Job Logs: {job.id.substring(0, 13)}...</span>
+                                    </div>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="sm"
+                                      className="h-6 text-slate-400 hover:text-white"
+                                      onClick={() => setViewingLogs(null)}
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                  
+                                  <div className="p-4 max-h-96 overflow-auto font-mono text-xs">
+                                    {/* Job execution logs */}
+                                    {job.logs && job.logs.length > 0 ? (
+                                      <div className="space-y-1">
+                                        {job.logs.map((log: any, idx: number) => (
+                                          <div key={idx} className="text-green-400">
+                                            <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span>
+                                            <span className="ml-2">{log}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-slate-400 space-y-1">
+                                        <div><span className="text-slate-500">[{job.queuedTime ? new Date(job.queuedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-blue-400">INFO</span> Job queued: {job.type}</div>
+                                        {job.startTime && (
+                                          <div><span className="text-slate-500">[{new Date(job.startTime).toLocaleTimeString()}]</span> <span className="text-green-400">INFO</span> Job started by worker: {job.worker}</div>
+                                        )}
+                                        {(job.metadata as any)?.currentStep && (
+                                          <div><span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-cyan-400">INFO</span> {(job.metadata as any).currentStep}</div>
+                                        )}
+                                        {(job.metadata as any)?.activeDocuments?.length > 0 && (
+                                          <>
+                                            <div className="text-yellow-400 mt-2">
+                                              <span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-yellow-400">INFO</span> Parallel processing: {(job.metadata as any).activeDocuments.length} documents
+                                            </div>
+                                            {(job.metadata as any).activeDocuments.slice(0, 10).map((doc: any, idx: number) => (
+                                              <div key={idx} className="text-slate-400 ml-4">
+                                                <span className="text-slate-600">└─</span> [{idx + 1}] {doc.name} <span className="text-cyan-400">({doc.duration}s)</span>
+                                              </div>
+                                            ))}
+                                          </>
+                                        )}
+                                        {job.progress > 0 && job.progress < 100 && (
+                                          <div><span className="text-slate-500">[{new Date().toLocaleTimeString()}]</span> <span className="text-cyan-400">INFO</span> Progress: {job.progress}%</div>
+                                        )}
+                                        {job.status === 'completed' && job.completedTime && (
+                                          <div><span className="text-slate-500">[{new Date(job.completedTime).toLocaleTimeString()}]</span> <span className="text-green-400">SUCCESS</span> Job completed successfully</div>
+                                        )}
+                                        {job.status === 'failed' && job.error && (
+                                          <div><span className="text-slate-500">[{job.completedTime ? new Date(job.completedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-red-400">ERROR</span> {job.error}</div>
+                                        )}
+                                        {job.status === 'cancelled' && (
+                                          <div><span className="text-slate-500">[{job.completedTime ? new Date(job.completedTime).toLocaleTimeString() : '--:--:--'}]</span> <span className="text-yellow-400">WARN</span> Job cancelled by user</div>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </AnimatedGridItemWithDelay>
                           ))}
                         </div>
                       </TabsContent>
 
                       <TabsContent value="queues" className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {mockQueues.map((queue, index) => (
+                        {loadingQueues && queues.length === 0 ? (
+                          <div className="text-center py-8">
+                            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                            <p className="text-muted-foreground mt-2">Loading queue statistics...</p>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            {(queues.length > 0 ? queues : mockQueues).map((queue, index) => (
                             <AnimatedGridItemWithDelay
                               key={queue.name}
                               className="animate-fade-in-up"
@@ -705,13 +1261,20 @@ export default function JobMonitorPage() {
                                 </CardContent>
                               </Card>
                             </AnimatedGridItemWithDelay>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </TabsContent>
 
                       <TabsContent value="workers" className="space-y-4">
-                        <div className="space-y-4">
-                          {mockWorkers.map((worker, index) => (
+                        {loadingWorkers && workers.length === 0 ? (
+                          <div className="text-center py-8">
+                            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
+                            <p className="text-muted-foreground mt-2">Loading worker statistics...</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {(workers.length > 0 ? workers : mockWorkers).map((worker, index) => (
                             <AnimatedGridItemWithDelay
                               key={worker.id}
                               className="animate-fade-in-up"
@@ -806,21 +1369,138 @@ export default function JobMonitorPage() {
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end">
-                                        <DropdownMenuItem>View Details</DropdownMenuItem>
-                                        <DropdownMenuItem>View Logs</DropdownMenuItem>
-                                        {worker.status === "active" && (
-                                          <DropdownMenuItem>Pause Worker</DropdownMenuItem>
-                                        )}
-                                        <DropdownMenuItem>Restart Worker</DropdownMenuItem>
-                                        <DropdownMenuItem className="text-red-600">Stop Worker</DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={(e) => {
+                                            e.preventDefault()
+                                            setSelectedWorker(prev => (prev === worker.id ? null : worker.id))
+                                          }}
+                                        >
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          View Details
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                          onSelect={(e) => {
+                                            e.preventDefault()
+                                            // Navigate to filtered jobs view for this queue
+                                            const queueType = worker.queue
+                                            toast.info(`Showing jobs for ${worker.name}`)
+                                          }}
+                                        >
+                                          <FileText className="h-4 w-4 mr-2" />
+                                          View Queue Jobs
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem disabled className="text-muted-foreground">
+                                          <AlertCircle className="h-4 w-4 mr-2" />
+                                          Worker controls unavailable
+                                        </DropdownMenuItem>
                                       </DropdownMenuContent>
                                     </DropdownMenu>
                                   </div>
+                                  
+                                  {/* Worker Details Section (expandable) */}
+                                  {selectedWorker === worker.id && (
+                                    <div className="mt-4 rounded-lg border-t border-slate-200 dark:border-slate-700 pt-4">
+                                      <div className="space-y-4">
+                                        <div className="flex items-center justify-between">
+                                          <h4 className="font-semibold text-sm">Worker Details</h4>
+                                          <Badge variant={worker.health === 'healthy' ? 'default' : worker.health === 'degraded' ? 'secondary' : 'destructive'}>
+                                            {worker.health || 'unknown'}
+                                          </Badge>
+                                        </div>
+                                        
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-sm">
+                                          <div>
+                                            <p className="text-muted-foreground">Queue Type</p>
+                                            <p className="font-medium">{worker.queue}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Concurrency Limit</p>
+                                            <p className="font-medium">{worker.maxLoad || worker.concurrency} jobs</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Current Load</p>
+                                            <p className="font-medium">{worker.currentLoad || 0}/{worker.maxLoad || worker.concurrency}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Success Rate</p>
+                                            <p className={`font-medium ${(worker.successRate || 0) >= 90 ? 'text-green-600' : (worker.successRate || 0) >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                                              {worker.successRate || 0}%
+                                            </p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Jobs Processed</p>
+                                            <p className="font-medium">{(worker.jobsProcessed || 0).toLocaleString()}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Jobs Failed</p>
+                                            <p className="font-medium text-red-600">{worker.jobsFailed || 0}</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Queue Waiting</p>
+                                            <p className="font-medium">{worker.queueSize || 0} jobs</p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Uptime</p>
+                                            <p className="font-medium">
+                                              {worker.uptime ? `${Math.floor(worker.uptime / 3600)}h ${Math.floor((worker.uptime % 3600) / 60)}m` : 'N/A'}
+                                            </p>
+                                          </div>
+                                          <div>
+                                            <p className="text-muted-foreground">Utilization</p>
+                                            <p className="font-medium">{worker.utilization || 0}%</p>
+                                          </div>
+                                        </div>
+                                        
+                                        {/* Current Tasks */}
+                                        {worker.currentTasks && worker.currentTasks.length > 0 && (
+                                          <div className="space-y-2">
+                                            <p className="font-semibold text-sm flex items-center gap-2">
+                                              <Activity className="h-4 w-4 text-blue-500 animate-pulse" />
+                                              Active Tasks ({worker.currentTasks.length})
+                                            </p>
+                                            <div className="space-y-2">
+                                              {worker.currentTasks.map((task: any, idx: number) => (
+                                                <div key={idx} className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800">
+                                                  <div className="flex items-center justify-between">
+                                                    <span className="font-medium text-sm">{task.type || 'Unknown Task'}</span>
+                                                    {task.progress > 0 && (
+                                                      <Badge variant="secondary" className="text-xs">
+                                                        {task.progress}%
+                                                      </Badge>
+                                                    )}
+                                                  </div>
+                                                  <p className="text-xs text-muted-foreground mt-1">
+                                                    Job ID: <code className="text-xs bg-slate-200 dark:bg-slate-800 px-1 rounded">{task.jobId?.substring(0, 13)}...</code>
+                                                  </p>
+                                                  {task.startedAt && (
+                                                    <p className="text-xs text-muted-foreground mt-1">
+                                                      Started: {new Date(task.startedAt).toLocaleTimeString()}
+                                                    </p>
+                                                  )}
+                                                  {task.progress > 0 && (
+                                                    <Progress value={task.progress} className="h-1.5 mt-2" />
+                                                  )}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          </div>
+                                        )}
+                                        
+                                        {(!worker.currentTasks || worker.currentTasks.length === 0) && worker.status === 'idle' && (
+                                          <div className="text-center py-4 text-sm text-muted-foreground">
+                                            <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                                            <p>Worker is idle - waiting for jobs</p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                  )}
                                 </CardContent>
                               </Card>
                             </AnimatedGridItemWithDelay>
-                          ))}
-                        </div>
+                            ))}
+                          </div>
+                        )}
                       </TabsContent>
                     </Tabs>
                   </CardContent>

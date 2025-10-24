@@ -19,7 +19,7 @@ interface BaselineGanttChartProps {
 }
 
 export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGanttChartProps) {
-  const ganttContainerRef = useRef<HTMLDivElement>(null)
+  const ganttContainerRef = useRef<HTMLDivElement | null>(null)
   const ganttInstance = useRef<any>(null)
 
   useEffect(() => {
@@ -498,9 +498,9 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           })()}
         </div>
 
-      {/* frappe-gantt hidden due to rendering issues - SVG has 0x0 dimensions */}
-      <div className="hidden" style={{ display: 'none' }}>
-      <style jsx global>{`
+      {/* frappe-gantt removed - SVG rendering issues (0x0 dimensions, black screen) */}
+      {/* Keeping initialization code for potential future use with different library */}
+      <style>{`
         .gantt-container {
           font-family: inherit;
           overflow: hidden;
@@ -614,25 +614,11 @@ export function BaselineGanttChart({ baseline, viewMode = 'Month' }: BaselineGan
           stroke: #f59e0b;
         }
       `}</style>
-        <div 
-          ref={ganttContainerRef} 
-          className="gantt-container" 
-          style={{ 
-            minHeight: '400px',
-            maxHeight: '600px',
-            width: '100%',
-            overflow: 'auto',
-            backgroundColor: '#ffffff',
-            border: '1px solid #e5e7eb',
-            borderRadius: '0.5rem',
-            padding: '1rem'
-          }}
-        ></div>
-        </div>
       </div>
     </div>
   )
 }
 
 export default BaselineGanttChart
+
 
