@@ -17,10 +17,26 @@ export function Header() {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const response = await apiClient.request('/queue-stats/metrics')
+        // Check if user has a token before making request
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        if (!token) {
+          return // Skip fetching if not authenticated
+        }
+
+        const response = await apiClient.request('/queue-stats/metrics', {
+          method: 'GET',
+          suppressNotFoundError: true // Suppress console errors for expected failures
+        })
         setMetrics(response)
-      } catch (error) {
-        // Silently fail, header should still work
+      } catch (error: any) {
+        // Silently fail for auth errors (403/401) - user not logged in or token expired
+        if (error?.status === 403 || error?.status === 401) {
+          return
+        }
+        // Log other unexpected errors only in development
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[Header] Failed to fetch metrics:', error.message)
+        }
       }
     }
 

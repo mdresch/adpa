@@ -231,8 +231,10 @@ class ApiClient {
 
       return data
     } catch (error: any) {
-      // Don't log 404s if suppressNotFoundError is set (expected "not found" scenarios)
-      const shouldSuppressLog = (options as any).suppressNotFoundError && error?.status === 404
+      // Don't log expected errors if suppressNotFoundError is set
+      // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
+      const shouldSuppressLog = (options as any).suppressNotFoundError && 
+        (error?.status === 404 || error?.status === 401 || error?.status === 403)
       
       if (!shouldSuppressLog) {
         console.error(`API request failed: ${endpoint}`, error)
