@@ -1401,8 +1401,10 @@ class ProcessFlowService {
       steps[stepIndex].status = 'processing'
       logger.info('Step 7: Generating final document using AI provider')
       
-      // Generate the actual document using AI
-      const aiGeneratedDocument = await this.generateDocumentWithAI(injectedContent, template, config)
+      // Generate the actual document using AI (with metadata)
+      const aiGenerationResult = await this.generateDocumentWithAI(injectedContent, template, config)
+      const aiGeneratedDocument = typeof aiGenerationResult === 'string' ? aiGenerationResult : aiGenerationResult.content
+      const aiMetadata = typeof aiGenerationResult === 'object' ? aiGenerationResult : null
       const aiGeneratedTokens = this.estimateTokenCount(aiGeneratedDocument)
       
       steps[stepIndex].tokens = aiGeneratedTokens
@@ -1422,13 +1424,14 @@ class ProcessFlowService {
       
       logger.info('Workflow processing completed successfully')
       
-      // Save the final document to the project
+      // Save the final document to the project (with AI metadata)
       const savedDocument = await this.saveGeneratedDocument(
         aiGeneratedDocument,
         config,
         template,
         project,
-        compressedDocuments
+        compressedDocuments,
+        aiMetadata
       )
       
       logger.info(`Generated document saved with ID: ${savedDocument.id}`)
@@ -1516,7 +1519,15 @@ class ProcessFlowService {
       }
       
       logger.info(`AI document generation completed successfully`)
-      return response.content
+      
+      // Return full response with metadata (provider, model, usage, etc.)
+      return {
+        content: response.content,
+        provider: response.provider || providerType,
+        model: response.model || modelName,
+        usage: response.usage,
+        metadata: response.metadata
+      }
       
     } catch (error) {
       logger.error('Error generating document with AI:', error)
@@ -1631,14 +1642,33 @@ class ProcessFlowService {
     config: WorkflowConfiguration,
     template: any,
     project: any,
-    compressedDocuments: any[]
+    compressedDocuments: any[],
+    aiMetadata?: any
   ): Promise<{id: string, name: string}> {
     try {
       // Generate document name based on template and timestamp
       const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-')
       const documentName = `${template.name} - Generated ${timestamp}`
       
-      // Create document metadata
+      // Calculate token counts
+      const totalTokens = aiMetadata?.usage?.total_tokens || Math.ceil(finalContent.length / 4)
+      const inputTokens = aiMetadata?.usage?.prompt_tokens || 0
+      const outputTokens = aiMetadata?.usage?.completion_tokens || totalTokens
+      
+      // Helper function to calculate AI cost
+      const calculateCost = (provider: string, inputTokens: number, outputTokens: number): number => {
+        const pricing: any = {
+          'openai': { input: 0.01 / 1000, output: 0.03 / 1000 },
+          'google': { input: 0.00025 / 1000, output: 0.00125 / 1000 },
+          'mistral': { input: 0.001 / 1000, output: 0.003 / 1000 },
+          'groq': { input: 0.00027 / 1000, output: 0.00027 / 1000 },
+          'anthropic': { input: 0.008 / 1000, output: 0.024 / 1000 }
+        }
+        const rates = pricing[provider?.toLowerCase()] || { input: 0.001 / 1000, output: 0.003 / 1000 }
+        return (inputTokens * rates.input) + (outputTokens * rates.output)
+      }
+      
+      // Create document metadata (general workflow info)
       const metadata = {
         generatedBy: 'Process Flow Workflow',
         templateId: config.templateId,
@@ -1646,17 +1676,41 @@ class ProcessFlowService {
         compressionMethod: config.compressionMethod,
         compressionLevel: config.compressionLevel,
         priorityStrategy: config.priorityStrategy,
+        totalTokens
+      }
+      
+      // Create generation_metadata (AI-specific info for display)
+      const generationMetadata = {
         sourceDocuments: compressedDocuments.map(doc => ({
           id: doc.document.documentId,
           name: doc.document.name,
           originalTokens: doc.document.estimatedTokens,
           compressedTokens: doc.compressedTokens
         })),
-        generatedAt: new Date().toISOString(),
-        totalTokens: Math.ceil(finalContent.length / 4)
+        aiProcessing: aiMetadata ? {
+          provider: aiMetadata.provider,
+          model: aiMetadata.model,
+          temperature: 0.3,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          estimatedCost: calculateCost(aiMetadata.provider, inputTokens, outputTokens),
+          status: 'success',
+          processingTime: aiMetadata.processingTime || 'N/A'
+        } : {
+          provider: 'N/A',
+          model: 'N/A',
+          temperature: 0.3,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          estimatedCost: 0,
+          status: 'unknown',
+          processingTime: 'N/A'
+        }
       }
       
-      // Insert document into database
+      // Insert document into database with both metadata and generation_metadata
       const result = await this.pool.query(`
         INSERT INTO documents (
           id, 
@@ -1667,6 +1721,7 @@ class ProcessFlowService {
           status, 
           framework, 
           metadata,
+          generation_metadata,
           created_at, 
           updated_at
         ) VALUES (
@@ -1678,6 +1733,7 @@ class ProcessFlowService {
           'draft', 
           $5, 
           $6,
+          $7,
           NOW(), 
           NOW()
         ) RETURNING id, name
@@ -1687,7 +1743,8 @@ class ProcessFlowService {
         config.projectId,
         config.templateId,
         project.framework || 'ADPA',
-        JSON.stringify(metadata)
+        JSON.stringify(metadata),
+        JSON.stringify(generationMetadata)
       ])
       
       const savedDocument = result.rows[0]
