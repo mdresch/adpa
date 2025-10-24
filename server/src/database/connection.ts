@@ -26,7 +26,7 @@ const createPool = (host: string) => {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: databaseUrl,
-      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('supabase') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
@@ -47,8 +47,8 @@ const createPool = (host: string) => {
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
-    // SSL configuration for Neon and other cloud providers
-    ssl: host.includes('neon.tech') || host.includes('azure') || process.env.DB_SSL === "true" 
+    // SSL configuration for Supabase and other cloud providers
+    ssl: host.includes('supabase.co') || host.includes('azure') || process.env.DB_SSL === "true" 
       ? { rejectUnauthorized: false } 
       : false,
   })
@@ -67,7 +67,7 @@ export async function connectDatabase() {
     // Parse connection string to extract components
     // This allows us to force IPv4 by explicitly setting the family option
     let poolConfig: any = {
-      ssl: databaseUrl.includes('neon.tech') || databaseUrl.includes('supabase') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
