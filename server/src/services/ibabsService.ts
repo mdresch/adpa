@@ -1,408 +1,383 @@
 /**
- * iBabs OAuth Service
- * 
- * Handles OAuth 2.0 authentication flow for iBabs board portal integration.
- * Provides methods for authorization, token exchange, refresh, and revocation.
+ * iBabs Service - OAuth Token Management
+ * Handles OAuth authentication and token refresh for iBabs API
+ * Beacon 6.1 dependency
  */
 
-import crypto from "crypto"
+import axios, { AxiosInstance } from "axios"
+import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
-import { logger, childLogger } from "../utils/logger"
 
-const log = childLogger({ component: "ibabsService" })
-
-/**
- * OAuth configuration from environment variables
- */
-const IBABS_CONFIG = {
-  clientId: process.env.IBABS_CLIENT_ID || "",
-  clientSecret: process.env.IBABS_CLIENT_SECRET || "",
-  redirectUri: process.env.IBABS_REDIRECT_URI || "http://localhost:5000/api/ibabs/auth/callback",
-  authUrl: process.env.IBABS_AUTH_URL || "https://api.ibabs.eu/oauth/authorize",
-  tokenUrl: process.env.IBABS_TOKEN_URL || "https://api.ibabs.eu/oauth/token",
-  scope: "read write meetings documents"
+export interface IBabsConfig {
+  baseUrl: string
+  clientId: string
+  clientSecret: string
+  redirectUri?: string
 }
 
-/**
- * OAuth state storage for CSRF protection
- * In production, this should be stored in Redis with TTL
- */
-const stateStore = new Map<string, { userId: string; createdAt: number }>()
-
-/**
- * Token refresh mutex to prevent race conditions
- * Tracks userId -> Promise<void> for in-flight refresh operations
- */
-const refreshMutex = new Map<string, Promise<void>>()
-
-/**
- * Generate a secure random state parameter for CSRF protection
- */
-function generateState(userId: string): string {
-  const state = crypto.randomBytes(32).toString("hex")
-  stateStore.set(state, { userId, createdAt: Date.now() })
-  
-  // Clean up old states (older than 10 minutes)
-  for (const [key, value] of stateStore.entries()) {
-    if (Date.now() - value.createdAt > 10 * 60 * 1000) {
-      stateStore.delete(key)
-    }
-  }
-  
-  return state
+export interface IBabsTokens {
+  access_token: string
+  refresh_token?: string
+  expires_in: number
+  token_type: string
+  expires_at?: number
 }
 
-/**
- * Validate and consume a state parameter
- */
-function validateState(state: string): string | null {
-  const stateData = stateStore.get(state)
-  if (!stateData) {
-    return null
-  }
-  
-  // Check if state is expired (10 minutes)
-  if (Date.now() - stateData.createdAt > 10 * 60 * 1000) {
-    stateStore.delete(state)
-    return null
-  }
-  
-  // Consume the state (one-time use)
-  stateStore.delete(state)
-  return stateData.userId
+export interface IBabsMeeting {
+  id: string
+  title: string
+  date: string
+  location?: string
+  status: string
+  agenda_items?: IBabsAgendaItem[]
 }
 
-/**
- * Encode token using base64 for storage consistency (not encryption)
- * 
- * ⚠️ SECURITY WARNING: Base64 encoding is NOT encryption!
- * Base64 is trivially reversible and provides NO security.
- * 
- * For production use, implement proper encryption using:
- * - crypto.createCipheriv with AES-256-GCM
- * - Or use database-level encryption features
- * - Or use a key management service (AWS KMS, Azure Key Vault, etc.)
- * 
- * @param token - Token to encode
- * @returns Base64-encoded token
- */
-function encryptToken(token: string): string {
-  if (!token || typeof token !== 'string') {
-    throw new Error('Invalid token: must be a non-empty string')
-  }
-  return Buffer.from(token).toString("base64")
+export interface IBabsAgendaItem {
+  id: string
+  number: string
+  title: string
+  description?: string
 }
 
-/**
- * Decode token from base64
- */
-function decryptToken(encrypted: string): string {
-  return Buffer.from(encrypted, "base64").toString("utf8")
+export interface IBabsActionItem {
+  id: string
+  title: string
+  description?: string
+  assigned_to?: string
+  due_date?: string
+  status: string
+  meeting_id: string
 }
 
-export class IbabsService {
-  /**
-   * Generate OAuth authorization URL
-   * 
-   * @param userId - User ID requesting authorization
-   * @returns Authorization URL to redirect user to
-   */
-  async getAuthorizationUrl(userId: string): Promise<string> {
-    log.info("Generating iBabs authorization URL", { userId })
-    
-    if (!IBABS_CONFIG.clientId) {
-      throw new Error("iBabs client ID not configured")
-    }
-    
-    const state = generateState(userId)
-    
-    const params = new URLSearchParams({
-      client_id: IBABS_CONFIG.clientId,
-      redirect_uri: IBABS_CONFIG.redirectUri,
-      response_type: "code",
-      scope: IBABS_CONFIG.scope,
-      state
-    })
-    
-    const authUrl = `${IBABS_CONFIG.authUrl}?${params.toString()}`
-    log.debug("Generated authorization URL", { userId, state })
-    
-    return authUrl
-  }
-  
-  /**
-   * Handle OAuth callback and exchange code for tokens
-   * 
-   * @param code - Authorization code from iBabs
-   * @param state - State parameter for CSRF protection
-   * @returns User ID if successful
-   */
-  async handleCallback(code: string, state: string): Promise<string> {
-    log.info("Handling iBabs OAuth callback", { state })
-    
-    // Validate state parameter
-    const userId = validateState(state)
-    if (!userId) {
-      log.error("Invalid or expired state parameter", { state })
-      throw new Error("Invalid or expired state parameter")
-    }
-    
-    // Exchange code for tokens
-    const tokenResponse = await this.exchangeCodeForTokens(code)
-    
-    // Store tokens in database
-    await this.storeTokens(userId, tokenResponse)
-    
-    log.info("iBabs OAuth callback handled successfully", { userId })
-    return userId
-  }
-  
-  /**
-   * Exchange authorization code for access and refresh tokens
-   */
-  private async exchangeCodeForTokens(code: string): Promise<any> {
-    log.debug("Exchanging authorization code for tokens")
-    
-    if (!IBABS_CONFIG.clientId || !IBABS_CONFIG.clientSecret) {
-      throw new Error("iBabs OAuth credentials not configured")
-    }
-    
-    const params = new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      client_id: IBABS_CONFIG.clientId,
-      client_secret: IBABS_CONFIG.clientSecret,
-      redirect_uri: IBABS_CONFIG.redirectUri
-    })
-    
-    const response = await fetch(IBABS_CONFIG.tokenUrl, {
-      method: "POST",
+export class IBabsService {
+  private client: AxiosInstance
+  private config: IBabsConfig
+  private tokens: IBabsTokens | null = null
+  private integrationId: string
+
+  constructor(config: IBabsConfig, integrationId: string) {
+    this.config = config
+    this.integrationId = integrationId
+
+    this.client = axios.create({
+      baseURL: config.baseUrl,
       headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
+        "Accept": "application/json",
+        "Content-Type": "application/json",
       },
-      body: params.toString()
+      timeout: 30000,
     })
-    
-    if (!response.ok) {
-      const error = await response.text()
-      log.error("Token exchange failed", { status: response.status, error })
-      throw new Error(`Token exchange failed: ${error}`)
-    }
-    
-    const tokenData = await response.json()
-    log.debug("Token exchange successful")
-    
-    return tokenData
-  }
-  
-  /**
-   * Store OAuth tokens in database
-   */
-  private async storeTokens(userId: string, tokenData: any): Promise<void> {
-    log.debug("Storing OAuth tokens", { userId })
-    
-    // Validate required fields to prevent runtime errors
-    if (!tokenData || typeof tokenData !== 'object') {
-      throw new Error('Invalid token data: must be an object')
-    }
-    
-    if (!tokenData.access_token) {
-      throw new Error('Invalid token data: missing access_token')
-    }
-    
-    if (!tokenData.refresh_token) {
-      throw new Error('Invalid token data: missing refresh_token')
-    }
-    
-    if (!tokenData.expires_in || typeof tokenData.expires_in !== 'number') {
-      throw new Error('Invalid token data: missing or invalid expires_in')
-    }
-    
-    const encryptedAccessToken = encryptToken(tokenData.access_token)
-    const encryptedRefreshToken = encryptToken(tokenData.refresh_token)
-    const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
-    
-    // Upsert connection (update if exists, insert if not)
-    await pool.query(
-      `INSERT INTO ibabs_connections (user_id, access_token, refresh_token, token_type, expires_at, scope)
-       VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (user_id) 
-       DO UPDATE SET 
-         access_token = EXCLUDED.access_token,
-         refresh_token = EXCLUDED.refresh_token,
-         token_type = EXCLUDED.token_type,
-         expires_at = EXCLUDED.expires_at,
-         scope = EXCLUDED.scope,
-         updated_at = NOW()`,
-      [
-        userId,
-        encryptedAccessToken,
-        encryptedRefreshToken,
-        tokenData.token_type || "Bearer",
-        expiresAt,
-        tokenData.scope || IBABS_CONFIG.scope
-      ]
+
+    // Add request interceptor for authentication
+    this.client.interceptors.request.use(
+      async (config) => {
+        await this.ensureValidToken()
+        if (this.tokens?.access_token) {
+          config.headers.Authorization = `Bearer ${this.tokens.access_token}`
+        }
+        logger.info(`iBabs API Request: ${config.method?.toUpperCase()} ${config.url}`)
+        return config
+      },
+      (error) => {
+        logger.error("iBabs API Request Error:", error)
+        return Promise.reject(error)
+      }
     )
-    
-    log.info("OAuth tokens stored successfully", { userId, expiresAt })
-  }
-  
-  /**
-   * Get valid access token for user (refresh if expired)
-   * 
-   * Uses a mutex to prevent race conditions when multiple concurrent requests
-   * trigger token refresh simultaneously.
-   * 
-   * @param userId - User ID
-   * @returns Valid access token
-   */
-  async getAccessToken(userId: string): Promise<string> {
-    log.debug("Getting access token", { userId })
-    
-    const result = await pool.query(
-      `SELECT access_token, refresh_token, expires_at FROM ibabs_connections WHERE user_id = $1`,
-      [userId]
-    )
-    
-    if (result.rows.length === 0) {
-      throw new Error("iBabs connection not found")
-    }
-    
-    const connection = result.rows[0]
-    const expiresAt = new Date(connection.expires_at)
-    
-    // Check if token is expired or will expire in next 5 minutes
-    if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
-      log.info("Access token expired or expiring soon, refreshing", { userId })
-      
-      // Check if refresh is already in progress for this user
-      const existingRefresh = refreshMutex.get(userId)
-      if (existingRefresh) {
-        log.debug("Token refresh already in progress, waiting", { userId })
-        await existingRefresh
-      } else {
-        // Start new refresh and store promise in mutex
-        const refreshPromise = this.refreshAccessToken(userId).finally(() => {
-          // Clean up mutex after refresh completes (success or failure)
-          refreshMutex.delete(userId)
+
+    // Add response interceptor for error handling
+    this.client.interceptors.response.use(
+      (response) => {
+        logger.info(`iBabs API Response: ${response.status} ${response.config.url}`)
+        return response
+      },
+      async (error) => {
+        logger.error("iBabs API Response Error:", {
+          status: error.response?.status,
+          statusText: error.response?.statusText,
+          url: error.config?.url,
+          data: error.response?.data,
         })
-        refreshMutex.set(userId, refreshPromise)
-        await refreshPromise
+
+        // Handle token expiration
+        if (error.response?.status === 401 && !error.config._retry) {
+          error.config._retry = true
+          await this.refreshAccessToken()
+          return this.client.request(error.config)
+        }
+
+        return Promise.reject(error)
+      }
+    )
+  }
+
+  /**
+   * Initialize tokens from database
+   */
+  async initialize(): Promise<void> {
+    try {
+      const result = await pool.query(
+        `SELECT credentials_encrypted FROM integrations WHERE id = $1 AND type = 'ibabs'`,
+        [this.integrationId]
+      )
+
+      if (result.rows.length > 0 && result.rows[0].credentials_encrypted) {
+        const credentials = JSON.parse(
+          Buffer.from(result.rows[0].credentials_encrypted, "base64").toString()
+        )
+        this.tokens = credentials.tokens
+        logger.info("iBabs tokens loaded from database")
+      }
+    } catch (error) {
+      logger.error("Failed to load iBabs tokens:", error)
+    }
+  }
+
+  /**
+   * Authenticate with iBabs OAuth
+   */
+  async authenticate(authCode?: string): Promise<IBabsTokens> {
+    try {
+      const tokenUrl = `${this.config.baseUrl}/oauth2/token`
+      
+      const params = new URLSearchParams()
+      
+      if (authCode) {
+        // Exchange authorization code for tokens
+        params.append("grant_type", "authorization_code")
+        params.append("code", authCode)
+        params.append("redirect_uri", this.config.redirectUri || "")
+      } else {
+        // Client credentials flow
+        params.append("grant_type", "client_credentials")
       }
       
-      // Get refreshed token
-      const refreshedResult = await pool.query(
-        `SELECT access_token FROM ibabs_connections WHERE user_id = $1`,
-        [userId]
+      params.append("client_id", this.config.clientId)
+      params.append("client_secret", this.config.clientSecret)
+
+      const response = await axios.post(tokenUrl, params, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      })
+
+      this.tokens = {
+        ...response.data,
+        expires_at: Date.now() + (response.data.expires_in * 1000),
+      }
+
+      // Store tokens in database
+      await this.storeTokens()
+
+      logger.info("iBabs authentication successful")
+      return this.tokens
+    } catch (error: any) {
+      logger.error("iBabs authentication failed:", error)
+      throw new Error(
+        `iBabs authentication failed: ${error.response?.data?.error_description || error.message}`
       )
+    }
+  }
+
+  /**
+   * Refresh access token
+   */
+  async refreshAccessToken(): Promise<void> {
+    if (!this.tokens?.refresh_token) {
+      logger.warn("No refresh token available, re-authenticating")
+      await this.authenticate()
+      return
+    }
+
+    try {
+      const tokenUrl = `${this.config.baseUrl}/oauth2/token`
       
-      return decryptToken(refreshedResult.rows[0].access_token)
+      const params = new URLSearchParams()
+      params.append("grant_type", "refresh_token")
+      params.append("refresh_token", this.tokens.refresh_token)
+      params.append("client_id", this.config.clientId)
+      params.append("client_secret", this.config.clientSecret)
+
+      const response = await axios.post(tokenUrl, params, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" }
+      })
+
+      this.tokens = {
+        ...response.data,
+        expires_at: Date.now() + (response.data.expires_in * 1000),
+      }
+
+      // Store updated tokens
+      await this.storeTokens()
+
+      logger.info("iBabs access token refreshed")
+    } catch (error: any) {
+      logger.error("Failed to refresh iBabs token:", error)
+      throw new Error(
+        `Failed to refresh token: ${error.response?.data?.error_description || error.message}`
+      )
     }
-    
-    return decryptToken(connection.access_token)
   }
-  
+
   /**
-   * Refresh expired access token
-   * 
-   * @param userId - User ID
+   * Ensure we have a valid access token
    */
-  async refreshAccessToken(userId: string): Promise<void> {
-    log.info("Refreshing iBabs access token", { userId })
-    
-    const result = await pool.query(
-      `SELECT refresh_token FROM ibabs_connections WHERE user_id = $1`,
-      [userId]
-    )
-    
-    if (result.rows.length === 0) {
-      throw new Error("iBabs connection not found")
+  private async ensureValidToken(): Promise<void> {
+    if (!this.tokens) {
+      await this.initialize()
     }
-    
-    const refreshToken = decryptToken(result.rows[0].refresh_token)
-    
-    // Exchange refresh token for new access token
-    const params = new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: IBABS_CONFIG.clientId,
-      client_secret: IBABS_CONFIG.clientSecret
-    })
-    
-    const response = await fetch(IBABS_CONFIG.tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: params.toString()
-    })
-    
-    if (!response.ok) {
-      const error = await response.text()
-      log.error("Token refresh failed", { userId, status: response.status, error })
-      throw new Error(`Token refresh failed: ${error}`)
+
+    if (!this.tokens) {
+      throw new Error("No iBabs tokens available. Please authenticate first.")
     }
-    
-    const tokenData = await response.json()
-    
-    // Update tokens in database
-    await this.storeTokens(userId, tokenData)
-    
-    log.info("Access token refreshed successfully", { userId })
+
+    // Check if token is expired or about to expire (within 5 minutes)
+    const expiresAt = this.tokens.expires_at || 0
+    const now = Date.now()
+    const bufferTime = 5 * 60 * 1000 // 5 minutes
+
+    if (expiresAt - now < bufferTime) {
+      logger.info("iBabs token expired or expiring soon, refreshing...")
+      await this.refreshAccessToken()
+    }
   }
-  
+
   /**
-   * Revoke iBabs access and delete tokens
-   * 
-   * @param userId - User ID
+   * Store tokens in database
    */
-  async revokeAccess(userId: string): Promise<void> {
-    log.info("Revoking iBabs access", { userId })
-    
-    // Delete connection from database
-    const result = await pool.query(
-      `DELETE FROM ibabs_connections WHERE user_id = $1 RETURNING id`,
-      [userId]
-    )
-    
-    if (result.rows.length === 0) {
-      throw new Error("iBabs connection not found")
+  private async storeTokens(): Promise<void> {
+    try {
+      const credentialsEncrypted = Buffer.from(
+        JSON.stringify({ tokens: this.tokens })
+      ).toString("base64")
+
+      await pool.query(
+        `UPDATE integrations SET credentials_encrypted = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [credentialsEncrypted, this.integrationId]
+      )
+
+      logger.info("iBabs tokens stored in database")
+    } catch (error) {
+      logger.error("Failed to store iBabs tokens:", error)
     }
-    
-    log.info("iBabs access revoked successfully", { userId })
   }
-  
+
   /**
-   * Get connection status for user
-   * 
-   * @param userId - User ID
-   * @returns Connection status or null if not connected
+   * Get upcoming meetings
    */
-  async getConnectionStatus(userId: string): Promise<{
-    connected: boolean
-    expiresAt?: Date
-    scope?: string
-  }> {
-    log.debug("Getting connection status", { userId })
-    
-    const result = await pool.query(
-      `SELECT expires_at, scope FROM ibabs_connections WHERE user_id = $1`,
-      [userId]
-    )
-    
-    if (result.rows.length === 0) {
-      return { connected: false }
+  async getUpcomingMeetings(daysAhead: number = 30): Promise<IBabsMeeting[]> {
+    try {
+      const startDate = new Date().toISOString()
+      const endDate = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000).toISOString()
+
+      const response = await this.client.get("/v1/meetings", {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+          status: "scheduled",
+        },
+      })
+
+      return response.data.meetings || []
+    } catch (error: any) {
+      logger.error("Failed to get iBabs meetings:", error)
+      throw new Error(
+        `Failed to get meetings: ${error.response?.data?.message || error.message}`
+      )
     }
-    
-    const connection = result.rows[0]
-    
-    return {
-      connected: true,
-      expiresAt: new Date(connection.expires_at),
-      scope: connection.scope
+  }
+
+  /**
+   * Get meeting details
+   */
+  async getMeeting(meetingId: string): Promise<IBabsMeeting> {
+    try {
+      const response = await this.client.get(`/v1/meetings/${meetingId}`)
+      return response.data
+    } catch (error: any) {
+      logger.error(`Failed to get iBabs meeting ${meetingId}:`, error)
+      throw new Error(
+        `Failed to get meeting: ${error.response?.data?.message || error.message}`
+      )
+    }
+  }
+
+  /**
+   * Upload document to meeting
+   */
+  async uploadDocument(
+    meetingId: string,
+    document: {
+      title: string
+      content: Buffer
+      contentType: string
+      agendaItem?: string
+      classification?: string
+      accessControl?: string[]
+    }
+  ): Promise<{ documentId: string; url: string }> {
+    try {
+      const formData = new FormData()
+      const blob = new Blob([document.content], { type: document.contentType })
+      
+      formData.append("file", blob, `${document.title}.pdf`)
+      formData.append("title", document.title)
+      
+      if (document.agendaItem) {
+        formData.append("agenda_item", document.agendaItem)
+      }
+      if (document.classification) {
+        formData.append("classification", document.classification)
+      }
+      if (document.accessControl) {
+        formData.append("access_control", JSON.stringify(document.accessControl))
+      }
+
+      const response = await this.client.post(
+        `/v1/meetings/${meetingId}/documents`,
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      )
+
+      logger.info(`Document uploaded to iBabs meeting ${meetingId}`)
+      return {
+        documentId: response.data.id,
+        url: response.data.url,
+      }
+    } catch (error: any) {
+      logger.error(`Failed to upload document to iBabs meeting ${meetingId}:`, error)
+      throw new Error(
+        `Failed to upload document: ${error.response?.data?.message || error.message}`
+      )
+    }
+  }
+
+  /**
+   * Get action items from a meeting
+   */
+  async getActionItems(meetingId: string): Promise<IBabsActionItem[]> {
+    try {
+      const response = await this.client.get(`/v1/meetings/${meetingId}/actions`)
+      return response.data.actions || []
+    } catch (error: any) {
+      logger.error(`Failed to get iBabs action items for meeting ${meetingId}:`, error)
+      throw new Error(
+        `Failed to get action items: ${error.response?.data?.message || error.message}`
+      )
+    }
+  }
+
+  /**
+   * Test connection to iBabs
+   */
+  async testConnection(): Promise<boolean> {
+    try {
+      await this.getUpcomingMeetings(7)
+      return true
+    } catch (error) {
+      logger.error("iBabs connection test failed:", error)
+      return false
     }
   }
 }
-
-// Export singleton instance
-export const ibabsService = new IbabsService()
