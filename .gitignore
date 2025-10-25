@@ -14,6 +14,8 @@ out/
 
 # production
 /build
+coverage/
+*.lcov
 
 # debug
 npm-debug.log*
