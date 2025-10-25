@@ -121,7 +121,7 @@ export async function getRiskMetrics(programId: string) {
       FROM risks r
       JOIN projects p ON r.project_id = p.id
       WHERE p.program_id = $1
-      GROUP BY r.severity
+      GROUP BY COALESCE(r.severity, 'low')
       `,
       [programId]
     )
