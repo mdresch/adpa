@@ -44,6 +44,23 @@ export interface Project {
   updated_at: string
 }
 
+export interface Program {
+  id: string
+  name: string
+  description?: string
+  owner_id: string
+  owner_name?: string
+  budget?: number
+  currency_code?: string
+  start_date?: string
+  end_date?: string
+  rag_status: 'green' | 'amber' | 'red'
+  status: string
+  created_at: string
+  updated_at: string
+  project_count?: number
+}
+
 export interface Document {
   id: string
   project_id: string
@@ -419,6 +436,55 @@ class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.request(`/projects/${id}`, { method: "DELETE" })
+  }
+
+  // Programs API
+  async getPrograms(params?: {
+    page?: number
+    limit?: number
+    status?: string
+    owner_id?: string
+    rag_status?: string
+    search?: string
+  }): Promise<{ programs: Program[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ programs: Program[]; pagination: any }>(
+      `/programs?${queryParams}`
+    )
+    return response
+  }
+
+  async getProgram(id: string): Promise<Program> {
+    const response = await this.request<{ program: Program }>(`/programs/${id}`)
+    return response.program
+  }
+
+  async createProgram(programData: Partial<Program>): Promise<Program> {
+    const response = await this.request<{ program: Program }>("/programs", {
+      method: "POST",
+      body: JSON.stringify(programData),
+    })
+    return response.program
+  }
+
+  async updateProgram(id: string, programData: Partial<Program>): Promise<Program> {
+    const response = await this.request<{ program: Program }>(`/programs/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(programData),
+    })
+    return response.program
+  }
+
+  async deleteProgram(id: string): Promise<void> {
+    await this.request(`/programs/${id}`, { method: "DELETE" })
   }
 
   // Templates API
