@@ -47,7 +47,7 @@ next-env.d.ts
 .pnpm-store/
 
 # Test files and temporary files
-__tests__/
+# __tests__/  # Allow test files to be tracked
 test-*.json
 test-*.js
 test-*.css
