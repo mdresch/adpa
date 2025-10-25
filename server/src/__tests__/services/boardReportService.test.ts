@@ -21,6 +21,8 @@ jest.mock('../../utils/logger', () => ({
   }
 }));
 
+import * as aiServiceModule from '../../services/aiService';
+
 jest.mock('../../services/aiService', () => ({
   aiService: {
     generateText: jest.fn()
@@ -32,10 +34,12 @@ describe('BoardReportService', () => {
   let mockPool: jest.Mocked<Pool>;
 
   beforeEach(() => {
-    // Create mock pool
+    // Create mock pool with proper typing
     mockPool = {
-      query: jest.fn()
-    } as any;
+      query: jest.fn(),
+      connect: jest.fn(),
+      end: jest.fn()
+    } as jest.Mocked<Pool>;
 
     service = new BoardReportService(mockPool);
 
@@ -95,7 +99,7 @@ describe('BoardReportService', () => {
     });
 
     it('should generate report with AI when useAI is true', async () => {
-      const { aiService } = require('../../services/aiService');
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>;
       
       mockPool.query
         .mockResolvedValueOnce({ rows: [mockTemplate] } as any)
