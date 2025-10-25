@@ -67,8 +67,12 @@ export default function ProgramsPage() {
   }
 
   useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/login')
+      return
+    }
     fetchPrograms()
-  }, [])
+  }, [isAuthenticated, router])
 
   const handleCreateProgram = async () => {
     try {

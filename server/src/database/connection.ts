@@ -6,6 +6,10 @@ if (process.env.NODE_ENV !== "production") {
 
 import { Pool } from "pg"
 import { logger } from "../utils/logger"
+import dns from "dns"
+import { promisify } from "util"
+
+const dnsLookup = promisify(dns.lookup)
 
 // Check if DATABASE_URL is provided (Railway, Heroku, etc.)
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
@@ -76,24 +80,26 @@ export async function connectDatabase() {
       connectionTimeoutMillis: 30000,
     }
     
-    // Parse URL to force IPv4
+    // Parse URL and manually resolve to IPv4
     try {
       const dbUrl = new URL(databaseUrl)
+      
+      // Manually resolve hostname to IPv4 address
+      console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address...`)
+      const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
+      console.log(`✅ Resolved to IPv4: ${address}`)
+      
       poolConfig = {
         ...poolConfig,
-        host: dbUrl.hostname,
+        host: address, // Use resolved IPv4 address instead of hostname
         port: parseInt(dbUrl.port) || 5432,
         database: dbUrl.pathname.slice(1).split('?')[0],
         user: dbUrl.username,
         password: dbUrl.password,
-  // CRITICAL: Force IPv4 only - Railway doesn't support IPv6
-  // @ts-ignore - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
-  family: 4,
       }
-      console.log(`🔧 Forcing IPv4 connection to: ${dbUrl.hostname}`)
     } catch (e) {
-      // Fallback to connectionString if URL parsing fails
-      console.warn('⚠️  Could not parse DATABASE_URL, using connectionString (may fail on Railway)')
+      // Fallback to connectionString if URL parsing or DNS resolution fails
+      console.warn('⚠️  Could not resolve hostname to IPv4, using connectionString:', e.message)
       poolConfig.connectionString = databaseUrl
     }
     
