@@ -50,7 +50,8 @@ const getRedisClient = () => {
   logger.info("getRedisClient called")
   if (!redisClient) {
     logger.info("Creating new Redis client")
-    redisClient = createClient(getRedisConfig())
+    const host = process.env.REDIS_HOST || "localhost"
+    redisClient = createClient(createRedisConfig(host))
     
     redisClient.on("error", (err: any) => {
       logger.error("Redis Client Error:", err)
@@ -78,11 +79,12 @@ export async function connectRedis() {
     logger.info(`Trying Redis connection via ${method.description}: ${method.host}`)
     
     for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
+      let testClient: any = null
       try {
         logger.info(`Attempting to connect to Redis (attempt ${attempt}/${maxRetriesPerMethod}) via ${method.description}...`)
         
         // Create a new client for this connection method
-        const testClient = createClient(createRedisConfig(method.host))
+        testClient = createClient(createRedisConfig(method.host))
         
         // Attach event listeners
         testClient.on("error", (err: any) => {
@@ -122,9 +124,11 @@ export async function connectRedis() {
         logger.warn(`Redis connection attempt ${attempt} failed via ${method.description}:`, errorMessage)
         
         // Clean up failed client
-        try {
-          await testClient.disconnect().catch(() => {})
-        } catch {}
+        if (testClient) {
+          try {
+            await testClient.disconnect().catch(() => {})
+          } catch {}
+        }
         
         if (attempt < maxRetriesPerMethod) {
           console.log(`🔄 Retrying Redis connection in ${retryDelay}ms...`)
