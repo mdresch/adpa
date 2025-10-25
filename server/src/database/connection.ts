@@ -33,6 +33,7 @@ const createPool = (host: string) => {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
       // Force IPv4 to prevent IPv6 connection issues on Railway
+      // @ts-ignore - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
       family: 4,
     })
   }
@@ -85,8 +86,9 @@ export async function connectDatabase() {
         database: dbUrl.pathname.slice(1).split('?')[0],
         user: dbUrl.username,
         password: dbUrl.password,
-        // CRITICAL: Force IPv4 only - Railway doesn't support IPv6
-        family: 4,
+  // CRITICAL: Force IPv4 only - Railway doesn't support IPv6
+  // @ts-ignore - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
+  family: 4,
       }
       console.log(`🔧 Forcing IPv4 connection to: ${dbUrl.hostname}`)
     } catch (e) {
