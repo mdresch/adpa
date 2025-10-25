@@ -30,6 +30,12 @@ const IBABS_CONFIG = {
 const stateStore = new Map<string, { userId: string; createdAt: number }>()
 
 /**
+ * Token refresh mutex to prevent race conditions
+ * Tracks userId -> Promise<void> for in-flight refresh operations
+ */
+const refreshMutex = new Map<string, Promise<void>>()
+
+/**
  * Generate a secure random state parameter for CSRF protection
  */
 function generateState(userId: string): string {
@@ -68,9 +74,22 @@ function validateState(state: string): string | null {
 
 /**
  * Encode token using base64 for storage consistency (not encryption)
- * In production, use proper encryption library for security
+ * 
+ * ⚠️ SECURITY WARNING: Base64 encoding is NOT encryption!
+ * Base64 is trivially reversible and provides NO security.
+ * 
+ * For production use, implement proper encryption using:
+ * - crypto.createCipheriv with AES-256-GCM
+ * - Or use database-level encryption features
+ * - Or use a key management service (AWS KMS, Azure Key Vault, etc.)
+ * 
+ * @param token - Token to encode
+ * @returns Base64-encoded token
  */
 function encryptToken(token: string): string {
+  if (!token || typeof token !== 'string') {
+    throw new Error('Invalid token: must be a non-empty string')
+  }
   return Buffer.from(token).toString("base64")
 }
 
@@ -182,6 +201,23 @@ export class IbabsService {
   private async storeTokens(userId: string, tokenData: any): Promise<void> {
     log.debug("Storing OAuth tokens", { userId })
     
+    // Validate required fields to prevent runtime errors
+    if (!tokenData || typeof tokenData !== 'object') {
+      throw new Error('Invalid token data: must be an object')
+    }
+    
+    if (!tokenData.access_token) {
+      throw new Error('Invalid token data: missing access_token')
+    }
+    
+    if (!tokenData.refresh_token) {
+      throw new Error('Invalid token data: missing refresh_token')
+    }
+    
+    if (!tokenData.expires_in || typeof tokenData.expires_in !== 'number') {
+      throw new Error('Invalid token data: missing or invalid expires_in')
+    }
+    
     const encryptedAccessToken = encryptToken(tokenData.access_token)
     const encryptedRefreshToken = encryptToken(tokenData.refresh_token)
     const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000)
@@ -214,6 +250,9 @@ export class IbabsService {
   /**
    * Get valid access token for user (refresh if expired)
    * 
+   * Uses a mutex to prevent race conditions when multiple concurrent requests
+   * trigger token refresh simultaneously.
+   * 
    * @param userId - User ID
    * @returns Valid access token
    */
@@ -235,7 +274,21 @@ export class IbabsService {
     // Check if token is expired or will expire in next 5 minutes
     if (expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
       log.info("Access token expired or expiring soon, refreshing", { userId })
-      await this.refreshAccessToken(userId)
+      
+      // Check if refresh is already in progress for this user
+      const existingRefresh = refreshMutex.get(userId)
+      if (existingRefresh) {
+        log.debug("Token refresh already in progress, waiting", { userId })
+        await existingRefresh
+      } else {
+        // Start new refresh and store promise in mutex
+        const refreshPromise = this.refreshAccessToken(userId).finally(() => {
+          // Clean up mutex after refresh completes (success or failure)
+          refreshMutex.delete(userId)
+        })
+        refreshMutex.set(userId, refreshPromise)
+        await refreshPromise
+      }
       
       // Get refreshed token
       const refreshedResult = await pool.query(
