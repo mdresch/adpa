@@ -244,6 +244,12 @@ export default function ProgramsPage() {
     }
   }
 
+  // Helper function to safely update editingProgram
+  const updateEditingProgram = (updates: Partial<Program>) => {
+    if (!editingProgram) return
+    setEditingProgram({ ...editingProgram, ...updates })
+  }
+
   // Handle edit program
   const handleEditProgram = (program: Program) => {
     // Normalize dates to YYYY-MM-DD so <input type="date"> displays them correctly
@@ -286,18 +292,9 @@ export default function ProgramsPage() {
     }
   }
 
-  const filteredPrograms = programs.filter((program) => {
-    const matchesSearch =
-      program.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (program.description?.toLowerCase().includes(searchTerm.toLowerCase()) || false)
-    const matchesStatus = statusFilter === "all" || program.status === statusFilter
-    const matchesOwner = ownerFilter === "all" || program.owner_id === ownerFilter
-    const matchesRAG = ragFilter === "all" || program.rag_status === ragFilter
-    return matchesSearch && matchesStatus && matchesOwner && matchesRAG
-  })
-
+  // Server already applies all filters, no need for client-side filtering
   // Sort by most recently updated first
-  const sortedPrograms = [...filteredPrograms].sort((a, b) => {
+  const sortedPrograms = [...programs].sort((a, b) => {
     const aTime = a.updated_at ? new Date(a.updated_at).getTime() : 0
     const bTime = b.updated_at ? new Date(b.updated_at).getTime() : 0
     return bTime - aTime
@@ -537,7 +534,7 @@ export default function ProgramsPage() {
                             id="edit-program-name"
                             placeholder="Enter program name"
                             value={editingProgram?.name || ""}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProgram({...editingProgram!, name: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateEditingProgram({ name: e.target.value })}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             required
                           />
@@ -551,7 +548,7 @@ export default function ProgramsPage() {
                             title="RAG Status"
                             className="flex h-10 w-full rounded-md border border-slate-200 dark:border-slate-700 bg-background px-3 py-2 text-sm mt-2 focus:border-blue-500 transition-colors"
                             value={editingProgram?.rag_status || "green"}
-                            onChange={(e) => setEditingProgram({...editingProgram!, rag_status: e.target.value as 'green' | 'amber' | 'red'})}
+                            onChange={(e) => updateEditingProgram({ rag_status: e.target.value as 'green' | 'amber' | 'red' })}
                           >
                             <option value="green">🟢 Green - On Track</option>
                             <option value="amber">🟡 Amber - At Risk</option>
@@ -567,7 +564,7 @@ export default function ProgramsPage() {
                           id="edit-description"
                           placeholder="Describe the program objectives and scope"
                           value={editingProgram?.description || ""}
-                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditingProgram({...editingProgram!, description: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => updateEditingProgram({ description: e.target.value })}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                         />
                       </div>
@@ -580,7 +577,7 @@ export default function ProgramsPage() {
                             id="edit-start-date"
                             type="date"
                             value={editingProgram?.start_date || ""}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProgram({...editingProgram!, start_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateEditingProgram({ start_date: e.target.value })}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -592,7 +589,7 @@ export default function ProgramsPage() {
                             id="edit-end-date"
                             type="date"
                             value={editingProgram?.end_date || ""}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProgram({...editingProgram!, end_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateEditingProgram({ end_date: e.target.value })}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -604,7 +601,11 @@ export default function ProgramsPage() {
                             id="edit-budget"
                             placeholder="$0"
                             value={editingProgram?.budget?.toString() || ""}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProgram({...editingProgram!, budget: Number(e.target.value)})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                              const value = e.target.value
+                              const parsedValue = value === "" ? undefined : parseFloat(value)
+                              updateEditingProgram({ budget: !isNaN(parsedValue as number) ? parsedValue : undefined })
+                            }}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
