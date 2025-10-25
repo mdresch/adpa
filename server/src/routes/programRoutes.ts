@@ -12,12 +12,12 @@ const router = express.Router()
 const programCreateSchema = Joi.object({
   name: Joi.string().max(255).required(),
   description: Joi.string().allow('', null),
-  budget: Joi.number().precision(2).min(0).optional(),
+  budget: Joi.number().precision(2).min(0).optional().allow(null),
   currency: Joi.string().length(3).optional().default('USD'),
   start_date: Joi.date().required(),
   end_date: Joi.date().required(),
   status: Joi.string().valid('green', 'amber', 'red').default('green'),
-  owner_id: Joi.string().uuid().required(),
+  // owner_id is set from authenticated user, not required in request
 })
 
 const programUpdateSchema = Joi.object({
@@ -56,9 +56,14 @@ router.post('/', authenticateToken, requirePermission('programs.manage'), valida
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const payload = req.body
-    // created_by will be set from authenticated user if available
-    const createdBy = (req as any).user?.id
-    const program = await programService.createProgram({ ...payload, created_by: createdBy })
+    const userId = (req as any).user?.id
+    
+    // Set owner_id and created_by from authenticated user
+    const program = await programService.createProgram({ 
+      ...payload, 
+      owner_id: userId,
+      created_by: userId 
+    })
     res.status(201).json({ success: true, data: program })
   } catch (error) {
     log.error('Failed to create program', error)
