@@ -136,6 +136,52 @@ export interface Template {
   }
 }
 
+export interface Program {
+  id: string
+  name: string
+  description?: string
+  status: 'green' | 'amber' | 'red'
+  owner_id: string
+  owner_name?: string
+  start_date?: string
+  end_date?: string
+  budget?: number
+  currency?: string
+  created_at: string
+  updated_at: string
+  created_by?: string
+  updated_by?: string
+}
+
+export interface ProgramMetrics {
+  budget: {
+    total: number
+    spent: number
+    remaining: number
+    percentSpent: number
+  }
+  schedule: {
+    startDate: string
+    endDate: string
+    daysElapsed: number
+    daysRemaining: number
+    percentComplete: number
+  }
+  projects: {
+    total: number
+    green: number
+    amber: number
+    red: number
+  }
+  risks: {
+    total: number
+    critical: number
+    high: number
+    medium: number
+    low: number
+  }
+}
+
 export interface Job {
   id: string
   type: string
