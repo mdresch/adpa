@@ -1,5 +1,15 @@
 import express from 'express'
 import request from 'supertest'
+
+// Mock the programService module before importing the router so the router uses the mocked functions
+jest.mock('../../../src/services/programService', () => ({
+  createProgram: jest.fn(),
+  getProgramById: jest.fn(),
+  updateProgram: jest.fn(),
+  deleteProgram: jest.fn(),
+  listPrograms: jest.fn(),
+}))
+
 import { createProgramRouter } from '../../../src/routes/programRoutes'
 import * as programService from '../../../src/services/programService'
 
