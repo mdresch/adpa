@@ -99,16 +99,28 @@ export async function connectDatabase() {
         password: dbUrl.password,
       }
     } catch (e: any) {
-      // Fallback to connectionString if URL parsing or DNS resolution fails
-      console.warn('⚠️  Could not resolve hostname to IPv4, using connectionString:', e?.message || e)
-      poolConfig = {
-        connectionString: databaseUrl,
-        ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-          ? { rejectUnauthorized: false }
-          : false,
-        max: 20,
-        idleTimeoutMillis: 30000,
-        connectionTimeoutMillis: 30000,
+      // Fallback: Parse connection string manually to apply SSL config
+      console.warn('⚠️  Could not resolve hostname to IPv4, parsing connectionString with SSL config:', e?.message || e)
+      try {
+        const dbUrl = new URL(databaseUrl)
+        poolConfig = {
+          host: dbUrl.hostname,
+          port: parseInt(dbUrl.port) || 5432,
+          database: dbUrl.pathname.slice(1).split('?')[0],
+          user: dbUrl.username,
+          password: dbUrl.password,
+          ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+            ? { rejectUnauthorized: false }
+            : false,
+          max: 20,
+          idleTimeoutMillis: 30000,
+          connectionTimeoutMillis: 30000,
+        }
+        console.log(`🔧 Using parsed connection with SSL (rejectUnauthorized: false) to: ${dbUrl.hostname}`)
+      } catch (parseError) {
+        // Last resort: use connectionString as-is
+        console.error('⚠️  Could not parse DATABASE_URL at all, using raw connectionString')
+        poolConfig.connectionString = databaseUrl
       }
     }
     
