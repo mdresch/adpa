@@ -67,18 +67,20 @@ export async function getScheduleMetrics(programId: string) {
     const result = await pool.query(
       `
       SELECT 
-        start_date,
-        end_date
+        MIN(start_date) AS min_start_date,
+        MAX(end_date) AS max_end_date
       FROM projects
       WHERE program_id = $1
         AND start_date IS NOT NULL
         AND end_date IS NOT NULL
-      ORDER BY start_date ASC, end_date DESC
       `,
       [programId]
     )
 
-    if (result.rows.length === 0) {
+    const minStart = result.rows[0]?.min_start_date
+    const maxEnd = result.rows[0]?.max_end_date
+
+    if (!minStart || !maxEnd) {
       return {
         totalDays: 0,
         daysElapsed: 0,
@@ -87,8 +89,8 @@ export async function getScheduleMetrics(programId: string) {
     }
 
     // Get earliest start and latest end
-    const startDate = new Date(result.rows[0].start_date)
-    const endDate = new Date(result.rows[result.rows.length - 1].end_date)
+    const startDate = new Date(minStart)
+    const endDate = new Date(maxEnd)
     const now = new Date()
 
     const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24))
