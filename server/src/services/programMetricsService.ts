@@ -133,10 +133,12 @@ export async function getRiskMetrics(programId: string) {
       low: 0
     }
 
-    result.rows.forEach(row => {
-      const severity = row.severity.toLowerCase()
+    result.rows.forEach((row: any) => {
+      const rawSeverity = row?.severity
+      const severity = typeof rawSeverity === 'string' ? rawSeverity.toLowerCase() : 'low'
       if (severity in riskCounts) {
-        riskCounts[severity as keyof typeof riskCounts] = parseInt(row.count)
+        const countValue = Number.parseInt(String(row?.count), 10)
+        riskCounts[severity as keyof typeof riskCounts] = Number.isNaN(countValue) ? 0 : countValue
       }
     })
 

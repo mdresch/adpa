@@ -186,6 +186,35 @@ describe("programMetricsService", () => {
         low: 0
       })
     })
+
+    it("should map NULL severity to low and use COALESCE in GROUP BY", async () => {
+      // Use implementation to assert SQL content and return rows with null severity
+      ;(mockPool.query as any).mockImplementationOnce(async (sql: string, params: any[]) => {
+        expect(typeof sql).toBe("string")
+        expect(sql).toContain("GROUP BY COALESCE(r.severity, 'low')")
+        expect(params).toEqual([testProgramId])
+        return {
+          rows: [
+            { severity: null, count: "3" }, // should be counted under 'low'
+            { severity: "high", count: "2" }
+          ],
+          command: "",
+          rowCount: 2,
+          oid: 0,
+          fields: []
+        } as any
+      })
+
+      const result = await programMetricsService.getRiskMetrics(testProgramId)
+
+      expect(result).toEqual({
+        total: 5,
+        critical: 0,
+        high: 2,
+        medium: 0,
+        low: 3
+      })
+    })
   })
 
   describe("getRAGStatus", () => {
