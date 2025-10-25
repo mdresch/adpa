@@ -330,7 +330,7 @@ export default function ProgramsPage() {
     if (isAuthenticated) {
       fetchPrograms()
     }
-  }, [isAuthenticated, statusFilter, ownerFilter, ragFilter, searchTerm, pagination.page])
+  }, [isAuthenticated, statusFilter, ownerFilter, ragFilter, searchTerm, pagination.page, fetchPrograms])
 
   if (!isAuthenticated) {
     return (
