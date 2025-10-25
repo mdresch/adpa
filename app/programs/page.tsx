@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,6 +34,7 @@ import { Textarea } from "@/components/ui/textarea"
 
 export default function ProgramsPage() {
   const { isAuthenticated } = useAuth()
+  const router = useRouter()
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
@@ -95,7 +97,7 @@ export default function ProgramsPage() {
         currency: "USD",
       })
       // Redirect to the new program
-      window.location.href = `/programs/${newProgram.id}`
+      router.push(`/programs/${newProgram.id}`)
     } catch (error: any) {
       console.error('Failed to create program:', error)
       toast.error(error?.message || 'Failed to create program')

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { useParams } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -67,8 +67,25 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+// WebSocket event interfaces
+interface ProgramUpdatedEvent {
+  programId: string
+  program?: Program
+}
+
+interface ProgramStatusChangedEvent {
+  programId: string
+  status: 'green' | 'amber' | 'red'
+}
+
+interface ProgramProjectAddedEvent {
+  programId: string
+  projectId: string
+}
+
 export default function ProgramDetailPage() {
   const params = useParams()
+  const router = useRouter()
   const programId = params?.id as string
   const { isAuthenticated, user } = useAuth()
 
@@ -158,7 +175,7 @@ export default function ProgramDetailPage() {
     const socket = apiClient.getSocket()
     
     if (socket && programId) {
-      socket.on('program:updated', (data: any) => {
+      socket.on('program:updated', (data: ProgramUpdatedEvent) => {
         if (data.programId === programId) {
           fetchProgram()
           fetchMetrics()
@@ -166,14 +183,14 @@ export default function ProgramDetailPage() {
         }
       })
 
-      socket.on('program:status:changed', (data: any) => {
+      socket.on('program:status:changed', (data: ProgramStatusChangedEvent) => {
         if (data.programId === programId) {
           fetchProgram()
           toast.info(`Program status changed to ${data.status}`)
         }
       })
 
-      socket.on('program:project:added', (data: any) => {
+      socket.on('program:project:added', (data: ProgramProjectAddedEvent) => {
         if (data.programId === programId) {
           fetchProjects()
           fetchMetrics()
@@ -224,7 +241,7 @@ export default function ProgramDetailPage() {
       toast.success('Program deleted successfully')
       setDeleteDialogOpen(false)
       // Redirect to programs list
-      window.location.href = '/programs'
+      router.push('/programs')
     } catch (error: any) {
       console.error('Failed to delete program:', error)
       toast.error(error?.message || 'Failed to delete program')
@@ -633,8 +650,10 @@ export default function ProgramDetailPage() {
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-2">
-                                <Progress value={50} className="w-20" />
-                                <span className="text-sm">50%</span>
+                                <Progress value={typeof (project as any).progress === 'number' ? (project as any).progress : 0} className="w-20" />
+                                <span className="text-sm">
+                                  {typeof (project as any).progress === 'number' ? `${(project as any).progress}%` : 'N/A'}
+                                </span>
                               </div>
                             </TableCell>
                             <TableCell>
