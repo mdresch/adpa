@@ -20,6 +20,7 @@ import { pool } from "./database/connection"
 // Routes
 import authRoutes from "./routes/auth"
 import projectRoutes from "./routes/projects"
+import programRoutes from "./routes/programRoutes"
 import documentRoutes from "./routes/documents"
 import userRoutes from "./routes/users"
 import aiRoutes from "./routes/ai"
@@ -169,6 +170,7 @@ app.use("/api/auth", authRoutes)
 console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
+app.use("/api/programs", programRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/documents", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
