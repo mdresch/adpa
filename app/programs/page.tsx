@@ -33,7 +33,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
 export default function ProgramsPage() {
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, loading: authLoading } = useAuth()
   const router = useRouter()
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
@@ -67,12 +67,27 @@ export default function ProgramsPage() {
   }
 
   useEffect(() => {
+    // Wait for auth to finish loading before checking authentication
+    if (authLoading) {
+      return
+    }
+    
     if (!isAuthenticated) {
       router.push('/login')
       return
     }
+    
     fetchPrograms()
-  }, [isAuthenticated, router])
+  }, [isAuthenticated, authLoading, router])
+
+  // Show loading state while auth is initializing
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
 
   const handleCreateProgram = async () => {
     try {
