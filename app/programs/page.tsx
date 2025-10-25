@@ -97,10 +97,17 @@ export default function ProgramsPage() {
   const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   // Fetch programs from API
-  const fetchPrograms = async () => {
+  const fetchPrograms = React.useCallback(async () => {
     try {
       setLoading(true)
-      let params: any = {
+      const params: {
+        page: number
+        limit: number
+        status?: string
+        owner_id?: string
+        rag_status?: string
+        search?: string
+      } = {
         page: pagination.page,
         limit: pagination.limit,
       }
@@ -123,7 +130,7 @@ export default function ProgramsPage() {
 
       const response = await apiClient.getPrograms(params)
       setPrograms(response.programs || [])
-      setPagination(response.pagination || pagination)
+      setPagination(prev => response.pagination || prev)
     } catch (error) {
       console.error("Failed to fetch programs:", error)
       toast.error("Failed to load programs")
@@ -132,7 +139,7 @@ export default function ProgramsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [pagination.page, pagination.limit, statusFilter, ownerFilter, ragFilter, searchTerm])
 
   // Create new program
   const handleCreateProgram = async (e: React.FormEvent) => {
@@ -258,8 +265,8 @@ export default function ProgramsPage() {
 
     setEditingProgram({
       ...program,
-      start_date: normalizeDate(program.start_date as any),
-      end_date: normalizeDate(program.end_date as any),
+      start_date: normalizeDate(program.start_date),
+      end_date: normalizeDate(program.end_date),
     })
     setEditDialogOpen(true)
   }
@@ -730,8 +737,8 @@ export default function ProgramsPage() {
                                   <span>Timeline</span>
                                 </div>
                                 <p className="font-medium text-xs text-slate-700 dark:text-slate-200">
-                                  {program.start_date && new Date(program.start_date).toLocaleDateString()} -{" "}
-                                  {program.end_date && new Date(program.end_date).toLocaleDateString()}
+                                  {program.start_date ? new Date(program.start_date).toLocaleDateString() : "Not set"} -{" "}
+                                  {program.end_date ? new Date(program.end_date).toLocaleDateString() : "Not set"}
                                 </p>
                               </motion.div>
                               <motion.div
