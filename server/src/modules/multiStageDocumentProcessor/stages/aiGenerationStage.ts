@@ -176,7 +176,31 @@ export class AIGenerationStage {
         template_id: input.input_data.template_id
       })
 
-      // Extract configuration
+      // 🔍 DEBUG: Log what input AI generation receives
+      logger.info('🎭 AI GENERATION STAGE INPUT DEBUG', {
+        has_context: !!input.context,
+        context_keys: Object.keys(input.context || {}),
+        context_size_bytes: JSON.stringify(input.context || {}).length,
+        has_project_data: !!input.context?.project,
+        has_documents: !!input.context?.documents,
+        document_count: Array.isArray(input.context?.documents) ? input.context.documents.length : 0,
+        input_data_keys: Object.keys(input.input_data || {}),
+        has_processed_template: !!input.input_data?.processed_template
+      })
+
+      // 🔍 DEBUG: Log sample of context if available
+      if (input.context?.documents && Array.isArray(input.context.documents) && input.context.documents.length > 0) {
+        logger.info('📚 CONTEXT DOCUMENTS AVAILABLE', {
+          document_count: input.context.documents.length,
+          sample_doc_names: input.context.documents.slice(0, 3).map((d: any) => d.name || 'unnamed')
+        })
+      } else {
+        logger.warn('⚠️ NO CONTEXT DOCUMENTS AVAILABLE FOR AI GENERATION')
+      }
+
+      // Extract configuration - load model configs from database
+      const defaultModelConfigs = await this.getDefaultModelConfigs()
+      
       const config: AIGenerationConfig = {
         enable_multi_model_generation: true,
         enable_iterative_refinement: true,
@@ -184,7 +208,7 @@ export class AIGenerationStage {
         enable_quality_gates: true,
         max_refinement_iterations: 3,
         quality_threshold: 0.8,
-        ai_models: this.getDefaultModelConfigs(),
+        ai_models: defaultModelConfigs,
         generation_strategy: 'adaptive',
         refinement_strategy: 'automatic',
         enable_fallback_models: true,
@@ -197,6 +221,16 @@ export class AIGenerationStage {
       if (!processedTemplate) {
         throw new Error('Processed template not found in input data')
       }
+
+      // 🔍 DEBUG: Log processed template details
+      logger.info('📋 PROCESSED TEMPLATE DEBUG', {
+        template_id: processedTemplate.template_id,
+        template_name: processedTemplate.template_name,
+        has_system_prompt: !!processedTemplate.system_prompt,
+        system_prompt_preview: processedTemplate.system_prompt?.substring(0, 150) || 'NO SYSTEM PROMPT',
+        sections_count: processedTemplate.sections?.length || 0,
+        content_length: processedTemplate.content?.length || 0
+      })
 
       // Step 1: Generate initial document content
       const initialResult = await this.generateInitialDocument(
@@ -529,7 +563,22 @@ Return ONLY the section content in markdown format. Do not include section heade
     const startTime = Date.now()
 
     try {
-      const response = await this.aiService.generate({
+      // 🔍 DEBUG: Log what's being sent to AI
+      logger.info('🤖 AI GENERATION REQUEST DEBUG', {
+        section_id: prompt.section_id,
+        section_name: prompt.section_name,
+        provider: model.provider,
+        model: model.model,
+        prompt_length: prompt.prompt.length,
+        prompt_preview: prompt.prompt.substring(0, 300),
+        has_context: prompt.prompt.includes('ADPA') || prompt.prompt.includes('project'),
+        has_extraction_instruction: prompt.prompt.includes('EXTRACT') || prompt.prompt.includes('extract'),
+        temperature: model.temperature,
+        max_tokens: model.max_tokens
+      })
+
+      // Use dynamic fallback (queries DB for active providers)
+      const response = await this.aiService.generateWithFallback({
         prompt: prompt.prompt,
         provider: model.provider,
         model: model.model,
@@ -538,13 +587,26 @@ Return ONLY the section content in markdown format. Do not include section heade
       })
 
       const processingTime = Date.now() - startTime
+      
+      logger.info(`✨ AI Generation using provider: ${response.providerUsed} (requested: ${model.provider})`)
+      
+      // 🔍 DEBUG: Log what AI returned
+      logger.info('📤 AI GENERATION RESPONSE DEBUG', {
+        section_id: prompt.section_id,
+        provider_used: response.providerUsed,
+        content_length: response.content?.length || 0,
+        content_preview: response.content?.substring(0, 200) || 'no content',
+        has_placeholders: response.content?.includes('[') && response.content?.includes(']'),
+        processing_time_ms: processingTime,
+        tokens_used: response.usage?.total_tokens || 0
+      })
 
       return {
         section_id: prompt.section_id,
         section_name: prompt.section_name,
         content: response.content || '',
         model_used: model.model,
-        provider_used: model.provider,
+        provider_used: response.providerUsed, // Use actual provider that worked
         processing_time_ms: processingTime,
         tokens_used: response.usage?.total_tokens || 0,
         quality_score: 0.8, // Will be calculated later
@@ -688,49 +750,105 @@ Return ONLY the section content in markdown format. Do not include section heade
     return document
   }
 
-  // Helper methods
-  private getDefaultModelConfigs(): AIModelConfig[] {
-    return [
-      {
-        provider: 'openai',
-        model: 'gpt-4',
-        priority: 1,
-        enabled: true,
-        temperature: 0.7,
-        max_tokens: 2000,
-        timeout: 30000,
-        retry_attempts: 3,
-        quality_threshold: 0.8,
-        cost_weight: 0.3,
-        performance_weight: 0.7
-      },
-      {
-        provider: 'google',
-        model: 'gemini-pro',
-        priority: 2,
-        enabled: true,
-        temperature: 0.7,
-        max_tokens: 2000,
-        timeout: 30000,
-        retry_attempts: 3,
-        quality_threshold: 0.8,
-        cost_weight: 0.2,
-        performance_weight: 0.8
-      },
-      {
-        provider: 'anthropic',
-        model: 'claude-3-sonnet',
-        priority: 3,
-        enabled: true,
-        temperature: 0.7,
-        max_tokens: 2000,
-        timeout: 30000,
-        retry_attempts: 3,
-        quality_threshold: 0.8,
-        cost_weight: 0.4,
-        performance_weight: 0.6
+  // Helper methods - Query database for provider default models
+  private async getDefaultModelConfigs(): Promise<AIModelConfig[]> {
+    try {
+      // Get active providers with their configured default models from database
+      const result = await pool.query(`
+        SELECT provider_type, configuration, priority, is_active
+        FROM ai_providers
+        WHERE is_active = true
+        ORDER BY priority ASC, name ASC
+      `)
+      
+      const configs: AIModelConfig[] = []
+      
+      for (let i = 0; i < result.rows.length; i++) {
+        const row = result.rows[i]
+        const config = row.configuration || {}
+        
+        // Get default model from configuration, fallback to provider defaults
+        let defaultModel = config.model || config.default_model || config.defaultModel
+        
+        // Provider-specific defaults if not configured
+        if (!defaultModel) {
+          const defaults: Record<string, string> = {
+            'google': 'gemini-2.5-flash',
+            'groq': 'llama-3.3-70b-versatile',
+            'mistral': 'mistral-large-latest',
+            'openai': 'gpt-4o',
+            'anthropic': 'claude-sonnet-4',
+            'azure': 'gpt-4'
+          }
+          defaultModel = defaults[row.provider_type] || 'gpt-4o'
+        }
+        
+        configs.push({
+          provider: row.provider_type,
+          model: defaultModel,
+          priority: i + 1,
+          enabled: row.is_active,
+          temperature: config.temperature || config.modelParameters?.temperature || 0.7,
+          max_tokens: config.max_tokens || config.modelParameters?.maxTokens || 2000,
+          timeout: config.timeout || 30000,
+          retry_attempts: config.maxRetries || 3,
+          quality_threshold: 0.8,
+          cost_weight: 0.3,
+          performance_weight: 0.7
+        })
       }
-    ]
+      
+      logger.info(`📋 [AI-GENERATION] Loaded ${configs.length} model configs from database:`, 
+        configs.map(c => `${c.provider}/${c.model}`).join(', ')
+      )
+      
+      return configs
+      
+    } catch (error) {
+      logger.error('Failed to load model configs from database, using fallback:', error)
+      // Fallback to defaults if database query fails
+      return [
+        {
+          provider: 'google',
+          model: 'gemini-2.5-flash',
+          priority: 1,
+          enabled: true,
+          temperature: 0.7,
+          max_tokens: 2000,
+          timeout: 30000,
+          retry_attempts: 3,
+          quality_threshold: 0.8,
+          cost_weight: 0.2,
+          performance_weight: 0.8
+        },
+        {
+          provider: 'groq',
+          model: 'llama-3.3-70b-versatile',
+          priority: 2,
+          enabled: true,
+          temperature: 0.7,
+          max_tokens: 2000,
+          timeout: 30000,
+          retry_attempts: 3,
+          quality_threshold: 0.8,
+          cost_weight: 0.1,
+          performance_weight: 0.9
+        },
+        {
+          provider: 'mistral',
+          model: 'mistral-large-latest',
+          priority: 3,
+          enabled: true,
+          temperature: 0.7,
+          max_tokens: 2000,
+          timeout: 30000,
+          retry_attempts: 3,
+          quality_threshold: 0.8,
+          cost_weight: 0.3,
+          performance_weight: 0.7
+        }
+      ]
+    }
   }
 
   private buildContextSummary(context: ContextData): string {

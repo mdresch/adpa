@@ -61,9 +61,12 @@ export class MultiFormatOutputEngine {
     options: FormatConversionOptions = {}
   ): Promise<ConversionResult> {
     try {
-      logger.info('Converting markdown to format', { targetFormat })
+      // Default to markdown if no format specified
+      const format = (targetFormat || 'markdown').toLowerCase()
+      
+      logger.info('Converting markdown to format', { targetFormat: format })
 
-      switch (targetFormat.toLowerCase()) {
+      switch (format) {
         case 'pdf':
           return await this.convertToPDF(markdownContent, options)
         case 'docx':

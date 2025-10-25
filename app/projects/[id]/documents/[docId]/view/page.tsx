@@ -2,10 +2,14 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
@@ -32,6 +36,7 @@ import {
   Star,
   MoreHorizontal,
 } from "@/components/ui/icons-shim"
+import { Award } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
@@ -102,9 +107,13 @@ export default function ProjectDocumentViewer() {
   const [editedContent, setEditedContent] = useState("")
   const [showVersions, setShowVersions] = useState(false)
   const [showComments, setShowComments] = useState(false)
+  const [showSummaries, setShowSummaries] = useState(false)
+  const [summaries, setSummaries] = useState<any[]>([])
+  const [loadingSummaries, setLoadingSummaries] = useState(false)
   const [newComment, setNewComment] = useState("")
   const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
+  const [templateName, setTemplateName] = useState<string>("")
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -335,14 +344,41 @@ The ADPA system represents a significant advancement in document processing auto
           }
         }
         
-        setDocument({...documentData, content: contentString})
+        // Use template_name from document response (backend already provides it)
+        if (documentData.template_name) {
+          setTemplateName(documentData.template_name)
+        } else if (documentData.template_id) {
+          // Fallback: fetch template name if not included in response
+          try {
+            const templateResponse = await apiClient.get(`/templates/${documentData.template_id}`)
+            setTemplateName(templateResponse.name || 'Unknown Template')
+          } catch (error) {
+            console.error('Failed to fetch template name:', error)
+            setTemplateName('Unknown Template')
+          }
+        }
+        
+        // 🆕 Extract source_documents from metadata if available
+        const sourceDocuments = documentData.metadata?.source_documents || 
+                               documentData.generation_metadata?.source_documents || 
+                               []
+        
+        setDocument({
+          ...documentData, 
+          content: contentString,
+          source_documents: sourceDocuments // Expose at top level for UI
+        })
         setVersions(versionsData)
         setEditedContent(contentString)
+        
+        // Extract TOC from real document content
+        if (contentString) {
+          extractTableOfContents(contentString)
+        }
       } catch (error) {
         console.error("Failed to load document:", error)
         
         // Fallback to mock data if API fails (for development/demo purposes)
-        console.log("Falling back to mock data for demonstration")
         setDocument(mockDocument)
         setVersions(mockVersions)
         setEditedContent(mockDocument.content)
@@ -367,22 +403,22 @@ The ADPA system represents a significant advancement in document processing auto
     const headings: Array<{ id: string; text: string; level: number }> = []
     const lines = (typeof content === 'string' ? content : '').split('\n')
     
-    lines.forEach((line, index) => {
+    lines.forEach((line) => {
       const h1Match = line.match(/^#\s+(.+)$/)
       const h2Match = line.match(/^##\s+(.+)$/)
       const h3Match = line.match(/^###\s+(.+)$/)
       
       if (h1Match) {
-        const text = h1Match[1]
-        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const text = h1Match[1].replace(/\*/g, '').trim() // Remove markdown formatting
+        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 1 })
       } else if (h2Match) {
-        const text = h2Match[1]
-        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const text = h2Match[1].replace(/\*/g, '').trim()
+        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 2 })
       } else if (h3Match) {
-        const text = h3Match[1]
-        const id = `heading-${index}-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const text = h3Match[1].replace(/\*/g, '').trim()
+        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 3 })
       }
     })
@@ -552,6 +588,32 @@ The ADPA system represents a significant advancement in document processing auto
     }
   }
 
+  const fetchSummaries = async () => {
+    setLoadingSummaries(true)
+    setShowSummaries(true)
+    
+    try {
+      const response = await apiClient.request(
+        `/documents/${documentId}/summaries`
+      )
+      
+      if (response.summaries) {
+        setSummaries(response.summaries)
+        if (response.summaries.length === 0) {
+          toast.info("No cached summaries yet. They will be created when you run process-flow jobs.")
+        } else {
+          toast.success(`Found ${response.summaries.length} cached summaries!`)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch summaries:", error)
+      toast.error("Failed to load summaries")
+      setSummaries([])
+    } finally {
+      setLoadingSummaries(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex">
@@ -602,10 +664,14 @@ The ADPA system represents a significant advancement in document processing auto
   }
 
   return (
-    <div className="min-h-screen bg-background flex" style={{ scrollBehavior: 'smooth' }}>
-      <Sidebar />
+    <div className="h-screen bg-background flex overflow-hidden" style={{ scrollBehavior: 'smooth' }}>
+      <div className="flex-shrink-0">
+        <Sidebar />
+      </div>
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
+        <div className="flex-shrink-0">
+          <Header />
+        </div>
         <main className="flex-1 overflow-y-auto p-6">
           <PageTransition>
             <AnimatedLayout>
@@ -655,6 +721,14 @@ The ADPA system represents a significant advancement in document processing auto
                         <MessageSquare className="h-4 w-4 mr-2" />
                         Comments ({document.comments?.length || 0})
                       </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={fetchSummaries}
+                      >
+                        <BarChart3 className="h-4 w-4 mr-2" />
+                        View Summaries
+                      </Button>
                     </div>
                   </div>
                 </motion.div>
@@ -684,6 +758,12 @@ The ADPA system represents a significant advancement in document processing auto
                                   <Share className="h-4 w-4 mr-2" />
                                   Share
                                 </Button>
+                                <Link href={`/projects/${projectId}/documents/${documentId}`}>
+                                  <Button variant="default" size="sm">
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    View Metadata
+                                  </Button>
+                                </Link>
                               </>
                             ) : (
                               <>
@@ -899,8 +979,8 @@ The ADPA system represents a significant advancement in document processing auto
                     </AnimatedCard>
                   </div>
 
-                  {/* Sidebar */}
-                  <div className="space-y-6">
+                  {/* Sidebar - Sticky */}
+                  <div className="space-y-6 sticky top-6 self-start">
                     {/* Table of Contents */}
                     {!isEditing && tableOfContents.length > 0 && (
                       <AnimatedCard>
@@ -981,10 +1061,10 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="font-medium">v{(document as any).version}</span>
                               </div>
                             )}
-                            {(document as any).template_id && (
+                            {((document as any).template_id || templateName) && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Template:</span>
-                                <span className="font-medium text-xs">{(document as any).template_id.substring(0, 8)}...</span>
+                                <span className="font-medium">{templateName || 'Loading...'}</span>
                               </div>
                             )}
                             {(document as any).framework && (
@@ -1009,11 +1089,19 @@ The ADPA system represents a significant advancement in document processing auto
                           <div className="grid grid-cols-2 gap-2 text-sm">
                             <div>
                               <span className="text-muted-foreground">Words:</span>
-                              <span className="ml-2 font-medium">{document.word_count || 0}</span>
+                              <span className="ml-2 font-medium">
+                                {(document.word_count || 
+                                  (document as any).generation_metadata?.contentMetrics?.words || 
+                                  0).toLocaleString()}
+                              </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Characters:</span>
-                              <span className="ml-2 font-medium">{document.character_count || 0}</span>
+                              <span className="ml-2 font-medium">
+                                {(document.character_count || 
+                                  (document as any).generation_metadata?.contentMetrics?.characters || 
+                                  0).toLocaleString()}
+                              </span>
                             </div>
                           </div>
                         </div>
@@ -1036,56 +1124,450 @@ The ADPA system represents a significant advancement in document processing auto
                       </CardContent>
                     </AnimatedCard>
 
-                    {/* Generation Stats */}
+                    {/* AI Processing Metrics */}
                     <AnimatedCard>
                       <CardHeader>
                         <CardTitle className="flex items-center space-x-2">
                           <BarChart3 className="h-5 w-5" />
-                          <span>Generation Stats</span>
+                          <span>AI Processing Metrics</span>
                         </CardTitle>
+                        <CardDescription>
+                          How this document was generated
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <div className="space-y-2">
-                          <p className="text-sm font-medium">Compression</p>
-                          <div className="text-sm">
+                          <p className="text-sm font-medium">Provider & Model</p>
+                          <div className="text-sm space-y-1">
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">Ratio:</span>
-                              <span className="font-medium">{document.compression_ratio}%</span>
+                              <span className="text-muted-foreground">Provider:</span>
+                              <span className="font-medium">
+                                {(document as any).generation_metadata?.aiProcessing?.provider || 
+                                 (document as any).metadata?.ai_usage?.provider_used || 
+                                 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">Original:</span>
-                              <span className="font-medium">{document.original_size}</span>
+                              <span className="text-muted-foreground">Model:</span>
+                              <span className="font-medium">
+                                {(document as any).generation_metadata?.aiProcessing?.model || 
+                                 (document as any).metadata?.ai_usage?.model_used || 
+                                 document.ai_model || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
-                              <span className="text-muted-foreground">Compressed:</span>
-                              <span className="font-medium">{document.compressed_size}</span>
+                              <span className="text-muted-foreground">Temperature:</span>
+                              <span className="font-medium">
+                                {(document as any).generation_metadata?.aiProcessing?.temperature || 'N/A'}
+                              </span>
                             </div>
                           </div>
                         </div>
                         <Separator />
                         <div className="space-y-2">
-                          <p className="text-sm font-medium">AI Processing</p>
-                          <div className="text-sm">
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Model:</span>
-                              <span className="font-medium">{document.ai_model}</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-muted-foreground">Time:</span>
-                              <span className="font-medium">{document.processing_time}</span>
-                            </div>
+                          <p className="text-sm font-medium">Token Usage</p>
+                          <div className="text-sm space-y-1">
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Input Tokens:</span>
-                              <span className="font-medium">{document.input_tokens}</span>
+                              <span className="font-medium">
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.input || 
+                                 document.input_tokens || 'N/A'}
+                              </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Output Tokens:</span>
-                              <span className="font-medium">{document.output_tokens}</span>
+                              <span className="font-medium">
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.output || 
+                                 document.output_tokens || 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Total Tokens:</span>
+                              <span className="font-medium text-primary">
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.total || 
+                                 ((document.input_tokens || 0) + (document.output_tokens || 0)) || 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Est. Cost:</span>
+                              <span className="font-medium text-green-600">
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.cost || 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <Separator />
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Performance</p>
+                          <div className="text-sm space-y-1">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Processing Time:</span>
+                              <span className="font-medium">
+                                {(document as any).generation_metadata?.aiProcessing?.processingTime || 
+                                 (document as any).generation_metadata?.generation?.durationFormatted ||
+                                 ((document as any).generation_metadata?.generation?.duration ? 
+                                   `${((document as any).generation_metadata.generation.duration / 1000).toFixed(2)}s` : 
+                                   'N/A')}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Status:</span>
+                              <Badge variant="secondary" className="text-xs">
+                                {(document as any).generation_metadata?.generation?.status || 'unknown'}
+                              </Badge>
                             </div>
                           </div>
                         </div>
                       </CardContent>
                     </AnimatedCard>
+
+                    {/* Quality Metrics */}
+                    {(document as any).generation_metadata?.qualityMetrics && (
+                      <AnimatedCard>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <Award className="h-5 w-5" />
+                            <span>Quality Metrics</span>
+                          </CardTitle>
+                          <CardDescription>
+                            AI-analyzed document quality indicators
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Overall Quality</p>
+                            <div className="flex items-center justify-between">
+                              <span className="text-3xl font-bold text-primary">
+                                {(document as any).generation_metadata.qualityMetrics.overall}
+                              </span>
+                              <Badge 
+                                variant="secondary" 
+                                className="text-sm px-3 py-1"
+                              >
+                                {(document as any).generation_metadata.qualityMetrics.grade}
+                              </Badge>
+                            </div>
+                          </div>
+                          <Separator />
+                          <div className="space-y-2">
+                            <p className="text-sm font-medium">Detailed Scores</p>
+                            <div className="space-y-2">
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Completeness</span>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-blue-500 transition-all"
+                                      style={{ width: (document as any).generation_metadata.qualityMetrics.completeness }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium w-12 text-right">
+                                    {(document as any).generation_metadata.qualityMetrics.completeness}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Structure</span>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-green-500 transition-all"
+                                      style={{ width: (document as any).generation_metadata.qualityMetrics.structure }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium w-12 text-right">
+                                    {(document as any).generation_metadata.qualityMetrics.structure}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Formatting</span>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-purple-500 transition-all"
+                                      style={{ width: (document as any).generation_metadata.qualityMetrics.formatting }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium w-12 text-right">
+                                    {(document as any).generation_metadata.qualityMetrics.formatting}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-sm text-muted-foreground">Content Depth</span>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                    <div 
+                                      className="h-full bg-orange-500 transition-all"
+                                      style={{ width: (document as any).generation_metadata.qualityMetrics.depth }}
+                                    />
+                                  </div>
+                                  <span className="text-sm font-medium w-12 text-right">
+                                    {(document as any).generation_metadata.qualityMetrics.depth}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* New Dimensions 5-9 */}
+                              {(document as any).generation_metadata.qualityMetrics.accuracy !== undefined && (
+                                <>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-muted-foreground">Accuracy</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-indigo-500 transition-all"
+                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.accuracy}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-sm font-medium w-12 text-right">
+                                        {(document as any).generation_metadata.qualityMetrics.accuracy}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-muted-foreground">Consistency</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-teal-500 transition-all"
+                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.consistency}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-sm font-medium w-12 text-right">
+                                        {(document as any).generation_metadata.qualityMetrics.consistency}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-muted-foreground">Context Relevance</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-cyan-500 transition-all"
+                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.contextRelevance}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-sm font-medium w-12 text-right">
+                                        {(document as any).generation_metadata.qualityMetrics.contextRelevance}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-muted-foreground">Professional Quality</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-pink-500 transition-all"
+                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.professionalQuality}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-sm font-medium w-12 text-right">
+                                        {(document as any).generation_metadata.qualityMetrics.professionalQuality}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-sm text-muted-foreground">Standards Compliance</span>
+                                    <div className="flex items-center space-x-2">
+                                      <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                        <div 
+                                          className="h-full bg-emerald-500 transition-all"
+                                          style={{ width: `${(document as any).generation_metadata.qualityMetrics.standardsCompliance}%` }}
+                                        />
+                                      </div>
+                                      <span className="text-sm font-medium w-12 text-right">
+                                        {(document as any).generation_metadata.qualityMetrics.standardsCompliance}%
+                                      </span>
+                                    </div>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                          
+                          {/* Complexity Score with Time Estimate */}
+                          {(document as any).generation_metadata.qualityMetrics.complexityScore !== undefined && (
+                            <>
+                              <Separator />
+                              <div className="space-y-2">
+                                <p className="text-sm font-medium">Manual Creation Estimate</p>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Complexity Score</span>
+                                  <div className="flex items-center space-x-2">
+                                    <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                                      <div 
+                                        className="h-full bg-red-500 transition-all"
+                                        style={{ width: `${(document as any).generation_metadata.qualityMetrics.complexityScore}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium w-12 text-right">
+                                      {(document as any).generation_metadata.qualityMetrics.complexityScore}%
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                {/* Time Estimate Card with Research Breakdown */}
+                                {(() => {
+                                  const complexity = (document as any).generation_metadata.qualityMetrics.complexityScore || 0
+                                  const research = (document as any).generation_metadata?.researchComplexity
+                                  
+                                  let level = 'Simple'
+                                  let writingTime = '2-4 hours'
+                                  let color = 'text-green-600'
+                                  let bgColor = 'bg-green-50'
+                                  let borderColor = 'border-green-200'
+                                  
+                                  if (complexity >= 76) {
+                                    level = 'Very Complex'
+                                    writingTime = '2-4 days (16-32 hours)'
+                                    color = 'text-red-600'
+                                    bgColor = 'bg-red-50'
+                                    borderColor = 'border-red-200'
+                                  } else if (complexity >= 51) {
+                                    level = 'Complex'
+                                    writingTime = '1-2 days (8-16 hours)'
+                                    color = 'text-orange-600'
+                                    bgColor = 'bg-orange-50'
+                                    borderColor = 'border-orange-200'
+                                  } else if (complexity >= 26) {
+                                    level = 'Moderate'
+                                    writingTime = '4-8 hours'
+                                    color = 'text-yellow-600'
+                                    bgColor = 'bg-yellow-50'
+                                    borderColor = 'border-yellow-200'
+                                  }
+                                  
+                                  // Calculate research time based on source documents
+                                  const sourceDocCount = research?.sourceDocuments || 0
+                                  const readingTimeHours = research?.estimatedReadingTimeHours || 0
+                                  const readingTimeDisplay = readingTimeHours >= 8 
+                                    ? `${Math.round(readingTimeHours / 8)} day${readingTimeHours >= 16 ? 's' : ''}` 
+                                    : `${Math.round(readingTimeHours)} hour${readingTimeHours !== 1 ? 's' : ''}`
+                                  
+                                  return (
+                                    <div className={`p-3 ${bgColor} rounded-lg border ${borderColor} mt-2`}>
+                                      <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs text-muted-foreground">Complexity Level:</span>
+                                        <span className={`text-sm font-semibold ${color}`}>{level}</span>
+                                      </div>
+                                      
+                                      {sourceDocCount > 0 && (
+                                        <div className="space-y-1 mb-2 pb-2 border-b">
+                                          <div className="flex justify-between items-center text-xs">
+                                            <span className="text-muted-foreground">📚 Context Research:</span>
+                                            <span className={`font-medium ${color}`}>
+                                              {sourceDocCount} doc{sourceDocCount !== 1 ? 's' : ''} (~{readingTimeDisplay})
+                                            </span>
+                                          </div>
+                                          <div className="flex justify-between items-center text-xs">
+                                            <span className="text-muted-foreground">✍️ Writing Time:</span>
+                                            <span className={`font-medium ${color}`}>{writingTime}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                      
+                                      <div className="flex justify-between items-center mb-2">
+                                        <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
+                                        <span className={`text-sm font-bold ${color}`}>
+                                          {sourceDocCount > 0 ? `${readingTimeDisplay} + ${writingTime}` : writingTime}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="text-xs text-muted-foreground italic pt-2 border-t">
+                                        ⚡ Time savings: AI generated in {(document as any).generation_metadata?.generation?.duration || 'N/A'}
+                                      </div>
+                                    </div>
+                                  )
+                                })()}
+                              </div>
+                            </>
+                          )}
+                          {(document as any).generation_metadata.qualityMetrics.recommendations?.length > 0 && (
+                            <>
+                              <Separator />
+                              <div className="space-y-2">
+                                <p className="text-sm font-medium">Recommendations</p>
+                                <ul className="text-sm text-muted-foreground space-y-1">
+                                  {(document as any).generation_metadata.qualityMetrics.recommendations.map((rec: string, idx: number) => (
+                                    <li key={idx} className="flex items-start space-x-2">
+                                      <span className="text-blue-500 mt-0.5">•</span>
+                                      <span>{rec}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            </>
+                          )}
+                        </CardContent>
+                      </AnimatedCard>
+                    )}
+
+                    {/* Content Metrics */}
+                    {((document as any).word_count || (document as any).generation_metadata?.contentMetrics) && (
+                      <AnimatedCard>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <FileText className="h-5 w-5" />
+                            <span>Content Metrics</span>
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Word Count:</span>
+                              <span className="font-medium">
+                                {((document as any).word_count || (document as any).generation_metadata?.contentMetrics?.words || 0).toLocaleString('en-US')}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Characters:</span>
+                              <span className="font-medium">
+                                {((document as any).character_count || (document as any).generation_metadata?.contentMetrics?.characters || 0).toLocaleString('en-US')}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Sentences:</span>
+                              <span className="font-medium">
+                                {(() => {
+                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentences || 0
+                                  return sc > 0 ? sc.toLocaleString('en-US') : 'N/A'
+                                })()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Paragraphs:</span>
+                              <span className="font-medium">
+                                {(() => {
+                                  const pc = (document as any).paragraph_count || (document as any).generation_metadata?.contentMetrics?.paragraphs || 0
+                                  return pc > 0 ? pc.toLocaleString('en-US') : 'N/A'
+                                })()}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Avg Words/Sentence:</span>
+                              <span className="font-medium">
+                                {(() => {
+                                  // Try pre-calculated value first
+                                  const preCalc = (document as any).generation_metadata?.contentMetrics?.avgWordsPerSentence
+                                  if (preCalc && preCalc !== 'N/A') return preCalc
+                                  
+                                  // Otherwise calculate it
+                                  const wc = (document as any).word_count || (document as any).generation_metadata?.contentMetrics?.wordCount || 0
+                                  const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentenceCount || 0
+                                  return (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : 'N/A'
+                                })()}
+                              </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </AnimatedCard>
+                    )}
 
                     {/* Export Options */}
                     <AnimatedCard>
@@ -1115,6 +1597,62 @@ The ADPA system represents a significant advancement in document processing auto
                       </CardContent>
                     </AnimatedCard>
 
+                    {/* Context Statistics */}
+                    {(document as any).metadata?.context_stats && (
+                      <AnimatedCard>
+                        <CardHeader>
+                          <CardTitle className="flex items-center space-x-2">
+                            <BarChart3 className="h-5 w-5" />
+                            <span>Context Statistics</span>
+                          </CardTitle>
+                          <CardDescription>
+                            What context was used to generate this document
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="space-y-2 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Documents in Project:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata.context_stats.total_documents_available}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Used as Context:</span>
+                              <span className="font-medium text-primary">
+                                {(document as any).metadata.context_stats.documents_used_as_context}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Stakeholders Available:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata.context_stats.stakeholders_available}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Custom Settings:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata.context_stats.custom_settings_count}
+                              </span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Custom Metadata:</span>
+                              <span className="font-medium">
+                                {(document as any).metadata.context_stats.custom_metadata_count}
+                              </span>
+                            </div>
+                            <Separator className="my-2" />
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Context Tokens:</span>
+                              <span className="font-medium text-blue-600">
+                                ~{(document as any).metadata.context_stats.estimated_context_tokens?.toLocaleString() || 'N/A'}
+                              </span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </AnimatedCard>
+                    )}
+
                     {/* Source Documents */}
                     <AnimatedCard>
                       <CardHeader>
@@ -1122,20 +1660,48 @@ The ADPA system represents a significant advancement in document processing auto
                           <ExternalLink className="h-5 w-5" />
                           <span>Source Documents</span>
                         </CardTitle>
+                        <CardDescription>
+                          Documents used as context during generation
+                        </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2">
-                          {(document.source_documents || []).map((doc) => (
-                            <div key={doc.id} className="flex items-center justify-between p-2 rounded border">
-                              <div>
+                          {(document.source_documents || []).length === 0 ? (
+                            <p className="text-sm text-muted-foreground italic">
+                              No source documents - this was the first document generated or no context was available.
+                            </p>
+                          ) : (
+                            (document.source_documents || []).map((doc: any, idx: number) => (
+                              <div key={doc.id || doc.title || idx} className="flex items-center justify-between p-3 rounded border hover:bg-accent transition-colors">
+                                <div className="flex items-center space-x-3 flex-1">
+                                  <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/10 text-primary text-xs font-bold">
+                                    {doc.priority_rank || idx + 1}
+                                  </div>
+                                  <div className="flex-1">
+                                    <div className="flex items-center space-x-2 mb-1">
                                 <p className="text-sm font-medium">{doc.title}</p>
+                                      {doc.status && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          {doc.status}
+                                        </Badge>
+                                      )}
+                                      {doc.phase_name && doc.phase_name !== 'Other' && (
+                                        <Badge variant="outline" className="text-xs">
+                                          Phase {doc.lifecycle_phase}: {doc.phase_name}
+                                        </Badge>
+                                      )}
+                                    </div>
                                 <p className="text-xs text-muted-foreground">{doc.type}</p>
                               </div>
+                                </div>
+                                <Link href={doc.url || `/projects/${projectId}/documents/${doc.id}/view`}>
                               <Button variant="ghost" size="sm">
                                 <Eye className="h-4 w-4" />
                               </Button>
+                                </Link>
                             </div>
-                          ))}
+                            ))
+                          )}
                         </div>
                       </CardContent>
                     </AnimatedCard>
@@ -1243,6 +1809,132 @@ The ADPA system represents a significant advancement in document processing auto
           </PageTransition>
         </main>
       </div>
+      
+      {/* Summaries Dialog */}
+      <Dialog open={showSummaries} onOpenChange={setShowSummaries}>
+        <DialogContent className="max-w-5xl max-h-[80vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <BarChart3 className="h-5 w-5" />
+              Document Summaries - {document?.title}
+            </DialogTitle>
+            <DialogDescription>
+              View cached AI-generated summaries at different compression levels. These are reused in process-flow jobs to save time and API costs.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="h-[60vh] pr-4">
+            {loadingSummaries ? (
+              <div className="flex items-center justify-center py-12">
+                <div className="text-center">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                  <p className="text-muted-foreground">Loading summaries...</p>
+                </div>
+              </div>
+            ) : summaries.length === 0 ? (
+              <div className="text-center py-12">
+                <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No Summaries Yet</h3>
+                <p className="text-muted-foreground mb-4">
+                  Summaries will be automatically created when you run process-flow jobs with AI compression.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Once created, they'll be cached and reused to save time (~60s AI call becomes instant!)
+                </p>
+              </div>
+            ) : (
+              <Tabs defaultValue={summaries[0]?.compression_level?.toString() || "0.2"} className="w-full">
+                <TabsList className="grid grid-cols-auto gap-2 mb-4">
+                  {Array.from(new Set(summaries.map(s => s.compression_level)))
+                    .sort((a, b) => a - b)
+                    .map((level) => (
+                      <TabsTrigger key={level} value={level.toString()}>
+                        {(level * 100).toFixed(0)}% Compression
+                      </TabsTrigger>
+                    ))}
+                </TabsList>
+                
+                {Array.from(new Set(summaries.map(s => s.compression_level))).map((level) => {
+                  const summary = summaries.find(s => s.compression_level === level)
+                  if (!summary) return null
+                  
+                  return (
+                    <TabsContent key={level} value={level.toString()} className="space-y-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-lg">Summary Statistics</CardTitle>
+                        </CardHeader>
+                        <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div>
+                            <p className="text-sm text-muted-foreground">Compression Level</p>
+                            <p className="text-2xl font-bold">{(summary.compression_level * 100).toFixed(0)}%</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Original Tokens</p>
+                            <p className="text-2xl font-bold">{summary.original_tokens.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Compressed Tokens</p>
+                            <p className="text-2xl font-bold">{summary.compressed_tokens.toLocaleString()}</p>
+                          </div>
+                          <div>
+                            <p className="text-sm text-muted-foreground">Times Reused</p>
+                            <p className="text-2xl font-bold text-green-600">{summary.times_reused || 0}</p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg">Compressed Content</CardTitle>
+                            <div className="flex items-center gap-2">
+                              {summary.ai_provider && (
+                                <Badge variant="outline">
+                                  {summary.ai_provider}
+                                </Badge>
+                              )}
+                              {summary.is_valid ? (
+                                <Badge variant="default" className="bg-green-600">Valid</Badge>
+                              ) : (
+                                <Badge variant="destructive">Invalid</Badge>
+                              )}
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
+                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                              <ReactMarkdown 
+                                remarkPlugins={[remarkGfm]}
+                              >
+                                {summary.compressed_content}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                          
+                          <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
+                            <div>
+                              <span className="font-medium">Created:</span>{' '}
+                              {new Date(summary.created_at).toLocaleString()}
+                            </div>
+                            {summary.last_reused_at && (
+                              <div>
+                                <span className="font-medium">Last Reused:</span>{' '}
+                                {new Date(summary.last_reused_at).toLocaleString()}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </TabsContent>
+                  )
+                })}
+              </Tabs>
+            )}
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

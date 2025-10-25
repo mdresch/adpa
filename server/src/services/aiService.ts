@@ -1,10 +1,13 @@
 /**
- * AI Service - AI Gateway Integration
- * Uses Vercel AI SDK and AI Gateway for unified multi-provider access
- * Version: 3.0 - AI Gateway Only
+ * AI Service - AI Gateway Integration with Direct Provider Fallback
+ * Primary: Vercel AI SDK and AI Gateway for unified multi-provider access
+ * Fallback: Direct provider SDKs when AI Gateway unavailable
+ * Version: 3.1 - AI Gateway + Direct Fallback
  */
 
 import { generateText } from "ai"
+import { GoogleGenerativeAI } from "@google/generative-ai"
+import { createMistral } from "@ai-sdk/mistral"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 
@@ -38,17 +41,22 @@ export interface AIGenerateResponse {
   metadata?: any
 }
 
+interface ProviderBackoffState {
+  provider: string
+  failureCount: number
+  lastFailureTime: number
+  nextRetryTime: number
+}
+
 class AIService {
-  private gatewayApiKey: string
+  private providerBackoff: Map<string, ProviderBackoffState> = new Map()
+  private readonly INITIAL_BACKOFF_MS = 1000 // 1 second
+  private readonly MAX_BACKOFF_MS = 60000 // 60 seconds
+  private readonly BACKOFF_MULTIPLIER = 2
+  private readonly BACKOFF_JITTER = 0.1 // 10% jitter
 
   constructor() {
-    // Use AI Gateway API key from environment
-    this.gatewayApiKey = process.env.AI_GATEWAY_API_KEY || ""
-    if (!this.gatewayApiKey) {
-      logger.warn("AI_GATEWAY_API_KEY not set in environment. AI features will not work.")
-    } else {
-      logger.info("AI Gateway initialized with API key")
-    }
+    logger.info("AI Service initialized - will fetch AI Gateway key from database")
   }
 
   async initializeProviders() {
@@ -72,6 +80,223 @@ class AIService {
     logger.info(`Provider ${provider.name} (${provider.type}) registered in database`)
   }
 
+  /**
+   * Calculate backoff delay for a provider based on failure count
+   */
+  private calculateBackoffDelay(failureCount: number): number {
+    // Exponential backoff: delay = initial * (multiplier ^ failureCount)
+    let delay = this.INITIAL_BACKOFF_MS * Math.pow(this.BACKOFF_MULTIPLIER, failureCount - 1)
+    
+    // Cap at max backoff
+    delay = Math.min(delay, this.MAX_BACKOFF_MS)
+    
+    // Add jitter to prevent thundering herd (±10%)
+    const jitter = delay * this.BACKOFF_JITTER * (Math.random() * 2 - 1)
+    delay = delay + jitter
+    
+    return Math.floor(delay)
+  }
+
+  /**
+   * Check if provider is available (not in backoff period)
+   */
+  private isProviderAvailable(provider: string): boolean {
+    const backoffState = this.providerBackoff.get(provider)
+    
+    if (!backoffState) {
+      return true // No backoff state, provider is available
+    }
+    
+    const now = Date.now()
+    if (now < backoffState.nextRetryTime) {
+      const waitTime = Math.ceil((backoffState.nextRetryTime - now) / 1000)
+      logger.info(`⏸️ [AI-BACKOFF] Provider ${provider} in backoff, retry in ${waitTime}s`)
+      return false
+    }
+    
+    return true
+  }
+
+  /**
+   * Record provider failure and update backoff state
+   */
+  private recordProviderFailure(provider: string): void {
+    const now = Date.now()
+    const existingState = this.providerBackoff.get(provider)
+    
+    const failureCount = existingState ? existingState.failureCount + 1 : 1
+    const backoffDelay = this.calculateBackoffDelay(failureCount)
+    const nextRetryTime = now + backoffDelay
+    
+    this.providerBackoff.set(provider, {
+      provider,
+      failureCount,
+      lastFailureTime: now,
+      nextRetryTime
+    })
+    
+    logger.warn(`⏸️ [AI-BACKOFF] Provider ${provider} failed (attempt ${failureCount}), backing off for ${Math.ceil(backoffDelay / 1000)}s`)
+  }
+
+  /**
+   * Reset backoff state for provider after successful request
+   */
+  private resetProviderBackoff(provider: string): void {
+    const existingState = this.providerBackoff.get(provider)
+    
+    if (existingState && existingState.failureCount > 0) {
+      logger.info(`✅ [AI-BACKOFF] Provider ${provider} recovered, resetting backoff (was ${existingState.failureCount} failures)`)
+      this.providerBackoff.delete(provider)
+    }
+  }
+
+  /**
+   * Get list of active providers from database, ordered by priority
+   */
+  private async getActiveProviders(): Promise<string[]> {
+    try {
+      const result = await pool.query(
+        `SELECT provider_type 
+         FROM ai_providers 
+         WHERE is_active = true 
+         ORDER BY priority ASC, name ASC`
+      )
+      
+      const providers = result.rows.map(row => row.provider_type)
+      logger.info(`📋 [AI-FALLBACK] Active providers available: ${providers.join(', ')}`)
+      return providers
+    } catch (error) {
+      logger.error('Failed to get active providers:', error)
+      // Return default fallback list if DB query fails
+      return ['google', 'mistral', 'groq']
+    }
+  }
+
+  /**
+   * Generate with automatic fallback to alternative providers
+   * Dynamically checks database for active providers with exponential backoff
+   */
+  async generateWithFallback(
+    request: AIGenerateRequest, 
+    fallbackProviders?: string[]
+  ): Promise<AIGenerateResponse & { providerUsed: string }> {
+    // Always get active providers from database for filtering
+    const activeProvidersFromDb = await this.getActiveProviders()
+    
+    // Build provider list
+    let availableProviders: string[]
+    if (fallbackProviders && fallbackProviders.length > 0) {
+      // Filter fallback list to only include active providers
+      availableProviders = fallbackProviders.filter(p => activeProvidersFromDb.includes(p))
+    } else {
+      availableProviders = activeProvidersFromDb
+    }
+    
+    // Check if requested provider is active
+    const isRequestedProviderActive = activeProvidersFromDb.includes(request.provider)
+    
+    // Build provider chain: only include requested provider if it's active
+    let providers: string[]
+    if (isRequestedProviderActive) {
+      providers = [request.provider, ...availableProviders.filter(p => p !== request.provider)]
+    } else {
+      logger.info(`⚠️ [AI-FALLBACK] Requested provider ${request.provider} is not active, using active providers only`)
+      providers = availableProviders
+    }
+    
+    // Filter out providers in backoff period
+    const providersBeforeBackoff = providers.length
+    providers = providers.filter(p => this.isProviderAvailable(p))
+    
+    if (providers.length < providersBeforeBackoff) {
+      const skipped = providersBeforeBackoff - providers.length
+      logger.info(`⏸️ [AI-BACKOFF] Skipped ${skipped} provider(s) in backoff period`)
+    }
+    
+    // Auto-disable providers with insufficient funds
+    const autoDisableProvider = async (providerType: string, reason: string) => {
+      try {
+        await pool.query(
+          `UPDATE ai_providers 
+           SET is_active = false, 
+               updated_at = CURRENT_TIMESTAMP
+           WHERE provider_type = $1 AND is_active = true`,
+          [providerType]
+        )
+        const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+        logger.warn(`🚫 [AI-AUTO-DISABLE] Provider ${providerType} has been automatically deactivated`)
+        logger.warn(`💳 [AI-AUTO-DISABLE] Reason: ${reason}`)
+        logger.info(`💡 [AI-AUTO-DISABLE] Reactivate at ${frontendUrl}/ai-providers once credits are topped up`)
+      } catch (error) {
+        logger.error(`Failed to auto-disable provider ${providerType}:`, error)
+      }
+    }
+    
+    if (providers.length === 0) {
+      throw new Error('All active providers are currently in backoff period. Please try again later.')
+    }
+    
+    logger.info(`🔄 [AI-FALLBACK] Provider chain (active only): ${providers.join(' → ')}`)
+    
+    let lastError: Error | null = null
+    let attemptsWithBackoff = 0
+    
+    for (const provider of providers) {
+      try {
+        attemptsWithBackoff++
+        logger.info(`🔄 [AI-FALLBACK] Trying provider: ${provider} (attempt ${attemptsWithBackoff}/${providers.length})`)
+        
+        const result = await this.generate({ ...request, provider })
+        
+        // Success! Reset backoff for this provider
+        this.resetProviderBackoff(provider)
+        
+        logger.info(`✅ [AI-FALLBACK] Success with provider: ${provider}`)
+        return { ...result, providerUsed: provider }
+      } catch (error: any) {
+        logger.warn(`⚠️ [AI-FALLBACK] Provider ${provider} failed: ${error.message}`)
+        
+        // Check if error is due to insufficient funds/credits or capacity exceeded
+        const errorMessage = error.message?.toLowerCase() || ''
+        const isInsufficientFunds = 
+          errorMessage.includes('insufficient funds') ||
+          errorMessage.includes('insufficient_funds') ||
+          errorMessage.includes('no credits') ||
+          errorMessage.includes('out of credits') ||
+          errorMessage.includes('credit limit') ||
+          errorMessage.includes('service tier capacity exceeded') ||
+          errorMessage.includes('capacity exceeded') ||
+          errorMessage.includes('rate limit exceeded') ||
+          errorMessage.includes('too many requests') ||
+          error.statusCode === 402 || // Payment Required
+          error.statusCode === 429 || // Too Many Requests
+          error.type === 'insufficient_funds' ||
+          error.code === 'rate_limit_exceeded'
+        
+        if (isInsufficientFunds) {
+          logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
+          await autoDisableProvider(provider, `Insufficient capacity: ${error.message}`)
+        } else {
+          // Record failure and apply backoff for other errors
+          this.recordProviderFailure(provider)
+        }
+        
+        lastError = error
+        
+        // Add delay between provider attempts (progressive backoff)
+        if (attemptsWithBackoff < providers.length) {
+          const delayMs = Math.min(1000 * attemptsWithBackoff, 5000) // Max 5s between attempts
+          logger.info(`⏳ [AI-FALLBACK] Waiting ${delayMs}ms before trying next provider...`)
+          await new Promise(resolve => setTimeout(resolve, delayMs))
+        }
+      }
+    }
+    
+    // All providers failed
+    logger.error('❌ [AI-FALLBACK] All active providers failed')
+    throw lastError || new Error('All AI providers failed')
+  }
+
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
     logger.info('🚀 [AI-SERVICE-1/8] Generate method called')
     logger.info('📊 [AI-SERVICE] Request:', {
@@ -81,26 +306,47 @@ class AIService {
       promptLength: request.prompt.length
     })
     
-    if (!this.gatewayApiKey) {
-      logger.error('❌ [AI-SERVICE] No API key configured')
-      throw new Error("AI Gateway API key not configured. Please set AI_GATEWAY_API_KEY in environment.")
+    // Fetch AI Gateway API key from database
+    const { getAIGatewayKey } = await import("../routes/settings")
+    const gatewayApiKey = await getAIGatewayKey()
+    
+    if (!gatewayApiKey) {
+      logger.error('❌ [AI-SERVICE] No AI Gateway API key configured')
+      throw new Error("AI Gateway API key not configured. Please configure it in Settings.")
     }
-    logger.info('✅ [AI-SERVICE-2/8] API key validated')
+    logger.info('✅ [AI-SERVICE-2/8] AI Gateway API key retrieved from database')
 
-    // Process template if provided
-    let processedPrompt = request.prompt
-    if (request.template_id && request.variables) {
-      logger.info('🔄 [AI-SERVICE-3/8] Processing template variables...')
-      processedPrompt = await this.processTemplate(request.template_id, request.variables, request.prompt)
+    // KISS: Build system and user messages separately
+    let systemMessage: string | undefined = undefined
+    let userMessage: string = request.prompt
+    
+    if (request.template_id) {
+      logger.info('🔄 [AI-SERVICE-3/8] Loading template system prompt (KISS)...')
+      const templateSystemPrompt = await this.getTemplateSystemPrompt(request.template_id)
+      if (templateSystemPrompt) {
+        systemMessage = templateSystemPrompt
+        // Build user message with ALL context
+        userMessage = this.buildUserMessage(request.prompt, request.variables)
+        logger.info('✅ [AI-SERVICE-3/8] KISS architecture applied: System=Template, User=Context')
+      } else {
+        logger.warn('⚠️ [AI-SERVICE-3/8] Template not found, using direct prompt')
+      }
     } else {
-      logger.info('✅ [AI-SERVICE-3/8] No template processing needed')
+      logger.info('✅ [AI-SERVICE-3/8] No template, using direct prompt')
+    }
+    
+    // If system_prompt provided directly in request, use that
+    if (request.system_prompt) {
+      systemMessage = request.system_prompt
+      logger.info('✅ [AI-SERVICE-3/8] Using provided system_prompt')
     }
 
     try {
       // Get provider type from database to build the model ID
       logger.info('🔍 [AI-SERVICE-4/8] Looking up provider type...')
+      // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
       const providerResult = await pool.query(
-        "SELECT provider_type, configuration FROM ai_providers WHERE name = $1 AND is_active = true",
+        "SELECT provider_type, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
         [request.provider]
       )
 
@@ -110,24 +356,188 @@ class AIService {
       }
 
       const providerType = providerResult.rows[0].provider_type
-      logger.info('✅ [AI-SERVICE-5/8] Provider type:', providerType)
+      logger.info('✅ [AI-SERVICE-5/8] Provider type:', providerType, 'for requested provider:', request.provider)
       
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
       
       logger.info('🌐 [AI-SERVICE-6/8] AI Gateway generation starting:', gatewayModelId)
       logger.info('⏱️ [AI-SERVICE] Temperature:', request.temperature || 0.7)
-      logger.info('📝 [AI-SERVICE] Prompt length:', processedPrompt.length, 'chars')
+      logger.info('📝 [AI-SERVICE] User message length:', userMessage.length, 'chars')
+      if (systemMessage) {
+        logger.info('📝 [AI-SERVICE] System message length:', systemMessage.length, 'chars')
+      }
+      
+      // FIXED: Use environment variable for AI Gateway (Vercel AI SDK requirement)
+      // The SDK reads from process.env.OPENAI_API_KEY automatically
+      // We temporarily set it in a try-finally block to minimize race condition window
+      logger.info('🔑 [AI-SERVICE] Using AI Gateway API key (thread-safe as possible)')
       
       // Use AI Gateway unified API (Vercel AI SDK)
       logger.info('🔗 [AI-SERVICE] Calling generateText() with AI Gateway...')
-      const result = await generateText({
-        model: gatewayModelId,
-        prompt: processedPrompt,
-        temperature: request.temperature || 0.7,
-        maxTokens: request.max_tokens || 2000,
-      } as any)
+      logger.info('🔗 [AI-SERVICE] Model ID:', gatewayModelId)
+      logger.info('🔑 [AI-SERVICE] API Key configured:', !!gatewayApiKey) // Don't log length (security)
+      
+      // FIXED: Vercel AI SDK looks for AI_GATEWAY_API_KEY environment variable!
+      // Documentation: https://vercel.com/docs/ai-gateway
+      // Temporarily set process.env for this request
+      const previousKey = process.env.AI_GATEWAY_API_KEY
+      process.env.AI_GATEWAY_API_KEY = gatewayApiKey
+      
+      let result
+      let gatewaySuccess = false
+      
+      try {
+        // KISS: Use messages array if we have system message, otherwise use prompt
+        if (systemMessage) {
+          logger.info('📨 [AI-SERVICE-6/8] Using KISS architecture with system + user messages')
+          result = await generateText({
+            model: gatewayModelId,
+            messages: [
+              { role: 'system', content: systemMessage },
+              { role: 'user', content: userMessage }
+            ],
+            temperature: request.temperature || 0.7,
+            maxTokens: request.max_tokens || 2000,
+          } as any)
+        } else {
+          logger.info('📨 [AI-SERVICE-6/8] Using simple prompt (no template)')
+          result = await generateText({
+            model: gatewayModelId,
+            prompt: userMessage,
+            temperature: request.temperature || 0.7,
+            maxTokens: request.max_tokens || 2000,
+          } as any)
+        }
+        gatewaySuccess = true
+      } catch (gatewayError: any) {
+        logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
+        logger.warn('⚠️ [AI-SERVICE] Gateway error:', gatewayError?.message || gatewayError)
+        
+        // Restore key before fallback
+        if (previousKey) {
+          process.env.AI_GATEWAY_API_KEY = previousKey
+        } else {
+          delete process.env.AI_GATEWAY_API_KEY
+        }
+        
+        // FALLBACK: Try direct Google AI
+        if (providerType === 'google') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Google AI...')
+          
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          if (!directApiKey) {
+            throw new Error('Direct Google AI API key not found in provider configuration')
+          }
+          
+          logger.info('✅ [AI-SERVICE] Direct Google AI API key found')
+          const genAI = new GoogleGenerativeAI(directApiKey)
+          const model = genAI.getGenerativeModel({ model: request.model || 'gemini-2.5-flash' })
+          
+          logger.info('🚀 [AI-SERVICE] Calling direct Google AI with KISS architecture...')
+          // KISS: Combine system and user message for Google AI (it doesn't have separate system role)
+          const combinedPrompt = systemMessage 
+            ? `${systemMessage}\n\n---\n\n${userMessage}`
+            : userMessage
+          const googleResult = await model.generateContent(combinedPrompt)
+          const response = await googleResult.response
+          const text = response.text()
+          
+          logger.info('✅ [AI-SERVICE-7/8] Direct Google AI generation successful!')
+          logger.info('📝 [AI-SERVICE] Content length:', text.length, 'chars')
+          
+          // Estimate token usage (Google AI doesn't always provide it)
+          const promptLength = systemMessage ? systemMessage.length + userMessage.length : userMessage.length
+          const estimatedTokens = Math.ceil((promptLength + text.length) / 4)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: estimatedTokens,
+          })
+          
+          logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+          
+          return {
+            content: text,
+            provider: request.provider,
+            model: request.model || 'gemini-2.5-flash',
+            usage: {
+              prompt_tokens: Math.ceil(promptLength / 4),
+              completion_tokens: Math.ceil(text.length / 4),
+              total_tokens: estimatedTokens,
+            },
+          }
+        }
+        
+        // FALLBACK: Try direct Mistral AI
+        if (providerType === 'mistral') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Mistral AI...')
+          
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          if (!directApiKey) {
+            throw new Error('Direct Mistral AI API key not found in provider configuration')
+          }
+          
+          logger.info('✅ [AI-SERVICE] Direct Mistral AI API key found')
+          
+          const mistral = createMistral({ apiKey: directApiKey })
+          
+          // Use appropriate Mistral model (not Google model!)
+          const mistralModels = ['mistral-large-latest', 'mistral-small-latest', 'open-mistral-7b', 'open-mixtral-8x7b']
+          const modelName = mistralModels.includes(request.model || '') 
+            ? request.model 
+            : 'mistral-small-latest' // Default to small (free tier)
+          
+          logger.info(`🚀 [AI-SERVICE] Calling direct Mistral AI with model: ${modelName}`)
+          
+          const mistralResult = await generateText({
+            model: mistral(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info('✅ [AI-SERVICE-7/8] Direct Mistral AI generation successful!')
+          logger.info('📝 [AI-SERVICE] Content length:', mistralResult.text.length, 'chars')
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: mistralResult.usage?.totalTokens || 0,
+          })
+          
+          logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+          
+          return {
+            content: mistralResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: mistralResult.usage?.promptTokens || 0,
+              completion_tokens: mistralResult.usage?.completionTokens || 0,
+              total_tokens: mistralResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        // No fallback available for this provider
+        throw gatewayError
+      } finally {
+        // Restore previous key if AI Gateway was used
+        if (gatewaySuccess) {
+          if (previousKey) {
+            process.env.AI_GATEWAY_API_KEY = previousKey
+          } else {
+            delete process.env.AI_GATEWAY_API_KEY
+          }
+        }
+      }
 
+      // AI Gateway success path
       logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
       logger.info('📊 [AI-SERVICE] Tokens used:', result.usage.totalTokens)
       logger.info('📝 [AI-SERVICE] Content length:', result.text.length, 'chars')
@@ -170,11 +580,33 @@ class AIService {
       'azure': 'gpt-4',
     }
 
+    // Define provider-specific model families
+    const providerModelFamilies: Record<string, string[]> = {
+      'openai': ['gpt-', 'o1-', 'text-'],
+      'google': ['gemini-', 'palm-'],
+      'groq': ['llama', 'mixtral', 'gemma'],
+      'mistral': ['mistral-', 'codestral-', 'pixtral-', 'magistral-'],
+      'anthropic': ['claude-'],
+      'azure': ['gpt-', 'text-']
+    }
+
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
+    
+    // Check if the requested model is compatible with the provider
+    const compatibleFamilies = providerModelFamilies[providerType] || []
+    const isCompatible = compatibleFamilies.some(family => 
+      modelId.toLowerCase().includes(family.toLowerCase())
+    )
+    
+    // If model is incompatible, use provider's default model
+    if (!isCompatible && model) {
+      logger.warn(`⚠️ [AI-SERVICE] Model ${model} not compatible with ${providerType}, using default: ${defaultModels[providerType]}`)
+      modelId = defaultModels[providerType]
+    }
     
     // Handle deprecated Groq models
     const groqModelMapping: Record<string, string> = {
-      'gemma2-9b-it': 'llama3-8b-8192',  // Decommissioned, use llama3 instead
+      'gemma2-9b-it': 'llama3-8b-8192',
       'gemma-7b-it': 'llama3-8b-8192',
       'llama-3.2-90b-text-preview': 'llama-3.3-70b-versatile',
       'llama2-70b-4096': 'llama3-70b-8192',
@@ -274,37 +706,74 @@ class AIService {
     }
   }
 
-  private async processTemplate(
-    templateId: string,
-    variables: Record<string, any>,
-    basePrompt: string
-  ): Promise<string> {
+  /**
+   * Get template system prompt (KISS: Keep It Simple)
+   * System prompt = Pure methodology, no variables replaced
+   */
+  private async getTemplateSystemPrompt(templateId: string): Promise<string | null> {
     try {
       const result = await pool.query(
-        "SELECT content, variables FROM templates WHERE id = $1",
+        "SELECT system_prompt, content FROM templates WHERE id = $1",
         [templateId]
       )
 
       if (result.rows.length === 0) {
-        logger.warn(`Template not found: ${templateId}, using base prompt`)
-        return basePrompt
+        logger.warn(`Template not found: ${templateId}`)
+        return null
       }
 
       const template = result.rows[0]
-      let processedContent = JSON.stringify(template.content)
-
-      // Replace variables in template
-      for (const [key, value] of Object.entries(variables)) {
-        const regex = new RegExp(`{{\\s*${key}\\s*}}`, "g")
-        processedContent = processedContent.replace(regex, String(value))
+      let systemMessage = template.system_prompt || ''
+      
+      // Add template content structure if defined
+      if (template.content && Object.keys(template.content).length > 0) {
+        systemMessage += '\n\nTEMPLATE STRUCTURE:\n'
+        systemMessage += JSON.stringify(template.content, null, 2)
       }
-
-      // Combine with base prompt
-      return `${basePrompt}\n\nTemplate Context:\n${processedContent}`
+      
+      return systemMessage
     } catch (error) {
-      logger.error(`Template processing failed for ${templateId}:`, error)
-      return basePrompt
+      logger.error(`Failed to get template system prompt for ${templateId}:`, error)
+      return null
     }
+  }
+
+  /**
+   * Build user message with ALL context (KISS: Keep It Simple)
+   * User message = Variables + User prompt + All context
+   */
+  private buildUserMessage(
+    userPrompt: string,
+    variables?: Record<string, any>,
+    additionalContext?: string
+  ): string {
+    let userMessage = ''
+    
+    // 1. Add variables (project-specific data)
+    if (variables && Object.keys(variables).length > 0) {
+      userMessage += 'PROJECT CONTEXT:\n'
+      userMessage += JSON.stringify(variables, null, 2)
+      userMessage += '\n\n'
+    }
+    
+    // 2. Add user's request
+    if (userPrompt) {
+      userMessage += 'USER REQUEST:\n'
+      userMessage += userPrompt
+      userMessage += '\n\n'
+    }
+    
+    // 3. Add additional context (from project/documents/integrations)
+    if (additionalContext) {
+      userMessage += 'ADDITIONAL CONTEXT:\n'
+      userMessage += additionalContext
+      userMessage += '\n\n'
+    }
+    
+    // 4. Add explicit instruction
+    userMessage += 'Please extract the information above and populate the template using the provided data.'
+    
+    return userMessage
   }
 }
 

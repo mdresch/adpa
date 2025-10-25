@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { Skeleton, SkeletonLine } from "@/components/ui/skeleton"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,7 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { FileText, Plus, Edit, Copy, Trash2, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles } from "lucide-react"
+import { FileText, Plus, Edit, Copy, Archive, Download, Upload, Search, Filter, Minus, Wand2, Brain, Sparkles, Eye } from "lucide-react"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
 import {
@@ -68,7 +69,18 @@ const getSystemPromptSuggestions = (framework: string): string[] => {
   ]
 }
 
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary' },
+  testing: { emoji: '🔵', label: 'Testing', color: 'default' },
+  compliance: { emoji: '🟣', label: 'Compliance Review', color: 'default' },
+  validated: { emoji: '🟡', label: 'Validated', color: 'default' },
+  production: { emoji: '🟢', label: 'Production', color: 'default' },
+  archived: { emoji: '📦', label: 'Archived', color: 'secondary' },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'destructive' },
+}
+
 export default function Templates() {
+  const router = useRouter()
   const [templates, setTemplates] = useState<any[]>([])
   const [loading, setLoading] = useState<boolean>(true)
 
@@ -192,20 +204,17 @@ export default function Templates() {
     }
   }, [editingTemplate, isDialogOpen])
   const [submitting, setSubmitting] = useState(false)
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
-  const [selectedTemplateForGeneration, setSelectedTemplateForGeneration] = useState<any | null>(null)
-  const [generatePrompt, setGeneratePrompt] = useState("")
-  const [generating, setGenerating] = useState(false)
+  // generation from Templates view removed; use Process Flow instead
   const [downloadingIds, setDownloadingIds] = useState<string[]>([])
   const [cloningIds, setCloningIds] = useState<string[]>([])
   const [deletingIds, setDeletingIds] = useState<string[]>([])
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState<any | null>(null)
   const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState(false)
-  const [trashTemplates, setTrashTemplates] = useState<any[]>([])
-  const [loadingTrash, setLoadingTrash] = useState(false)
-  const [trashPage, setTrashPage] = useState(1)
-  const [trashLimit, setTrashLimit] = useState(10)
-  const [trashPagination, setTrashPagination] = useState<any | null>(null)
+  const [archiveTemplates, setArchiveTemplates] = useState<any[]>([])
+  const [loadingArchive, setLoadingArchive] = useState(false)
+  const [archivePage, setArchivePage] = useState(1)
+  const [archiveLimit, setArchiveLimit] = useState(10)
+  const [archivePagination, setArchivePagination] = useState<any | null>(null)
   const [hardDeletingId, setHardDeletingId] = useState<string | null>(null)
   const [confirmHardDeleteTemplate, setConfirmHardDeleteTemplate] = useState<any | null>(null)
   const [isConfirmHardDeleteOpen, setIsConfirmHardDeleteOpen] = useState(false)
@@ -260,56 +269,21 @@ export default function Templates() {
     }
   }
 
-  const openGenerateDialog = (template: any) => {
-    setSelectedTemplateForGeneration(template)
-    setGeneratePrompt(`Generate a document using the "${template.name || 'template'}" template.`)
-    setGenerateDialogOpen(true)
-  }
+  // (no generate dialog here)
 
-  const handleGenerateSubmit = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault()
-    const template = selectedTemplateForGeneration
-    if (!template?.id) return
-    setGenerating(true)
+  const loadArchive = async (page?: number) => {
+    const p = page || archivePage
+    setLoadingArchive(true)
     try {
-      const response = await apiClient.generateContent({ prompt: generatePrompt, provider: 'openai', template_id: String(template.id) })
-      // response may be string or object
-      const content = typeof response === 'string' ? response : JSON.stringify(response, null, 2)
-      const blob = new Blob([content], { type: 'text/plain' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      const safeName = (template.name || 'generated').replace(/[^a-z0-9\-_.]/gi, '_')
-      a.href = url
-      a.download = `${safeName}-generated.txt`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      URL.revokeObjectURL(url)
-      toast.success('Generation complete — download started')
+      const resp = await apiClient.getDeletedTemplates({ page: p, limit: archiveLimit })
+      setArchiveTemplates(resp.templates || [])
+      setArchivePagination(resp.pagination || null)
+      setArchivePage(p)
     } catch (err: any) {
-      console.error('Failed to generate from template', err)
-      toast.error(err?.message || 'Failed to generate from template')
+      console.error('Failed to load archive', err)
+      toast.error(err?.message || 'Failed to load archive')
     } finally {
-      setGenerating(false)
-      setGenerateDialogOpen(false)
-      setSelectedTemplateForGeneration(null)
-      setGeneratePrompt("")
-    }
-  }
-
-  const loadTrash = async (page?: number) => {
-    const p = page || trashPage
-    setLoadingTrash(true)
-    try {
-      const resp = await apiClient.getDeletedTemplates({ page: p, limit: trashLimit })
-      setTrashTemplates(resp.templates || [])
-      setTrashPagination(resp.pagination || null)
-      setTrashPage(p)
-    } catch (err: any) {
-      console.error('Failed to load trash', err)
-      toast.error(err?.message || 'Failed to load trash')
-    } finally {
-      setLoadingTrash(false)
+      setLoadingArchive(false)
     }
   }
 
@@ -350,8 +324,8 @@ export default function Templates() {
       await apiClient.restoreTemplate(String(template.id))
       toast.success('Template restored')
   await loadTemplates({ showLoading: true })
-  // refresh current trash page
-  await loadTrash(trashPage)
+  // refresh current archive page
+  await loadArchive(archivePage)
     } catch (err: any) {
       console.error('Failed to restore template', err)
       toast.error(err?.message || 'Failed to restore template')
@@ -377,7 +351,7 @@ export default function Templates() {
       await apiClient.hardDeleteTemplate(id)
       toast.success('Template permanently deleted')
   // Reload the current page after deletion
-  await loadTrash(trashPage)
+  await loadArchive(archivePage)
     } catch (err: any) {
       console.error('Failed to hard delete template', err)
       toast.error(err?.message || 'Failed to permanently delete template')
@@ -451,7 +425,9 @@ export default function Templates() {
       template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       template.description.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesFramework = selectedFramework === "all" || template.framework === selectedFramework
-    return matchesSearch && matchesFramework
+    // Exclude archived templates from main views (they appear only in Archive tab)
+    const isNotArchived = template.development_status !== 'archived' && !template.deleted_at
+    return matchesSearch && matchesFramework && isNotArchived
   })
 
   return (
@@ -751,7 +727,7 @@ export default function Templates() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-                {/* Hard Delete Dialog for Trash */}
+                {/* Hard Delete Dialog for Archive */}
                 <Dialog open={isConfirmHardDeleteOpen} onOpenChange={(open) => { if (!open) { setIsConfirmHardDeleteOpen(false); setConfirmHardDeleteTemplate(null) } }}>
                   <DialogContent className="sm:max-w-[420px]">
                     <DialogHeader>
@@ -769,29 +745,7 @@ export default function Templates() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-                {/* Generate from Template Dialog */}
-                <Dialog open={generateDialogOpen} onOpenChange={(open) => { if (!open) { setGenerateDialogOpen(false); setSelectedTemplateForGeneration(null); setGeneratePrompt("") } }}>
-                  <DialogContent className="sm:max-w-[600px]">
-                    <form onSubmit={handleGenerateSubmit}>
-                      <DialogHeader>
-                        <DialogTitle>Generate From Template</DialogTitle>
-                        <DialogDescription>Provide a prompt to generate a document using this template.</DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        <div>
-                          <label className="text-sm font-medium">Prompt</label>
-                          <textarea aria-label="Generate prompt" placeholder="Provide instructions for the document generation" className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1" value={generatePrompt} onChange={(e) => setGeneratePrompt(e.target.value)} />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <div className="flex gap-2">
-                          <Button type="button" variant="outline" onClick={() => { setGenerateDialogOpen(false); setSelectedTemplateForGeneration(null); setGeneratePrompt("") }} disabled={generating}>Cancel</Button>
-                          <Button type="submit" disabled={generating}>{generating ? 'Generating...' : 'Generate'}</Button>
-                        </div>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
-                </Dialog>
+                {/* Generate dialog removed */}
               </div>
             </div>
 
@@ -827,7 +781,10 @@ export default function Templates() {
                 <TabsTrigger value="grid">Grid View</TabsTrigger>
                 <TabsTrigger value="list">List View</TabsTrigger>
                 <TabsTrigger value="categories">By Category</TabsTrigger>
-                <TabsTrigger value="trash" onClick={() => loadTrash()}>Trash</TabsTrigger>
+                <TabsTrigger value="archive" onClick={() => loadArchive()}>
+                  <Archive className="h-4 w-4 mr-2" />
+                  Archive
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="grid" className="space-y-4">
@@ -836,14 +793,17 @@ export default function Templates() {
                 )}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredTemplates.map((template) => (
-                    <Card key={template.id} className="hover:shadow-md transition-shadow">
+                    <Card key={template.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => router.push(`/templates/${template.id}`)}>
                       <CardHeader>
                         <div className="flex items-start justify-between">
                           <FileText className="h-8 w-8 text-primary" />
                           <div className="flex space-x-1">
-                            <Badge variant={template.status === "active" ? "default" : "secondary"}>
-                              {template.status}
-                            </Badge>
+                            {/* Development Status Badge */}
+                            {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                              <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].color as any}>
+                                {statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}
+                              </Badge>
+                            )}
                             <Badge variant="outline">{template.framework}</Badge>
                             {template.system_prompt && (
                               <Badge variant="secondary" className="bg-blue-100 text-blue-800">
@@ -853,26 +813,34 @@ export default function Templates() {
                             )}
                           </div>
                         </div>
-                        <CardTitle className="text-lg">{template.name}</CardTitle>
+                        <CardTitle 
+                          className="text-lg hover:text-primary transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            router.push(`/templates/${template.id}`)
+                          }}
+                        >
+                          {template.name}
+                        </CardTitle>
                         <CardDescription className="line-clamp-2">{template.description}</CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-3">
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Version:</span>
-                            <span className="font-medium">{template.version}</span>
+                            <span className="font-medium">v{template?.prompt_version || 1}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Usage:</span>
-                            <span className="font-medium">{template.usage} times</span>
+                            <span className="font-medium">{Number(template?.validation_count ?? 0)} times</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Modified:</span>
-                            <span className="font-medium">{template.lastModified}</span>
+                            <span className="font-medium">{template?.updated_at ? new Date(template.updated_at).toLocaleString() : '—'}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Author:</span>
-                            <span className="font-medium">{template.author}</span>
+                            <span className="font-medium">{template?.created_by_name || template?.author || '—'}</span>
                           </div>
 
                           {/* AI Enhancement Information */}
@@ -893,29 +861,43 @@ export default function Templates() {
                             </div>
                           )}
 
+                          {/* Health & Validation Info */}
+                          {template.validation_count > 0 && (
+                            <div className="pt-2 border-t">
+                              <div className="flex items-center justify-between text-xs">
+                                <span className="text-muted-foreground">Success Rate:</span>
+                                <span className="font-semibold">
+                                  {template.success_rate !== undefined && template.success_rate !== null
+                                    ? Number(template.success_rate)
+                                    : template.validation_count > 0
+                                      ? Math.round((template.success_count / template.validation_count) * 100)
+                                      : 0}%
+                                </span>
+                              </div>
+                              <div className="flex items-center justify-between text-xs mt-1">
+                                <span className="text-muted-foreground">Validations:</span>
+                                <span>{template.validation_count}</span>
+                              </div>
+                            </div>
+                          )}
+
                           <div className="flex space-x-2 pt-2">
-                            <Button size="sm" className="flex-1" onClick={() => openEditDialog(template)}>
-                              <Edit className="h-4 w-4 mr-1" />
-                              Edit
-                            </Button>
-                            <Button size="sm" variant="secondary" onClick={() => openGenerateDialog(template)}>
-                              <Plus className="h-4 w-4 mr-1" />
-                              Generate
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleClone(template)} disabled={cloningIds.includes(String(template.id))}>
-                              <Copy className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleDownload(template)}
-                              disabled={downloadingIds.includes(String(template.id))}
+                            <Button 
+                              size="sm" 
+                              className="flex-1" 
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                router.push(`/templates/${template.id}`)
+                              }}
                             >
-                              <Download className="h-4 w-4" />
-                              {downloadingIds.includes(String(template.id)) ? <span className="sr-only">Downloading</span> : null}
+                              <Eye className="h-4 w-4 mr-1" />
+                              View
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDelete(template)} disabled={deletingIds.includes(String(template.id))}>
-                              <Trash2 className="h-4 w-4" />
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openEditDialog(template) }}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleClone(template) }} disabled={cloningIds.includes(String(template.id))}>
+                              <Copy className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
@@ -943,13 +925,13 @@ export default function Templates() {
                               </div>
                               <p className="text-sm text-muted-foreground">{template.description}</p>
                               <div className="flex items-center space-x-4 text-xs text-muted-foreground mt-1">
-                                <span>v{template.version}</span>
+                                <span>v{String((template?.content?.metadata?.version) || template.version || '—')}</span>
                                 <span>•</span>
-                                <span>{template.usage} uses</span>
+                                <span>{Number(template?.usage_count ?? template?.usage ?? 0)} uses</span>
                                 <span>•</span>
-                                <span>Modified {template.lastModified}</span>
+                                <span>Modified {template?.updated_at ? new Date(template.updated_at).toLocaleString() : '—'}</span>
                                 <span>•</span>
-                                <span>by {template.author}</span>
+                                <span>by {template?.created_by_name || template?.author || '—'}</span>
                               </div>
                             </div>
                           </div>
@@ -958,10 +940,7 @@ export default function Templates() {
                               <Edit className="h-4 w-4 mr-1" />
                               Edit
                             </Button>
-                            <Button size="sm" variant="secondary" onClick={() => openGenerateDialog(template)}>
-                              <Plus className="h-4 w-4 mr-1" />
-                              Generate
-                            </Button>
+                            {/* Generate button removed in list view as well */}
                             <Button variant="outline" size="sm" onClick={() => handleClone(template)} disabled={cloningIds.includes(String(template.id))}>
                               <Copy className="h-4 w-4" />
                             </Button>
@@ -973,9 +952,6 @@ export default function Templates() {
                             >
                               <Download className="h-4 w-4" />
                               {downloadingIds.includes(String(template.id)) ? <span className="sr-only">Downloading</span> : null}
-                            </Button>
-                            <Button variant="outline" size="sm" onClick={() => handleDelete(template)} disabled={deletingIds.includes(String(template.id))}>
-                              <Trash2 className="h-4 w-4" />
                             </Button>
                           </div>
                         </div>
@@ -1028,11 +1004,11 @@ export default function Templates() {
                   )
                 })}
               </TabsContent>
-              <TabsContent value="trash" className="space-y-4">
-                {loadingTrash ? (
+              <TabsContent value="archive" className="space-y-4">
+                {loadingArchive ? (
                   // show skeleton placeholders while loading
                   <div className="space-y-3">
-                    {[...Array(Math.min(3, trashLimit || 3)).keys()].map((i) => (
+                    {[...Array(Math.min(3, archiveLimit || 3)).keys()].map((i) => (
                       <Card key={`skeleton-${i}`} className="animate-pulse">
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
@@ -1051,20 +1027,31 @@ export default function Templates() {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {trashTemplates.length === 0 && (
-                      <div className="p-4 text-sm text-muted-foreground">No deleted templates</div>
+                    {archiveTemplates.length === 0 && (
+                      <div className="p-4 text-sm text-muted-foreground flex items-center gap-2">
+                        <Archive className="h-5 w-5" />
+                        <span>No archived templates</span>
+                      </div>
                     )}
-                    {trashTemplates.map((template) => (
+                    {archiveTemplates.map((template) => (
                       <Card key={template.id}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="font-semibold">{template.name}</h3>
-                              <p className="text-sm text-muted-foreground">Deleted: {template.deleted_at}</p>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <h3 className="font-semibold">{template.name}</h3>
+                                <Badge variant="secondary" className="text-xs">
+                                  📦 Archived
+                                </Badge>
+                              </div>
+                              <p className="text-sm text-muted-foreground">{template.description}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Framework: {template.framework} • Category: {template.category} • Archived: {new Date(template.deleted_at).toLocaleDateString()}
+                              </p>
                             </div>
                             <div className="flex items-center space-x-2">
-                              <Button size="sm" onClick={() => handleRestore(template)} disabled={loadingTrash}>Restore</Button>
-                              <Button variant="destructive" size="sm" onClick={() => handleConfirmHardDelete(template)} disabled={loadingTrash || hardDeletingId === String(template.id)}>Delete Permanently</Button>
+                              <Button size="sm" onClick={() => handleRestore(template)} disabled={loadingArchive}>Restore</Button>
+                              <Button variant="destructive" size="sm" onClick={() => handleConfirmHardDelete(template)} disabled={loadingArchive || hardDeletingId === String(template.id)}>Delete Permanently</Button>
                             </div>
                           </div>
                         </CardContent>
@@ -1073,23 +1060,23 @@ export default function Templates() {
                   </div>
                 )}
 
-                {trashPagination && (
+                {archivePagination && (
                   <div className="flex items-center justify-between mt-4">
                     <div className="flex items-center space-x-4">
-                      <div className="text-sm text-muted-foreground">Page {trashPagination.page} of {trashPagination.pages} — {trashPagination.total} items</div>
+                      <div className="text-sm text-muted-foreground">Page {archivePagination.page} of {archivePagination.pages} — {archivePagination.total} items</div>
                       <div className="flex items-center space-x-2 text-sm">
                         <label className="text-sm text-muted-foreground">Per page</label>
                         <select
                           aria-label="Items per page"
-                          value={trashLimit}
+                          value={archiveLimit}
                           onChange={(e) => {
                             const v = Number(e.target.value) || 10
-                            setTrashLimit(v)
-                            setTrashPage(1)
-                            loadTrash(1)
+                            setArchiveLimit(v)
+                            setArchivePage(1)
+                            loadArchive(1)
                           }}
                           className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-                          disabled={loadingTrash}
+                          disabled={loadingArchive}
                         >
                           <option value={10}>10</option>
                           <option value={25}>25</option>
@@ -1103,36 +1090,36 @@ export default function Templates() {
                       <input
                         type="number"
                         min={1}
-                        max={trashPagination.pages}
-                        value={trashPage}
-                        onChange={(e) => setTrashPage(Number(e.target.value || 1))}
+                        max={archivePagination.pages}
+                        value={archivePage}
+                        onChange={(e) => setArchivePage(Number(e.target.value || 1))}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
-                            let p = Number(trashPage) || 1
-                            p = Math.max(1, Math.min(trashPagination.pages, p))
-                            setTrashPage(p)
-                            loadTrash(p)
+                            let p = Number(archivePage) || 1
+                            p = Math.max(1, Math.min(archivePagination.pages, p))
+                            setArchivePage(p)
+                            loadArchive(p)
                           }
                         }}
                         onBlur={() => {
-                          let p = Number(trashPage) || 1
-                          p = Math.max(1, Math.min(trashPagination.pages, p))
-                          setTrashPage(p)
-                          loadTrash(p)
+                          let p = Number(archivePage) || 1
+                          p = Math.max(1, Math.min(archivePagination.pages, p))
+                          setArchivePage(p)
+                          loadArchive(p)
                         }}
                         className="w-16 rounded-md border border-input px-2 py-1 text-sm"
-                        disabled={loadingTrash}
+                        disabled={loadingArchive}
                         aria-label="Page number"
                       />
-                      {loadingTrash && (
+                      {loadingArchive && (
                         <svg className="animate-spin h-5 w-5 text-muted" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden>
                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
                         </svg>
                       )}
                       </div>
-                      <Button variant="outline" size="sm" onClick={() => { const p = Math.max(1, trashPage - 1); setTrashPage(p); loadTrash(p) }} disabled={loadingTrash || trashPage <= 1}>Prev</Button>
-                      <Button variant="outline" size="sm" onClick={() => { const p = Math.min(trashPagination.pages, trashPage + 1); setTrashPage(p); loadTrash(p) }} disabled={loadingTrash || trashPage >= trashPagination.pages}>Next</Button>
+                      <Button variant="outline" size="sm" onClick={() => { const p = Math.max(1, archivePage - 1); setArchivePage(p); loadArchive(p) }} disabled={loadingArchive || archivePage <= 1}>Prev</Button>
+                      <Button variant="outline" size="sm" onClick={() => { const p = Math.min(archivePagination.pages, archivePage + 1); setArchivePage(p); loadArchive(p) }} disabled={loadingArchive || archivePage >= archivePagination.pages}>Next</Button>
                     </div>
                   </div>
                 )}

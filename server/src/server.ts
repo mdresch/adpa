@@ -20,17 +20,21 @@ import { pool } from "./database/connection"
 // Routes
 import authRoutes from "./routes/auth"
 import projectRoutes from "./routes/projects"
+import programRoutes from "./routes/programRoutes"
 import documentRoutes from "./routes/documents"
 import userRoutes from "./routes/users"
 import aiRoutes from "./routes/ai"
 import aiProvidersRoutes from "./routes/ai-providers"
+import aiFailoverRoutes from "./routes/ai-failover"
 import analyticsRoutes from "./routes/analytics"
 import jobRoutes from "./routes/jobs"
+import queueStatsRoutes from "./routes/queue-stats"
 import securityRoutes from "./routes/security"
 import integrationRoutes from "./routes/integrations"
 import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
+import ibabsRoutes from "./routes/ibabsRoutes"
 import templateRoutes from "./routes/templates"
 import templateAnalyticsRoutes from "./routes/template-analytics"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
@@ -54,24 +58,83 @@ import contextInjectionRoutes from "./routes/context-injection"
 import pipelineRoutes from "./routes/pipeline"
 import documentGenerationRoutes from "./routes/documentGeneration"
 import templateStatsRoutes from "./routes/template-stats"
+import settingsRoutes from "./routes/settings"
+import baselinesRoutes from "./routes/baselines"
 
 const app = express()
 const server = createServer(app)
 const io = new SocketIOServer(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true)
+      
+      // Check if origin matches any allowed pattern
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin
+        }
+        if (allowed instanceof RegExp) {
+          return allowed.test(origin)
+        }
+        return false
+      })
+      
+      if (isAllowed) {
+        callback(null, true)
+      } else {
+        console.warn(`Socket.IO CORS blocked origin: ${origin}`)
+        callback(new Error(`Origin ${origin} not allowed by CORS`))
+      }
+    },
     methods: ["GET", "POST"],
+    credentials: true,
   },
 })
 
-const PORT = process.env.PORT || 5000
+const PORT = parseInt(process.env.PORT || "5000", 10)
 
 // Middleware
 app.use(helmet())
+
+// CORS Configuration - Allow Vercel deployments
+const allowedOrigins = [
+  "http://localhost:3000",                    // Local development
+  "http://localhost:3001",                    // Alternative local port
+  process.env.FRONTEND_URL,                   // Configured frontend URL
+  /https:\/\/.*\.vercel\.app$/,               // All Vercel preview deployments
+  /https:\/\/adpa.*\.vercel\.app$/,           // ADPA Vercel deployments
+  "https://adpa.vercel.app",                  // Production Vercel domain
+  "https://adpa-production.up.railway.app",   // Railway frontend (if accessing directly)
+]
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true)
+      
+      // Check if origin matches any allowed pattern
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin
+        }
+        if (allowed instanceof RegExp) {
+          return allowed.test(origin)
+        }
+        return false
+      })
+      
+      if (isAllowed) {
+        callback(null, true)
+      } else {
+        logger.warn(`CORS blocked origin: ${origin}`)
+        callback(new Error(`Origin ${origin} not allowed by CORS`))
+      }
+    },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   }),
 )
 // assign a request id to each incoming request
@@ -81,6 +144,7 @@ app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
 // Analytics tracking middleware (tracks all API requests automatically)
 import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
+// Enable analytics in all environments (database schema verified Oct 2025)
 app.use(analyticsMiddleware)
 logger.info("📊 Analytics tracking middleware enabled")
 
@@ -106,13 +170,16 @@ app.use("/api/auth", authRoutes)
 console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
+app.use("/api/programs", programRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/documents", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/ai", aiRoutes)
 app.use("/api/ai-providers", aiProvidersRoutes)
+app.use("/api/ai-failover", aiFailoverRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
+app.use("/api/queue-stats", queueStatsRoutes)
 app.use("/api/security", securityRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
@@ -120,6 +187,7 @@ app.use("/api/integrations", integrationRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
+app.use("/api/integrations/ibabs", ibabsRoutes)
 app.use("/api/templates", templateRoutes)
 app.use("/api/template-analytics", templateAnalyticsRoutes)
 app.use("/api/template-stats", templateStatsRoutes)
@@ -138,10 +206,12 @@ app.use("/api/process-flow", processFlowRoutes)
 app.use("/api/ai-models", aiModelsRoutes)
 // app.use("/api/ai-analytics", aiAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
+app.use("/api/settings", settingsRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
 app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
+app.use("/api/baselines", baselinesRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
@@ -246,6 +316,43 @@ async function startServer() {
       console.log("📊 Connecting to database...")
       await connectDatabase()
       console.log("✅ Database connected successfully")
+      
+      // Auto-create document_summaries table if it doesn't exist
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS document_summaries (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+            compression_method VARCHAR(50) NOT NULL,
+            compression_level DECIMAL(3,2) NOT NULL,
+            target_tokens INTEGER NOT NULL,
+            original_content TEXT NOT NULL,
+            original_tokens INTEGER NOT NULL,
+            compressed_content TEXT NOT NULL,
+            compressed_tokens INTEGER NOT NULL,
+            compression_ratio DECIMAL(5,4) NOT NULL,
+            ai_provider VARCHAR(100),
+            ai_model VARCHAR(100),
+            template_context JSONB,
+            template_context_hash VARCHAR(64),
+            document_version INTEGER NOT NULL DEFAULT 1,
+            is_valid BOOLEAN NOT NULL DEFAULT true,
+            times_reused INTEGER NOT NULL DEFAULT 0,
+            last_reused_at TIMESTAMP,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT document_summaries_unique_cache_v2 UNIQUE (document_id, compression_method, compression_level, template_context_hash)
+          );
+          
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_document_id ON document_summaries(document_id);
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_valid ON document_summaries(is_valid) WHERE is_valid = true;
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_method ON document_summaries(compression_method);
+          CREATE INDEX IF NOT EXISTS idx_document_summaries_reuse ON document_summaries(times_reused DESC);
+        `)
+        console.log("✅ document_summaries table ready (auto-migration)")
+      } catch (migrationError) {
+        console.warn("⚠️  Could not create document_summaries table:", migrationError)
+      }
     } catch (dbError) {
       console.warn(
         "⚠️  Database connection failed, starting server without database:",
@@ -314,6 +421,12 @@ async function startServer() {
 // }
 
 export { app, io }
+
+
+
+
+
+
 
 
 

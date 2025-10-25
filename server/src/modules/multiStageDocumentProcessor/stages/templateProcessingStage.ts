@@ -172,6 +172,33 @@ export class TemplateProcessingStage {
       const template = await this.loadTemplate(input.input_data.template_id)
       logger.info('Template loaded', { template_id: template.template_id })
 
+      // 🔍 DEBUG: Log template details
+      logger.info('🎯 TEMPLATE PROCESSING DEBUG', {
+        template_id: template.template_id,
+        template_name: template.template_name,
+        has_system_prompt: !!template.system_prompt,
+        system_prompt_length: template.system_prompt?.length || 0,
+        system_prompt_preview: template.system_prompt?.substring(0, 150) || 'NO SYSTEM PROMPT',
+        has_prompt_build_up: !!template.prompt_build_up,
+        template_content_length: template.content?.length || 0
+      })
+
+      // 🔍 DEBUG: Check if it's extraction-focused
+      if (template.system_prompt) {
+        const isExtractionFocused = 
+          template.system_prompt.includes('EXTRACT') &&
+          template.system_prompt.includes('REAL PROJECT DATA') &&
+          template.system_prompt.includes('DO NOT generate')
+        
+        logger.info('✨ TEMPLATE PROMPT TYPE', {
+          template_id: template.template_id,
+          is_extraction_focused: isExtractionFocused,
+          has_extract_keyword: template.system_prompt.includes('EXTRACT'),
+          has_real_data_keyword: template.system_prompt.includes('REAL PROJECT DATA'),
+          has_do_not_rules: template.system_prompt.includes('DO NOT')
+        })
+      }
+
       // Step 2: Extract variables from template
       const variables = await this.extractVariables(template)
       logger.info('Variables extracted', { count: variables.length })
@@ -276,17 +303,17 @@ export class TemplateProcessingStage {
   private async loadTemplate(templateId: string): Promise<any> {
     const result = await pool.query(
       `SELECT 
-        template_id,
-        template_name,
+        id as template_id,
+        name as template_name,
         framework,
         content,
         system_prompt,
         context_injection_config,
-        prompt_buildup_config,
-        version,
-        metadata
+        prompt_build_up as prompt_buildup_config,
+        1 as version,
+        '{}'::jsonb as metadata
       FROM templates
-      WHERE template_id = $1`,
+      WHERE id = $1`,
       [templateId]
     )
 
@@ -607,14 +634,16 @@ export class TemplateProcessingStage {
         // Build enhancement prompt
         const enhancementPrompt = this.buildEnhancementPrompt(section, context, config)
 
-        // Call AI service
-        const aiResponse = await this.aiService.generate({
+        // Call AI service with dynamic fallback (queries DB for active providers)
+        const aiResponse = await this.aiService.generateWithFallback({
           prompt: enhancementPrompt,
-          provider: config.ai_provider || 'openai',
-          model: config.ai_model || 'gpt-4',
+          provider: config.ai_provider || 'google',
+          model: config.ai_model || 'gemini-2.5-flash',
           temperature: config.temperature || 0.7,
           max_tokens: config.max_tokens || 2000
         })
+        
+        logger.info(`✨ Provider used for enhancement: ${aiResponse.providerUsed}`)
 
         const enhancedContent = aiResponse.content?.trim() || section.content
 
@@ -758,6 +787,7 @@ ${config.custom_instructions || `
     // Base quality score (20 points)
     const baseScore = 20
 
-    return Math.min(variableScore + enhancementScore + baseScore, 100)
+    // Return as decimal (0.0-1.0) not percentage (0-100)
+    return Math.min(variableScore + enhancementScore + baseScore, 100) / 100
   }
 }

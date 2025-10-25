@@ -14,6 +14,8 @@ out/
 
 # production
 /build
+coverage/
+*.lcov
 
 # debug
 npm-debug.log*
@@ -23,6 +25,11 @@ yarn-error.log*
 
 # env files
 .env
+.env.*
+!.env.*.example
+.env.local
+.env.production
+.env.vercel.production
 
 # vercel
 .vercel
@@ -42,7 +49,7 @@ next-env.d.ts
 .pnpm-store/
 
 # Test files and temporary files
-__tests__/
+# __tests__/  # Allow test files to be tracked
 test-*.json
 test-*.js
 test-*.css
@@ -97,7 +104,7 @@ server/src/routes/azure-ai-foundry.ts
 # Frontend experimental pages
 app/ai-analytics/
 app/ecs-ai/
-app/process-flow/
+# app/process-flow/  # NOW ENABLED FOR PRODUCTION
 
 # UI components and styles (experimental)
 # components/ui/icons-shim.tsx  # NOW ENABLED FOR PRODUCTION

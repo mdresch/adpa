@@ -92,8 +92,8 @@ export const schemas = {
   // Project schemas
   createProject: Joi.object({
     name: Joi.string().min(2).max(255).required(),
-    description: Joi.string().max(1000).optional(),
-    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").required(),
+    description: Joi.string().max(3000).optional(),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "PMBOK", "PMBOK 7", "DMBOK").required(),
     priority: Joi.string().valid("low", "medium", "high", "critical").default("medium"),
     start_date: Joi.date().optional(),
     end_date: Joi.date().greater(Joi.ref("start_date")).optional(),
@@ -103,7 +103,7 @@ export const schemas = {
   
   updateProject: Joi.object({
     name: Joi.string().min(2).max(255).optional(),
-    description: Joi.string().max(1000).optional(),
+    description: Joi.string().max(3000).optional(),
     framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").optional(),
     status: Joi.string().valid("active", "inactive", "completed", "archived").optional(),
     priority: Joi.string().valid("low", "medium", "high", "critical").optional(),

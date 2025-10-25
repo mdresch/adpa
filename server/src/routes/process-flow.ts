@@ -13,7 +13,14 @@ import ProcessFlowService from '../services/processFlowService'
 import { documentCompressionService } from '../services/documentCompressionService'
 
 const router = Router()
-const processFlowService = new ProcessFlowService(pool)
+
+// Initialize service lazily to ensure pool is connected
+function getProcessFlowService() {
+  if (!pool) {
+    throw new Error('Database connection not initialized')
+  }
+  return new ProcessFlowService(pool)
+}
 
 /**
  * GET /api/process-flow/templates
@@ -28,7 +35,7 @@ router.get('/templates',
     try {
       log.info('Getting available templates for process flow')
       
-      const templates = await processFlowService.getAvailableTemplates()
+      const templates = await getProcessFlowService().getAvailableTemplates()
       
       res.json({
         success: true,
@@ -59,7 +66,7 @@ router.get('/projects',
     try {
       log.info('Getting available projects for process flow')
       
-      const projects = await processFlowService.getAvailableProjects()
+      const projects = await getProcessFlowService().getAvailableProjects()
       
       res.json({
         success: true,
@@ -92,7 +99,7 @@ router.get('/projects/:projectId/documents',
       const { projectId } = req.params
       log.info(`Getting documents for project ${projectId}`)
       
-      const documents = await processFlowService.getProjectDocuments(projectId)
+      const documents = await getProcessFlowService().getProjectDocuments(projectId)
       
       res.json({
         success: true,
@@ -125,7 +132,7 @@ router.get('/providers/:providerId/models',
       const { providerId } = req.params
       log.info(`Getting models for AI provider ${providerId}`)
       
-      const models = await processFlowService.getProviderModels(providerId)
+      const models = await getProcessFlowService().getProviderModels(providerId)
       
       res.json({
         success: true,
@@ -195,7 +202,7 @@ router.post('/prioritize-documents',
         })
       }
       
-      const prioritizedDocuments = await processFlowService.calculateDocumentPriorities(documents, strategy)
+      const prioritizedDocuments = await getProcessFlowService().calculateDocumentPriorities(documents, strategy)
       
       res.json({
         success: true,
@@ -238,7 +245,7 @@ router.post('/analyze-context-window',
       const { templateId, projectId, prioritizedDocuments, maxTokens } = req.body
       log.info(`Analyzing context window for template ${templateId} and project ${projectId}`)
       
-      const analysis = await processFlowService.analyzeContextWindow(
+      const analysis = await getProcessFlowService().analyzeContextWindow(
         templateId,
         projectId,
         prioritizedDocuments,
@@ -263,7 +270,7 @@ router.post('/analyze-context-window',
 
 /**
  * POST /api/process-flow/start-workflow
- * Start workflow processing
+ * Start workflow processing (as background job)
  */
 router.post('/start-workflow',
   authenticateToken,
@@ -284,33 +291,49 @@ router.post('/start-workflow',
     
     try {
       const config = req.body
-      log.info(`Starting workflow processing for template ${config.templateId} and project ${config.projectId}`)
+      const userId = req.user?.id
+      log.info(`Queueing workflow processing for template ${config.templateId} and project ${config.projectId}`)
       
-      const result = await processFlowService.startWorkflowProcessing(config)
+      // Import addJob from queueService
+      const { addJob } = await import('../services/queueService')
       
-      res.json({
+      // Generate job ID
+      const jobId = require('crypto').randomUUID()
+      
+      // Queue the job for async processing
+      await addJob('process-flow', {
+        jobId,
+        userId,
+        config
+      }, {
+        priority: 5,
+        attempts: 2,
+        backoff: {
+          type: 'exponential',
+          delay: 5000
+        }
+      })
+      
+      log.info(`Process-flow job queued: ${jobId}`)
+      
+      // Return job information immediately (async processing)
+      res.status(202).json({
         success: true,
+        message: 'Process flow workflow queued for processing',
         data: {
-          workflowId: result.workflowId,
-          steps: result.steps,
-          finalDocument: result.finalDocument,
-          savedDocument: result.savedDocument,
-          config,
-          summary: {
-            totalSteps: result.steps.length,
-            completedSteps: result.steps.filter(step => step.status === 'completed').length,
-            totalTokens: result.steps.reduce((sum, step) => sum + step.tokens, 0),
-            finalDocumentLength: result.finalDocument.length,
-            finalDocumentTokens: Math.ceil(result.finalDocument.length / 4)
-          }
+          jobId,
+          templateId: config.templateId,
+          projectId: config.projectId,
+          status: 'queued',
+          message: 'Your document is being generated in the background. Check the Jobs page for progress.'
         }
       })
       
     } catch (error) {
-      log.error('Error starting workflow processing:', error)
+      log.error('Error queueing workflow processing:', error)
       res.status(500).json({
         success: false,
-        error: 'Failed to start workflow processing',
+        error: 'Failed to queue workflow processing',
         message: error.message
       })
     }

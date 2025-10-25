@@ -183,28 +183,28 @@ export default function Dashboard() {
     { 
       icon: FileText, 
       label: "Generate Document", 
-      color: "from-blue-500 to-cyan-500",
+      color: "from-blue-600 to-blue-800",
       onClick: () => router.push("/projects"),
       description: "Create new documents"
     },
     { 
       icon: Zap, 
       label: "Configure AI", 
-      color: "from-purple-500 to-pink-500",
+      color: "from-blue-700 to-blue-900",
       onClick: () => router.push("/ai-providers"),
       description: "Manage AI providers"
     },
     { 
       icon: Users, 
       label: "Manage Users", 
-      color: "from-emerald-500 to-teal-500",
+      color: "from-blue-500 to-blue-700",
       onClick: () => router.push("/admin"),
       description: "User administration"
     },
     { 
       icon: TrendingUp, 
       label: "View Analytics", 
-      color: "from-orange-500 to-red-500",
+      color: "from-blue-800 to-slate-900",
       onClick: () => router.push("/ai-analytics"),
       description: "AI usage insights"
     },
@@ -244,9 +244,9 @@ export default function Dashboard() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, ease: "easeOut" }}
-                className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 p-8 text-white shadow-2xl"
+                className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 via-blue-700 to-blue-600 p-8 text-white shadow-2xl"
               >
-                <div className="absolute inset-0 bg-black/20"></div>
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-900/40 to-blue-800/20"></div>
                 <div className="relative z-10">
                   <motion.div
                     initial={{ opacity: 0, x: -20 }}
@@ -268,7 +268,7 @@ export default function Dashboard() {
                     transition={{ delay: 0.4, duration: 0.5 }}
                     className="text-xl opacity-90 max-w-2xl"
                   >
-                    Advanced Document Processing & Automation Framework - Your intelligent business automation platform
+                    Advanced Document Processing Analytics - Where every document builds intelligence for the next generation
                   </motion.p>
                 </div>
                 <motion.div
@@ -282,6 +282,160 @@ export default function Dashboard() {
                   className="absolute bottom-0 left-0 w-48 h-48 bg-white/5 rounded-full translate-y-24 -translate-x-24"
                 />
               </motion.div>
+
+              {/* Compounding Intelligence Showcase */}
+              <AnimatedCard className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg"
+                    >
+                      <Brain className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">Compounding Intelligence Engine</CardTitle>
+                      <CardDescription>Each document enhances the intelligence of future generations</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1, duration: 0.6 }}
+                      className="text-center p-6 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border border-blue-200 dark:border-blue-700"
+                    >
+                      <div className="text-4xl mb-4">🧠</div>
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Context Injection</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Previous high-quality documents automatically inform new generations with relevant context
+                      </p>
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2, duration: 0.6 }}
+                      className="text-center p-6 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border border-blue-300 dark:border-blue-600"
+                    >
+                      <div className="text-4xl mb-4">📊</div>
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Adaptive Compression</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Intelligent compression reduces token usage by up to 80% while preserving critical information
+                      </p>
+                    </motion.div>
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3, duration: 0.6 }}
+                      className="text-center p-6 rounded-xl bg-gradient-to-br from-blue-200 to-blue-300 dark:from-blue-700/20 dark:to-blue-600/20 border border-blue-400 dark:border-blue-500"
+                    >
+                      <div className="text-4xl mb-4">🔄</div>
+                      <h4 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">Knowledge Graph</h4>
+                      <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Documents form interconnected knowledge networks that evolve and improve over time
+                      </p>
+                    </motion.div>
+                  </div>
+                </CardContent>
+              </AnimatedCard>
+
+              {/* Smart Topic Centric Knowledge Compression */}
+              <AnimatedCard className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
+                    >
+                      <Brain className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">Smart Topic Centric Knowledge Compression</CardTitle>
+                      <CardDescription>AI-driven topic extraction and intelligent summarization with domain-specific primers</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                      ADPA's intelligent compression engine analyzes documents across multiple knowledge domains, 
+                      extracting key topics and building contextualized summaries primed with domain expertise. 
+                      Each knowledge area maintains its own compression matrix, ensuring critical information is preserved 
+                      while achieving up to 80% token reduction.
+                    </p>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      {[
+                        {
+                          domain: "Project Management",
+                          primer: "PMBOK 7th Edition",
+                          icon: "📋",
+                          topics: "Scope, Schedule, Budget, Risk, Stakeholders",
+                          color: "from-blue-500 to-blue-600"
+                        },
+                        {
+                          domain: "Business Analysis",
+                          primer: "BABOK v3",
+                          icon: "📊",
+                          topics: "Requirements, Processes, Enterprise Architecture",
+                          color: "from-blue-600 to-blue-700"
+                        },
+                        {
+                          domain: "Data Management",
+                          primer: "DMBOK Framework",
+                          icon: "🗄️",
+                          topics: "Data Governance, Quality, Architecture, Security",
+                          color: "from-blue-700 to-blue-800"
+                        },
+                        {
+                          domain: "Strategic Planning",
+                          primer: "Enterprise Strategy",
+                          icon: "🎯",
+                          topics: "Vision, Goals, KPIs, Portfolio Alignment",
+                          color: "from-blue-800 to-blue-900"
+                        }
+                      ].map((area, index) => (
+                        <motion.div
+                          key={area.domain}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: index * 0.1, duration: 0.6 }}
+                          whileHover={{ y: -4, scale: 1.02 }}
+                          className="p-4 rounded-lg border border-blue-200 dark:border-blue-700 hover:shadow-md transition-all duration-200"
+                        >
+                          <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${area.color} flex items-center justify-center text-2xl mb-3 shadow-lg`}>
+                            {area.icon}
+                          </div>
+                          <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                            {area.domain}
+                          </h4>
+                          <p className="text-xs text-blue-700 dark:text-blue-400 font-medium mb-2">
+                            {area.primer}
+                          </p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                            {area.topics}
+                          </p>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-2 flex items-center">
+                        <span className="text-lg mr-2">🎓</span>
+                        Context Building Intelligence
+                      </h4>
+                      <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                        Our AI analyzes each document through domain-specific lenses, identifying key concepts, 
+                        relationships, and dependencies. The system builds rich contextual summaries that maintain 
+                        semantic accuracy while dramatically reducing token consumption. Each summary is tagged with 
+                        relevance scores, confidence metrics, and cross-domain linkages for optimal reuse.
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </AnimatedCard>
 
               {/* System Status Cards */}
               <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -331,7 +485,7 @@ export default function Dashboard() {
                   <div className="flex items-center space-x-3">
                     <motion.div
                       whileHover={{ scale: 1.1 }}
-                      className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg"
+                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
                     >
                       <Zap className="h-6 w-6 text-white" />
                     </motion.div>
@@ -419,6 +573,329 @@ export default function Dashboard() {
                 </CardContent>
               </AnimatedCard>
 
+              {/* 10-Stage Enterprise Processing Pipeline */}
+              <AnimatedCard className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg"
+                    >
+                      <Activity className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">10-Stage Enterprise Document Processing Pipeline</CardTitle>
+                      <CardDescription>End-to-end intelligent processing from ingestion to enterprise integration</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {[
+                      {
+                        stage: "1. OCR & Ingestion",
+                        description: "Optical character recognition for scanned documents, PDFs, and images with format normalization",
+                        icon: "📄",
+                        color: "from-blue-400 to-blue-500"
+                      },
+                      {
+                        stage: "2. Context Gathering",
+                        description: "Collects relevant project documents, stakeholder information, and historical context",
+                        icon: "🔍",
+                        color: "from-blue-450 to-blue-550"
+                      },
+                      {
+                        stage: "3. Topic Extraction",
+                        description: "AI-driven topic analysis and domain-specific knowledge categorization across frameworks",
+                        icon: "🎯",
+                        color: "from-blue-500 to-blue-600"
+                      },
+                      {
+                        stage: "4. Content Prioritization",
+                        description: "Ranks content by relevance, importance, and impact using multi-dimensional scoring",
+                        icon: "📊",
+                        color: "from-blue-550 to-blue-650"
+                      },
+                      {
+                        stage: "5. Smart Compression",
+                        description: "Topic-centric compression with domain primers, achieving 80% token reduction",
+                        icon: "🗜️",
+                        color: "from-blue-600 to-blue-700"
+                      },
+                      {
+                        stage: "6. Context Injection",
+                        description: "Injects compressed, domain-aware context into AI prompts for enhanced generation",
+                        icon: "💉",
+                        color: "from-blue-650 to-blue-750"
+                      },
+                      {
+                        stage: "7. AI Generation",
+                        description: "Multi-provider AI generation with framework-specific templates and guardrails",
+                        icon: "🤖",
+                        color: "from-blue-700 to-blue-800"
+                      },
+                      {
+                        stage: "8. Quality Scoring",
+                        description: "Knowledge output matrix scoring: completeness, accuracy, coherence, compliance",
+                        icon: "⭐",
+                        color: "from-blue-750 to-blue-850"
+                      },
+                      {
+                        stage: "9. Analytics & Reporting",
+                        description: "Real-time metrics, cost analysis, quality dashboards, and ROI tracking",
+                        icon: "📈",
+                        color: "from-blue-800 to-blue-900"
+                      },
+                      {
+                        stage: "10. Enterprise Integration",
+                        description: "Seamless export to SharePoint, Confluence, Jira, and enterprise document systems",
+                        icon: "🔗",
+                        color: "from-blue-900 to-slate-900"
+                      }
+                    ].map((stage, index) => (
+                      <motion.div
+                        key={stage.stage}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: index * 0.1, duration: 0.6 }}
+                        whileHover={{ y: -2, scale: 1.02 }}
+                        className="p-4 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${stage.color} flex items-center justify-center text-lg shadow-lg`}>
+                            {stage.icon}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                              {stage.stage}
+                            </h4>
+                            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                              {stage.description}
+                            </p>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                </CardContent>
+              </AnimatedCard>
+
+              {/* Advanced Enterprise Intelligence Features */}
+              <AnimatedCard className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-800 to-slate-900 rounded-lg"
+                    >
+                      <TrendingUp className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">Advanced Enterprise Intelligence</CardTitle>
+                      <CardDescription>Proactive project management with AI-powered baseline tracking and drift detection</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Baseline & Drift Detection */}
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1, duration: 0.6 }}
+                        className="p-5 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border border-blue-200 dark:border-blue-700"
+                      >
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-2xl shadow-lg">
+                            📊
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base mb-1">
+                              Baseline & Drift Detection
+                            </h4>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+                              Automated scope deviation tracking
+                            </p>
+                          </div>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Scope Drift:</strong> Real-time detection of scope creep and unauthorized changes</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Technical Drift:</strong> Architecture and technology stack deviation alerts</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Timeline Drift:</strong> Schedule variance analysis with critical path impact</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Budget Drift:</strong> Cost overrun detection with automatic escalation</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Auto Change Requests:</strong> Generates CRs from detected positive deviations</span>
+                          </li>
+                        </ul>
+                      </motion.div>
+
+                      {/* Intelligent Feedback System */}
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.2, duration: 0.6 }}
+                        className="p-5 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border border-blue-300 dark:border-blue-600"
+                      >
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center text-2xl shadow-lg">
+                            💬
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base mb-1">
+                              Document Review Intelligence
+                            </h4>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+                              AI-powered feedback analytics
+                            </p>
+                          </div>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Multi-Level Feedback:</strong> Stakeholder, reviewer, and peer input aggregation</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Sentiment Analysis:</strong> AI-driven tone and satisfaction scoring</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Template Optimization:</strong> Continuous improvement based on feedback patterns</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Provider Performance:</strong> AI model effectiveness tracking and optimization</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Quality Trends:</strong> Longitudinal analysis of document quality evolution</span>
+                          </li>
+                        </ul>
+                      </motion.div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      {/* Hierarchical Project Management */}
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.3, duration: 0.6 }}
+                        className="p-5 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border border-blue-300 dark:border-blue-600"
+                      >
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center text-2xl shadow-lg">
+                            🏗️
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base mb-1">
+                              Hierarchical Project Management
+                            </h4>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+                              Portfolio → Program → Project → Task
+                            </p>
+                          </div>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Portfolio View:</strong> Strategic alignment and cross-program dependencies</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Program Management:</strong> Multi-project coordination and resource sharing</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Misalignment Detection:</strong> AI identifies over-elevated or hidden programs</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Consolidation Alerts:</strong> Suggests project mergers for efficiency gains</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Cross-Level Drift:</strong> Detects scope creep cascading across hierarchy</span>
+                          </li>
+                        </ul>
+                      </motion.div>
+
+                      {/* Resource Allocation Intelligence */}
+                      <motion.div
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.4, duration: 0.6 }}
+                        className="p-5 rounded-xl bg-gradient-to-br from-blue-200 to-blue-300 dark:from-blue-700/20 dark:to-blue-600/20 border border-blue-400 dark:border-blue-500"
+                      >
+                        <div className="flex items-start space-x-3 mb-4">
+                          <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-800 to-slate-900 flex items-center justify-center text-2xl shadow-lg">
+                            👥
+                          </div>
+                          <div>
+                            <h4 className="font-semibold text-slate-800 dark:text-slate-100 text-base mb-1">
+                              Resource Allocation Intelligence
+                            </h4>
+                            <p className="text-xs text-blue-700 dark:text-blue-400 font-medium">
+                              Integration-first approach
+                            </p>
+                          </div>
+                        </div>
+                        <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Jira Integration:</strong> Pull work logs and time tracking from existing systems</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Overallocation Alerts:</strong> Identifies resource conflicts across projects</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Underutilization Detection:</strong> Flags idle capacity and optimization opportunities</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Skill Gap Analysis:</strong> AI-driven competency mapping and recommendations</span>
+                          </li>
+                          <li className="flex items-start">
+                            <span className="text-blue-600 mr-2">•</span>
+                            <span><strong>Cross-Project View:</strong> Enterprise-wide resource utilization dashboard</span>
+                          </li>
+                        </ul>
+                      </motion.div>
+                    </div>
+
+                    {/* Value Proposition Banner */}
+                    <div className="bg-gradient-to-r from-blue-700 to-blue-900 rounded-lg p-6 text-white shadow-xl">
+                      <div className="flex items-center space-x-4">
+                        <div className="text-4xl">🎯</div>
+                        <div className="flex-1">
+                          <h4 className="font-bold text-lg mb-2">Proactive Intelligence, Not Reactive Management</h4>
+                          <p className="text-sm text-blue-100 leading-relaxed">
+                            ADPA's advanced features transform traditional project management from reactive firefighting to proactive intelligence. 
+                            Detect issues before they become problems, optimize resource allocation in real-time, and maintain perfect alignment 
+                            from portfolio strategy down to individual tasks. Estimated ROI: <strong>300-500% over 18 months</strong>.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </AnimatedCard>
+
               {/* Performance Metrics */}
               <AnimatedCard
                 delay={0.5}
@@ -427,12 +904,12 @@ export default function Dashboard() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <motion.div
-                        whileHover={{ scale: 1.1 }}
-                        className="p-2 bg-gradient-to-br from-orange-500 to-red-600 rounded-lg"
-                      >
-                        <Activity className="h-6 w-6 text-white" />
-                      </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
+                    >
+                      <Activity className="h-6 w-6 text-white" />
+                    </motion.div>
                       <div>
                         <CardTitle>System Performance</CardTitle>
                         <CardDescription>Real-time metrics and health indicators</CardDescription>
@@ -513,12 +990,12 @@ export default function Dashboard() {
                 >
                   <CardHeader>
                     <div className="flex items-center space-x-3">
-                      <motion.div
-                        whileHover={{ scale: 1.1 }}
-                        className="p-2 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg"
-                      >
-                        <CheckCircle className="h-6 w-6 text-white" />
-                      </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg"
+                    >
+                      <CheckCircle className="h-6 w-6 text-white" />
+                    </motion.div>
                       <div>
                         <CardTitle>Integration Health</CardTitle>
                         <CardDescription>Status of external system integrations</CardDescription>
@@ -575,12 +1052,12 @@ export default function Dashboard() {
                 >
                   <CardHeader>
                     <div className="flex items-center space-x-3">
-                      <motion.div
-                        whileHover={{ scale: 1.1 }}
-                        className="p-2 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg"
-                      >
-                        <Activity className="h-6 w-6 text-white" />
-                      </motion.div>
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
+                    >
+                      <Activity className="h-6 w-6 text-white" />
+                    </motion.div>
                       <div>
                         <CardTitle>Recent Activity</CardTitle>
                         <CardDescription>Latest system events and operations</CardDescription>
@@ -638,7 +1115,7 @@ export default function Dashboard() {
                   <div className="flex items-center space-x-3">
                     <motion.div
                       whileHover={{ scale: 1.1 }}
-                      className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg"
+                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
                     >
                       <TrendingUp className="h-6 w-6 text-white" />
                     </motion.div>
@@ -704,49 +1181,49 @@ function LandingPage() {
   const features = [
     {
       icon: Brain,
-      title: "AI-Powered Processing",
-      description: "Advanced AI models for intelligent document analysis, generation, and automation",
-      color: "from-blue-500 to-cyan-500"
+      title: "Compounding Intelligence",
+      description: "Each document builds upon previous knowledge, creating an ever-evolving knowledge graph that improves quality over time",
+      color: "from-blue-600 to-blue-700"
     },
     {
       icon: FileText,
-      title: "Document Automation",
-      description: "Streamline document workflows with automated generation, processing, and management",
-      color: "from-purple-500 to-pink-500"
+      title: "Multi-Framework Support",
+      description: "PMBOK, BABOK, DMBOK, and custom frameworks for business analysis and project management excellence",
+      color: "from-blue-700 to-blue-800"
     },
     {
       icon: "🛡️",
       title: "Enterprise Security",
-      description: "Bank-grade security with encryption, compliance, and audit trails",
-      color: "from-emerald-500 to-teal-500"
+      description: "SOC 2 Type II compliant with AES-256 encryption, audit trails, and tamper-evident logging",
+      color: "from-blue-500 to-blue-600"
     },
     {
       icon: Zap,
-      title: "Real-time Collaboration",
-      description: "Live document editing, instant updates, and seamless team collaboration",
-      color: "from-orange-500 to-red-500"
+      title: "80% Cost Reduction",
+      description: "Intelligent compression and context management reduces AI token costs by up to 80% while maintaining quality",
+      color: "from-blue-800 to-blue-900"
     },
     {
       icon: TrendingUp,
-      title: "Analytics & Insights",
-      description: "Comprehensive analytics and reporting for document processing and AI usage",
-      color: "from-indigo-500 to-purple-500"
+      title: "Real-Time Analytics",
+      description: "Track document quality, AI usage, compression efficiency, and ROI with comprehensive dashboards",
+      color: "from-blue-600 to-blue-800"
     },
     {
       icon: Users,
-      title: "Team Management",
-      description: "Role-based access control, user management, and permission systems",
-      color: "from-pink-500 to-rose-500"
+      title: "Stakeholder Intelligence",
+      description: "Automated stakeholder analysis and personalized content generation for targeted communication",
+      color: "from-blue-700 to-blue-900"
     }
   ]
 
   const integrations = [
     { name: "SharePoint", logo: "🔗" },
     { name: "Confluence", logo: "📝" },
+    { name: "Jira", logo: "📋" },
     { name: "Adobe PDF", logo: "📄" },
     { name: "Microsoft 365", logo: "💼" },
-    { name: "Google Workspace", logo: "🌐" },
-    { name: "Slack", logo: "💬" }
+    { name: "Google Workspace", logo: "🌐" }
   ]
 
   return (
@@ -759,11 +1236,11 @@ function LandingPage() {
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl"
+                className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-xl"
               >
                 <Brain className="h-6 w-6 text-white" />
               </motion.div>
-              <span className="text-xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              <span className="text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-900 bg-clip-text text-transparent">
                 ADPA Framework
               </span>
             </div>
@@ -771,15 +1248,15 @@ function LandingPage() {
               <Button
                 variant="ghost"
                 onClick={() => router.push("/login")}
-                className="text-slate-600 dark:text-slate-300 hover:text-blue-600"
+                className="text-slate-700 dark:text-slate-300 hover:text-blue-700 font-medium"
               >
-                Sign In
+                Client Login
               </Button>
               <Button
                 onClick={() => router.push("/login")}
-                className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                className="bg-blue-700 hover:bg-blue-800 text-white font-semibold px-6"
               >
-                Get Started
+                Contact Us
               </Button>
             </div>
           </div>
@@ -796,17 +1273,20 @@ function LandingPage() {
             className="mb-8"
           >
             <h1 className="text-5xl md:text-7xl font-bold mb-6">
-              <span className="bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600 bg-clip-text text-transparent">
+              <span className="bg-gradient-to-r from-blue-700 via-blue-800 to-blue-900 bg-clip-text text-transparent">
                 Advanced Document
               </span>
               <br />
               <span className="text-slate-800 dark:text-slate-100">
-                Processing & Automation
+                Processing Analytics
               </span>
             </h1>
-            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300 max-w-4xl mx-auto leading-relaxed">
-              Transform your document workflows with AI-powered automation, intelligent processing, 
-              and seamless integrations. Boost productivity, ensure compliance, and scale your operations.
+            <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300 max-w-4xl mx-auto leading-relaxed mb-6">
+              Enterprise-grade document intelligence for project managers, business analysts, and process improvement professionals. 
+              Leverage compounding AI to transform requirements gathering, stakeholder analysis, and strategic documentation.
+            </p>
+            <p className="text-lg text-slate-500 dark:text-slate-400 max-w-3xl mx-auto font-medium">
+              Trusted by Fortune 500 organizations to deliver strategic frameworks and actionable insights that accelerate decision-making and drive measurable outcomes.
             </p>
           </motion.div>
 
@@ -825,40 +1305,40 @@ function LandingPage() {
                 transition={{ delay: 0.4, duration: 0.8 }}
                 className="text-center mb-12"
               >
-                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 mb-6">
+                <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-r from-blue-600 via-blue-700 via-blue-800 to-blue-900 mb-6">
                   <Brain className="h-12 w-12 text-white" />
                 </div>
                 <h3 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">ADPA Framework</h3>
-                <p className="text-lg text-slate-600 dark:text-slate-300">Advanced Data Processing Automation</p>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">From raw data to real-time decisions</p>
+                <p className="text-lg text-slate-600 dark:text-slate-300">Advanced Document Processing Analytics</p>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Where knowledge compounds and intelligence evolves</p>
               </motion.div>
 
               {/* Four Segments in Grid Layout */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
                 {[
                   { 
-                    icon: "🔎", 
-                    title: "Analyze", 
-                    description: "Inventory sources & contracts\nProfile & validate data quality\nDefine KPIs & outcomes",
-                    color: "from-indigo-500 to-blue-500"
+                    icon: "🔍", 
+                    title: "Gather", 
+                    description: "Collect project documents\nExtract stakeholder context\nBuild knowledge foundation",
+                    color: "from-blue-500 to-blue-600"
                   },
                   { 
-                    icon: "📐", 
-                    title: "Design", 
-                    description: "Model schemas & transformations\nOrchestrate flow (batch/stream)\nGuardrails: security • governance • lineage",
-                    color: "from-cyan-500 to-teal-500"
-                  },
-                  { 
-                    icon: "⚙️", 
+                    icon: "🧠", 
                     title: "Process", 
-                    description: "Execute pipelines on scalable compute\nMonitor SLAs, cost, carbon\nAutomate incident response",
-                    color: "from-lime-500 to-green-500"
+                    description: "6-stage intelligent pipeline\nContext compression & injection\nMulti-provider AI generation",
+                    color: "from-blue-600 to-blue-700"
                   },
                   { 
-                    icon: "🔁", 
-                    title: "Adapt", 
-                    description: "Feedback loops & drift detection\nContinuous optimization (AutoML, tuning)\nVersioning, rollback, A/B",
-                    color: "from-amber-500 to-orange-500"
+                    icon: "📊", 
+                    title: "Analyze", 
+                    description: "Real-time analytics & insights\nToken usage optimization\nQuality metrics tracking",
+                    color: "from-blue-700 to-blue-800"
+                  },
+                  { 
+                    icon: "🔄", 
+                    title: "Evolve", 
+                    description: "Compounding intelligence\nKnowledge graph growth\nContinuous improvement",
+                    color: "from-blue-800 to-blue-900"
                   }
                 ].map((segment, index) => (
                   <motion.div
@@ -887,10 +1367,10 @@ function LandingPage() {
               {/* Benefits Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-5xl mx-auto mb-8">
                 {[
-                  { title: "Faster time-to-insight", icon: "⚡" },
-                  { title: "Lower run costs", icon: "💰" },
-                  { title: "Higher reliability", icon: "🛡️" },
-                  { title: "Compliant by design", icon: "✅" }
+                  { title: "80% token reduction", icon: "⚡" },
+                  { title: "Compounding intelligence", icon: "🧠" },
+                  { title: "Enterprise security", icon: "🛡️" },
+                  { title: "Real-time analytics", icon: "📊" }
                 ].map((benefit, index) => (
                   <motion.div
                     key={benefit.title}
@@ -916,9 +1396,9 @@ function LandingPage() {
                 className="text-center"
               >
                 <div className="inline-flex items-center space-x-2 text-slate-600 dark:text-slate-400">
-                  <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 rounded-full"></div>
-                  <span className="text-sm font-medium">Built for modern data and AI ops</span>
-                  <div className="w-8 h-1 bg-gradient-to-r from-indigo-500 via-cyan-500 via-lime-500 to-amber-500 rounded-full"></div>
+                  <div className="w-8 h-1 bg-gradient-to-r from-blue-600 via-blue-700 via-blue-800 to-blue-900 rounded-full"></div>
+                  <span className="text-sm font-medium">Enterprise-Grade Document Intelligence Platform</span>
+                  <div className="w-8 h-1 bg-gradient-to-r from-blue-600 via-blue-700 via-blue-800 to-blue-900 rounded-full"></div>
                 </div>
               </motion.div>
             </div>
@@ -933,18 +1413,18 @@ function LandingPage() {
             <Button
               size="lg"
               onClick={() => router.push("/login")}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-8 py-4 text-lg"
+              className="bg-gradient-to-r from-blue-700 to-blue-900 hover:from-blue-800 hover:to-slate-900 text-white px-8 py-4 text-lg shadow-xl"
             >
               <Sparkles className="mr-2 h-5 w-5" />
-              Start Free Trial
+              Request Enterprise Demo
             </Button>
             <Button
               size="lg"
               variant="outline"
-              className="border-2 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 px-8 py-4 text-lg hover:bg-slate-50 dark:hover:bg-slate-800"
+              className="border-2 border-blue-700 dark:border-blue-600 text-blue-800 dark:text-blue-400 px-8 py-4 text-lg hover:bg-blue-50 dark:hover:bg-blue-900/20"
             >
               <Activity className="mr-2 h-5 w-5" />
-              View Demo
+              View Case Studies
             </Button>
           </motion.div>
 
@@ -956,16 +1436,19 @@ function LandingPage() {
             className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto"
           >
             <div className="text-center">
-              <div className="text-4xl font-bold text-blue-600 mb-2">10M+</div>
-              <div className="text-slate-600 dark:text-slate-300">Documents Processed</div>
+              <div className="text-4xl font-bold text-blue-700 mb-2">80%</div>
+              <div className="text-slate-600 dark:text-slate-300 font-medium">Cost Reduction</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Through intelligent compression</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-purple-600 mb-2">500+</div>
-              <div className="text-slate-600 dark:text-slate-300">Enterprise Clients</div>
+              <div className="text-4xl font-bold text-blue-800 mb-2">98.5%</div>
+              <div className="text-slate-600 dark:text-slate-300 font-medium">Quality Score</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">Enterprise-grade accuracy</div>
             </div>
             <div className="text-center">
-              <div className="text-4xl font-bold text-indigo-600 mb-2">99.9%</div>
-              <div className="text-slate-600 dark:text-slate-300">Uptime Guarantee</div>
+              <div className="text-4xl font-bold text-blue-900 mb-2">50+</div>
+              <div className="text-slate-600 dark:text-slate-300 font-medium">Framework Templates</div>
+              <div className="text-sm text-slate-500 dark:text-slate-400 mt-1">PMBOK, BABOK, DMBOK</div>
             </div>
           </motion.div>
         </div>
@@ -981,14 +1464,14 @@ function LandingPage() {
             className="text-center mb-16"
           >
             <h2 className="text-4xl md:text-5xl font-bold text-slate-800 dark:text-slate-100 mb-6">
-              Powerful Features for Modern Teams
+              Enterprise Capabilities That Drive Results
             </h2>
             <p className="text-xl text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
-              Everything you need to automate, process, and manage documents at scale
+              Strategic frameworks and practical guidance designed for project management, business analysis, and process excellence
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 mb-20">
             {features.map((feature, index) => (
               <motion.div
                 key={feature.title}
@@ -1018,6 +1501,425 @@ function LandingPage() {
               </motion.div>
             ))}
           </div>
+
+          {/* Smart Topic Centric Knowledge Compression - Landing Page */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.6, duration: 0.8 }}
+            className="mb-20"
+          >
+            <Card className="border-0 shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+              <CardHeader className="text-center pb-6">
+                <CardTitle className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-3">
+                  Smart Topic Centric Knowledge Compression
+                </CardTitle>
+                <CardDescription className="text-lg">
+                  AI-driven topic extraction and intelligent summarization with domain-specific primers
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-center text-slate-600 dark:text-slate-300 mb-8 max-w-4xl mx-auto leading-relaxed">
+                  ADPA's intelligent compression engine analyzes documents across multiple knowledge domains, 
+                  extracting key topics and building contextualized summaries primed with domain expertise. 
+                  Each knowledge area maintains its own compression matrix, ensuring critical information is preserved 
+                  while achieving up to 80% token reduction.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                  {[
+                    {
+                      domain: "Project Management",
+                      primer: "PMBOK 7th Edition",
+                      icon: FileText,
+                      topics: "Scope, Schedule, Budget, Risk, Stakeholders",
+                      color: "from-blue-500 to-blue-600"
+                    },
+                    {
+                      domain: "Business Analysis",
+                      primer: "BABOK v3",
+                      icon: TrendingUp,
+                      topics: "Requirements, Processes, Enterprise Architecture",
+                      color: "from-blue-600 to-blue-700"
+                    },
+                    {
+                      domain: "Data Management",
+                      primer: "DMBOK Framework",
+                      icon: Activity,
+                      topics: "Data Governance, Quality, Architecture, Security",
+                      color: "from-blue-700 to-blue-800"
+                    },
+                    {
+                      domain: "Strategic Planning",
+                      primer: "Enterprise Strategy",
+                      icon: Zap,
+                      topics: "Vision, Goals, KPIs, Portfolio Alignment",
+                      color: "from-blue-800 to-blue-900"
+                    }
+                  ].map((area, index) => (
+                    <motion.div
+                      key={area.domain}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.7 + index * 0.1, duration: 0.6 }}
+                      whileHover={{ y: -4, scale: 1.02 }}
+                      className="p-5 rounded-xl border-2 border-blue-200 dark:border-blue-700 hover:shadow-lg transition-all duration-200 bg-white dark:bg-slate-800"
+                    >
+                      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${area.color} flex items-center justify-center mb-4 shadow-lg`}>
+                        <area.icon className="h-8 w-8 text-white" />
+                      </div>
+                      <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-2">
+                        {area.domain}
+                      </h4>
+                      <p className="text-sm text-blue-700 dark:text-blue-400 font-semibold mb-3">
+                        {area.primer}
+                      </p>
+                      <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                        {area.topics}
+                      </p>
+                    </motion.div>
+                  ))}
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border-2 border-blue-200 dark:border-blue-700">
+                  <h4 className="font-bold text-slate-800 dark:text-slate-100 mb-3 flex items-center text-lg">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center mr-3">
+                      <Brain className="h-5 w-5 text-white" />
+                    </div>
+                    Context Building Intelligence
+                  </h4>
+                  <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
+                    Our AI analyzes each document through domain-specific lenses, identifying key concepts, 
+                    relationships, and dependencies. The system builds rich contextual summaries that maintain 
+                    semantic accuracy while dramatically reducing token consumption. Each summary is tagged with 
+                    relevance scores, confidence metrics, and cross-domain linkages for optimal reuse.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* 10-Stage Enterprise Processing Pipeline - Landing Page */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.8, duration: 0.8 }}
+            className="mb-20"
+          >
+            <Card className="border-0 shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+              <CardHeader className="text-center pb-6">
+                <CardTitle className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-3">
+                  10-Stage Enterprise Document Processing Pipeline
+                </CardTitle>
+                <CardDescription className="text-lg">
+                  End-to-end intelligent processing from ingestion to enterprise integration
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                  {[
+                    {
+                      stage: "1. OCR & Ingestion",
+                      description: "Optical character recognition for scanned documents, PDFs, and images with format normalization",
+                      icon: FileText,
+                      color: "from-blue-400 to-blue-500"
+                    },
+                    {
+                      stage: "2. Context Gathering",
+                      description: "Collects relevant project documents, stakeholder information, and historical context",
+                      icon: Activity,
+                      color: "from-blue-450 to-blue-550"
+                    },
+                    {
+                      stage: "3. Topic Extraction",
+                      description: "AI-driven topic analysis and domain-specific knowledge categorization across frameworks",
+                      icon: Zap,
+                      color: "from-blue-500 to-blue-600"
+                    },
+                    {
+                      stage: "4. Content Prioritization",
+                      description: "Ranks content by relevance, importance, and impact using multi-dimensional scoring",
+                      icon: TrendingUp,
+                      color: "from-blue-550 to-blue-650"
+                    },
+                    {
+                      stage: "5. Smart Compression",
+                      description: "Topic-centric compression with domain primers, achieving 80% token reduction",
+                      icon: Activity,
+                      color: "from-blue-600 to-blue-700"
+                    },
+                    {
+                      stage: "6. Context Injection",
+                      description: "Injects compressed, domain-aware context into AI prompts for enhanced generation",
+                      icon: Zap,
+                      color: "from-blue-650 to-blue-750"
+                    },
+                    {
+                      stage: "7. AI Generation",
+                      description: "Multi-provider AI generation with framework-specific templates and guardrails",
+                      icon: Brain,
+                      color: "from-blue-700 to-blue-800"
+                    },
+                    {
+                      stage: "8. Quality Scoring",
+                      description: "Knowledge output matrix scoring: completeness, accuracy, coherence, compliance",
+                      icon: CheckCircle,
+                      color: "from-blue-750 to-blue-850"
+                    },
+                    {
+                      stage: "9. Analytics & Reporting",
+                      description: "Real-time metrics, cost analysis, quality dashboards, and ROI tracking",
+                      icon: TrendingUp,
+                      color: "from-blue-800 to-blue-900"
+                    },
+                    {
+                      stage: "10. Enterprise Integration",
+                      description: "Seamless export to SharePoint, Confluence, Jira, and enterprise document systems",
+                      icon: Activity,
+                      color: "from-blue-900 to-slate-900"
+                    }
+                  ].map((stage, index) => (
+                    <motion.div
+                      key={stage.stage}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.9 + index * 0.05, duration: 0.4 }}
+                      whileHover={{ y: -2, scale: 1.02 }}
+                      className="p-4 rounded-xl border-2 border-blue-200 dark:border-blue-700 hover:shadow-lg transition-all duration-200 bg-white dark:bg-slate-800"
+                    >
+                      <div className="flex items-start space-x-3">
+                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-br ${stage.color} flex items-center justify-center shadow-lg flex-shrink-0`}>
+                          <stage.icon className="h-6 w-6 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm mb-1">
+                            {stage.stage}
+                          </h4>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                            {stage.description}
+                          </p>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+
+          {/* Advanced Enterprise Intelligence - Landing Page */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.0, duration: 0.8 }}
+          >
+            <Card className="border-0 shadow-2xl bg-white/90 dark:bg-slate-900/90 backdrop-blur-sm">
+              <CardHeader className="text-center pb-6">
+                <CardTitle className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-3">
+                  Advanced Enterprise Intelligence
+                </CardTitle>
+                <CardDescription className="text-lg">
+                  Proactive project management with AI-powered baseline tracking and drift detection
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  {/* Baseline & Drift Detection */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 1.1, duration: 0.6 }}
+                    className="p-6 rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20 border-2 border-blue-200 dark:border-blue-700"
+                  >
+                    <div className="flex items-start space-x-4 mb-4">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <TrendingUp className="h-8 w-8 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
+                          Baseline & Drift Detection
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-400 font-medium">
+                          Automated scope deviation tracking
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Scope Drift:</strong> Real-time detection of scope creep and unauthorized changes</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Technical Drift:</strong> Architecture and technology stack deviation alerts</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Timeline Drift:</strong> Schedule variance analysis with critical path impact</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Budget Drift:</strong> Cost overrun detection with automatic escalation</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Auto Change Requests:</strong> Generates CRs from detected positive deviations</span>
+                      </li>
+                    </ul>
+                  </motion.div>
+
+                  {/* Document Review Intelligence */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 1.2, duration: 0.6 }}
+                    className="p-6 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border-2 border-blue-300 dark:border-blue-600"
+                  >
+                    <div className="flex items-start space-x-4 mb-4">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-700 to-blue-900 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <FileText className="h-8 w-8 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
+                          Document Review Intelligence
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-400 font-medium">
+                          AI-powered feedback analytics
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Multi-Level Feedback:</strong> Stakeholder, reviewer, and peer input aggregation</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Sentiment Analysis:</strong> AI-driven tone and satisfaction scoring</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Template Optimization:</strong> Continuous improvement based on feedback patterns</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Provider Performance:</strong> AI model effectiveness tracking and optimization</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Quality Trends:</strong> Longitudinal analysis of document quality evolution</span>
+                      </li>
+                    </ul>
+                  </motion.div>
+
+                  {/* Hierarchical Project Management */}
+                  <motion.div
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 1.3, duration: 0.6 }}
+                    className="p-6 rounded-xl bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-800/20 dark:to-blue-700/20 border-2 border-blue-300 dark:border-blue-600"
+                  >
+                    <div className="flex items-start space-x-4 mb-4">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <Activity className="h-8 w-8 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
+                          Hierarchical Project Management
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-400 font-medium">
+                          Portfolio → Program → Project → Task
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Portfolio View:</strong> Strategic alignment and cross-program dependencies</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Program Management:</strong> Multi-project coordination and resource sharing</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Misalignment Detection:</strong> AI identifies over-elevated or hidden programs</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Consolidation Alerts:</strong> Suggests project mergers for efficiency gains</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Cross-Level Drift:</strong> Detects scope creep cascading across hierarchy</span>
+                      </li>
+                    </ul>
+                  </motion.div>
+
+                  {/* Resource Allocation Intelligence */}
+                  <motion.div
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 1.4, duration: 0.6 }}
+                    className="p-6 rounded-xl bg-gradient-to-br from-blue-200 to-blue-300 dark:from-blue-700/20 dark:to-blue-600/20 border-2 border-blue-400 dark:border-blue-500"
+                  >
+                    <div className="flex items-start space-x-4 mb-4">
+                      <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-800 to-slate-900 flex items-center justify-center shadow-lg flex-shrink-0">
+                        <Users className="h-8 w-8 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
+                          Resource Allocation Intelligence
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-400 font-medium">
+                          Integration-first approach
+                        </p>
+                      </div>
+                    </div>
+                    <ul className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Jira Integration:</strong> Pull work logs and time tracking from existing systems</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Overallocation Alerts:</strong> Identifies resource conflicts across projects</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Underutilization Detection:</strong> Flags idle capacity and optimization opportunities</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Skill Gap Analysis:</strong> AI-driven competency mapping and recommendations</span>
+                      </li>
+                      <li className="flex items-start">
+                        <span className="text-blue-600 mr-2 text-lg">•</span>
+                        <span><strong>Cross-Project View:</strong> Enterprise-wide resource utilization dashboard</span>
+                      </li>
+                    </ul>
+                  </motion.div>
+                </div>
+
+                {/* Value Proposition Banner */}
+                <div className="bg-gradient-to-r from-blue-700 to-blue-900 rounded-xl p-8 text-white shadow-2xl">
+                  <div className="flex items-center space-x-6">
+                    <div className="w-16 h-16 rounded-xl bg-white/20 flex items-center justify-center">
+                      <Zap className="h-10 w-10 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <h4 className="font-bold text-2xl mb-3">Proactive Intelligence, Not Reactive Management</h4>
+                      <p className="text-blue-100 leading-relaxed text-base">
+                        ADPA's advanced features transform traditional project management from reactive firefighting to proactive intelligence. 
+                        Detect issues before they become problems, optimize resource allocation in real-time, and maintain perfect alignment 
+                        from portfolio strategy down to individual tasks. Estimated ROI: <strong className="text-white">300-500% over 18 months</strong>.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         </div>
       </section>
 
@@ -1031,10 +1933,10 @@ function LandingPage() {
             className="text-center mb-16"
           >
             <h2 className="text-4xl md:text-5xl font-bold text-slate-800 dark:text-slate-100 mb-6">
-              Seamless Integrations
+              Enterprise System Integration
             </h2>
             <p className="text-xl text-slate-600 dark:text-slate-300 max-w-3xl mx-auto">
-              Connect with your favorite tools and platforms for a unified workflow experience
+              Connect seamlessly with your existing enterprise platforms and collaboration tools for unified document intelligence
             </p>
           </motion.div>
 
@@ -1063,7 +1965,7 @@ function LandingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-blue-600 via-purple-600 to-indigo-600">
+      <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-blue-800 via-blue-900 to-slate-900">
         <div className="max-w-4xl mx-auto text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -1071,28 +1973,28 @@ function LandingPage() {
             transition={{ duration: 0.8 }}
           >
             <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Ready to Transform Your Workflow?
+              Turn Insight Into Action
             </h2>
             <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-              Join thousands of teams already using ADPA to automate their document processes 
-              and boost productivity by 300%.
+              Discover how ADPA's compounding intelligence platform helps Fortune 500 organizations 
+              accelerate project delivery, reduce costs by 80%, and maintain enterprise-grade compliance.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
                 size="lg"
                 onClick={() => router.push("/login")}
-                className="bg-white text-blue-600 hover:bg-blue-50 px-8 py-4 text-lg font-semibold"
+                className="bg-white text-blue-900 hover:bg-blue-50 px-8 py-4 text-lg font-semibold shadow-xl"
               >
                 <Sparkles className="mr-2 h-5 w-5" />
-                Start Your Free Trial
+                Request Enterprise Demo
               </Button>
               <Button
                 size="lg"
                 variant="outline"
                 onClick={() => router.push("/login")}
-                className="border-2 border-white text-white hover:bg-white hover:text-blue-600 px-8 py-4 text-lg font-semibold"
+                className="border-2 border-white text-white hover:bg-white/10 px-8 py-4 text-lg font-semibold"
               >
-                Schedule a Demo
+                Talk To An Expert
               </Button>
             </div>
           </motion.div>
@@ -1107,14 +2009,14 @@ function LandingPage() {
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                className="p-2 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl"
+                className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-xl"
               >
                 <Brain className="h-6 w-6 text-white" />
               </motion.div>
-              <span className="text-xl font-bold">ADPA Framework</span>
+              <span className="text-xl font-bold">ADPA</span>
             </div>
             <div className="flex items-center space-x-6 text-sm text-slate-400">
-              <span>© 2024 ADPA Framework. All rights reserved.</span>
+              <span>© 2025 ADPA. All rights reserved.</span>
               <Button
                 variant="ghost"
                 size="sm"

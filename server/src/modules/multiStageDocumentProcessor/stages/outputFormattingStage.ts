@@ -25,11 +25,27 @@ export class OutputFormattingStage {
 
       // Extract input data
       const { quality_assessed_document } = input.input_data
-      const output_config = (input.context as any)?.output_config || {
+      let output_config = (input.context as any)?.output_config || {
         primary_format: 'markdown',
         secondary_formats: [],
         include_metadata: false
       }
+      
+      // Ensure primary_format has a default value
+      if (!output_config.primary_format) {
+        output_config.primary_format = 'markdown'
+      }
+      
+      // Ensure secondary_formats is always an array
+      if (!output_config.secondary_formats || !Array.isArray(output_config.secondary_formats)) {
+        output_config.secondary_formats = []
+      }
+      
+      logger.info('📝 Output config validated', {
+        primaryFormat: output_config.primary_format,
+        secondaryFormats: output_config.secondary_formats,
+        includeMetadata: output_config.include_metadata
+      })
 
       // Generate primary format
       const primaryFormat = await this.generatePrimaryFormat(quality_assessed_document, output_config)
@@ -108,14 +124,15 @@ export class OutputFormattingStage {
     }
 
     // Generate primary format using the engine
+    const primaryFormat = outputConfig.primary_format || 'markdown'
     const result = await this.formatEngine.convertFromMarkdown(
       markdownContent,
-      outputConfig.primary_format,
+      primaryFormat,
       conversionOptions
     )
 
     return {
-      format: outputConfig.primary_format,
+      format: primaryFormat,
       content: result.content,
       metadata: result.metadata,
       size: result.metadata.size,
@@ -126,8 +143,11 @@ export class OutputFormattingStage {
   private async generateSecondaryFormats(qualityAssessedDocument: any, outputConfig: any, primaryFormat: any): Promise<Record<string, any>> {
     // Generate secondary formats
     const secondaryFormats: Record<string, any> = {}
+    
+    // Ensure secondary_formats is an array
+    const formats = outputConfig.secondary_formats || []
 
-    for (const format of outputConfig.secondary_formats) {
+    for (const format of formats) {
       try {
         const secondaryFormat = await this.generateSecondaryFormat(qualityAssessedDocument, format, primaryFormat)
         secondaryFormats[format] = secondaryFormat
@@ -270,9 +290,51 @@ export class OutputFormattingStage {
   private extractMarkdownContent(qualityAssessedDocument: any): string {
     let markdownContent = ''
 
+    // Log the FULL structure for debugging
+    logger.info('🔍 FULL quality_assessed_document structure', {
+      fullStructure: JSON.stringify(qualityAssessedDocument, null, 2).substring(0, 2000)
+    })
+    
+    logger.info('🔍 Extracting markdown content from quality_assessed_document', {
+      hasMarkdownContent: !!qualityAssessedDocument.markdown_content,
+      hasPersonalizedSections: !!qualityAssessedDocument.personalized_sections,
+      hasContentSections: !!qualityAssessedDocument.content_sections,
+      hasContent: !!qualityAssessedDocument.content,
+      hasDocument: !!qualityAssessedDocument.document,
+      hasGeneratedDocument: !!qualityAssessedDocument.generated_document,
+      topLevelKeys: Object.keys(qualityAssessedDocument || {}),
+      generatedDocKeys: qualityAssessedDocument.generated_document ? Object.keys(qualityAssessedDocument.generated_document) : [],
+      contentKeys: qualityAssessedDocument.content ? Object.keys(qualityAssessedDocument.content) : []
+    })
+
     // Check if document already has markdown content
     if (qualityAssessedDocument.markdown_content) {
       return qualityAssessedDocument.markdown_content
+    }
+
+    // PRIORITY 0: Extract from original_document.content.raw_content (Quality Assurance passes this through)
+    if (qualityAssessedDocument.original_document?.content?.raw_content) {
+      logger.info('✅ Content extracted from original_document.content.raw_content', {
+        contentLength: qualityAssessedDocument.original_document.content.raw_content.length
+      })
+      return qualityAssessedDocument.original_document.content.raw_content
+    }
+
+    // Extract from original_document.content.sections (if structured)
+    if (qualityAssessedDocument.original_document?.content?.sections) {
+      for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.original_document.content.sections)) {
+        if (sectionData && typeof sectionData === 'object') {
+          const section = sectionData as any
+          markdownContent += `## ${sectionKey}\n\n${section.content || section.raw_content || ''}\n\n`
+        }
+      }
+      if (markdownContent.trim()) {
+        logger.info('✅ Content extracted from original_document.content.sections', {
+          sectionCount: Object.keys(qualityAssessedDocument.original_document.content.sections).length,
+          contentLength: markdownContent.length
+        })
+        return markdownContent.trim()
+      }
     }
 
     // Extract from personalized sections
@@ -303,13 +365,105 @@ export class OutputFormattingStage {
       }
     }
 
-    // Extract from raw content if available
-    if (qualityAssessedDocument.content && typeof qualityAssessedDocument.content === 'string') {
-      markdownContent += qualityAssessedDocument.content
+    // PRIORITY 1: Extract from generated_document (AI generation stage output)
+    if (qualityAssessedDocument.generated_document) {
+      const genDoc = qualityAssessedDocument.generated_document
+      
+      // Try to get raw_content
+      if (genDoc.content?.raw_content) {
+        markdownContent += genDoc.content.raw_content
+        logger.info('✅ Content extracted from generated_document.content.raw_content', {
+          contentLength: genDoc.content.raw_content.length
+        })
+      }
+      // Or extract from sections (Record)
+      else if (genDoc.content?.sections) {
+        for (const [sectionKey, sectionData] of Object.entries(genDoc.content.sections)) {
+          if (sectionData && typeof sectionData === 'object') {
+            const section = sectionData as any
+            markdownContent += `## ${sectionKey}\n\n${section.content || section.raw_content || ''}\n\n`
+          }
+        }
+        logger.info('✅ Content extracted from generated_document.content.sections', {
+          sectionCount: Object.keys(genDoc.content.sections).length
+        })
+      }
+      // Or from sections array
+      else if (genDoc.sections && Array.isArray(genDoc.sections)) {
+        for (const section of genDoc.sections) {
+          if (section.title) {
+            markdownContent += `## ${section.title}\n\n`
+          }
+          if (section.content) {
+            markdownContent += `${section.content}\n\n`
+          }
+        }
+        logger.info('✅ Content extracted from generated_document.sections array', {
+          sectionCount: genDoc.sections.length
+        })
+      }
+    }
+    
+    // PRIORITY 2: Check if quality_assessed_document itself IS the generated_document
+    // (Quality stage might pass it through directly)
+    if (!markdownContent.trim() && qualityAssessedDocument.content) {
+      if (qualityAssessedDocument.content.raw_content) {
+        markdownContent += qualityAssessedDocument.content.raw_content
+        logger.info('✅ Content extracted from quality_assessed_document.content.raw_content', {
+          contentLength: qualityAssessedDocument.content.raw_content.length
+        })
+      } else if (qualityAssessedDocument.content.sections) {
+        for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.content.sections)) {
+          if (sectionData && typeof sectionData === 'object') {
+            const section = sectionData as any
+            markdownContent += `## ${sectionKey}\n\n${section.content || section.raw_content || ''}\n\n`
+          }
+        }
+        logger.info('✅ Content extracted from quality_assessed_document.content.sections', {
+          sectionCount: Object.keys(qualityAssessedDocument.content.sections).length
+        })
+      }
+    }
+    
+    // PRIORITY 3: Check for sections array directly on quality_assessed_document
+    if (!markdownContent.trim() && qualityAssessedDocument.sections && Array.isArray(qualityAssessedDocument.sections)) {
+      for (const section of qualityAssessedDocument.sections) {
+        if (section.title) {
+          markdownContent += `## ${section.title}\n\n`
+        }
+        if (section.content) {
+          markdownContent += `${section.content}\n\n`
+        }
+      }
+      logger.info('✅ Content extracted from quality_assessed_document.sections array', {
+        sectionCount: qualityAssessedDocument.sections.length
+      })
     }
 
-    // If no content found, create a basic document
+    // Extract from raw content if available
+    if (!markdownContent.trim() && qualityAssessedDocument.content) {
+      if (typeof qualityAssessedDocument.content === 'string') {
+        markdownContent += qualityAssessedDocument.content
+      } else if (qualityAssessedDocument.content.raw_content) {
+        markdownContent += qualityAssessedDocument.content.raw_content
+      } else if (qualityAssessedDocument.content.sections) {
+        for (const [sectionKey, sectionData] of Object.entries(qualityAssessedDocument.content.sections)) {
+          if (sectionData && typeof sectionData === 'object' && (sectionData as any).content) {
+            markdownContent += `## ${sectionKey}\n\n${(sectionData as any).content}\n\n`
+          }
+        }
+      }
+    }
+
+    // If no content found, create a basic document with debug info
     if (!markdownContent.trim()) {
+      logger.warn('⚠️ No content found in quality_assessed_document, generating placeholder', {
+        availableKeys: Object.keys(qualityAssessedDocument || {}),
+        documentId: qualityAssessedDocument.document_id,
+        hasGeneratedDocument: !!qualityAssessedDocument.generated_document,
+        hasContent: !!qualityAssessedDocument.content
+      })
+      
       markdownContent = `# ${qualityAssessedDocument.document_id || 'Document'}\n\n`
       markdownContent += `*This document was generated but contains no content.*\n\n`
       markdownContent += `**Document ID:** ${qualityAssessedDocument.document_id || 'Unknown'}\n`

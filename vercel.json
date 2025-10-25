@@ -1,11 +1,4 @@
 {
-  "git": {
-    "deploymentEnabled": {
-      "adpa-project-charter": false
-    }
-  },
-  "github": {
-    "enabled": false,
-    "autoAlias": false
-  }
+  "buildCommand": "npm run build",
+  "installCommand": "npm install"
 }

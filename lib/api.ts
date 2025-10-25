@@ -1,8 +1,17 @@
 import { io, Socket } from "socket.io-client"
+import { getApiBaseUrl, getWsUrl } from "./api-url"
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api"
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || "http://localhost:5000"
+const API_BASE_URL = getApiBaseUrl()
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || getWsUrl()
+
+// Debug logging only in development
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+  console.log('🔧 API Debug:', {
+    API_BASE_URL,
+    WS_URL
+  })
+}
 
 // Types
 export interface User {
@@ -35,6 +44,23 @@ export interface Project {
   updated_at: string
 }
 
+export interface Program {
+  id: string
+  name: string
+  description?: string
+  owner_id: string
+  owner_name?: string
+  budget?: number
+  currency_code?: string
+  start_date?: string
+  end_date?: string
+  rag_status: 'green' | 'amber' | 'red'
+  status: string
+  created_at: string
+  updated_at: string
+  project_count?: number
+}
+
 export interface Document {
   id: string
   project_id: string
@@ -47,6 +73,10 @@ export interface Document {
   updated_by: string
   created_at: string
   updated_at: string
+  generation_metadata?: any
+  metadata?: any
+  template_metadata?: any
+  source_documents?: any[]
 }
 
 export interface Stakeholder {
@@ -84,6 +114,13 @@ export interface Template {
   created_by: string
   created_at: string
   updated_at: string
+  // Template Lifecycle Fields
+  development_status?: 'draft' | 'testing' | 'compliance' | 'validated' | 'production' | 'deprecated' | 'archived'
+  validation_count?: number
+  success_count?: number
+  success_rate?: number
+  health_rating?: 'Excellent' | 'Good' | 'Fair' | 'Needs Improvement'
+  last_validated_at?: string
   // AI Enhancement Fields
   system_prompt?: string
   context_injection_config?: {
@@ -113,6 +150,52 @@ export interface Template {
     }>
     final_format: 'markdown' | 'structured_json' | 'plain_text' | 'html'
     include_metadata: boolean
+  }
+}
+
+export interface Program {
+  id: string
+  name: string
+  description?: string
+  status: 'green' | 'amber' | 'red'
+  owner_id: string
+  owner_name?: string
+  start_date?: string
+  end_date?: string
+  budget?: number
+  currency?: string
+  created_at: string
+  updated_at: string
+  created_by?: string
+  updated_by?: string
+}
+
+export interface ProgramMetrics {
+  budget: {
+    total: number
+    spent: number
+    remaining: number
+    percentSpent: number
+  }
+  schedule: {
+    startDate: string
+    endDate: string
+    daysElapsed: number
+    daysRemaining: number
+    percentComplete: number
+  }
+  projects: {
+    total: number
+    green: number
+    amber: number
+    red: number
+  }
+  risks: {
+    total: number
+    critical: number
+    high: number
+    medium: number
+    low: number
   }
 }
 
@@ -177,7 +260,11 @@ class ApiClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${this.baseURL}${endpoint}`
+    // FIX: Handle trailing/leading slashes to prevent double slashes
+    const baseURL = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${baseURL}${cleanEndpoint}`
+    
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
@@ -201,12 +288,20 @@ class ApiClient {
         // Create an error object that includes the response data for better error handling
         const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
         ;(error as any).response = { data, status: response.status }
+        ;(error as any).status = response.status
         throw error
       }
 
       return data
-    } catch (error) {
-      console.error(`API request failed: ${endpoint}`, error)
+    } catch (error: any) {
+      // Don't log expected errors if suppressNotFoundError is set
+      // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
+      const shouldSuppressLog = (options as any).suppressNotFoundError && 
+        (error?.status === 404 || error?.status === 401 || error?.status === 403)
+      
+      if (!shouldSuppressLog) {
+        console.error(`API request failed: ${endpoint}`, error)
+      }
       throw error
     }
   }
@@ -341,6 +436,55 @@ class ApiClient {
 
   async deleteProject(id: string): Promise<void> {
     await this.request(`/projects/${id}`, { method: "DELETE" })
+  }
+
+  // Programs API
+  async getPrograms(params?: {
+    page?: number
+    limit?: number
+    status?: string
+    owner_id?: string
+    rag_status?: string
+    search?: string
+  }): Promise<{ programs: Program[]; pagination: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined) {
+          queryParams.append(key, value.toString())
+        }
+      })
+    }
+
+    const response = await this.request<{ programs: Program[]; pagination: any }>(
+      `/programs?${queryParams}`
+    )
+    return response
+  }
+
+  async getProgram(id: string): Promise<Program> {
+    const response = await this.request<{ program: Program }>(`/programs/${id}`)
+    return response.program
+  }
+
+  async createProgram(programData: Partial<Program>): Promise<Program> {
+    const response = await this.request<{ program: Program }>("/programs", {
+      method: "POST",
+      body: JSON.stringify(programData),
+    })
+    return response.program
+  }
+
+  async updateProgram(id: string, programData: Partial<Program>): Promise<Program> {
+    const response = await this.request<{ program: Program }>(`/programs/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(programData),
+    })
+    return response.program
+  }
+
+  async deleteProgram(id: string): Promise<void> {
+    await this.request(`/programs/${id}`, { method: "DELETE" })
   }
 
   // Templates API
@@ -579,18 +723,18 @@ class ApiClient {
     }
 
     const response = await this.request<{ templates: Template[]; pagination: any }>(
-      `/document-templates?${queryParams}`
+      `/templates?${queryParams}`
     )
     return response
   }
 
   async getTemplate(id: string): Promise<Template> {
-    const response = await this.request<{ template: Template }>(`/document-templates/${id}`)
+    const response = await this.request<{ template: Template }>(`/templates/${id}`)
     return response.template
   }
 
   async createTemplate(templateData: Partial<Template>): Promise<Template> {
-    const response = await this.request<{ template: Template }>("/document-templates", {
+    const response = await this.request<{ template: Template }>("/templates", {
       method: "POST",
       body: JSON.stringify(templateData),
     })
@@ -598,7 +742,7 @@ class ApiClient {
   }
 
   async updateTemplate(id: string, templateData: Partial<Template>): Promise<Template> {
-    const response = await this.request<{ template: Template }>(`/document-templates/${id}`, {
+    const response = await this.request<{ template: Template }>(`/templates/${id}`, {
       method: "PUT",
       body: JSON.stringify(templateData),
     })
@@ -606,7 +750,7 @@ class ApiClient {
   }
 
   async deleteTemplate(id: string): Promise<void> {
-    await this.request(`/document-templates/${id}`, { method: "DELETE" })
+    await this.request(`/templates/${id}`, { method: "DELETE" })
   }
 
   async getDeletedTemplates(params?: { page?: number; limit?: number }): Promise<{ templates: Template[]; pagination?: any }> {
@@ -617,23 +761,23 @@ class ApiClient {
       })
     }
   const qs = queryParams.toString()
-  const response = await this.request<{ templates: Template[]; pagination?: any }>(`/document-templates/trash${qs ? `?${qs}` : ""}`)
+  const response = await this.request<{ templates: Template[]; pagination?: any }>(`/templates/trash${qs ? `?${qs}` : ""}`)
     return response
   }
 
   async restoreTemplate(id: string): Promise<Template> {
-  const response = await this.request<{ template: Template }>(`/document-templates/${id}/restore`, {
+  const response = await this.request<{ template: Template }>(`/templates/${id}/restore`, {
       method: "POST",
     })
     return response.template
   }
 
   async hardDeleteTemplate(id: string): Promise<void> {
-  await this.request(`/document-templates/${id}/hard`, { method: "DELETE" })
+  await this.request(`/templates/${id}/hard`, { method: "DELETE" })
   }
 
   async cloneTemplate(id: string, data: { name: string; description?: string; is_public?: boolean }): Promise<Template> {
-  const response = await this.request<{ template: Template }>(`/document-templates/${id}/clone`, {
+  const response = await this.request<{ template: Template }>(`/templates/${id}/clone`, {
       method: "POST",
       body: JSON.stringify(data),
     })

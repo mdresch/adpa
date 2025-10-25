@@ -1,0 +1,157 @@
+=========================================
+ADPA ENVIRONMENT FILES - COPY THESE
+=========================================
+
+Your Infrastructure:
+- Database: Supabase (blxzjbxczpmmgiwbtmdo)
+- Redis: Upstash (natural-vulture-7034)
+- Backend: Railway (adpa-production.up.railway.app)
+- Frontend: Vercel
+
+=========================================
+FILE 1: server/.env
+=========================================
+
+Copy everything below this line to: D:\source\repos\adpa\server\.env
+
+------ START COPYING HERE ------
+
+# ADPA Backend Configuration
+# Generated: 2025-10-20
+
+# ==================== DATABASE (SUPABASE) ====================
+
+DATABASE_URL=postgresql://postgres:QueIQ4Klopman$@db.blxzjbxczpmmgiwbtmdo.supabase.co:5432/postgres
+
+SUPABASE_URL=https://blxzjbxczpmmgiwbtmdo.supabase.co
+SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJseHpqYnhjenBtbWdpd2J0bWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5MjIwMzAsImV4cCI6MjA3NjQ5ODAzMH0.2U4c5wrUBAD6BM8yRwJcS0MwgcSEVpzfS3gXUeVtNYM
+SUPABASE_PROJECT_REF=blxzjbxczpmmgiwbtmdo
+
+# ==================== REDIS (UPSTASH) ====================
+
+# GET REDIS PASSWORD FROM: https://console.upstash.com
+# Find database: natural-vulture-7034
+# Copy password from "Redis Connect" URL
+# Then replace YOUR_REDIS_PASSWORD below with actual password
+
+REDIS_URL=rediss://default:YOUR_REDIS_PASSWORD@natural-vulture-7034.upstash.io:6379
+
+# Component values (fallback)
+REDIS_HOST=natural-vulture-7034.upstash.io
+REDIS_PORT=6379
+REDIS_TLS=true
+
+# REST API (alternative)
+UPSTASH_REDIS_REST_URL=https://natural-vulture-7034.upstash.io
+UPSTASH_REDIS_REST_TOKEN=ARt6AAImcDIwMjg1MzZkM2Y0ZTE0MGVhOTIzNTRjOWQ3NmIyMDUxM3AyNzAzNA
+
+# ==================== SERVER ====================
+
+PORT=5000
+NODE_ENV=development
+
+# ==================== SECURITY ====================
+
+JWT_SECRET=adpa-jwt-secret-dev-DO-NOT-USE-IN-PRODUCTION
+SESSION_SECRET=adpa-session-secret-dev-DO-NOT-USE-IN-PRODUCTION
+
+# ==================== FRONTEND ====================
+
+FRONTEND_URL=http://localhost:3000
+
+# ==================== UPLOADS ====================
+
+MAX_FILE_SIZE=52428800
+UPLOAD_DIR=./uploads
+
+# ==================== LOGGING ====================
+
+LOG_LEVEL=info
+LOG_DIR=./logs
+
+------ STOP COPYING HERE ------
+
+=========================================
+FILE 2: .env.local (root folder)
+=========================================
+
+Copy everything below to: D:\source\repos\adpa\.env.local
+
+------ START COPYING HERE ------
+
+# ADPA Frontend Configuration
+
+NEXT_PUBLIC_SUPABASE_URL=https://blxzjbxczpmmgiwbtmdo.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJseHpqYnhjenBtbWdpd2J0bWRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA5MjIwMzAsImV4cCI6MjA3NjQ5ODAzMH0.2U4c5wrUBAD6BM8yRwJcS0MwgcSEVpzfS3gXUeVtNYM
+
+# Development API
+NEXT_PUBLIC_API_URL=http://localhost:5000/api
+NEXT_PUBLIC_WS_URL=http://localhost:5000
+
+# Production API (uncomment when deploying)
+# NEXT_PUBLIC_API_URL=https://adpa-production.up.railway.app/api
+# NEXT_PUBLIC_WS_URL=https://adpa-production.up.railway.app
+
+------ STOP COPYING HERE ------
+
+=========================================
+IMPORTANT: GET REDIS PASSWORD
+=========================================
+
+1. Go to: https://console.upstash.com
+2. Sign in
+3. Find database: "natural-vulture-7034"
+4. Look for "Redis Connect" or "Connect" section
+5. Copy the connection URL (format: rediss://default:PASSWORD@natural-vulture-7034.upstash.io:6379)
+6. Extract the PASSWORD part
+7. Update REDIS_URL in server/.env with the full URL
+
+Example:
+rediss://default:AbCd1234EfGh5678@natural-vulture-7034.upstash.io:6379
+                  ^^^^^^^^^^^^^^^^^^
+                  This is your password
+
+=========================================
+AFTER CREATING FILES
+=========================================
+
+1. Verify server/.env exists:
+   dir server\.env
+
+2. Verify .env.local exists:
+   dir .env.local
+
+3. Run migrations:
+   node scripts/apply-baseline-migration.js
+   node scripts/create-change-request-template.js
+
+4. Verify tables:
+   node scripts/check-baseline-tables.js
+
+5. Start backend:
+   cd server
+   npm run dev
+
+6. Start frontend (new terminal):
+   npm run dev
+
+7. Test:
+   http://localhost:3000
+   http://localhost:5000/health
+
+=========================================
+TROUBLESHOOTING
+=========================================
+
+If Redis connection fails:
+- Verify REDIS_URL has correct password
+- Check TLS is set to true
+- Try REST API as fallback (already in .env)
+
+If Database connection fails:
+- Verify Supabase password: QueIQ4Klopman$
+- Check project ref: blxzjbxczpmmgiwbtmdo
+- Try Supabase SQL Editor to test connection
+
+=========================================
+

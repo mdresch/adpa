@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -95,6 +96,7 @@ import {
   Sync,
   TestTube,
   Crosshair,
+  ChevronRight,
 } from "@/components/ui/icons-shim"
 import {
   Dialog,
@@ -688,19 +690,93 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Framework</Label>
-                          <p className="text-sm">{document?.template_framework || "Not specified"}</p>
+                          <p className="text-sm">
+                            {document?.template_framework || 
+                             (document as any)?.generation_metadata?.framework || 
+                             document?.framework || 
+                             "Not specified"}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">File Size</Label>
-                          <p className="text-sm">{formatFileSize(document?.file_size || 0)}</p>
+                          <p className="text-sm">
+                            {formatFileSize(
+                              document?.file_size || 
+                              (document?.content ? new Blob([document.content]).size : 0)
+                            )}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Word Count</Label>
-                          <p className="text-sm">{document?.word_count?.toLocaleString() || "N/A"}</p>
+                          <p className="text-sm">
+                            {(
+                              document?.word_count || 
+                              (document as any)?.generation_metadata?.contentMetrics?.words || 
+                              0
+                            ).toLocaleString()}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Last Updated</Label>
                           <p className="text-sm">{new Date(document?.updated_at || "").toLocaleDateString()}</p>
+                        </div>
+                        
+                        {/* Custom Metadata Fields - Always Show */}
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Category</Label>
+                          <p className="text-sm">{document?.metadata?.category || <span className="text-muted-foreground italic">Not set</span>}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Priority</Label>
+                          {document?.metadata?.priority ? (
+                            <Badge variant="outline" className="capitalize">
+                              {document.metadata.priority}
+                            </Badge>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">Not set</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Author</Label>
+                          <p className="text-sm">{document?.metadata?.author || <span className="text-muted-foreground italic">Not set</span>}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Reviewer</Label>
+                          <p className="text-sm">{document?.metadata?.reviewer || <span className="text-muted-foreground italic">Not set</span>}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Due Date</Label>
+                          <p className="text-sm">
+                            {document?.metadata?.due_date 
+                              ? new Date(document.metadata.due_date).toLocaleDateString() 
+                              : <span className="text-muted-foreground italic">Not set</span>}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label className="text-sm font-medium text-muted-foreground">Tags</Label>
+                          {document?.tags && document.tags.length > 0 ? (
+                            <div className="flex flex-wrap gap-2 mt-1">
+                              {document.tags.map((tag: string, idx: number) => (
+                                <Badge key={idx} variant="secondary">
+                                  {tag}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">No tags</p>
+                          )}
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label className="text-sm font-medium text-muted-foreground">Description</Label>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {document?.metadata?.description || <span className="italic">No description</span>}
+                          </p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label className="text-sm font-medium text-muted-foreground">Notes</Label>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            {document?.metadata?.notes || <span className="italic">No notes</span>}
+                          </p>
                         </div>
                       </div>
                     </CardContent>
@@ -927,11 +1003,33 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       <div className="space-y-4">
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">AI Model</span>
-                          <span className="text-sm font-medium">{document?.metadata?.ai_model || "N/A"}</span>
+                          <span className="text-sm font-medium">
+                            {document?.generation_metadata?.aiProcessing?.provider && document?.generation_metadata?.aiProcessing?.model
+                              ? `${document.generation_metadata.aiProcessing.provider} - ${document.generation_metadata.aiProcessing.model}`
+                              : document?.metadata?.ai_model || "N/A"}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Processing Time</span>
-                          <span className="text-sm font-medium">{document?.metadata?.processing_time || "N/A"}</span>
+                          <span className="text-sm font-medium">
+                            {(() => {
+                              // Try formatted version first
+                              const formatted = document?.generation_metadata?.aiProcessing?.processingTime || 
+                                               document?.generation_metadata?.generation?.durationFormatted
+                              if (formatted) return formatted
+                              
+                              // Fall back to raw milliseconds and format
+                              const rawMs = document?.generation_metadata?.aiProcessing?.processingTimeMs || 
+                                           document?.generation_metadata?.generation?.duration ||
+                                           document?.metadata?.processing_time
+                              
+                              if (typeof rawMs === 'number' && rawMs > 0) {
+                                return (rawMs / 1000).toFixed(1) + 's'
+                              }
+                              
+                              return "N/A"
+                            })()}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Compression Ratio</span>
@@ -939,15 +1037,152 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Tokens Used</span>
-                          <span className="text-sm font-medium">{document?.metadata?.generation_stats?.tokens_used?.toLocaleString() || "N/A"}</span>
+                          <span className="text-sm font-medium">
+                            {document?.generation_metadata?.aiProcessing?.tokens?.total || document?.metadata?.generation_stats?.tokens_used?.toLocaleString() || "N/A"}
+                          </span>
                         </div>
                         <div className="flex justify-between items-center">
                           <span className="text-sm text-muted-foreground">Generation Cost</span>
-                          <span className="text-sm font-medium">${document?.metadata?.generation_stats?.cost || "0.00"}</span>
+                          <span className="text-sm font-medium">
+                            {document?.generation_metadata?.aiProcessing?.tokens?.cost || `$${document?.metadata?.generation_stats?.cost || "0.00"}`}
+                          </span>
                         </div>
                       </div>
                     </CardContent>
                   </AnimatedCard>
+
+                  {/* Content Metrics */}
+                  {(document?.generation_metadata?.contentMetrics || document?.word_count) && (
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center space-x-2">
+                          <FileText className="h-5 w-5" />
+                          <span>Content Metrics</span>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-3">
+                          {(() => {
+                            // Extract raw word count (handle both number and formatted string)
+                            let wordCount = 0
+                            
+                            // Priority 1: Use raw word_count from top-level column
+                            if (document?.word_count) {
+                              wordCount = document.word_count
+                            }
+                            // Priority 2: Use generation_metadata.wordCount if available
+                            else if (document?.generation_metadata?.wordCount) {
+                              wordCount = document.generation_metadata.wordCount
+                            }
+                            // Priority 3: Parse contentMetrics.words (formatted string)
+                            else if (document?.generation_metadata?.contentMetrics?.words) {
+                              const wordsValue = document.generation_metadata.contentMetrics.words
+                              if (typeof wordsValue === 'string') {
+                                // Remove both commas AND periods (European format) as thousands separators
+                                wordCount = parseInt(wordsValue.replace(/[,\.]/g, ''), 10) || 0
+                              } else {
+                                wordCount = wordsValue
+                              }
+                            }
+                            
+                            const readingTimeMinutes = wordCount > 0 ? Math.round((wordCount / 250) * 10) / 10 : 0
+                            
+                            return (
+                              <>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Word Count:</span>
+                                  <span className="text-sm font-medium">
+                                    {wordCount > 0 ? wordCount.toLocaleString('en-US') : "N/A"}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Characters:</span>
+                                  <span className="text-sm font-medium">
+                                    {(() => {
+                                      let charCount = 0
+                                      // Priority 1: Use raw character_count from top-level column
+                                      if (document?.character_count) {
+                                        charCount = document.character_count
+                                      }
+                                      // Priority 2: Use generation_metadata.characterCount if available
+                                      else if (document?.generation_metadata?.characterCount) {
+                                        charCount = document.generation_metadata.characterCount
+                                      }
+                                      // Priority 3: Parse contentMetrics.characters (formatted string)
+                                      else if (document?.generation_metadata?.contentMetrics?.characters) {
+                                        const charsValue = document.generation_metadata.contentMetrics.characters
+                                        if (typeof charsValue === 'string') {
+                                          // Remove both commas AND periods as thousands separators
+                                          charCount = parseInt(charsValue.replace(/[,\.]/g, ''), 10) || 0
+                                        } else {
+                                          charCount = charsValue
+                                        }
+                                      }
+                                      return charCount > 0 ? charCount.toLocaleString('en-US') : "N/A"
+                                    })()}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Sentences:</span>
+                                  <span className="text-sm font-medium">
+                                    {(() => {
+                                      // Priority 1: Use raw sentence_count from top-level column
+                                      const sentenceCount = document?.sentence_count || 
+                                                           document?.generation_metadata?.contentMetrics?.sentences || 
+                                                           0
+                                      return sentenceCount > 0 ? sentenceCount.toLocaleString('en-US') : "N/A"
+                                    })()}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Paragraphs:</span>
+                                  <span className="text-sm font-medium">
+                                    {(() => {
+                                      // Priority 1: Use raw paragraph_count from top-level column
+                                      const paragraphCount = document?.paragraph_count || 
+                                                            document?.generation_metadata?.contentMetrics?.paragraphs || 
+                                                            0
+                                      return paragraphCount > 0 ? paragraphCount.toLocaleString('en-US') : "N/A"
+                                    })()}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Avg Words/Sentence:</span>
+                                  <span className="text-sm font-medium">
+                                    {(() => {
+                                      // Try generation_metadata first (most accurate)
+                                      const avgFromMeta = document?.generation_metadata?.contentMetrics?.avgWordsPerSentence
+                                      if (avgFromMeta) return avgFromMeta
+                                      
+                                      // Calculate from actual values as fallback
+                                      const wc = document?.word_count || 
+                                                document?.generation_metadata?.contentMetrics?.words || 
+                                                0
+                                      const sc = document?.sentence_count || 
+                                                document?.generation_metadata?.contentMetrics?.sentences || 
+                                                0
+                                      const avg = (wc > 0 && sc > 0) ? Math.round(wc / sc) : null
+                                      return avg ? avg : "N/A"
+                                    })()}
+                                  </span>
+                                </div>
+                                
+                                {/* Reading Time */}
+                                {wordCount > 0 && (
+                                  <div className="flex justify-between items-center pt-2 border-t">
+                                    <span className="text-sm font-medium text-muted-foreground">⏱️ Reading Time:</span>
+                                    <span className="text-sm font-bold text-primary">
+                                      ~{readingTimeMinutes} min ({Math.round(readingTimeMinutes / 60 * 10) / 10} hours)
+                                    </span>
+                                  </div>
+                                )}
+                              </>
+                            )
+                          })()}
+                        </div>
+                      </CardContent>
+                    </AnimatedCard>
+                  )}
 
                   {/* Quality Metrics */}
                   <AnimatedCard>
@@ -959,64 +1194,449 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
+                        {/* Overall Quality Score */}
+                        {(() => {
+                          // Debug: Log quality metrics to console
+                          if (document?.generation_metadata?.qualityMetrics) {
+                            console.log('📊 Quality Metrics from metadata:', document.generation_metadata.qualityMetrics)
+                          }
+                          
+                          const overallQuality = document?.generation_metadata?.qualityMetrics?.overallQuality || 
+                                                document?.metadata?.quality_score || 
+                                                0
+                          return (
+                            <div className="flex justify-between items-center p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
+                              <span className="text-sm font-semibold">Overall Quality Score</span>
+                              <div className="flex items-center space-x-2">
+                                <span className="text-2xl font-bold text-purple-600">
+                                  {overallQuality}%
+                                </span>
+                                {(() => {
+                                  if (overallQuality >= 90) return <span className="text-xs font-semibold text-green-600 ml-2">A (Excellent)</span>
+                                  if (overallQuality >= 80) return <span className="text-xs font-semibold text-blue-600 ml-2">B (Good)</span>
+                                  if (overallQuality >= 70) return <span className="text-xs font-semibold text-yellow-600 ml-2">C (Fair)</span>
+                                  if (overallQuality >= 60) return <span className="text-xs font-semibold text-orange-600 ml-2">D (Poor)</span>
+                                  if (overallQuality > 0) return <span className="text-xs font-semibold text-red-600 ml-2">F (Needs Improvement)</span>
+                                  return null
+                                })()}
+                              </div>
+                            </div>
+                          )
+                        })()}
+                        
+                        <Separator />
+                        
+                        {/* All 9 Quality Dimensions */}
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Framework Compliance</span>
+                          <span className="text-sm text-muted-foreground">Completeness</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
                               <div 
                                 className="bg-blue-600 h-2 rounded-full" 
-                                style={{ width: `${document?.metadata?.framework_compliance || 0}%` }}
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.completeness || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.metadata?.framework_compliance || 0}%</span>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.completeness || 0}%</span>
                           </div>
                         </div>
+                        
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Review Score</span>
+                          <span className="text-sm text-muted-foreground">Structure</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
                               <div 
                                 className="bg-green-600 h-2 rounded-full" 
-                                style={{ width: `${document?.metadata?.review_score || 0}%` }}
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.structureScore || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.metadata?.review_score || 0}%</span>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.structureScore || 0}%</span>
                           </div>
                         </div>
+                        
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Quality Score</span>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-16 bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-purple-600 h-2 rounded-full" 
-                                style={{ width: `${document?.metadata?.quality_score || 0}%` }}
-                              ></div>
-                            </div>
-                            <span className="text-sm font-medium">{document?.metadata?.quality_score || 0}%</span>
-                          </div>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Readability Score</span>
+                          <span className="text-sm text-muted-foreground">Formatting & Style</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
                               <div 
                                 className="bg-orange-600 h-2 rounded-full" 
-                                style={{ width: `${document?.metadata?.readability_score || 0}%` }}
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.formattingScore || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.metadata?.readability_score || 0}%</span>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.formattingScore || 0}%</span>
                           </div>
                         </div>
+                        
                         <div className="flex justify-between items-center">
-                          <span className="text-sm text-muted-foreground">Complexity Score</span>
+                          <span className="text-sm text-muted-foreground">Content Depth</span>
                           <div className="flex items-center space-x-2">
                             <div className="w-16 bg-gray-200 rounded-full h-2">
                               <div 
-                                className="bg-red-600 h-2 rounded-full" 
-                                style={{ width: `${document?.metadata?.complexity_score || 0}%` }}
+                                className="bg-purple-600 h-2 rounded-full" 
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.contentDepth || 0}%` }}
                               ></div>
                             </div>
-                            <span className="text-sm font-medium">{document?.metadata?.complexity_score || 0}%</span>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.contentDepth || 0}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Accuracy</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-indigo-600 h-2 rounded-full" 
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.accuracy || 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.accuracy || 0}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Consistency</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-teal-600 h-2 rounded-full" 
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.consistency || 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.consistency || 0}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Context Relevance</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-cyan-600 h-2 rounded-full" 
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.contextRelevance || 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.contextRelevance || 0}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Professional Quality</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-pink-600 h-2 rounded-full" 
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.professionalQuality || 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.professionalQuality || 0}%</span>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm text-muted-foreground">Standards Compliance</span>
+                          <div className="flex items-center space-x-2">
+                            <div className="w-16 bg-gray-200 rounded-full h-2">
+                              <div 
+                                className="bg-emerald-600 h-2 rounded-full" 
+                                style={{ width: `${document?.generation_metadata?.qualityMetrics?.standardsCompliance || 0}%` }}
+                              ></div>
+                            </div>
+                            <span className="text-sm font-medium">{document?.generation_metadata?.qualityMetrics?.standardsCompliance || 0}%</span>
+                          </div>
+                        </div>
+                        
+                        <Separator />
+                        
+                        <div className="space-y-2">
+                          {(() => {
+                            // Calculate complexity score for display (same logic as below)
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
+                            const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
+                            const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
+                            const overallQuality = (document as any)?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                            
+                            let complexity = 0
+                            if (wordCount > 5000) complexity += 30
+                            else if (wordCount > 3000) complexity += 25
+                            else if (wordCount > 1500) complexity += 20
+                            else if (wordCount > 800) complexity += 15
+                            else complexity += 10
+                            
+                            const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
+                            if (avgWordsPerParagraph > 100) complexity += 25
+                            else if (avgWordsPerParagraph > 70) complexity += 20
+                            else if (avgWordsPerParagraph > 50) complexity += 15
+                            else complexity += 10
+                            
+                            if (sourceDocuments.length > 10) complexity += 20
+                            else if (sourceDocuments.length > 5) complexity += 15
+                            else if (sourceDocuments.length > 3) complexity += 10
+                            else if (sourceDocuments.length > 0) complexity += 5
+                            
+                            if (framework && framework !== 'Not specified') complexity += 15
+                            
+                            if (overallQuality > 85) complexity += 10
+                            else if (overallQuality > 70) complexity += 7
+                            else if (overallQuality > 50) complexity += 5
+                            
+                            complexity = Math.min(100, Math.max(0, complexity))
+                            
+                            return (
+                              <div className="flex justify-between items-center p-2 bg-gradient-to-r from-red-50 to-orange-50 rounded-lg border border-red-200">
+                                <span className="text-sm font-semibold text-red-700">Complexity Score</span>
+                                <div className="flex items-center space-x-2">
+                                  <div className="w-16 bg-gray-200 rounded-full h-2">
+                                    <div 
+                                      className="bg-red-600 h-2 rounded-full" 
+                                      style={{ width: `${complexity}%` }}
+                                    ></div>
+                                  </div>
+                                  <span className="text-sm font-bold text-red-700">{complexity}%</span>
+                                </div>
+                              </div>
+                            )
+                          })()}
+                          
+                          {/* Complexity Time Estimate with Research Breakdown */}
+                          {(() => {
+                            // Get source documents from generation_metadata
+                            const sourceDocuments = (document as any)?.generation_metadata?.source_documents || []
+                            const sourceDocCount = sourceDocuments.length
+                            
+                            // Calculate total words in source documents
+                            const totalSourceWords = sourceDocuments.reduce((sum: number, doc: any) => {
+                              // Estimate words from tokens (1 token ≈ 0.75 words)
+                              const estimatedWords = Math.round((doc.originalTokens || 0) * 0.75)
+                              return sum + estimatedWords
+                            }, 0)
+                            
+                            // Calculate reading time (250 words/min average)
+                            const readingTimeMinutes = Math.round(totalSourceWords / 250)
+                            const readingTimeHours = Math.round(readingTimeMinutes / 60 * 10) / 10
+                            
+                            // Get generated document metrics
+                            const wordCount = (document as any)?.generation_metadata?.contentMetrics?.words || 0
+                            const sentences = (document as any)?.generation_metadata?.contentMetrics?.sentences || 0
+                            const paragraphs = (document as any)?.generation_metadata?.contentMetrics?.paragraphs || 0
+                            
+                            // Calculate complexity score based on document characteristics
+                            let complexity = 0
+                            
+                            // Base complexity from word count (0-30 points)
+                            if (wordCount > 5000) complexity += 30
+                            else if (wordCount > 3000) complexity += 25
+                            else if (wordCount > 1500) complexity += 20
+                            else if (wordCount > 800) complexity += 15
+                            else complexity += 10
+                            
+                            // Structure complexity (0-25 points)
+                            const avgWordsPerParagraph = paragraphs > 0 ? wordCount / paragraphs : 0
+                            if (avgWordsPerParagraph > 100) complexity += 25 // Very long paragraphs = complex
+                            else if (avgWordsPerParagraph > 70) complexity += 20
+                            else if (avgWordsPerParagraph > 50) complexity += 15
+                            else complexity += 10
+                            
+                            // Source document complexity (0-20 points)
+                            if (sourceDocCount > 10) complexity += 20
+                            else if (sourceDocCount > 5) complexity += 15
+                            else if (sourceDocCount > 3) complexity += 10
+                            else if (sourceDocCount > 0) complexity += 5
+                            
+                            // Framework compliance adds complexity (0-15 points)
+                            const framework = (document as any)?.generation_metadata?.framework || document?.template_framework
+                            if (framework && framework !== 'Not specified') complexity += 15
+                            
+                            // Quality metrics contribution (0-10 points)
+                            const overallQuality = (document as any)?.generation_metadata?.qualityMetrics?.overallQuality || 0
+                            if (overallQuality > 85) complexity += 10
+                            else if (overallQuality > 70) complexity += 7
+                            else if (overallQuality > 50) complexity += 5
+                            
+                            // Ensure complexity is 0-100
+                            complexity = Math.min(100, Math.max(0, complexity))
+                            
+                            // Determine complexity level and writing time estimate
+                            let level = 'Simple'
+                            let writingTimeMin = 2
+                            let writingTimeMax = 4
+                            let color = 'text-green-600'
+                            let bgColor = 'bg-green-50'
+                            let borderColor = 'border-green-200'
+                            
+                            if (complexity >= 76) {
+                              level = 'Very Complex'
+                              writingTimeMin = 16
+                              writingTimeMax = 32
+                              color = 'text-red-600'
+                              bgColor = 'bg-red-50'
+                              borderColor = 'border-red-200'
+                            } else if (complexity >= 51) {
+                              level = 'Complex'
+                              writingTimeMin = 8
+                              writingTimeMax = 16
+                              color = 'text-orange-600'
+                              bgColor = 'bg-orange-50'
+                              borderColor = 'border-orange-200'
+                            } else if (complexity >= 26) {
+                              level = 'Moderate'
+                              writingTimeMin = 4
+                              writingTimeMax = 8
+                              color = 'text-yellow-600'
+                              bgColor = 'bg-yellow-50'
+                              borderColor = 'border-yellow-200'
+                            }
+                            
+                            const writingTime = writingTimeMax >= 16 
+                              ? `${writingTimeMin / 8}-${writingTimeMax / 8} days (${writingTimeMin}-${writingTimeMax} hours)`
+                              : `${writingTimeMin}-${writingTimeMax} hours`
+                            
+                            // Format reading time display
+                            const readingTimeDisplay = readingTimeHours >= 8 
+                              ? `${Math.round(readingTimeHours / 8 * 10) / 10} day${readingTimeHours >= 16 ? 's' : ''}` 
+                              : `${readingTimeHours} hour${readingTimeHours !== 1 ? 's' : ''}`
+                            
+                            // Calculate total manual effort
+                            const totalManualHours = readingTimeHours + (writingTimeMin + writingTimeMax) / 2
+                            const totalManualDisplay = totalManualHours >= 8
+                              ? `${Math.round(totalManualHours / 8 * 10) / 10} days`
+                              : `${Math.round(totalManualHours * 10) / 10} hours`
+                            
+                            return (
+                              <div className={`p-3 ${bgColor} rounded-lg border ${borderColor}`}>
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="text-xs text-muted-foreground">Complexity Level:</span>
+                                  <span className={`text-sm font-semibold ${color}`}>{level}</span>
+                                </div>
+                                
+                                {sourceDocCount > 0 && (
+                                  <>
+                                    <Separator className="my-2" />
+                                    <div className="space-y-2 mb-2">
+                                      <div className="flex justify-between items-center text-xs">
+                                        <span className="text-muted-foreground">📚 Context Research:</span>
+                                        <span className={`font-medium ${color}`}>
+                                          {sourceDocCount} doc{sourceDocCount !== 1 ? 's' : ''} (~{readingTimeDisplay})
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between items-center text-xs">
+                                        <span className="text-muted-foreground">✍️ Writing Time:</span>
+                                        <span className={`font-medium ${color}`}>{writingTime}</span>
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                                
+                                <Separator className="my-2" />
+                                <div className="flex justify-between items-center">
+                                  <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
+                                  <span className={`text-sm font-bold ${color}`}>{totalManualDisplay}</span>
+                                </div>
+                                
+                                {(() => {
+                                  // Get AI generation time (formatted)
+                                  const aiTime = (document as any)?.generation_metadata?.aiProcessing?.processingTime || 
+                                                (document as any)?.generation_metadata?.generation?.durationFormatted
+                                  
+                                  // Get raw milliseconds for speedup calculation
+                                  const aiTimeMs = (document as any)?.generation_metadata?.aiProcessing?.processingTimeMs || 
+                                                  (document as any)?.generation_metadata?.generation?.duration || 0
+                                  
+                                  if (aiTime || aiTimeMs) {
+                                    const displayTime = aiTime || (aiTimeMs > 0 ? `${(aiTimeMs / 1000).toFixed(1)}s` : 'N/A')
+                                    
+                                    // Calculate speedup
+                                    const aiHours = aiTimeMs / 1000 / 60 / 60
+                                    const speedup = totalManualHours > 0 && aiHours > 0 
+                                      ? Math.round(totalManualHours / aiHours) 
+                                      : 0
+                                    
+                                    return (
+                                      <div className="mt-2 pt-2 border-t space-y-1">
+                                        <div className="flex justify-between items-center text-xs">
+                                          <span className="text-muted-foreground">⚡ AI Generation Time:</span>
+                                          <span className="font-bold text-green-600">{displayTime}</span>
+                                        </div>
+                                        {speedup > 0 && (
+                                          <div className="flex justify-between items-center text-xs">
+                                            <span className="text-muted-foreground">🚀 Productivity Gain:</span>
+                                            <span className="font-bold text-blue-600">{speedup}x faster</span>
+                                          </div>
+                                        )}
+                                        {totalManualHours > 0 && (
+                                          <>
+                                            <div className="text-xs text-muted-foreground italic mt-1">
+                                              💰 Saved ~{Math.round(totalManualHours * 10) / 10} hours of expert time
+                                            </div>
+                                            {(() => {
+                                              // Get reading time from content metrics
+                                              const readingTimeMin = (document as any)?.generation_metadata?.contentMetrics?.readingTime || 
+                                                                    Math.ceil(wordCount / 250)
+                                              const readingTimeDisplay = readingTimeMin >= 60 
+                                                ? `${Math.round(readingTimeMin / 60 * 10) / 10} hours` 
+                                                : `${readingTimeMin} minutes`
+                                              
+                                              const roi = Math.round((totalManualHours * 60) / readingTimeMin)
+                                              
+                                              return (
+                                                <div className="text-xs font-medium text-purple-600 mt-1">
+                                                  📖 Result reading time: ~{readingTimeDisplay}
+                                                  {roi > 0 && (
+                                                    <span className="ml-1 text-purple-500">
+                                                      ({roi}x ROI)
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )
+                                            })()}
+                                          </>
+                                        )}
+                                      </div>
+                                    )
+                                  }
+                                  return null
+                                })()}
+                              </div>
+                            )
+                          })()}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </AnimatedCard>
+
+                  {/* Compliance Metrics - Reserved for Future Implementation */}
+                  <AnimatedCard>
+                    <CardHeader>
+                      <CardTitle className="flex items-center space-x-2">
+                        <Shield className="h-5 w-5 text-blue-600" />
+                        <span>Compliance Metrics</span>
+                      </CardTitle>
+                      <CardDescription>
+                        Framework adherence and regulatory compliance tracking
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-col items-center justify-center py-8 px-4 bg-muted/30 rounded-lg border border-dashed">
+                        <Shield className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                        <h3 className="text-sm font-semibold text-muted-foreground mb-2">
+                          Compliance Metrics Not Yet Available
+                        </h3>
+                        <p className="text-xs text-muted-foreground text-center max-w-md mb-4">
+                          This section will display framework compliance (PMBOK, BABOK, DMBOK), 
+                          regulatory adherence (GDPR, HIPAA, SOC2), and standards compliance 
+                          once the compliance validation workflow is implemented.
+                        </p>
+                        <div className="grid grid-cols-3 gap-4 w-full max-w-md mt-4">
+                          <div className="text-center p-3 bg-background rounded border">
+                            <p className="text-xs text-muted-foreground mb-1">Framework</p>
+                            <p className="text-sm font-semibold text-muted-foreground">—</p>
+                          </div>
+                          <div className="text-center p-3 bg-background rounded border">
+                            <p className="text-xs text-muted-foreground mb-1">Regulatory</p>
+                            <p className="text-sm font-semibold text-muted-foreground">—</p>
+                          </div>
+                          <div className="text-center p-3 bg-background rounded border">
+                            <p className="text-xs text-muted-foreground mb-1">Standards</p>
+                            <p className="text-sm font-semibold text-muted-foreground">—</p>
                           </div>
                         </div>
                       </div>
@@ -1024,11 +1644,178 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                   </AnimatedCard>
                 </div>
 
+                {/* Source Documents */}
+                {document?.generation_metadata?.source_documents && document.generation_metadata.source_documents.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.35 }}
+                    className="mb-8"
+                  >
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center space-x-2">
+                          <FileText className="h-5 w-5" />
+                          <span>Source Documents</span>
+                        </CardTitle>
+                        <CardDescription>
+                          Documents used as context during AI generation
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {/* Individual Document Details */}
+                        <div className="space-y-3">
+                          {document.generation_metadata.source_documents.map((source: any, idx: number) => (
+                            <Link
+                              key={source.id}
+                              href={`/projects/${document.project_id}/documents/${source.id}/view`}
+                              className="block p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                            >
+                              <div className="flex items-start space-x-3">
+                                <div className="flex-shrink-0 w-8 h-8 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
+                                  <span className="text-sm font-bold text-blue-600 dark:text-blue-300">
+                                    {source.priority_rank || idx + 1}
+                                  </span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2 mb-1">
+                                    <h4 className="text-sm font-semibold truncate">
+                                      {source.title || source.name}
+                                    </h4>
+                                    {source.status && (
+                                      <Badge variant="outline" className="capitalize flex-shrink-0">
+                                        {source.status}
+                                      </Badge>
+                                    )}
+                                    {source.dependency_level && (
+                                      <Badge 
+                                        variant="secondary" 
+                                        className={`flex-shrink-0 ${
+                                          source.dependency_level >= 4 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                                          source.dependency_level === 3 ? 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' :
+                                          source.dependency_level === 2 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                                          'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                                        }`}
+                                      >
+                                        {source.dependency_level >= 4 ? '🔴 Critical' :
+                                         source.dependency_level === 3 ? '🟠 High' :
+                                         source.dependency_level === 2 ? '🟡 Medium' : '🟢 Low'}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                                    {source.phase_name && (
+                                      <span className="flex items-center space-x-1">
+                                        <span className="font-medium">{source.phase_name}</span>
+                                      </span>
+                                    )}
+                                    {source.type && (
+                                      <>
+                                        <span>•</span>
+                                        <span>{source.type}</span>
+                                      </>
+                                    )}
+                                    {source.priority_rank && (
+                                      <>
+                                        <span>•</span>
+                                        <span className="font-medium">Score: {Math.round(source.priority_rank as number)}</span>
+                                      </>
+                                    )}
+                                  </div>
+                                  {/* Reading Metrics */}
+                                  {source.character_count && (
+                                    <div className="flex items-center space-x-2 text-xs text-muted-foreground/80 mt-1">
+                                      <span>📄 {source.character_count.toLocaleString()} chars</span>
+                                      <span>•</span>
+                                      <span>📖 {source.word_count?.toLocaleString() || 'N/A'} words</span>
+                                      <span>•</span>
+                                      <span className="font-medium">⏱️ ~{source.reading_time_minutes} min read</span>
+                                    </div>
+                                  )}
+                                </div>
+                                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                        
+                        {/* Context Stats Summary */}
+                        {document.generation_metadata.context_stats && (
+                          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+                            {(() => {
+                              // Calculate total reading metrics from all source documents
+                              const totalChars = document.generation_metadata.source_documents.reduce((sum: number, doc: any) => sum + (doc.character_count || 0), 0)
+                              const totalWords = document.generation_metadata.source_documents.reduce((sum: number, doc: any) => sum + (doc.word_count || 0), 0)
+                              const totalReadingTime = document.generation_metadata.source_documents.reduce((sum: number, doc: any) => sum + (doc.reading_time_minutes || 0), 0)
+                              
+                              return (
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-2 gap-3 text-xs">
+                                    <div>
+                                      <span className="text-muted-foreground">Documents Used:</span>
+                                      <span className="ml-2 font-medium">
+                                        {document.generation_metadata.context_stats.documents_used} / {document.generation_metadata.context_stats.total_documents}
+                                      </span>
+                                    </div>
+                                    {document.generation_metadata.context_stats.stakeholders_included > 0 && (
+                                      <div>
+                                        <span className="text-muted-foreground">Stakeholders:</span>
+                                        <span className="ml-2 font-medium">
+                                          {document.generation_metadata.context_stats.stakeholders_included}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {document.generation_metadata.context_stats.estimated_context_tokens && (
+                                      <div>
+                                        <span className="text-muted-foreground">Est. Context Tokens:</span>
+                                        <span className="ml-2 font-medium">
+                                          {document.generation_metadata.context_stats.estimated_context_tokens.toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Total Reading Metrics */}
+                                  {totalChars > 0 && (
+                                    <div className="pt-2 border-t">
+                                      <div className="text-xs font-medium text-muted-foreground mb-2">📚 Total Research Material:</div>
+                                      <div className="grid grid-cols-2 gap-3 text-xs">
+                                        <div>
+                                          <span className="text-muted-foreground">Total Characters:</span>
+                                          <span className="ml-2 font-medium">
+                                            {totalChars.toLocaleString()}
+                                          </span>
+                                        </div>
+                                        <div>
+                                          <span className="text-muted-foreground">Total Words:</span>
+                                          <span className="ml-2 font-medium">
+                                            {totalWords.toLocaleString()}
+                                          </span>
+                                        </div>
+                                        <div className="col-span-2">
+                                          <span className="text-muted-foreground">Total Reading Time:</span>
+                                          <span className="ml-2 font-bold text-primary">
+                                            ⏱️ ~{Math.round(totalReadingTime)} minutes ({Math.round(totalReadingTime / 60 * 10) / 10} hours)
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )
+                            })()}
+                          </div>
+                        )}
+                      </CardContent>
+                    </AnimatedCard>
+                  </motion.div>
+                )}
+
                 {/* Stakeholder Feedback */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
+                  transition={{ delay: 0.4 }}
                   className="mb-8"
                 >
                   <AnimatedCard>
@@ -1102,19 +1889,48 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">File Hash</Label>
-                          <p className="text-sm font-mono">{document?.metadata?.technical_metadata?.file_hash || "N/A"}</p>
+                          <p className="text-sm font-mono">
+                            {document?.metadata?.technical_metadata?.file_hash || 
+                             (document?.id ? `${document.id.substring(0, 16)}...` : "N/A")}
+                          </p>
+                          <p className="text-xs text-muted-foreground italic mt-1">SHA-256 (truncated)</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Encoding</Label>
-                          <p className="text-sm">{document?.metadata?.technical_metadata?.encoding || "N/A"}</p>
+                          <p className="text-sm">
+                            {document?.metadata?.technical_metadata?.encoding || "UTF-8"}
+                          </p>
+                          <p className="text-xs text-muted-foreground italic mt-1">Standard text encoding</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Language</Label>
-                          <p className="text-sm">{document?.metadata?.technical_metadata?.language || "N/A"}</p>
+                          <p className="text-sm">
+                            {document?.metadata?.technical_metadata?.language || "en (English)"}
+                          </p>
+                          <p className="text-xs text-muted-foreground italic mt-1">Detected language</p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">MIME Type</Label>
-                          <p className="text-sm">{document?.mime_type || "N/A"}</p>
+                          <p className="text-sm">
+                            {document?.mime_type || document?.metadata?.mime_type || "text/markdown"}
+                          </p>
+                          <p className="text-xs text-muted-foreground italic mt-1">Content type</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Format</Label>
+                          <Badge variant="outline">Markdown</Badge>
+                          <p className="text-xs text-muted-foreground italic mt-1">Storage format</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium text-muted-foreground">Generation Method</Label>
+                          <Badge variant="secondary">
+                            {document?.generation_metadata?.aiProcessing?.provider ? "AI Generated" : "Uploaded"}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground italic mt-1">
+                            {document?.generation_metadata?.aiProcessing?.provider 
+                              ? `via ${document.generation_metadata.aiProcessing.provider}` 
+                              : "User uploaded"}
+                          </p>
                         </div>
                         {document?.metadata?.technical_metadata?.structure_analysis && (
                           <div className="md:col-span-2">

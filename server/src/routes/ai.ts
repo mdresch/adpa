@@ -6,7 +6,7 @@ import { validate, validateParams, schemas } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { aiService } from "../services/aiService"
 import { ContextAwareAIService, generateWithContext } from "../modules/context/integration"
-import { addJob } from "../services/queueService"
+import * as queueService from "../services/queueService"
 import { v4 as uuidv4 } from "uuid"
 import { openaiConnector } from "../modules/ai/openai"
 import { googleConnector } from "../modules/ai/google"
@@ -17,6 +17,8 @@ import {
   formatMetadataForDisplay,
   logGenerationMetadata 
 } from "../utils/documentMetadata"
+import { trackActivity } from "../middleware/analyticsMiddleware"
+import { cache } from "../utils/redis"
 
 const router = express.Router()
 
@@ -54,69 +56,69 @@ router.post("/generate",
       }
       log.info('✅ [BACKEND-4/10] Provider validated:', providerCheck.rows[0].name)
 
-      // For extremely long requests (>20K chars or >10K tokens), we could use job queue
-      // But for now, use direct generation for all requests (Redis queueing is optional)
-      // This allows comprehensive prompts up to 20,000 characters
-      if (prompt.length > 20000 || (max_tokens && max_tokens > 10000)) {
-        log.info('🔄 [BACKEND-5/10] Extremely long request detected, but using direct generation (job queue disabled)')
-        // Job queueing temporarily disabled - proceed to direct generation
-      } else {
-        log.info('🔄 [BACKEND-5/10] Standard/long request, using direct generation')
-      }
-
-      // For quick requests, process immediately
-      // If client requested context-aware generation or provided contextual identifiers, use ContextAwareAIService
+      // Use job queue for ALL document generation to enable background processing
+      // This allows users to continue working while documents are generated
+      log.info('🔄 [BACKEND-5/10] Using background job queue for generation')
+      
       const useContext = req.query.use_context === 'true' || !!req.body.project_id || !!req.body.document_ids || !!req.body.template_id
       log.info('🔀 [BACKEND-6/10] Generation mode:', useContext ? 'Context-Aware' : 'Direct')
-
-      let result
-      if (useContext) {
-        log.info('🎯 [BACKEND-7/10] Starting context-aware generation...')
-        result = await ContextAwareAIService.generateWithContext({
-          prompt,
-          provider,
-          model,
-          temperature,
-          max_tokens,
-          template_id,
-          variables,
-          user_id: req.user?.id,
-          project_id: req.body.project_id,
-          document_ids: req.body.document_ids,
-          include_integrations: req.body.include_integrations,
-          custom_context: req.body.custom_context,
+      
+      // CRITICAL FIX: Prevent duplicate submissions within 10 seconds
+      const dedupeKey = `ai-gen:${req.user?.id}:${template_id}:${req.body.project_id}`
+      const recentJobId = await cache.get(dedupeKey)
+      
+      if (recentJobId) {
+        log.warn('⚠️ [DEDUPE] Duplicate request detected, returning existing job ID:', recentJobId)
+        return res.json({
+          message: "Document generation already in progress",
+          jobId: recentJobId,
+          status: "queued",
+          deduplicated: true
         })
-        log.info('✅ [BACKEND-8/10] Context-aware generation completed')
-      } else {
-        log.info('🤖 [BACKEND-7/10] Starting direct AI generation...')
-        result = await aiService.generate({
-          prompt,
-          provider,
-          model,
-          temperature,
-          max_tokens,
-          template_id,
-          variables,
-        })
-        log.info('✅ [BACKEND-8/10] Direct generation completed')
       }
       
-      log.info('📊 [BACKEND-9/10] Generation result:', {
-        hasContent: !!(result.content || result.text),
-        contentLength: (result.content || result.text || '').length,
-        hasUsage: !!result.usage,
-        tokens: result.usage?.total_tokens || result.usage?.totalTokens || 0
+      // Generate unique job ID (UUID format required by database)
+      const jobId = uuidv4()
+      log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
+      
+      // Store job ID for deduplication (10 second window)
+      await cache.set(dedupeKey, jobId, 10)
+      
+      // Add job to queue
+      const jobData = {
+        jobId,
+        userId: req.user?.id,
+        prompt,
+        provider,
+        model,
+        temperature,
+        max_tokens,
+        template_id,
+        variables,
+        use_context: useContext,
+        projectId: req.body.project_id,
+        projectName: req.body.project_name,
+        documentIds: req.body.document_ids,
+        include_integrations: req.body.include_integrations,
+        custom_context: req.body.custom_context,
+      }
+      
+      await queueService.addJob('ai-generate', jobData)
+      log.info('✅ [BACKEND-8/10] Job added to queue')
+      
+      // Return immediately with job ID
+      log.info('🎉 [BACKEND-9/10] Returning job ID to client')
+      
+      res.json({
+        message: "Document generation started",
+        jobId,
+        status: "queued"
       })
-
-  // Update usage stats
-      if (result.usage) {
-        await aiService.updateUsageStats(provider, result.usage)
-      }
-
-      // Calculate comprehensive metadata
-      const generationEnd = new Date()
-      const content = result.content || result.text || ''
       
+      log.info('✅ [BACKEND-10/10] Response sent - generation will continue in background')
+      return // Exit early, job will process asynchronously
+      
+      // The code below is unreachable but kept for reference
       const metadata = calculateDocumentMetadata(
         content,
         result,
@@ -133,18 +135,59 @@ router.post("/generate",
           projectName: req.body.project_name || 'Unknown Project',
           userId: req.user?.id || 'unknown',
           userName: req.user?.name || 'Unknown User',
-          promptLength: prompt.length
+          promptLength: prompt.length,
+          sourceDocuments: req.body.source_documents || [],
+          contextStats: req.body.context_stats || null
         }
       )
       
-      // Analyze quality
-      const quality = analyzeDocumentQuality(content, metadata)
+      // Analyze quality with source document count
+      const sourceDocCount = (req.body.source_documents?.length || req.body.context_stats?.documents_used || 0)
+      const quality = analyzeDocumentQuality(content, metadata, sourceDocCount)
       
       // Format for display
       const formattedMetadata = formatMetadataForDisplay(metadata, quality)
       
       // Log comprehensive metadata
       logGenerationMetadata(metadata, quality)
+
+      // Track AI generation activity
+      if (req.user?.id) {
+        trackActivity.aiGeneration(
+          req.user.id,
+          template_id ? 'template_based' : 'direct_prompt',
+          {
+            provider,
+            model: model || result.model,
+            template_id,
+            prompt_length: prompt.length,
+            tokens_used: metadata.totalTokens,
+            quality_score: quality.overallQuality,
+            processing_time_ms: metadata.processingTimeMs
+          }
+        )
+      }
+
+      // Track template validation (for template lifecycle tracking)
+      if (template_id && quality.overallQuality) {
+        try {
+          await pool.query(
+            'SELECT update_template_validation($1, $2, $3)',
+            [template_id, quality.overallQuality / 100, req.user?.id]
+          )
+          log.info('✅ Template validation tracked', {
+            template_id,
+            quality_score: quality.overallQuality,
+            validation_count_incremented: true
+          })
+          
+          // IMPORTANT: Clear template cache so UI shows updated metrics immediately
+          await cache.del(`template:${template_id}`)
+          log.info('🔄 Template cache cleared for fresh metrics display')
+        } catch (error) {
+          log.warn('⚠️ Failed to track template validation:', error.message)
+        }
+      }
 
       // Track template usage with comprehensive metrics if template was used
       if (template_id && req.body.document_id) {
@@ -189,13 +232,67 @@ router.post("/generate",
       )
 
       log.info('✅ [BACKEND-10/10] Metadata calculated and logged')
+
+      // AUTO-SAVE: If project_id is provided, automatically save the document to the project
+      let savedDocumentId = null
+      if (req.body.project_id && req.body.project_id !== 'unknown') {
+        try {
+          log.info('💾 [AUTO-SAVE] Saving document to project', {
+            projectId: req.body.project_id,
+            projectName: req.body.project_name
+          })
+
+          const documentId = require('crypto').randomUUID()
+          const templateData = template_id ? await pool.query('SELECT name FROM templates WHERE id = $1', [template_id]) : null
+          const documentTitle = templateData?.rows[0]?.name 
+            ? `${templateData.rows[0].name} - ${new Date().toLocaleDateString()}`
+            : `AI Generated Document - ${new Date().toLocaleDateString()}`
+
+          await pool.query(
+            `INSERT INTO documents 
+             (id, project_id, name, content, template_id, generation_metadata, created_by, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
+             RETURNING id`,
+            [
+              documentId,
+              req.body.project_id,
+              documentTitle,  // Changed column from 'title' to 'name'
+              content,
+              template_id || null,
+              JSON.stringify({
+                prompt: prompt,
+                provider: provider,
+                model: model || result.model,
+                template_id: template_id,
+                quality: quality,
+                ...formattedMetadata
+              }),
+              req.user?.id
+            ]
+          )
+
+          savedDocumentId = documentId
+          log.info('✅ [AUTO-SAVE] Document saved to project', {
+            documentId,
+            projectId: req.body.project_id,
+            title: documentTitle
+          })
+        } catch (saveError) {
+          log.error('❌ [AUTO-SAVE] Failed to save document to project:', saveError)
+          // Continue anyway - user can manually save if auto-save fails
+        }
+      }
+
       log.info('🎉 [BACKEND-10/10] Sending response to client')
 
       res.json({
         message: "Content generated successfully",
         result,
         metadata: formattedMetadata,
-        quality: quality
+        quality: quality,
+        savedToProject: !!savedDocumentId,
+        documentId: savedDocumentId,
+        projectId: req.body.project_id !== 'unknown' ? req.body.project_id : null
       })
       
       log.info('✅ [BACKEND] AI generation COMPLETE! Document ready.')

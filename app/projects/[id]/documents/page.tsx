@@ -54,6 +54,24 @@ import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { toast } from "sonner"
 
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
+
 interface Document {
   id: string
   name: string
@@ -78,10 +96,7 @@ interface Document {
 interface DocumentStats {
   totalDocuments: number
   byStatus: {
-    draft: number
-    review: number
-    approved: number
-    published: number
+    [key: string]: number
   }
   byTemplate: Array<{
     template_name: string
@@ -92,15 +107,18 @@ interface DocumentStats {
     framework: string
     count: number
   }>
-  recentActivity: Array<{
-    document_name: string
-    action: string
-    timestamp: string
-    user: string
-  }>
   totalWords: number
+  totalCharacters: number
   totalSize: number
-  avgProcessingTime: number
+  readingTimeMinutes: number
+  readingTimeFormatted: string
+  counts: {
+    published: number
+    generated: number
+    underReview: number
+    reviewed: number
+    draft: number
+  }
 }
 
 export default function ProjectDocuments({ params }: { params: { id: string } }) {
@@ -273,67 +291,6 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
-  // Calculate document statistics
-  const calculateStats = (docs: Document[]): DocumentStats => {
-    const byStatus = docs.reduce((acc, doc) => {
-      acc[doc.status as keyof typeof acc] = (acc[doc.status as keyof typeof acc] || 0) + 1
-      return acc
-    }, { draft: 0, review: 0, approved: 0, published: 0 })
-
-    const byTemplate = docs.reduce((acc, doc) => {
-      if (doc.template_name) {
-        const existing = acc.find(t => t.template_name === doc.template_name)
-        if (existing) {
-          existing.count++
-        } else {
-          acc.push({
-            template_name: doc.template_name,
-            template_framework: doc.template_framework || 'Unknown',
-            count: 1
-          })
-        }
-      }
-      return acc
-    }, [] as Array<{ template_name: string; template_framework: string; count: number }>)
-
-    const byFramework = docs.reduce((acc, doc) => {
-      const framework = doc.template_framework || 'Unknown'
-      const existing = acc.find(f => f.framework === framework)
-      if (existing) {
-        existing.count++
-      } else {
-        acc.push({ framework, count: 1 })
-      }
-      return acc
-    }, [] as Array<{ framework: string; count: number }>)
-
-    const recentActivity = docs
-      .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-      .slice(0, 5)
-      .map(doc => ({
-        document_name: doc.name,
-        action: 'Updated',
-        timestamp: doc.updated_at,
-        user: doc.updated_by
-      }))
-
-    const totalWords = docs.reduce((sum, doc) => sum + (doc.word_count || 0), 0)
-    const totalSize = docs.reduce((sum, doc) => sum + (doc.file_size || 0), 0)
-    const avgProcessingTime = docs.length > 0 
-      ? docs.reduce((sum, doc) => sum + (parseFloat(doc.metadata?.processing_time?.replace('s', '') || '0')), 0) / docs.length
-      : 0
-
-    return {
-      totalDocuments: docs.length,
-      byStatus,
-      byTemplate,
-      byFramework,
-      recentActivity,
-      totalWords,
-      totalSize,
-      avgProcessingTime
-    }
-  }
 
   // Handle document upload
   const handleUploadDocument = () => {
@@ -462,19 +419,19 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
-  // Delete document
+  // Delete document (soft delete)
   const handleDeleteDocument = async (documentId: string) => {
-    if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
+    if (!confirm("Are you sure you want to move this document to trash? You can restore it later from the Deleted Items page.")) {
       return
     }
     
     try {
       await apiClient.deleteDocument(documentId)
-      toast.success("Document deleted successfully!")
+      toast.success("Document moved to trash. You can restore it later from the Deleted Items page.")
       await fetchDocuments()
     } catch (error) {
       console.error("Failed to delete document:", error)
-      toast.error("Failed to delete document")
+      toast.error("Failed to move document to trash")
     }
   }
 
@@ -522,12 +479,40 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }, [pagination.page, searchTerm, statusFilter, templateFilter])
 
-  // Calculate stats when documents change
+  // Fetch comprehensive stats (across all documents)
+  const fetchStats = async () => {
+    try {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl(`/documents/project/${projectId}/stats`), {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+
+      if (response.ok) {
+        const statsData = await response.json()
+        setStats(statsData)
+      } else {
+        console.error('Failed to fetch stats:', response.statusText)
+      }
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+  // Fetch stats when component mounts or when documents are updated
+  useEffect(() => {
+    if (projectId) {
+      fetchStats()
+    }
+  }, [projectId])
+
+  // Refetch stats after documents change (create, update, delete)
   useEffect(() => {
     if (documents.length > 0) {
-      setStats(calculateStats(documents))
+      fetchStats()
     }
-  }, [documents])
+  }, [documents.length])
 
   if (!isAuthenticated) {
     return (
@@ -606,11 +591,19 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         <Upload className="h-4 w-4 mr-2" />
                         Upload Document
                       </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => router.push(`/projects/${projectId}/documents/deleted`)}
+                        className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Deleted Items
+                      </Button>
                     </div>
                   </div>
                 </motion.div>
 
-                {/* Dashboard Stats */}
+                {/* Dashboard Stats - Comprehensive across ALL documents */}
                 {stats && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
@@ -618,98 +611,84 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                     transition={{ delay: 0.2 }}
                     className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
                   >
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-blue-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
-                        <FileText className="h-4 w-4 text-muted-foreground" />
+                        <FileText className="h-4 w-4 text-blue-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{stats.totalDocuments}</div>
-                        <p className="text-xs text-muted-foreground">
-                          {stats.totalWords.toLocaleString()} total words
+                        <div className="text-3xl font-bold text-blue-600">{stats.totalDocuments}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          📊 {stats.totalWords.toLocaleString()} total words
+                        </p>
+                        <p className="text-xs text-blue-600 font-medium mt-1">
+                          Across all pages
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-green-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">Published</CardTitle>
                         <CheckCircle className="h-4 w-4 text-green-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{stats.byStatus.published}</div>
-                        <p className="text-xs text-muted-foreground">
-                          {((stats.byStatus.published / stats.totalDocuments) * 100).toFixed(1)}% of total
+                        <div className="text-3xl font-bold text-green-600">{stats.counts.published}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.published / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
+                        </p>
+                        <p className="text-xs text-green-600 font-medium mt-1">
+                          Live documents
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-yellow-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">In Review</CardTitle>
+                        <CardTitle className="text-sm font-medium">Under Review</CardTitle>
                         <AlertCircle className="h-4 w-4 text-yellow-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{stats.byStatus.review}</div>
-                        <p className="text-xs text-muted-foreground">
-                          {((stats.byStatus.review / stats.totalDocuments) * 100).toFixed(1)}% of total
+                        <div className="text-3xl font-bold text-yellow-600">{stats.counts.underReview}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.underReview / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
+                        </p>
+                        <p className="text-xs text-yellow-600 font-medium mt-1">
+                          Awaiting approval
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
-                    <AnimatedCard>
+                    <AnimatedCard className="border-l-4 border-l-purple-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Size</CardTitle>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium">Reading Time</CardTitle>
+                        <Clock className="h-4 w-4 text-purple-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{formatFileSize(stats.totalSize)}</div>
-                        <p className="text-xs text-muted-foreground">
-                          Avg: {formatFileSize(stats.totalSize / stats.totalDocuments)}
+                        <div className="text-3xl font-bold text-purple-600">{stats.readingTimeFormatted}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.readingTimeMinutes.toLocaleString()} minutes total
+                        </p>
+                        <p className="text-xs text-purple-600 font-medium mt-1">
+                          @ 225 words/min
                         </p>
                       </CardContent>
                     </AnimatedCard>
                   </motion.div>
                 )}
 
-                {/* Metadata Dashboard */}
-                {stats && (
+                {/* Framework Distribution */}
+                {stats && stats.totalDocuments > 0 && (
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.3 }}
-                    className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8"
+                    className="mb-8"
                   >
-                    {/* Template Distribution */}
-                    <AnimatedCard>
-                      <CardHeader>
-                        <CardTitle className="flex items-center space-x-2">
-                          <PieChart className="h-5 w-5" />
-                          <span>Template Distribution</span>
-                        </CardTitle>
-                        <CardDescription>
-                          Documents organized by template and framework
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          {stats.byTemplate.map((template, index) => (
-                            <div key={index} className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                                <span className="text-sm font-medium">{template.template_name}</span>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm font-bold">{template.count}</div>
-                                <div className="text-xs text-muted-foreground">{template.template_framework}</div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </AnimatedCard>
-
-                    {/* Framework Distribution */}
                     <AnimatedCard>
                       <CardHeader>
                         <CardTitle className="flex items-center space-x-2">
@@ -721,22 +700,41 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </CardDescription>
                       </CardHeader>
                       <CardContent>
-                        <div className="space-y-4">
-                          {stats.byFramework.map((framework, index) => (
-                            <div key={index} className="flex items-center justify-between">
-                              <div className="flex items-center space-x-2">
-                                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
-                                <span className="text-sm font-medium">{framework.framework}</span>
-                              </div>
-                              <div className="text-right">
-                                <div className="text-sm font-bold">{framework.count}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {((framework.count / stats.totalDocuments) * 100).toFixed(1)}%
+                        {stats.byFramework.length > 0 ? (
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            {stats.byFramework.map((framework, index) => {
+                              const percentage = ((framework.count / stats.totalDocuments) * 100).toFixed(1)
+                              const colors = [
+                                'bg-purple-500',
+                                'bg-indigo-500',
+                                'bg-blue-500',
+                                'bg-teal-500',
+                              ]
+                              const color = colors[index % colors.length]
+                              
+                              return (
+                                <div key={index} className="bg-gradient-to-br from-white to-gray-50 rounded-lg p-4 border shadow-sm">
+                                  <div className="flex items-center space-x-2 mb-3">
+                                    <div className={`w-4 h-4 rounded-full ${color}`}></div>
+                                    <span className="text-sm font-semibold">{framework.framework}</span>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <div className="text-3xl font-bold">{framework.count}</div>
+                                    <Progress value={parseFloat(percentage)} className="h-2" />
+                                    <div className="text-xs text-muted-foreground">
+                                      {percentage}% of total documents
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8 text-muted-foreground">
+                            <p>No framework information available for documents.</p>
+                            <p className="text-sm mt-2">Documents may not have templates assigned yet.</p>
+                          </div>
+                        )}
                       </CardContent>
                     </AnimatedCard>
                   </motion.div>
@@ -824,13 +822,20 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               <div className="flex-1">
                                 <div className="flex items-center space-x-3 mb-2">
                                   <FileText className="h-5 w-5 text-muted-foreground" />
-                                  <h3 className="text-lg font-semibold">{document.name}</h3>
-                                  <div className={getStatusColor(document.status)}>
+                                  <div className="flex-1">
+                                    <h3 className="text-lg font-semibold">{document.name}</h3>
+                                    {document.template_name && (
+                                      <p className="text-sm text-blue-600 font-medium">
+                                        📋 {document.template_name}
+                                      </p>
+                                    )}
+                                  </div>
+                                  <Badge className={getStatusColor(document.status)}>
                                     {document.status}
-                                  </div>
-                                  <div className="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 text-foreground">
+                                  </Badge>
+                                  <Badge variant="outline">
                                     v{document.version}
-                                  </div>
+                                  </Badge>
                                 </div>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -1013,7 +1018,11 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                             ) : (
                               templates.map((template) => (
                                 <option key={template.id} value={template.id}>
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                    : ''}
                                   {template.name} ({template.framework})
+                                  {template.development_status === 'production' ? ' ✓' : ''}
                                 </option>
                               ))
                             )}
@@ -1021,6 +1030,83 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                           <p className="text-xs text-muted-foreground mt-1">
                             Template selection is required to ensure proper document metadata and review compliance
                           </p>
+                          
+                          {/* Template Status Information Panel */}
+                          {uploadForm.template_id && templates.find(t => t.id === uploadForm.template_id) && (() => {
+                            const selectedTemplate = templates.find(t => t.id === uploadForm.template_id)!
+                            return (
+                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                      <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                        {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
+                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                      {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Success Rate</span>
+                                      <span className="font-semibold">
+                                        {selectedTemplate.success_rate !== undefined 
+                                          ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                          : selectedTemplate.success_count && selectedTemplate.validation_count
+                                            ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                            : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Test Runs</span>
+                                      <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Info for production templates */}
+                                {selectedTemplate.development_status === 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                        Production Template - Recommended for Uploads
+                                      </p>
+                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                        Using this template ensures proper metadata tagging and compliance tracking.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Note for non-production templates */}
+                                {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-blue-800 dark:text-blue-200">
+                                        Template Status: {selectedTemplate.development_status === 'draft' && 'Draft'}
+                                        {selectedTemplate.development_status === 'testing' && 'Testing'}
+                                        {selectedTemplate.development_status === 'validated' && 'Validated'}
+                                      </p>
+                                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                                        Metadata tagging will use this template's structure. Consider using a production template for better compliance tracking.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                         <div>
                           <Label htmlFor="file-upload">File *</Label>
@@ -1098,11 +1184,93 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                             ) : (
                               templates.map((template) => (
                                 <option key={template.id} value={template.id}>
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                    : ''}
                                   {template.name} ({template.framework})
+                                  {template.development_status === 'production' ? ' ✓' : ''}
                                 </option>
                               ))
                             )}
                           </select>
+                          
+                          {/* Template Status Information Panel */}
+                          {generateForm.template_id && templates.find(t => t.id === generateForm.template_id) && (() => {
+                            const selectedTemplate = templates.find(t => t.id === generateForm.template_id)!
+                            return (
+                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                      // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                      <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                        {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
+                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                      {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Success Rate</span>
+                                      <span className="font-semibold">
+                                        {selectedTemplate.success_rate !== undefined 
+                                          ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                          : selectedTemplate.success_count && selectedTemplate.validation_count
+                                            ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                            : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Test Runs</span>
+                                      <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Warning for non-production templates */}
+                                {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                        {selectedTemplate.development_status === 'draft' && 'Draft Template - Untested'}
+                                        {selectedTemplate.development_status === 'testing' && 'Testing Template - Limited validation'}
+                                        {selectedTemplate.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
+                                        {selectedTemplate.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
+                                      </p>
+                                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                        This template is still being tested. Results may vary in quality.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Success indicator for production templates */}
+                                {selectedTemplate.development_status === 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                        Production Template - Fully Validated
+                                      </p>
+                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                        This template has been thoroughly tested and is ready for production use.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                         <div>
                           <Label htmlFor="generate-prompt">Generation Prompt *</Label>

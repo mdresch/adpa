@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +22,6 @@ import {
   Sparkles,
   Settings,
   Play,
-  Square,
   Download,
   Copy,
   RefreshCw,
@@ -29,11 +29,30 @@ import {
   CheckCircle,
   Clock,
   Zap,
-} from "lucide-react"
+  Plus,
+} from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
+
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
 
 interface AIProvider {
   id: string
@@ -45,12 +64,28 @@ interface AIProvider {
 interface Template {
   id: string
   name: string
-  description: string
+  description?: string
   framework: string
+  category?: string
   variables: any[]
+  development_status?: 'draft' | 'testing' | 'compliance' | 'validated' | 'production' | 'deprecated' | 'archived'
+  validation_count?: number
+  success_count?: number
+  success_rate?: number
+  health_rating?: string
+  last_validated_at?: string
+}
+
+interface Project {
+  id: string
+  name: string
+  description?: string
+  status?: string
+  document_count?: number
 }
 
 export default function AIPage() {
+  const router = useRouter()
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
   const jobUpdates = useJobUpdates()
@@ -67,17 +102,26 @@ export default function AIPage() {
   const [result, setResult] = useState<any>(null)
   const [currentJobId, setCurrentJobId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  
+  // Project selection state
+  const [saveMode, setSaveMode] = useState<'new-project' | 'existing-project'>('new-project')
+  const [projects, setProjects] = useState<Project[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+  const [projectContext, setProjectContext] = useState<any>(null)
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [providersData, templatesData] = await Promise.all([
+        const [providersData, templatesData, projectsResponse] = await Promise.all([
           apiClient.getAIProviders(),
-          apiClient.getTemplates({ is_public: true, limit: 50 })
+          apiClient.getTemplates({ is_public: true, limit: 50 }),
+          apiClient.getProjects({ limit: 100 })
         ])
         
         setProviders(providersData)
         setTemplates(templatesData.templates)
+        // Extract projects array from response
+        setProjects(projectsResponse.projects || [])
         
         // Set default provider
         const activeProvider = providersData.find(p => p.is_active)
@@ -104,14 +148,40 @@ export default function AIPage() {
         setIsGenerating(false)
         setResult(jobUpdate.result)
         setCurrentJobId(null)
-        toast.success("AI generation completed!")
+        
+        // Check if document was saved to project
+        const documentId = jobUpdate.result?.documentId
+        const projectId = jobUpdate.result?.projectId || 
+                         (saveMode === 'existing-project' ? selectedProjectId : null)
+        
+        if (documentId && projectId) {
+          const projectName = projects.find(p => p.id === projectId)?.name || 'Project'
+          toast.success("Document generated and saved!", {
+            description: `Your document has been saved to ${projectName}. Click to view.`,
+            duration: 8000,
+            action: {
+              label: "View Document",
+              onClick: () => {
+                router.push(`/projects/${projectId}?tab=documents&highlight=${documentId}`)
+              }
+            }
+          })
+        } else {
+          toast.success("Document generation completed!", {
+            description: "Your generated content is ready.",
+            duration: 5000
+          })
+        }
       } else if (jobUpdate.status === "failed") {
         setIsGenerating(false)
         setCurrentJobId(null)
-        toast.error("AI generation failed: " + jobUpdate.error)
+        toast.error("Document generation failed", {
+          description: jobUpdate.error || "An error occurred during generation",
+          duration: 8000
+        })
       }
     }
-  }, [currentJobId, jobUpdates])
+  }, [currentJobId, jobUpdates, projects, saveMode, selectedProjectId])
 
   const handleGenerate = async () => {
     if (!selectedProvider) {
@@ -124,29 +194,74 @@ export default function AIPage() {
       return
     }
 
+    if (saveMode === 'existing-project' && !selectedProjectId) {
+      toast.error("Please select a project to save the document to")
+      return
+    }
+
     try {
       setIsGenerating(true)
       setResult(null)
 
+      // Fetch project context if saving to existing project
+      let enhancedPrompt = prompt
+      if (saveMode === 'existing-project' && selectedProjectId) {
+        try {
+          const context = await apiClient.request<any>(`/projects/${selectedProjectId}/context`)
+          setProjectContext(context)
+          
+          // Enhance prompt with project context
+          enhancedPrompt = `
+PROJECT CONTEXT:
+Project: ${context.name}
+Description: ${context.description || 'No description'}
+Status: ${context.status || 'Active'}
+Documents: ${context.documents?.map((d: any) => d.title).join(', ') || 'None'}
+Recent Changes: ${context.recent_changes?.length > 0 ? context.recent_changes.map((c: any) => `- ${c.title} (${c.change_type})`).join('\n') : 'None'}
+
+USER REQUEST:
+${prompt}
+
+Please create a document that considers the project context above and ensures consistency with existing project documentation.
+`
+        } catch (error) {
+          console.error("Failed to fetch project context:", error)
+          toast.warning("Continuing without project context")
+        }
+      }
+
       const generateData = {
-        prompt,
+        prompt: enhancedPrompt,
         provider: selectedProvider,
         temperature: temperature[0],
         max_tokens: maxTokens[0],
         template_id: selectedTemplate || undefined,
         variables: Object.keys(variables).length > 0 ? variables : undefined,
+        project_id: saveMode === 'existing-project' && selectedProjectId ? selectedProjectId : undefined,
+        project_name: saveMode === 'existing-project' && selectedProjectId ? projects.find(p => p.id === selectedProjectId)?.name : undefined,
       }
 
       const response = await apiClient.generateContent(generateData)
 
+      // All generation is now async (background job queue)
       if (response.jobId) {
-        // Long-running job
         setCurrentJobId(response.jobId)
-        toast.info("AI generation started", {
-          description: "This may take a few moments..."
+        setIsGenerating(false) // Allow user to continue working
+        
+        const projectName = saveMode === 'existing-project' && selectedProjectId 
+          ? projects.find(p => p.id === selectedProjectId)?.name 
+          : 'new project'
+        
+        toast.success("Document generation started", {
+          description: `Generating in background. You can continue working and will be notified when complete. ${projectName !== 'new project' ? `Document will be saved to ${projectName}.` : ''}`,
+          duration: 5000
         })
+        
+        // Reset form to allow starting another generation
+        setPrompt("")
+        setResult(null)
       } else {
-        // Immediate response
+        // Fallback for immediate response (shouldn't happen with new backend)
         setResult(response.result)
         setIsGenerating(false)
         toast.success("AI generation completed!")
@@ -159,6 +274,13 @@ export default function AIPage() {
   }
 
   const handleTemplateSelect = (templateId: string) => {
+    // Handle "no template" selection
+    if (templateId === "__none__") {
+      setSelectedTemplate("")
+      setVariables({})
+      return
+    }
+    
     setSelectedTemplate(templateId)
     const template = templates.find(t => t.id === templateId)
     
@@ -292,7 +414,7 @@ export default function AIPage() {
                                       <div className="flex items-center gap-2">
                                         <div className="h-2 w-2 rounded-full bg-green-500" />
                                         {provider.name}
-                                        <Badge variant="secondary">{provider.provider_type}</Badge>
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">{provider.provider_type}</span>
                                       </div>
                                     </SelectItem>
                                   ))}
@@ -305,21 +427,102 @@ export default function AIPage() {
                               <Label htmlFor="template">Template (Optional)</Label>
                               <Select value={selectedTemplate} onValueChange={handleTemplateSelect}>
                                 <SelectTrigger>
-                                  <SelectValue placeholder="Select a template" />
+                                  <SelectValue placeholder="Select a template or leave empty" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="">No template</SelectItem>
+                                  <SelectItem value="__none__">No template</SelectItem>
                                   {templates.map(template => (
                                     <SelectItem key={template.id} value={template.id}>
-                                      <div className="flex items-center gap-2">
-                                        <Badge variant="outline">{template.framework}</Badge>
-                                        {template.name}
+                                      <div className="flex items-center gap-2 w-full">
+                                        {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                                          <span className="text-xs">
+                                            {statusConfig[template.development_status as keyof typeof statusConfig].emoji}
+                                          </span>
+                                        )}
+                                        <span className="text-xs px-2 py-0.5 rounded border border-border">{template.framework}</span>
+                                        <span className="flex-1">{template.name}</span>
+                                        {template.development_status === 'production' && (
+                                          <span className="text-xs px-2 py-0.5 rounded bg-green-500 text-white">✓</span>
+                                        )}
                                       </div>
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             </div>
+                            
+                            {/* Template Status Information */}
+                            {selectedTemplateData && (
+                              <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {selectedTemplateData.development_status && statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig] && (
+                                      <Badge variant={statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig].variant}>
+                                        <>{statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplateData.development_status as keyof typeof statusConfig].label}</>
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {selectedTemplateData.health_rating && healthConfig[selectedTemplateData.health_rating as keyof typeof healthConfig] && (
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplateData.health_rating as keyof typeof healthConfig].color}`}>
+                                      <>{healthConfig[selectedTemplateData.health_rating as keyof typeof healthConfig].icon} {selectedTemplateData.health_rating}</>
+                                    </Badge>
+                                  )}
+                                </div>
+                                
+                                {selectedTemplateData.validation_count !== undefined && selectedTemplateData.validation_count > 0 && (
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Success Rate</span>
+                                      <span className="font-semibold">
+                                        {selectedTemplateData.success_rate !== undefined 
+                                          ? `${Number(selectedTemplateData.success_rate).toFixed(1)}%`
+                                          : selectedTemplateData.success_count && selectedTemplateData.validation_count
+                                            ? `${Math.round((selectedTemplateData.success_count / selectedTemplateData.validation_count) * 100)}%`
+                                            : 'N/A'}
+                                      </span>
+                                    </div>
+                                    <div className="flex flex-col">
+                                      <span className="text-muted-foreground text-xs">Test Runs</span>
+                                      <span className="font-semibold">{selectedTemplateData.validation_count}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Warning for non-production templates */}
+                                {selectedTemplateData.development_status && selectedTemplateData.development_status !== 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                        {selectedTemplateData.development_status === 'draft' && 'Draft Template - Untested'}
+                                        {selectedTemplateData.development_status === 'testing' && 'Testing Template - Limited validation'}
+                                        {selectedTemplateData.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
+                                        {selectedTemplateData.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
+                                      </p>
+                                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                        This template is still being tested. Results may vary in quality.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Success indicator for production templates */}
+                                {selectedTemplateData.development_status === 'production' && (
+                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                    <div className="flex-1">
+                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                        Production Template - Fully Validated
+                                      </p>
+                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                        This template has been thoroughly tested and is ready for production use.
+                                      </p>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
 
                             {/* Prompt */}
                             <div className="space-y-2">
@@ -328,10 +531,92 @@ export default function AIPage() {
                                 id="prompt"
                                 placeholder="Enter your prompt here..."
                                 value={prompt}
-                                onChange={(e) => setPrompt(e.target.value)}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setPrompt(e.target.value)}
                                 rows={6}
                                 className="resize-none"
                               />
+                            </div>
+
+                            {/* Project Selection */}
+                            <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                              <div className="flex items-center gap-2">
+                                <Plus className="h-4 w-4" />
+                                <Label className="text-base font-semibold">Save Generated Document To:</Label>
+                              </div>
+                              
+                              <div className="space-y-3">
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="radio"
+                                    id="new-project"
+                                    name="save-mode"
+                                    checked={saveMode === 'new-project'}
+                                    onChange={() => {
+                                      setSaveMode('new-project')
+                                      setSelectedProjectId("")
+                                    }}
+                                    className="h-4 w-4"
+                                  />
+                                  <Label htmlFor="new-project" className="font-normal cursor-pointer">
+                                    Create New Project
+                                  </Label>
+                                </div>
+                                
+                                <div className="flex items-center space-x-2">
+                                  <input
+                                    type="radio"
+                                    id="existing-project"
+                                    name="save-mode"
+                                    checked={saveMode === 'existing-project'}
+                                    onChange={() => setSaveMode('existing-project')}
+                                    className="h-4 w-4"
+                                  />
+                                  <Label htmlFor="existing-project" className="font-normal cursor-pointer">
+                                    Save to Existing Project
+                                  </Label>
+                                </div>
+                                
+                                {/* Project Dropdown (shown when existing-project is selected) */}
+                                {saveMode === 'existing-project' && (
+                                  <div className="ml-6 space-y-2">
+                                    <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+                                      <SelectTrigger>
+                                        <SelectValue placeholder="Select a project..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {projects.length === 0 ? (
+                                          <div className="p-4 text-sm text-muted-foreground text-center">
+                                            No projects available. Create a new project first.
+                                          </div>
+                                        ) : (
+                                          projects.map(project => (
+                                            <SelectItem key={project.id} value={project.id}>
+                                              <div className="flex flex-col">
+                                                <span>{project.name}</span>
+                                                <span className="text-xs text-muted-foreground">
+                                                  {project.document_count || 0} documents
+                                                </span>
+                                              </div>
+                                            </SelectItem>
+                                          ))
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                    
+                                    {selectedProjectId && (
+                                      <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                        <p className="text-sm text-blue-900 dark:text-blue-100">
+                                          <strong>Document will be saved to:</strong>{' '}
+                                          {projects.find(p => p.id === selectedProjectId)?.name}
+                                        </p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                                          AI will include project context for better results
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </TabsContent>
 
@@ -382,7 +667,7 @@ export default function AIPage() {
                                       id={variable.name}
                                       placeholder={variable.description}
                                       value={variables[variable.name] || ""}
-                                      onChange={(e) => setVariables(prev => ({
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVariables(prev => ({
                                         ...prev,
                                         [variable.name]: e.target.value
                                       }))}
@@ -446,8 +731,10 @@ export default function AIPage() {
                           <div className="space-y-4">
                             <div className="flex items-center justify-between">
                               <Badge variant="outline" className="text-green-600">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Generated
+                                <>
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Generated
+                                </>
                               </Badge>
                               <div className="flex gap-2">
                                 <Button
@@ -457,11 +744,119 @@ export default function AIPage() {
                                 >
                                   <Copy className="h-4 w-4" />
                                 </Button>
-                                <Button variant="outline" size="sm">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    const content = result.content || result.text || JSON.stringify(result)
+                                    const blob = new Blob([content], { type: 'text/markdown' })
+                                    const url = window.URL.createObjectURL(blob)
+                                    const a = document.createElement('a')
+                                    a.href = url
+                                    a.download = `${selectedTemplateData?.name || 'Generated Content'} - ${new Date().toISOString().split('T')[0]}.md`
+                                    a.click()
+                                    window.URL.revokeObjectURL(url)
+                                    toast.success('Document downloaded!')
+                                  }}
+                                >
                                   <Download className="h-4 w-4" />
                                 </Button>
                               </div>
                             </div>
+                            
+                            {/* Create Project Prompt for Business Case/Ideation templates */}
+                            {selectedTemplateData && (
+                              selectedTemplateData.name.toLowerCase().includes('business case') ||
+                              selectedTemplateData.name.toLowerCase().includes('ideation') ||
+                              selectedTemplateData.category?.toLowerCase().includes('business case')
+                            ) && (
+                              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                                <div className="flex items-start gap-3">
+                                  <div className="bg-blue-500 rounded-full p-2 mt-1">
+                                    <Sparkles className="h-4 w-4 text-white" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <h4 className="font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                                      Ready to turn this into a project?
+                                    </h4>
+                                    <p className="text-sm text-blue-700 dark:text-blue-300 mb-3">
+                                      Start a formal project with this {selectedTemplateData.name.includes('Ideation') ? 'ideation' : 'business case'} as the foundation.
+                                    </p>
+                                    <div className="flex gap-2">
+                                      <Button
+                                        size="sm"
+                                        onClick={async () => {
+                                          if (saveMode === 'existing-project' && selectedProjectId) {
+                                            // Save to existing project
+                                            try {
+                                              const selectedProject = projects.find(p => p.id === selectedProjectId)
+                                              const templateName = selectedTemplateData?.name || 'AI Generated Document'
+                                              const documentTitle = `${templateName} - ${new Date().toLocaleDateString()}`
+                                              
+                                              await apiClient.request(`/projects/${selectedProjectId}/documents`, {
+                                                method: 'POST',
+                                                body: JSON.stringify({
+                                                  title: documentTitle,
+                                                  content: result.content || result.text,
+                                                  template_id: selectedTemplate || null,
+                                                  generation_metadata: {
+                                                    prompt: prompt,
+                                                    provider: selectedProvider,
+                                                    template: selectedTemplate,
+                                                    ...(result.metadata || {})
+                                                  }
+                                                })
+                                              })
+                                              
+                                              toast.success(`Document saved to project: ${selectedProject?.name}`)
+                                              window.location.href = `/projects/${selectedProjectId}?tab=documents`
+                                            } catch (error: any) {
+                                              console.error("Failed to save document:", error)
+                                              toast.error(error?.message || 'Failed to save document to project')
+                                            }
+                                          } else {
+                                            // Store the generated content in sessionStorage for the project creation page
+                                            sessionStorage.setItem('project-draft', JSON.stringify({
+                                              content: result.content || result.text,
+                                              templateId: selectedTemplate,
+                                              templateName: selectedTemplateData.name,
+                                              framework: selectedTemplateData.framework,
+                                              prompt: prompt,
+                                              metadata: result.metadata || {}
+                                            }))
+                                            // Set flag to auto-open create dialog
+                                            sessionStorage.setItem('auto-create-project', 'true')
+                                            // Redirect to projects page (which has the create dialog)
+                                            window.location.href = '/projects'
+                                          }
+                                        }}
+                                        className="bg-blue-600 hover:bg-blue-700 text-white"
+                                      >
+                                        <Plus className="h-4 w-4 mr-2" />
+                                        {saveMode === 'existing-project' && selectedProjectId ? 'Save to Project' : 'Create Project'}
+                                      </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => {
+                                          // Store for process flow instead
+                                          sessionStorage.setItem('process-flow-draft', JSON.stringify({
+                                            content: result.content || result.text,
+                                            templateId: selectedTemplate,
+                                            templateName: selectedTemplateData.name,
+                                            framework: selectedTemplateData.framework,
+                                            prompt: prompt
+                                          }))
+                                          window.location.href = '/process-flow'
+                                        }}
+                                      >
+                                        Use in Pipeline
+                                      </Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             
                             <div className="bg-muted rounded-lg p-4 max-h-96 overflow-y-auto">
                               <pre className="whitespace-pre-wrap text-sm">
@@ -504,7 +899,7 @@ export default function AIPage() {
                                 <span className="text-sm font-medium">{provider.name}</span>
                               </div>
                               <Badge variant={provider.is_active ? "default" : "secondary"}>
-                                {provider.is_active ? "Active" : "Inactive"}
+                                <>{provider.is_active ? "Active" : "Inactive"}</>
                               </Badge>
                             </div>
                           ))}

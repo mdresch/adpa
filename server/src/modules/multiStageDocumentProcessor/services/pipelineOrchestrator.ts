@@ -5,6 +5,7 @@
 
 import { logger } from '../../../utils/logger'
 import { pool } from '../../../database/connection'
+import AnalyticsTrackingService from '../../../services/analyticsTrackingService'
 import type {
   DocumentProcessingRequest,
   PipelineConfig,
@@ -205,6 +206,7 @@ export class PipelineOrchestrator {
     previousResults: StageResult[]
   ): Promise<StageResult> {
     const startTime = Date.now()
+    const startedAt = new Date(startTime)
 
     logger.info('Executing stage', {
       stageId: stage.stage_id,
@@ -252,9 +254,41 @@ export class PipelineOrchestrator {
     }
 
     const executionTime = Date.now() - startTime
+    const completedAt = new Date(startTime + executionTime)
 
     // Store stage execution record
     await this.storeStageExecution(jobId, stage, stageInput, stageOutput, executionTime)
+
+    // Emit per-stage job analytics (non-blocking)
+    ;(async () => {
+      try {
+        await AnalyticsTrackingService.trackJobExecution({
+          jobId: `${jobId}:${stage.stage_id}`,
+          jobType: `pipeline_stage:${stage.stage_type}`,
+          queueName: 'pipeline',
+          status: 'completed',
+          priority: 0,
+          queuedAt: startedAt,
+          startedAt: startedAt,
+          completedAt: completedAt,
+          durationMs: executionTime,
+          success: true,
+          userId: (stageInput.context as any)?.user_id || null,
+          projectId: (stageInput.context as any)?.project_id || null,
+          jobData: {
+            stage_id: stage.stage_id,
+            stage_type: stage.stage_type,
+            order: stage.order,
+          },
+          resultData: {
+            quality_score: stageOutput.quality_score,
+            metadata: stageOutput.metadata || null,
+          },
+        })
+      } catch (e) {
+        // swallow; analytics should never break pipeline
+      }
+    })()
 
     const stageResult: StageResult = {
       stage_id: stage.stage_id,
@@ -363,6 +397,10 @@ export class PipelineOrchestrator {
         input.user_id = request.user_id
         break
       case 'template_processing':
+        // Add template_id from request
+        input.template_id = request.template_id
+        input.project_id = request.project_id
+        input.user_id = request.user_id
         // Get context from previous stage
         const contextStage = previousResults.find(r => r.stage_type === 'context_gathering')
         if (contextStage) {
@@ -373,29 +411,47 @@ export class PipelineOrchestrator {
         // Get processed template from previous stage
         const templateStage = previousResults.find(r => r.stage_type === 'template_processing')
         if (templateStage) {
-          input.processed_template = templateStage.output.output_data
+          // Extract the processed_template from the result
+          const result = templateStage.output.output_data
+          input.processed_template = result?.processed_template || result
         }
+        // Also pass template_id for reference
+        input.template_id = request.template_id
+        input.project_id = request.project_id
+        input.user_id = request.user_id
         break
       case 'context_injection':
         // Get generated document from previous stage
         const aiStage = previousResults.find(r => r.stage_type === 'ai_generation')
         if (aiStage) {
-          input.generated_document = aiStage.output.output_data
+          const result = aiStage.output.output_data
+          input.generated_document = result?.generated_document || result
         }
+        input.template_id = request.template_id
+        input.project_id = request.project_id
+        input.user_id = request.user_id
         break
       case 'quality_assurance':
         // Get contextualized document from previous stage
         const contextInjectionStage = previousResults.find(r => r.stage_type === 'context_injection')
         if (contextInjectionStage) {
-          input.contextualized_document = contextInjectionStage.output.output_data
+          const result = contextInjectionStage.output.output_data
+          input.contextualized_document = result?.contextualized_document || result
         }
+        input.template_id = request.template_id
+        input.project_id = request.project_id
+        input.user_id = request.user_id
         break
       case 'output_formatting':
         // Get quality-assessed document from previous stage
         const qualityStage = previousResults.find(r => r.stage_type === 'quality_assurance')
         if (qualityStage) {
-          input.quality_assessed_document = qualityStage.output.output_data
+          const result = qualityStage.output.output_data
+          input.quality_assessed_document = result?.quality_assessed_document || result
         }
+        input.template_id = request.template_id
+        input.project_id = request.project_id
+        input.user_id = request.user_id
         break
     }
 
@@ -417,15 +473,9 @@ export class PipelineOrchestrator {
 
   // Stage execution methods (these would delegate to actual stage implementations)
   private async executeContextGatheringStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual ContextGatheringStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { context: 'gathered' },
-      quality_score: 0.9,
-      processing_time: 1000,
-      metadata: { stage: 'context_gathering' }
-    }
+    const { ContextGatheringStage } = await import('../stages/contextGatheringStage')
+    const stage = new ContextGatheringStage()
+    return await stage.execute(input)
   }
 
   private async executeTemplateProcessingStage(input: StageInput): Promise<StageOutput> {
@@ -435,51 +485,27 @@ export class PipelineOrchestrator {
   }
 
   private async executeAIGenerationStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual AIGenerationStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'generated' },
-      quality_score: 0.8,
-      processing_time: 5000,
-      metadata: { stage: 'ai_generation' }
-    }
+    const { AIGenerationStage } = await import('../stages/aiGenerationStage')
+    const stage = new AIGenerationStage()
+    return await stage.execute(input)
   }
 
   private async executeContextInjectionStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual ContextInjectionStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'contextualized' },
-      quality_score: 0.9,
-      processing_time: 2000,
-      metadata: { stage: 'context_injection' }
-    }
+    const { ContextInjectionStage } = await import('../stages/contextInjectionStage')
+    const stage = new ContextInjectionStage()
+    return await stage.execute(input)
   }
 
   private async executeQualityAssuranceStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual QualityAssuranceStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'quality_assessed' },
-      quality_score: 0.95,
-      processing_time: 3000,
-      metadata: { stage: 'quality_assurance' }
-    }
+    const { QualityAssuranceStage } = await import('../stages/qualityAssuranceStage')
+    const stage = new QualityAssuranceStage()
+    return await stage.execute(input)
   }
 
   private async executeOutputFormattingStage(input: StageInput): Promise<StageOutput> {
-    // This would delegate to the actual OutputFormattingStage
-    return {
-      stage_id: input.stage_id,
-      stage_type: input.stage_type,
-      output_data: { document: 'formatted' },
-      quality_score: 0.9,
-      processing_time: 1000,
-      metadata: { stage: 'output_formatting' }
-    }
+    const { OutputFormattingStage } = await import('../stages/outputFormattingStage')
+    const stage = new OutputFormattingStage()
+    return await stage.execute(input)
   }
 
   private async updateJobProgress(jobId: string, progress: number, currentStage?: string): Promise<void> {

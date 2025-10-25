@@ -32,6 +32,8 @@ import {
   Loader2,
   FileUp,
   Wand2,
+  AlertCircle,
+  CheckCircle,
 } from "@/components/ui/icons-shim"
 import {
   Dialog,
@@ -45,6 +47,24 @@ import {
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+
+// Status configuration for template badges
+const statusConfig = {
+  draft: { emoji: '⚪', label: 'Draft', color: 'secondary', variant: 'secondary' as const },
+  testing: { emoji: '🔵', label: 'Testing', color: 'blue', variant: 'default' as const },
+  compliance: { emoji: '🟣', label: 'Compliance', color: 'purple', variant: 'default' as const },
+  validated: { emoji: '🟡', label: 'Validated', color: 'yellow', variant: 'default' as const },
+  production: { emoji: '🟢', label: 'Production', color: 'green', variant: 'default' as const },
+  archived: { emoji: '📦', label: 'Archived', color: 'gray', variant: 'secondary' as const },
+  deprecated: { emoji: '🔴', label: 'Deprecated', color: 'red', variant: 'destructive' as const },
+}
+
+const healthConfig = {
+  'Excellent': { color: 'text-green-600', bgColor: 'bg-green-50', icon: '⭐' },
+  'Good': { color: 'text-blue-600', bgColor: 'bg-blue-50', icon: '✓' },
+  'Fair': { color: 'text-yellow-600', bgColor: 'bg-yellow-50', icon: '◐' },
+  'Needs Improvement': { color: 'text-orange-600', bgColor: 'bg-orange-50', icon: '⚠' },
+}
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -218,8 +238,83 @@ export default function Projects() {
         end_date: newProject.end_date || undefined,
       }
       
-      await apiClient.createProject(projectData)
-      toast.success("Project created successfully!")
+      const createdProject = await apiClient.createProject(projectData)
+      
+      // Check if there's a business case draft to save as a document
+      const projectDraft = sessionStorage.getItem('project-draft')
+      console.log('🔍 Checking for project draft in sessionStorage:', {
+        hasDraft: !!projectDraft,
+        draftLength: projectDraft?.length
+      })
+      
+      if (projectDraft) {
+        try {
+          const draft = JSON.parse(projectDraft)
+          const content = draft.content || ''
+          
+          console.log('🔍 Project draft parsed:', {
+            hasContent: !!content,
+            contentLength: content.length,
+            templateId: draft.templateId,
+            templateName: draft.templateName,
+            framework: draft.framework
+          })
+          
+          // Create a document from the business case
+          if (content && createdProject && createdProject.id) {
+            try {
+              console.log('📄 Attempting to save business case as document...', {
+                projectId: createdProject.id,
+                projectName: createdProject.name,
+                contentLength: content.length,
+                templateId: draft.templateId
+              })
+              
+              // Create document via API (expects JSON, not file upload)
+              const documentData = {
+                name: draft.templateName || `${newProject.name} - Business Case`,
+                content: content,
+                template_id: draft.templateId || null,
+                status: 'draft', // Changed from 'final' to 'draft'
+                metadata: draft.metadata || {}
+              }
+              
+              console.log('📄 Sending document data:', {
+                ...documentData,
+                content: `${content.substring(0, 100)}... (${content.length} chars total)`
+              })
+              
+              // Use apiClient instead of raw fetch to avoid URL duplication
+              const createdDocument = await apiClient.createDocument(createdProject.id, documentData)
+              
+              console.log('✅ Document created successfully:', createdDocument)
+              toast.success(`Project created with ${draft.templateName || 'initial document'}!`)
+            } catch (docCreateError: any) {
+              console.error('❌ Document creation failed:', docCreateError)
+              toast.error(`Project created, but document failed to save: ${docCreateError.message || 'Unknown error'}`)
+            }
+          } else {
+            console.log('⚠️ Skipping document creation:', {
+              hasContent: !!content,
+              contentLength: content?.length,
+              hasProject: !!createdProject,
+              hasProjectId: !!createdProject?.id,
+              projectId: createdProject?.id
+            })
+            toast.success("Project created successfully!")
+          }
+          
+          // Clear the draft from session storage
+          sessionStorage.removeItem('project-draft')
+        } catch (docError) {
+          console.error("❌ Failed to save business case as document:", docError)
+          toast.error("Project created, but initial document could not be saved. You can upload it manually.")
+        }
+      } else {
+        console.log('ℹ️ No project draft found in sessionStorage - creating project without initial document')
+        toast.success("Project created successfully!")
+      }
+      
       setDialogOpen(false)
       setNewProject({
         name: "",
@@ -349,6 +444,9 @@ export default function Projects() {
       name: `${project.name} - Generated Document`,
       template_id: "",
       prompt: `Generate a comprehensive document for the ${project.name} project using the ${project.framework} framework. Include project overview, objectives, timeline, and key deliverables.`,
+      provider: "Groq AI",
+      model: "llama-3.1-8b-instant",
+      temperature: 0.7
     })
     setGenerateDialogOpen(true)
     fetchTemplates()
@@ -564,6 +662,16 @@ export default function Projects() {
     return matchesSearch && matchesStatus
   })
 
+  // Sort by most recently updated first
+  const sortedProjects = [...filteredProjects].sort((a, b) => {
+    // Sort by last_activity (most recent document or project update)
+    const aTime = (a as any).last_activity ? new Date((a as any).last_activity).getTime() : 
+                  a.updated_at ? new Date(a.updated_at).getTime() : 0
+    const bTime = (b as any).last_activity ? new Date((b as any).last_activity).getTime() : 
+                  b.updated_at ? new Date(b.updated_at).getTime() : 0
+    return bTime - aTime
+  })
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "active":
@@ -612,6 +720,204 @@ export default function Projects() {
       fetchProjects()
     }
   }, [isAuthenticated, statusFilter, searchTerm, pagination.page])
+
+  // Auto-open create dialog if coming from AI page
+  useEffect(() => {
+    const autoCreate = sessionStorage.getItem('auto-create-project')
+    const projectDraft = sessionStorage.getItem('project-draft')
+    
+    if (autoCreate === 'true' && projectDraft) {
+      try {
+        const draft = JSON.parse(projectDraft)
+        const content = draft.content || ''
+        
+        // Extract project name from business case or ideation title
+        let projectName = ''
+        
+        // Try Business Case format first
+        let titleMatch = content.match(/^#\s*Business Case:\s*(.+?)$/m)
+        if (titleMatch && titleMatch[1]) {
+          projectName = titleMatch[1].trim()
+        } else {
+          // Try Ideation format
+          titleMatch = content.match(/^#\s*💡\s*Ideation:\s*(.+?)$/m)
+          if (titleMatch && titleMatch[1]) {
+            projectName = titleMatch[1].trim()
+          } else {
+            // Try generic heading format
+            titleMatch = content.match(/^#\s+(.+?)$/m)
+            if (titleMatch && titleMatch[1] && !titleMatch[1].includes('Business Case') && !titleMatch[1].includes('Ideation')) {
+              projectName = titleMatch[1].trim()
+            } else {
+              // Fallback: try to find "Project Name:" in the content
+              const projectNameMatch = content.match(/\*\*Project Name:\*\*\s*(.+?)(?:\n|$)/m)
+              projectName = projectNameMatch ? projectNameMatch[1].trim() : (draft.templateName?.replace(' Template', '') || 'New Project')
+            }
+          }
+        }
+        
+        // Extract description from Business Need or Core Concept section (increased to 2000 chars)
+        let description = ''
+        
+        // Try Business Case format (1.2 Business Need)
+        let descMatch = content.match(/###\s*1\.2\s*Business Need\s*\n([\s\S]+?)(?=\n###|\n##|$)/i)
+        if (descMatch && descMatch[1]) {
+          description = descMatch[1].trim().substring(0, 2000)
+        } else {
+          // Try Ideation format - get entire "The Spark" section including Core Concept
+          descMatch = content.match(/##\s*1\.\s*The Spark[:\s]+What's the Big Idea\?\s*\n([\s\S]+?)(?=\n##\s*2\.|$)/i)
+          if (descMatch && descMatch[1]) {
+            // Extract the text, removing markdown headers
+            let sparkText = descMatch[1].trim()
+            // Remove the ### headers but keep the content
+            sparkText = sparkText.replace(/###\s*[\d.]+\s*[^\n]+\n/g, '')
+            description = sparkText.substring(0, 2000)
+          } else {
+            // Try just Core Concept section
+            descMatch = content.match(/###\s*1\.1\s*Core Concept\s*\n([\s\S]+?)(?=\n###|\n##|$)/i)
+            if (descMatch && descMatch[1]) {
+              description = descMatch[1].trim().substring(0, 2000)
+            } else {
+              // Fallback to executive summary
+              descMatch = content.match(/##\s*1\.\s*Executive Summary\s*\n([\s\S]+?)(?=\n##|$)/i)
+              if (descMatch && descMatch[1]) {
+                description = descMatch[1].trim().substring(0, 2000)
+              } else {
+                description = content.substring(0, 2000)
+              }
+            }
+          }
+        }
+        
+        // Extract Project Manager
+        let manager = ''
+        const pmMatch = content.match(/\*\*Project Manager:\*\*\s*(.+?)(?:\n|,|$)/m)
+        if (pmMatch && pmMatch[1]) {
+          manager = pmMatch[1].trim()
+        } else {
+          const preparedByMatch = content.match(/\*\*Prepared By:\*\*\s*(.+?)(?:\n|,|$)/m)
+          if (preparedByMatch && preparedByMatch[1]) {
+            manager = preparedByMatch[1].trim()
+          }
+        }
+        
+        // Extract Budget
+        let budget = ''
+        const budgetMatches = [
+          content.match(/\*\*Estimated Cost:\*\*\s*\$?([\d,]+(?:\.\d+)?)\s*(?:M|Million|K|Thousand)?/i),
+          content.match(/budget.*?\$?([\d,]+(?:\.\d+)?)\s*(?:M|Million|K|Thousand)?/i),
+          content.match(/\$\s*([\d,]+(?:\.\d+)?)\s*(?:M|Million|K|Thousand)/i),
+          content.match(/investment.*?\$?([\d,]+(?:\.\d+)?)\s*(?:M|Million|K|Thousand)?/i)
+        ]
+        for (const match of budgetMatches) {
+          if (match && match[1]) {
+            let budgetValue = match[1].replace(/,/g, '')
+            const parsedValue = parseFloat(budgetValue)
+            
+            // Only set budget if we got a valid number
+            if (!isNaN(parsedValue) && parsedValue > 0) {
+              // If the text mentions "M" or "Million", multiply by 1,000,000
+              if (match[0].match(/M|Million/i)) {
+                budget = (parsedValue * 1000000).toString()
+              } else if (match[0].match(/K|Thousand/i)) {
+                budget = (parsedValue * 1000).toString()
+              } else {
+                budget = parsedValue.toString()
+              }
+              break
+            }
+          }
+        }
+        // If no budget found, leave empty (not NaN)
+        if (!budget || budget === 'NaN') {
+          budget = ''
+        }
+        
+        // Extract Timeline/Dates
+        let startDate = ''
+        let endDate = ''
+        
+        // Try to find timeline mentions
+        const timelineMatch = content.match(/\*\*High-level Timeline:\*\*\s*(.+?)(?:\n|$)/m)
+        if (timelineMatch && timelineMatch[1]) {
+          const timeline = timelineMatch[1]
+          // Try to extract months (e.g., "12 months", "18-24 months")
+          const monthsMatch = timeline.match(/(\d+)(?:-(\d+))?\s*months?/i)
+          if (monthsMatch) {
+            const months = parseInt(monthsMatch[1])
+            const today = new Date()
+            startDate = today.toISOString().split('T')[0]
+            const endDateObj = new Date(today)
+            endDateObj.setMonth(endDateObj.getMonth() + months)
+            endDate = endDateObj.toISOString().split('T')[0]
+          }
+        }
+        
+        // Try to extract specific dates (e.g., "Q2 2026", "June 1, 2026")
+        if (!startDate) {
+          const dateRangeMatch = content.match(/(?:October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}\s*[–-]\s*(?:October|November|December|Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2},?\s+\d{4}/i)
+          if (dateRangeMatch) {
+            const dates = dateRangeMatch[0].split(/[–-]/)
+            if (dates.length === 2) {
+              try {
+                startDate = new Date(dates[0].trim()).toISOString().split('T')[0]
+                endDate = new Date(dates[1].trim()).toISOString().split('T')[0]
+              } catch (e) {
+                // Invalid date format, leave blank
+              }
+            }
+          }
+        }
+        
+        // Extract Framework (fallback chain)
+        // For ideations and business cases, use the template's framework as default
+        let framework = draft.framework || 'Custom'
+        
+        // Try to find explicit framework mention in content (for business cases)
+        if (!framework || framework === 'Custom') {
+          const frameworkMatch = content.match(/\*\*Framework:\*\*\s*(.+?)(?:\n|,|$)/m)
+          if (frameworkMatch && frameworkMatch[1]) {
+            framework = frameworkMatch[1].trim()
+          } else {
+            // For business cases, try to infer from content
+            if (content.includes('PMBOK') || content.includes('Project Management')) {
+              framework = 'PMBOK 7'
+            } else if (content.includes('BABOK') || content.includes('Business Analysis')) {
+              framework = 'BABOK'
+            } else {
+              // Use template framework or default to Custom
+              framework = draft.framework || 'Custom'
+            }
+          }
+        }
+        
+        // Pre-fill the form with extracted business case data
+        setNewProject({
+          name: projectName,
+          description: description,
+          framework: framework,
+          priority: 'high',
+          start_date: startDate,
+          end_date: endDate,
+          budget: budget,
+          manager: manager,
+        })
+        
+        // Open the create dialog
+        setDialogOpen(true)
+        
+        // Clear the flags so it doesn't auto-open again
+        sessionStorage.removeItem('auto-create-project')
+        
+        toast.success('Business case loaded! Review and complete the project details.')
+      } catch (error) {
+        console.error('Failed to load project draft:', error)
+        toast.error('Failed to load business case data')
+        sessionStorage.removeItem('auto-create-project')
+        sessionStorage.removeItem('project-draft')
+      }
+    }
+  }, [isAuthenticated])
 
   if (!isAuthenticated) {
     return (
@@ -759,7 +1065,7 @@ export default function Projects() {
                                 id="manager"
                                 placeholder="Enter manager name"
                                 value={newProject.manager}
-                                onChange={(e) => setNewProject({...newProject, manager: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, manager: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -772,7 +1078,7 @@ export default function Projects() {
                               id="description"
                               placeholder="Describe the project objectives and scope"
                               value={newProject.description}
-                              onChange={(e) => setNewProject({...newProject, description: e.target.value})}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewProject({...newProject, description: e.target.value})}
                               className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             />
                           </div>
@@ -785,7 +1091,7 @@ export default function Projects() {
                                 id="start-date"
                                 type="date"
                                 value={newProject.start_date}
-                                onChange={(e) => setNewProject({...newProject, start_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, start_date: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -797,7 +1103,7 @@ export default function Projects() {
                                 id="end-date"
                                 type="date"
                                 value={newProject.end_date}
-                                onChange={(e) => setNewProject({...newProject, end_date: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, end_date: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -809,7 +1115,7 @@ export default function Projects() {
                                 id="budget"
                                 placeholder="$0"
                                 value={newProject.budget}
-                                onChange={(e) => setNewProject({...newProject, budget: e.target.value})}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewProject({...newProject, budget: e.target.value})}
                                 className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                               />
                             </div>
@@ -853,7 +1159,7 @@ export default function Projects() {
                             id="edit-project-name"
                             placeholder="Enter project name"
                             value={editingProject?.name || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, name: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, name: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             required
                           />
@@ -919,7 +1225,7 @@ export default function Projects() {
                           id="edit-description"
                           placeholder="Describe the project objectives and scope"
                           value={editingProject?.description || ""}
-                          onChange={(e) => setEditingProject({...editingProject!, description: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditingProject({...editingProject!, description: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                         />
                       </div>
@@ -932,7 +1238,7 @@ export default function Projects() {
                             id="edit-start-date"
                             type="date"
                             value={editingProject?.start_date || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, start_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, start_date: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -944,7 +1250,7 @@ export default function Projects() {
                             id="edit-end-date"
                             type="date"
                             value={editingProject?.end_date || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, end_date: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, end_date: e.target.value})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -956,7 +1262,7 @@ export default function Projects() {
                             id="edit-budget"
                             placeholder="$0"
                             value={editingProject?.budget?.toString() || ""}
-                            onChange={(e) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingProject({...editingProject!, budget: Number(e.target.value)})}
                             className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           />
                         </div>
@@ -997,7 +1303,7 @@ export default function Projects() {
                           id="doc-name"
                           placeholder="Enter document name"
                           value={documentGenerationForm.name}
-                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentGenerationForm({...documentGenerationForm, name: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
@@ -1019,11 +1325,91 @@ export default function Projects() {
                           ) : (
                             templates.map((template) => (
                               <option key={template.id} value={template.id}>
+                                {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
+                                  ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                  : ''}
                                 {template.name} ({template.framework})
+                                {template.development_status === 'production' ? ' ✓' : ''}
                               </option>
                             ))
                           )}
                         </select>
+                        
+                        {/* Template Status Information Panel */}
+                        {documentGenerationForm.template_id && templates.find(t => t.id === documentGenerationForm.template_id) && (() => {
+                          const selectedTemplate = templates.find(t => t.id === documentGenerationForm.template_id)!
+                          return (
+                            <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-sm font-medium">Template Status:</span>
+                                  {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                    <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                      <>{statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}</>
+                                    </Badge>
+                                  )}
+                                </div>
+                                {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
+                                  <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                    <>{healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}</>
+                                  </Badge>
+                                )}
+                              </div>
+                              
+                              {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                <div className="grid grid-cols-2 gap-3 text-sm">
+                                  <div className="flex flex-col">
+                                    <span className="text-muted-foreground text-xs">Success Rate</span>
+                                    <span className="font-semibold">
+                                      {selectedTemplate.success_rate !== undefined 
+                                        ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                        : selectedTemplate.success_count && selectedTemplate.validation_count
+                                          ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                          : 'N/A'}
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-col">
+                                    <span className="text-muted-foreground text-xs">Test Runs</span>
+                                    <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Warning for non-production templates */}
+                              {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                  <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1">
+                                    <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                      {selectedTemplate.development_status === 'draft' && 'Draft Template - Untested'}
+                                      {selectedTemplate.development_status === 'testing' && 'Testing Template - Limited validation'}
+                                      {selectedTemplate.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
+                                      {selectedTemplate.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
+                                    </p>
+                                    <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                      This template is still being tested. Results may vary in quality.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                              
+                              {/* Success indicator for production templates */}
+                              {selectedTemplate.development_status === 'production' && (
+                                <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                  <div className="flex-1">
+                                    <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                      Production Template - Fully Validated
+                                    </p>
+                                    <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                      This template has been thoroughly tested and is ready for production use.
+                                    </p>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                       <div>
                         <Label htmlFor="generation-prompt" className="text-sm font-semibold">
@@ -1033,7 +1419,7 @@ export default function Projects() {
                           id="generation-prompt"
                           placeholder="Describe what you want the document to contain..."
                           value={documentGenerationForm.prompt}
-                          onChange={(e) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setDocumentGenerationForm({...documentGenerationForm, prompt: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           rows={4}
                           required
@@ -1097,7 +1483,7 @@ export default function Projects() {
                           id="upload-doc-name"
                           placeholder="Enter document name"
                           value={documentUploadForm.name}
-                          onChange={(e) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentUploadForm({...documentUploadForm, name: e.target.value})}
                           className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                           required
                         />
@@ -1137,7 +1523,7 @@ export default function Projects() {
                           id="file-upload"
                           type="file"
                           accept=".pdf,.doc,.docx,.txt,.md"
-                          onChange={(e) => {
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                             const file = e.target.files?.[0] || null
                             setDocumentUploadForm({...documentUploadForm, file})
                           }}
@@ -1210,7 +1596,7 @@ export default function Projects() {
               {/* Projects Grid */}
               {!loading && (
                 <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {filteredProjects.map((project, index) => {
+                  {sortedProjects.map((project, index) => {
                     const progress = getProjectProgress(project)
                     const documentsCount = (project as any).document_count || 0
                     
@@ -1348,7 +1734,7 @@ export default function Projects() {
                               <div className="flex items-center space-x-2">
                                 <Clock className="h-3 w-3 text-slate-400" />
                                 <span className="text-xs text-slate-500 dark:text-slate-400">
-                                  {new Date(project.updated_at).toLocaleDateString()}
+                                  Last activity: {new Date((project as any).last_activity || project.updated_at).toLocaleDateString()}
                                 </span>
                               </div>
                               <motion.div
@@ -1414,7 +1800,7 @@ export default function Projects() {
                 </AnimatedGrid>
               )}
 
-              {!loading && filteredProjects.length === 0 && (
+              {!loading && sortedProjects.length === 0 && (
                 <motion.div
                   initial={{ opacity: 0, scale: 0.9 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1451,7 +1837,7 @@ export default function Projects() {
               )}
 
               {/* Pagination */}
-              {!loading && filteredProjects.length > 0 && pagination.pages > 1 && (
+              {!loading && sortedProjects.length > 0 && pagination.pages > 1 && (
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
