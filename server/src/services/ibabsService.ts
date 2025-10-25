@@ -67,14 +67,15 @@ function validateState(state: string): string | null {
 }
 
 /**
- * Encrypt token using base64 encoding (consistent with existing code)
+ * Encode token using base64 for storage consistency (not encryption)
+ * In production, use proper encryption library for security
  */
 function encryptToken(token: string): string {
   return Buffer.from(token).toString("base64")
 }
 
 /**
- * Decrypt token from base64 encoding
+ * Decode token from base64
  */
 function decryptToken(encrypted: string): string {
   return Buffer.from(encrypted, "base64").toString("utf8")
