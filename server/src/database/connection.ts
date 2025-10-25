@@ -101,7 +101,15 @@ export async function connectDatabase() {
     } catch (e: any) {
       // Fallback to connectionString if URL parsing or DNS resolution fails
       console.warn('⚠️  Could not resolve hostname to IPv4, using connectionString:', e?.message || e)
-      poolConfig.connectionString = databaseUrl
+      poolConfig = {
+        connectionString: databaseUrl,
+        ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
+          ? { rejectUnauthorized: false }
+          : false,
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 30000,
+      }
     }
     
     const testPool = new Pool(poolConfig)
