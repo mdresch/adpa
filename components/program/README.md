@@ -307,7 +307,9 @@ export default function ProgramDetailPage() {
 
 ## Testing
 
-Component tests are located in `components/program/__tests__/MetricsDashboard.test.tsx` (note: excluded from git via .gitignore).
+Component tests have been created in `components/program/__tests__/MetricsDashboard.test.tsx`.
+
+**Note:** The `__tests__` directory is currently excluded from version control per the project's `.gitignore` settings. Test files can be committed by overriding this restriction with `git add -f` if needed for CI/CD pipelines.
 
 Test coverage includes:
 - Loading state rendering
