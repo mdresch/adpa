@@ -175,20 +175,18 @@ export async function getRAGStatus(programId: string) {
       red: 0
     }
 
-    const statuses: string[] = []
+    const statusSet: Set<string> = new Set()
 
     result.rows.forEach(row => {
       const status = row.status?.toLowerCase() || 'green'
       if (status in breakdown) {
         breakdown[status as keyof typeof breakdown] = parseInt(row.count)
-        // Add status to array for overall calculation
-        for (let i = 0; i < parseInt(row.count); i++) {
-          statuses.push(status)
-        }
+        // Add status to set for overall calculation
+        statusSet.add(status)
       }
     })
 
-    const overall = calculateOverallStatus(statuses)
+    const overall = calculateOverallStatus(Array.from(statusSet))
 
     return {
       overall,
