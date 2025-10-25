@@ -20,6 +20,7 @@ import { pool } from "./database/connection"
 // Routes
 import authRoutes from "./routes/auth"
 import projectRoutes from "./routes/projects"
+import programRoutes from "./routes/programRoutes"
 import documentRoutes from "./routes/documents"
 import userRoutes from "./routes/users"
 import aiRoutes from "./routes/ai"
@@ -33,6 +34,7 @@ import integrationRoutes from "./routes/integrations"
 import confluenceRoutes from "./routes/confluenceRoutes"
 import githubRoutes from "./routes/githubRoutes"
 import sharepointRoutes from "./routes/sharepointRoutes"
+import ibabsRoutes from "./routes/ibabsRoutes"
 import templateRoutes from "./routes/templates"
 import templateAnalyticsRoutes from "./routes/template-analytics"
 import { documentTemplateRoutes } from "./modules/documentTemplates"
@@ -168,6 +170,7 @@ app.use("/api/auth", authRoutes)
 console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
+app.use("/api/programs", programRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/documents", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
@@ -184,6 +187,7 @@ app.use("/api/integrations", integrationRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)
 app.use("/api/integrations/sharepoint", sharepointRoutes)
+app.use("/api/integrations/ibabs", ibabsRoutes)
 app.use("/api/templates", templateRoutes)
 app.use("/api/template-analytics", templateAnalyticsRoutes)
 app.use("/api/template-stats", templateStatsRoutes)
