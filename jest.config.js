@@ -2,7 +2,7 @@
 const config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/__tests__'],
+  roots: ['<rootDir>/__tests__', '<rootDir>/components'],
   testMatch: [
     '**/__tests__/**/*.test.ts',
     '**/__tests__/**/*.test.tsx'
@@ -12,7 +12,10 @@ const config = {
   },
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
+    'components/**/*.{ts,tsx}',
     '!lib/**/*.d.ts',
+    '!components/**/*.d.ts',
+    '!components/**/__tests__/**',
   ],
   coverageDirectory: 'coverage',
   coverageReporters: [

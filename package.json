@@ -71,6 +71,7 @@
     "frappe-gantt": "^1.0.4",
     "fs": "latest",
     "helmet": "latest",
+    "html-to-image": "^1.11.13",
     "http": "latest",
     "input-otp": "latest",
     "inquirer": "^9.2.0",
