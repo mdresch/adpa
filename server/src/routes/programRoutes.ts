@@ -8,6 +8,10 @@ const router = express.Router()
 /**
  * GET /api/programs/:id/metrics
  * Get aggregated metrics for a program
+ * 
+ * Note: Rate limiting should be implemented at the API gateway level or
+ * via a rate limiting middleware. The caching layer (5-min TTL) provides
+ * some protection against excessive database queries.
  */
 router.get("/:id/metrics", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
