@@ -5,6 +5,7 @@ import { validate } from '../middleware/validation'
 import { childLogger } from '../utils/logger'
 import programService from '../services/programService'
 import projectService from '../services/projectService'
+import * as programMetricsService from '../services/programMetricsService'
 
 const router = express.Router()
 
@@ -89,6 +90,30 @@ router.get('/:id/projects', authenticateToken, requirePermission('programs.view'
   } catch (error) {
     log.error('Failed to list projects by program', error)
     res.status(500).json({ error: 'Failed to list projects by program' })
+  }
+})
+
+// Get program metrics (Beacon 1.4)
+router.get("/:id/metrics", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  
+  try {
+    const { id } = req.params
+
+    log.info(`Fetching metrics for program: ${id}`)
+
+    const metrics = await programMetricsService.calculateMetrics(id)
+
+    res.json({
+      success: true,
+      data: metrics
+    })
+  } catch (error) {
+    log.error("Error fetching program metrics:", error)
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch program metrics"
+    })
   }
 })
 
