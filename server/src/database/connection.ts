@@ -9,7 +9,7 @@ import { logger } from "../utils/logger"
 import dns from "dns"
 import { promisify } from "util"
 
-const dnsLookup = promisify(dns.lookup)
+const dnsResolve4 = promisify(dns.resolve4)
 
 // Check if DATABASE_URL is provided (Railway, Heroku, etc.)
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
@@ -84,22 +84,23 @@ export async function connectDatabase() {
     try {
       const dbUrl = new URL(databaseUrl)
       
-      // Manually resolve hostname to IPv4 address
-      console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address...`)
-      const { address } = await dnsLookup(dbUrl.hostname, { family: 4 })
-      console.log(`✅ Resolved to IPv4: ${address}`)
+      // Manually resolve hostname to IPv4 address using dns.resolve4 (queries A records only)
+      console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
+      const addresses = await dnsResolve4(dbUrl.hostname)
+      const ipv4Address = addresses[0] // Use first IPv4 address
+      console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
       
       poolConfig = {
         ...poolConfig,
-        host: address, // Use resolved IPv4 address instead of hostname
+        host: ipv4Address, // Use resolved IPv4 address instead of hostname
         port: parseInt(dbUrl.port) || 5432,
         database: dbUrl.pathname.slice(1).split('?')[0],
         user: dbUrl.username,
         password: dbUrl.password,
       }
-    } catch (e) {
+    } catch (e: any) {
       // Fallback to connectionString if URL parsing or DNS resolution fails
-      console.warn('⚠️  Could not resolve hostname to IPv4, using connectionString:', e.message)
+      console.warn('⚠️  Could not resolve hostname to IPv4, using connectionString:', e?.message || e)
       poolConfig.connectionString = databaseUrl
     }
     
