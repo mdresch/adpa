@@ -2,6 +2,7 @@ import express from "express"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
+import projectService from "../services/projectService"
 import { v4 as uuidv4 } from "uuid"
 import { trackActivity } from "../middleware/analyticsMiddleware"
 
@@ -316,36 +317,47 @@ router.put("/:id", authenticateToken, requirePermission("projects.update"), asyn
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
-    const { name, description, framework, status, priority, start_date, end_date, budget, team_members } = req.body
+    const { name, description, framework, status, priority, start_date, end_date, budget, team_members, program_id } = req.body
 
     // Convert empty strings to null for date and numeric fields
     const startDateValue = start_date && start_date.trim() !== '' ? start_date : null
     const endDateValue = end_date && end_date.trim() !== '' ? end_date : null
     const budgetValue = budget && budget !== '' && budget !== null ? parseFloat(budget.toString()) : null
 
-    const result = await pool.query(
-      `
-      UPDATE projects 
-      SET name = $1, description = $2, framework = $3, status = $4, 
-          priority = $5, start_date = $6, end_date = $7, budget = $8, 
-          team_members = $9, updated_at = CURRENT_TIMESTAMP
-      WHERE id = $10
-      RETURNING *
-    `,
-      [name, description, framework, status, priority, startDateValue, endDateValue, budgetValue, JSON.stringify(team_members), id],
-    )
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Project not found" })
+    // Build update payload for service
+    const updates: any = {
+      name,
+      description,
+      framework,
+      status,
+      priority,
+      start_date: startDateValue,
+      end_date: endDateValue,
+      budget: budgetValue,
+      team_members: JSON.stringify(team_members),
     }
 
-  log.info(`Project updated: ${id} by ${req.user?.email}`)
+    // Only include program_id if present in request (allow null to unassign)
+    if (Object.prototype.hasOwnProperty.call(req.body, 'program_id')) {
+      updates.program_id = program_id
+    }
 
-    res.json({
-      message: "Project updated successfully",
-      project: result.rows[0],
-    })
+    const project = await projectService.update(id, updates, req.user?.id)
+    if (!project) return res.status(404).json({ error: "Project not found" })
+
+    log.info(`Project updated: ${id} by ${req.user?.email}`)
+
+    res.json({ message: "Project updated successfully", project })
   } catch (error) {
+    // Convert our service codes to appropriate HTTP responses
+    if ((error as any).code === 'PROGRAM_NOT_FOUND') {
+      return res.status(404).json({ error: 'Program not found' })
+    }
+
+    if ((error as any).code === 'FORBIDDEN') {
+      return res.status(403).json({ error: 'Forbidden' })
+    }
+
     log.error("Update project error:", error)
     res.status(500).json({ error: "Internal server error" })
   }

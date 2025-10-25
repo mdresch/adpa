@@ -4,6 +4,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { childLogger } from '../utils/logger'
 import programService from '../services/programService'
+import projectService from '../services/projectService'
 
 const router = express.Router()
 
@@ -75,6 +76,19 @@ router.get('/:id', authenticateToken, requirePermission('programs.view'), async 
   } catch (error) {
     log.error('Failed to fetch program', error)
     res.status(500).json({ error: 'Failed to fetch program' })
+  }
+})
+
+// List projects belonging to a program
+router.get('/:id/projects', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    const projects = await projectService.findByProgram(programId)
+    res.json({ success: true, data: projects })
+  } catch (error) {
+    log.error('Failed to list projects by program', error)
+    res.status(500).json({ error: 'Failed to list projects by program' })
   }
 })
 
