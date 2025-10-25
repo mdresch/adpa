@@ -31,6 +31,22 @@ export class TokenManager {
       'gpt-4-turbo': 128000,
       'gpt-35-turbo': 4096,
       'gpt-35-turbo-16k': 16384
+    },
+    'mistral ai': {
+      'mistral-large-latest': 32768,
+      'mistral-medium-latest': 32768,
+      'mistral-small-latest': 32768,
+      'open-mistral-7b': 32768,
+      'open-mixtral-8x7b': 32768,
+      'open-mixtral-8x22b': 65536
+    },
+    mistral: {
+      'mistral-large-latest': 32768,
+      'mistral-medium-latest': 32768,
+      'mistral-small-latest': 32768,
+      'open-mistral-7b': 32768,
+      'open-mixtral-8x7b': 32768,
+      'open-mixtral-8x22b': 65536
     }
   }
 
