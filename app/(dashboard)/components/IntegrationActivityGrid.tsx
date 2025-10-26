@@ -127,7 +127,19 @@ export function IntegrationActivityGrid({ integrationData, activityData }: Integ
                 <motion.div
                   animate={{ scale: [1, 1.3, 1] }}
                   transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, delay: index * 0.3 }}
-                  className={`w-3 h-3 bg-${activity.color}-500 rounded-full mt-2`}
+                  className={
+                    activity.color === "blue"
+                      ? "w-3 h-3 bg-blue-500 rounded-full mt-2"
+                      : activity.color === "emerald"
+                      ? "w-3 h-3 bg-emerald-500 rounded-full mt-2"
+                      : activity.color === "green"
+                      ? "w-3 h-3 bg-green-500 rounded-full mt-2"
+                      : activity.color === "yellow"
+                      ? "w-3 h-3 bg-yellow-500 rounded-full mt-2"
+                      : activity.color === "red"
+                      ? "w-3 h-3 bg-red-500 rounded-full mt-2"
+                      : "w-3 h-3 bg-gray-500 rounded-full mt-2"
+                  }
                 />
                 <div className="flex-1">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-200">{activity.action}</p>

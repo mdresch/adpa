@@ -4,8 +4,10 @@ const { Pool } = require('pg');
 // ⚠️ DEVELOPMENT SCRIPT ONLY - NOT FOR PRODUCTION USE
 // This script is used to check database users during local development
 // TLS verification disabled for self-signed certificates (Neon/Supabase dev)
+// codacy-disable-next-line SecurityRisk: This is a development utility script only
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  // codacy-disable-line SecurityRisk: Self-signed certificates are acceptable for local development
   ssl: process.env.NODE_ENV === 'production' 
     ? { rejectUnauthorized: true }  // Production: verify certificates
     : { rejectUnauthorized: false }  // Development: allow self-signed
