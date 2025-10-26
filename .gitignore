@@ -131,4 +131,7 @@ acli.exe
 # Scripts with potentially sensitive data (use .example versions)
 scripts/output/
 scripts/logs/
-scripts/*.log/backups/
+scripts/*.log
+
+# Legacy Docker files (archived)
+/legacy/
