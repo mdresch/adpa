@@ -1,12 +1,27 @@
 ---
 # Codacy Configuration for ADPA Project
-# This configuration suppresses false positives for development/utility scripts
+# Focus on critical issues (security, bugs) while allowing pragmatic TypeScript patterns
 
 engines:
-  # Enable security analysis but with context-aware exclusions
+  # Enable ESLint with customized rules for React/Next.js project
   eslint:
     enabled: true
+    # Disable overly strict rules that flag production-validated code
+    exclude_patterns:
+      # Allow 'any' types where appropriate (typed elsewhere or in rapid prototyping)
+      - '@typescript-eslint/no-explicit-any'
+      # Allow arrow function patterns common in React
+      - 'no-void'
+      - '@typescript-eslint/no-confusing-void-expression'
+      # Allow async event handlers (common in React)
+      - '@typescript-eslint/no-misused-promises'
   
+  # Focus on security and critical bugs
+  checkov:
+    enabled: true
+  shellcheck:
+    enabled: true
+
 exclude_paths:
   # Development and utility scripts (not production code)
   - 'server/check-users.js'
@@ -17,8 +32,12 @@ exclude_paths:
   - '**/__tests__/**'
   - '**/*.test.ts'
   - '**/*.test.js'
-  # Generated files
+  # Generated files and documentation
   - 'generated-documents/**'
+  - 'docs/**'
+  - 'marketing/**'
+  - '*.md'
+  # Build artifacts
   - 'node_modules/**'
   - 'dist/**'
   - 'build/**'
@@ -35,4 +54,5 @@ coverage:
     - 'server/check-users.js'
     - 'server/run-programs-migration.js'
     - 'server/scripts/**'
+    - '**/__tests__/**'
 
