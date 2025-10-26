@@ -48,6 +48,9 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import Link from "next/link"
 
+// Utility imports
+import { getStatusColor, getPriorityColor, getProjectProgress } from "./utils/helpers"
+
 // Component imports
 import { ProjectsHeader } from "./components/ProjectsHeader"
 import { ProjectsGrid } from "./components/ProjectsGrid"
