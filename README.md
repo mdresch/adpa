@@ -58,29 +58,40 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
 
 ## Installation
 
-### 🚨 Prerequisites (Docker Required)
+### 🚨 Prerequisites
 
-- **Docker** and **Docker Compose** (MANDATORY)
-- **Node.js** (≥18.x) - for local development tools only
+- **Node.js 18+** (REQUIRED)
+- **pnpm** (recommended) or npm
 - **Git** - for version control
+- **Supabase Account** - for PostgreSQL database
+- **Upstash Account** - for Redis cache
 
-### ⚡ Quick Start (Docker Only)
+### ⚡ Quick Start
 
 ```bash
 # 1. Clone repository
 git clone <repository-url>
-cd adpa-framework
+cd adpa
 
-# 2. Start Docker environment
-docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# 2. Install dependencies
+pnpm install
+cd server && npm install && cd ..
 
-# 3. Validate Docker setup
-validate-docker.bat
+# 3. Configure environment
+# Copy .env.example and add your Supabase/Upstash credentials
+cp .env.local.example .env.local
+cp server/.env.example server/.env
 
-# 4. Access application
+# 4. Start development servers
+# Frontend (terminal 1)
+pnpm dev
+
+# Backend (terminal 2)  
+cd server && npm run dev
+
+# 5. Access application
 # Frontend: http://localhost:3000
-# Backend:  http://localhost:5000
-# pgAdmin:  http://localhost:8080 (admin@adpa.com / admin123)
+# Backend:  http://localhost:5000/health
 ```
 
 ### 🐳 Docker Services
@@ -97,24 +108,23 @@ validate-docker.bat
 ### 🔍 Validation & Troubleshooting
 
 ```bash
-# Validate Docker configuration
-validate-docker.bat
+# Run tests
+pnpm test
 
-# Check running services
-docker-compose ps
+# Build for production
+pnpm build
+cd server && npm run build
 
 # View logs
-docker-compose logs -f
-
-# Stop services
-docker-compose down
+# Frontend: terminal output
+# Backend: server/logs/combined.log
 ```
 
-📖 **Detailed Docker instructions**: [DOCKER_README.md](DOCKER_README.md)
+📖 **Detailed setup instructions**: See `/docs/01-getting-started/`
 
-### ⚠️ Manual Installation (Not Recommended)
+### ℹ️ Note: Docker Deprecated
 
-Manual installation is **not recommended** and may break Docker compatibility. Use Docker for all development work.
+This project now uses **Supabase PostgreSQL** (serverless) and **Upstash Redis** instead of local Docker containers. Legacy Docker files have been archived to `legacy/docker/` for reference only.
 
 ## Usage
 
