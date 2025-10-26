@@ -117,6 +117,10 @@ global.d.ts
 server/src/utils/error.ts
 types/
 
+# BUT: Allow component-specific types directories
+!app/*/types/
+!app/*/*/types/
+
 # AI provider details pages (experimental)
 app/ai-providers/[id]/
 
