@@ -6,9 +6,47 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout } from "@/components/animated-layout"
 import { motion } from "framer-motion"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import {
+  FolderOpen,
+  Plus,
+  Search,
+  Filter,
+  Calendar,
+  Users,
+  FileText,
+  MoreHorizontal,
+  Edit,
+  Trash2,
+  Archive,
+  Sparkles,
+  Clock,
+  Loader2,
+  FileUp,
+  Wand2,
+  AlertCircle,
+  CheckCircle,
+} from "@/components/ui/icons-shim"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
+import Link from "next/link"
 
 // Component imports
 import { ProjectsHeader } from "./components/ProjectsHeader"
