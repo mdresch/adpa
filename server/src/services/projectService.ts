@@ -55,12 +55,27 @@ export async function update(projectId: string, data: any, userId: string) {
       // if program_id is null, that's allowed (unassign)
     }
 
-    // Build dynamic update
+    // Build dynamic update with SQL injection protection
+    // Whitelist of allowed updatable fields to prevent SQL injection
+    const ALLOWED_FIELDS = [
+      'name', 'description', 'status', 'priority', 'start_date', 
+      'end_date', 'budget', 'currency', 'owner_id', 'program_id',
+      'metadata', 'settings'
+    ]
+    
     const keys = Object.keys(data)
     if (keys.length === 0) {
       // Return current project
       const cur = await pool.query('SELECT * FROM projects WHERE id = $1', [projectId])
       return cur.rows[0] || null
+    }
+
+    // Validate all keys against whitelist to prevent SQL injection
+    const invalidKeys = keys.filter(k => !ALLOWED_FIELDS.includes(k))
+    if (invalidKeys.length > 0) {
+      const err: any = new Error(`Invalid fields: ${invalidKeys.join(', ')}`)
+      err.code = 'INVALID_FIELDS'
+      throw err
     }
 
     const setClauses = keys.map((k, i) => `${k} = $${i + 2}`)

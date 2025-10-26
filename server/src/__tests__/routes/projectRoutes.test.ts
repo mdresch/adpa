@@ -151,7 +151,7 @@ describe('Project routes - program linking', () => {
     app.use(express.json())
     // mount router with noop auth and allow perms
     app.use('/api/projects', projectsRouter)
-    app.use('/api/projects', projectsRouter)
+  })
 
   afterEach(() => {
     jest.restoreAllMocks()

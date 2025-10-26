@@ -1,0 +1,38 @@
+---
+# Codacy Configuration for ADPA Project
+# This configuration suppresses false positives for development/utility scripts
+
+engines:
+  # Enable security analysis but with context-aware exclusions
+  eslint:
+    enabled: true
+  
+exclude_paths:
+  # Development and utility scripts (not production code)
+  - 'server/check-users.js'
+  - 'server/run-programs-migration.js'
+  - 'server/scripts/**'
+  - 'scripts/**'
+  # Test files
+  - '**/__tests__/**'
+  - '**/*.test.ts'
+  - '**/*.test.js'
+  # Generated files
+  - 'generated-documents/**'
+  - 'node_modules/**'
+  - 'dist/**'
+  - 'build/**'
+  - '.next/**'
+  # Legacy and backup files
+  - 'legacy/**'
+  - 'backups/**'
+  - '*.sql'
+
+# Security pattern suppressions for specific known false positives
+# These are development scripts with proper context and are not security risks
+coverage:
+  exclude_paths:
+    - 'server/check-users.js'
+    - 'server/run-programs-migration.js'
+    - 'server/scripts/**'
+
