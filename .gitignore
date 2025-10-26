@@ -119,3 +119,16 @@ types/
 
 # AI provider details pages (experimental)
 app/ai-providers/[id]/
+
+# Backups and large files
+/backups/
+*.sql
+*.bak
+*.backup
+acli.exe
+*.exe
+
+# Scripts with potentially sensitive data (use .example versions)
+scripts/output/
+scripts/logs/
+scripts/*.log/backups/
