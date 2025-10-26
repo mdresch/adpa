@@ -292,7 +292,7 @@ router.post("/demo", async (req, res) => {
 })
 
 // Change Password (authenticated users only)
-router.post("/change-password", authenticate, async (req, res) => {
+router.post("/change-password", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { currentPassword, newPassword } = req.body
