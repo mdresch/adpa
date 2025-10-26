@@ -99,8 +99,8 @@ export async function connectDatabase() {
         password: dbUrl.password,
       }
     } catch (e: any) {
-      // Fallback: Parse connection string manually to apply SSL config
-      console.warn('⚠️  Could not resolve hostname to IPv4, parsing connectionString with SSL config:', e?.message || e)
+      // Fallback: Parse connection string manually to apply SSL config and force IPv4
+      console.warn('⚠️  Could not resolve hostname to IPv4, parsing connectionString with SSL config and IPv4 forcing:', e?.message || e)
       try {
         const dbUrl = new URL(databaseUrl)
         poolConfig = {
@@ -115,12 +115,18 @@ export async function connectDatabase() {
           max: 20,
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
+          // Force IPv4 even in fallback to prevent IPv6 connection attempts on Railway
+          // @ts-expect-error - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
+          family: 4,
         }
-        console.log(`🔧 Using parsed connection with SSL (rejectUnauthorized: false) to: ${dbUrl.hostname}`)
+        console.log(`🔧 Using parsed connection with SSL and IPv4 forcing (rejectUnauthorized: false) to: ${dbUrl.hostname}`)
       } catch (parseError) {
-        // Last resort: use connectionString as-is
-        console.error('⚠️  Could not parse DATABASE_URL at all, using raw connectionString')
+        // Last resort: use connectionString as-is with IPv4 forcing
+        console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString with IPv4 forcing')
         poolConfig.connectionString = databaseUrl
+        // Force IPv4 even in last resort fallback
+        // @ts-expect-error - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
+        poolConfig.family = 4
       }
     }
     
