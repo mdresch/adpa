@@ -1,52 +1,26 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
-import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
-import { AnimatedLayout, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
-import { motion } from "framer-motion"
+import { AnimatedLayout } from "@/components/animated-layout"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
-import {
-  FolderOpen,
-  Plus,
-  Search,
-  Filter,
-  Calendar,
-  Users,
-  FileText,
-  MoreHorizontal,
-  Edit,
-  Trash2,
-  Archive,
-  Sparkles,
-  Clock,
-  Loader2,
-  FileUp,
-  Wand2,
-  AlertCircle,
-  CheckCircle,
-} from "@/components/ui/icons-shim"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
+
+// Component imports
+import { ProjectsHeader } from "./components/ProjectsHeader"
+import { ProjectsGrid } from "./components/ProjectsGrid"
+import { EmptyState } from "./components/EmptyState"
+import { Pagination } from "./components/Pagination"
+import { CreateProjectDialog } from "./components/CreateProjectDialog"
+import { EditProjectDialog } from "./components/EditProjectDialog"
+import { GenerateDocumentDialog } from "./components/GenerateDocumentDialog"
+import { UploadDocumentDialog } from "./components/UploadDocumentDialog"
+
+// Type imports
+import type { NewProjectForm, DocumentGenerationForm, DocumentUploadForm, GenerationProgress, PaginationState } from "./types"
 
 // Status configuration for template badges
 const statusConfig = {
@@ -73,12 +47,7 @@ export default function Projects() {
   const [updating, setUpdating] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [pagination, setPagination] = useState<{
-    page: number
-    limit: number
-    total: number
-    pages: number
-  }>({
+  const [pagination, setPagination] = useState<PaginationState>({
     page: 1,
     limit: 9,
     total: 0,
@@ -88,16 +57,7 @@ export default function Projects() {
   const { isAuthenticated } = useAuth()
 
   // Form state for creating new project
-  const [newProject, setNewProject] = useState<{
-    name: string
-    description: string
-    framework: string
-    priority: string
-    start_date: string
-    end_date: string
-    budget: string
-    manager: string
-  }>({
+  const [newProject, setNewProject] = useState<NewProjectForm>({
     name: "",
     description: "",
     framework: "",
@@ -116,14 +76,7 @@ export default function Projects() {
   const [generatingDocument, setGeneratingDocument] = useState(false)
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false)
   const [selectedProjectForGeneration, setSelectedProjectForGeneration] = useState<Project | null>(null)
-  const [documentGenerationForm, setDocumentGenerationForm] = useState<{
-    name: string
-    template_id: string
-    prompt: string
-    provider: string
-    model: string
-    temperature: number
-  }>({
+  const [documentGenerationForm, setDocumentGenerationForm] = useState<DocumentGenerationForm>({
     name: "",
     template_id: "",
     prompt: "",
@@ -133,7 +86,7 @@ export default function Projects() {
   })
   
   // Generation progress tracking
-  const [generationProgress, setGenerationProgress] = useState({
+  const [generationProgress, setGenerationProgress] = useState<GenerationProgress>({
     step: 0,
     totalSteps: 4,
     message: '',
@@ -144,11 +97,7 @@ export default function Projects() {
   const [uploadingDocument, setUploadingDocument] = useState(false)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [selectedProjectForUpload, setSelectedProjectForUpload] = useState<Project | null>(null)
-  const [documentUploadForm, setDocumentUploadForm] = useState<{
-    name: string
-    file: File | null
-    template_id: string
-  }>({
+  const [documentUploadForm, setDocumentUploadForm] = useState<DocumentUploadForm>({
     name: "",
     file: null,
     template_id: "",
@@ -672,48 +621,7 @@ export default function Projects() {
     return bTime - aTime
   })
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
-      case "planning":
-        return "bg-gradient-to-r from-blue-500 to-cyan-500 text-white"
-      case "completed":
-        return "bg-gradient-to-r from-purple-500 to-pink-500 text-white"
-      case "on-hold":
-        return "bg-gradient-to-r from-orange-500 to-red-500 text-white"
-      default:
-        return "bg-gradient-to-r from-slate-500 to-gray-500 text-white"
-    }
-  }
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "text-red-500 bg-red-50 dark:bg-red-900/20"
-      case "medium":
-        return "text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20"
-      case "low":
-        return "text-green-500 bg-green-50 dark:bg-green-900/20"
-      default:
-        return "text-slate-500 bg-slate-50 dark:bg-slate-900/20"
-    }
-  }
-
-  // Mock progress calculation (in real app, this would come from API)
-  const getProjectProgress = (project: Project) => {
-    const startDate = new Date(project.start_date || Date.now())
-    const endDate = new Date(project.end_date || Date.now())
-    const now = new Date()
-    
-    if (now < startDate) return 0
-    if (now > endDate) return 100
-    
-    const totalDays = endDate.getTime() - startDate.getTime()
-    const elapsedDays = now.getTime() - startDate.getTime()
-    return Math.round((elapsedDays / totalDays) * 100)
-  }
-
+  // Utility functions now in utils/helpers.ts
   // Fetch projects on component mount and when filters change
   useEffect(() => {
     if (isAuthenticated) {
