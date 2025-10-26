@@ -291,4 +291,59 @@ router.post("/demo", async (req, res) => {
   }
 })
 
+// Change Password (authenticated users only)
+router.post("/change-password", authenticate, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { currentPassword, newPassword } = req.body
+    const userId = (req as any).user.userId
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: "Current password and new password are required" })
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "New password must be at least 8 characters long" })
+    }
+
+    // Get user's current password hash
+    const userResult = await pool.query(
+      "SELECT password_hash FROM users WHERE id = $1",
+      [userId]
+    )
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    const user = userResult.rows[0]
+
+    // Verify current password
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password_hash)
+    if (!isValidPassword) {
+      log.warn(`Failed password change attempt for user ${userId}`)
+      return res.status(401).json({ error: "Current password is incorrect" })
+    }
+
+    // Hash new password
+    const saltRounds = 12
+    const newPasswordHash = await bcrypt.hash(newPassword, saltRounds)
+
+    // Update password
+    await pool.query(
+      "UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [newPasswordHash, userId]
+    )
+
+    log.info(`Password changed successfully for user ${userId}`)
+
+    return res.json({
+      message: "Password changed successfully"
+    })
+  } catch (error) {
+    log.error("Password change error:", error)
+    return res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 export default router

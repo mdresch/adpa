@@ -22,6 +22,15 @@ export default function SettingsPage() {
   const [gatewayEnabled, setGatewayEnabled] = useState(false)
   const [currentKeyMasked, setCurrentKeyMasked] = useState("")
 
+  // Password Change Settings
+  const [changingPassword, setChangingPassword] = useState(false)
+  const [passwordMessage, setPasswordMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+
   useEffect(() => {
     loadSettings()
   }, [])
@@ -57,6 +66,51 @@ export default function SettingsPage() {
       setMessage({ type: 'error', text: errorMessage })
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordMessage(null)
+
+    // Validation
+    if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+      setPasswordMessage({ type: 'error', text: 'All fields are required' })
+      return
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordMessage({ type: 'error', text: 'New passwords do not match' })
+      return
+    }
+
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordMessage({ type: 'error', text: 'Password must be at least 8 characters long' })
+      return
+    }
+
+    try {
+      setChangingPassword(true)
+      
+      await apiClient.request('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword
+        })
+      })
+
+      setPasswordMessage({ type: 'success', text: 'Password changed successfully!' })
+      setPasswordForm({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      })
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Failed to change password'
+      setPasswordMessage({ type: 'error', text: errorMessage })
+    } finally {
+      setChangingPassword(false)
     }
   }
 
@@ -232,15 +286,98 @@ export default function SettingsPage() {
           <TabsContent value="security" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>Security Settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Key className="h-5 w-5" />
+                  Change Password
+                </CardTitle>
                 <CardDescription>
-                  Configure security and access control settings
+                  Update your account password for enhanced security
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Security settings coming soon...
-                </p>
+                <form onSubmit={handlePasswordChange} className="space-y-6">
+                  {passwordMessage && (
+                    <Alert variant={passwordMessage.type === 'error' ? 'destructive' : 'default'}>
+                      {passwordMessage.type === 'success' ? (
+                        <CheckCircle className="h-4 w-4" />
+                      ) : (
+                        <AlertCircle className="h-4 w-4" />
+                      )}
+                      <AlertDescription>{passwordMessage.text}</AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="current-password">Current Password</Label>
+                      <Input
+                        id="current-password"
+                        type="password"
+                        value={passwordForm.currentPassword}
+                        onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                        placeholder="Enter your current password"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="new-password">New Password</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={passwordForm.newPassword}
+                        onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                        placeholder="Enter your new password (min 8 characters)"
+                        required
+                        minLength={8}
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="confirm-password">Confirm New Password</Label>
+                      <Input
+                        id="confirm-password"
+                        type="password"
+                        value={passwordForm.confirmPassword}
+                        onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                        placeholder="Confirm your new password"
+                        required
+                        minLength={8}
+                      />
+                    </div>
+                  </div>
+
+                  <Button
+                    type="submit"
+                    disabled={changingPassword}
+                    className="w-full sm:w-auto"
+                  >
+                    {changingPassword ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Changing Password...
+                      </>
+                    ) : (
+                      <>
+                        <Key className="mr-2 h-4 w-4" />
+                        Change Password
+                      </>
+                    )}
+                  </Button>
+                </form>
+
+                <div className="bg-amber-50 dark:bg-amber-950 p-4 rounded-lg mt-6">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    Password Security Tips
+                  </h4>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>Use at least 8 characters (12+ recommended)</li>
+                    <li>Include uppercase, lowercase, numbers, and symbols</li>
+                    <li>Avoid common words or personal information</li>
+                    <li>Don't reuse passwords from other accounts</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
