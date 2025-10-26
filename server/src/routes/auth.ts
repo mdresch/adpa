@@ -296,7 +296,7 @@ router.post("/change-password", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { currentPassword, newPassword } = req.body
-    const userId = (req as any).user.userId
+    const userId = (req as any).user.id  // Fixed: authenticateToken sets user.id, not user.userId
 
     if (!currentPassword || !newPassword) {
       return res.status(400).json({ error: "Current password and new password are required" })
