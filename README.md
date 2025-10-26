@@ -64,7 +64,7 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
 - **pnpm** (recommended) or npm
 - **Git** - for version control
 - **Supabase Account** - for PostgreSQL database
-- **Upstash Account** - for Redis cache
+- **Railway Account** - for Redis cache
 
 ### ⚡ Quick Start
 
@@ -78,7 +78,7 @@ pnpm install
 cd server && npm install && cd ..
 
 # 3. Configure environment
-# Copy .env.example and add your Supabase/Upstash credentials
+# Copy .env.example and add your Supabase/Railway credentials
 cp .env.local.example .env.local
 cp server/.env.example server/.env
 
@@ -124,7 +124,7 @@ cd server && npm run build
 
 ### ℹ️ Note: Docker Deprecated
 
-This project now uses **Supabase PostgreSQL** (serverless) and **Upstash Redis** instead of local Docker containers. Legacy Docker files have been archived to `legacy/docker/` for reference only.
+This project now uses **Supabase PostgreSQL** (serverless) and **Railway Redis** instead of local Docker containers. Legacy Docker files have been archived to `legacy/docker/` for reference only.
 
 ## Usage
 

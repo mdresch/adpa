@@ -20,10 +20,11 @@
 
 ## Cleanup Strategy
 
-### Step 1: Rotate ALL Credentials (URGENT - Do First!)
-- [ ] **Neon PostgreSQL**: Change password in Neon dashboard
-- [ ] **Supabase**: Regenerate anon key and reset database password
-- [ ] **Upstash Redis**: Rotate REST token
+### Step 1: Rotate ALL Credentials ~~(URGENT)~~ → Mostly Complete
+- [x] **Neon PostgreSQL**: Already rotated (old password in scripts is inactive)
+- [x] **Supabase**: Already rotated (old password in scripts is inactive)
+- [ ] **Supabase Anon Key**: Verify if rotated
+- [ ] **Railway Redis**: Verify credentials status
 
 ### Step 2: Update Scripts
 Replace hardcoded values with environment variables:

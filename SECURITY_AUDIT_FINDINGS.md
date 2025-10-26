@@ -39,10 +39,9 @@ The following scripts contain old hardcoded credentials that should be cleaned u
   - `scripts/create-supabase-env.ps1`
   - `scripts/setup-supabase-env.ps1` (multiple occurrences)
 
-#### Upstash Redis Token:
-- `$UPSTASH_REDIS_REST_TOKEN = "ARt6AAIm..."`
-- **Found in:**
-  - `scripts/create-complete-env-files.ps1`
+#### Railway Redis URL (if exposed):
+- Check `scripts/create-complete-env-files.ps1` for any Railway Redis credentials
+- **Note:** Current setup uses Railway Redis, not Upstash
 
 ### Low Risk - Test/Development Credentials
 
@@ -64,10 +63,10 @@ The following scripts contain old hardcoded credentials that should be cleaned u
 ## ⚠️ Actions Required
 
 ### 1. ~~Rotate Production Credentials~~ ✅ COMPLETED
-- [x] **Neon PostgreSQL password** - Already rotated
-- [x] **Supabase database password** - Already rotated  
+- [x] **Neon PostgreSQL password** - Already rotated (old/inactive)
+- [x] **Supabase database password** - Already rotated (old/inactive)
 - [x] **Supabase anon key** - Need to verify if rotated
-- [ ] **Upstash Redis token** - Need to verify if rotated
+- [ ] **Railway Redis credentials** - Need to verify status
 
 ### 2. Update Scripts
 - [ ] Replace hardcoded credentials with environment variable references
