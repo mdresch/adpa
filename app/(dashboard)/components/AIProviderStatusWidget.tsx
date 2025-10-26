@@ -61,9 +61,31 @@ export function AIProviderStatusWidget({ providersData }: AIProviderStatusWidget
                 <motion.div
                   whileHover={{ rotate: 180 }}
                   transition={{ duration: 0.3 }}
-                  className={`p-2 rounded-lg bg-${provider.color}-50 dark:bg-${provider.color}-900/20`}
+                  className={
+                    provider.color === "blue"
+                      ? "p-2 rounded-lg bg-blue-50 dark:bg-blue-900/20"
+                      : provider.color === "emerald"
+                      ? "p-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20"
+                      : provider.color === "yellow"
+                      ? "p-2 rounded-lg bg-yellow-50 dark:bg-yellow-900/20"
+                      : provider.color === "red"
+                      ? "p-2 rounded-lg bg-red-50 dark:bg-red-900/20"
+                      : "p-2 rounded-lg bg-gray-50 dark:bg-gray-900/20"
+                  }
                 >
-                  <Zap className={`h-5 w-5 text-${provider.color}-500`} />
+                  <Zap
+                    className={
+                      provider.color === "blue"
+                        ? "h-5 w-5 text-blue-500"
+                        : provider.color === "emerald"
+                        ? "h-5 w-5 text-emerald-500"
+                        : provider.color === "yellow"
+                        ? "h-5 w-5 text-yellow-500"
+                        : provider.color === "red"
+                        ? "h-5 w-5 text-red-500"
+                        : "h-5 w-5 text-gray-500"
+                    }
+                  />
                 </motion.div>
                 <div>
                   <p className="font-semibold text-slate-800 dark:text-slate-100">{provider.name}</p>

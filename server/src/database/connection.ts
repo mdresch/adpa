@@ -37,7 +37,7 @@ const createPool = (host: string) => {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
       // Force IPv4 to prevent IPv6 connection issues on Railway
-      // @ts-ignore - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
+      // @ts-expect-error - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
       family: 4,
     })
   }

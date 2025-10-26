@@ -79,7 +79,7 @@ Effort to complete: ~160 hours development
 ```typescript
 // Frontend - Login (3 lines!)
 const { data, error } = await supabase.auth.signInWithPassword({
-  email: 'menno.drescher@gmail.com',
+  email: 'user@example.com',
   password: 'secure-password'
 })
 
@@ -87,7 +87,7 @@ const { data, error } = await supabase.auth.signInWithPassword({
 const { data: { user } } = await supabase.auth.getUser()
 
 // Frontend - Password reset (1 line!)
-await supabase.auth.resetPasswordForEmail('menno.drescher@gmail.com')
+await supabase.auth.resetPasswordForEmail('user@example.com')
 
 // Frontend - Social login (1 line!)
 await supabase.auth.signInWithOAuth({ provider: 'google' })

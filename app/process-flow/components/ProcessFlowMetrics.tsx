@@ -49,7 +49,7 @@ export function ProcessFlowMetrics({
         <CardContent>
           <div className="text-2xl font-bold">{formatNumber(totalUsageTokens)}</div>
           <p className="text-xs text-muted-foreground">
-            {utilization Percent}% utilized
+            {utilizationPercent}% utilized
           </p>
         </CardContent>
       </Card>

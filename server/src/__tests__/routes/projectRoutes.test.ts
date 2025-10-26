@@ -163,7 +163,6 @@ describe('Project routes - program linking', () => {
 
     // Mount a minimal program router to forward call to projectService
     const app2 = express()
-    const app2 = express()
     app2.use(express.json())
     app2.use('/api/programs', programRouter)
     const res = await request(app2).get('/api/programs/abc-123/projects').set('Authorization', 'Bearer tok')
@@ -186,10 +185,13 @@ describe('Project routes - program linking', () => {
   })
 
   test('PUT /api/projects/:id rejects invalid program_id', async () => {
-    await expect(projectService.update('proj-1', { program_id: 'invalid-prog' }, 'admin-1')).rejects.toMatchObject({ code: 'PROGRAM_NOT_FOUND' })
+    // Setup app for this test
+    const app2 = express()
     app2.use(express.json())
-  app2.use((req, res, next) => { req.user = { id: 'user-1', role: 'admin', email: 'admin@example.com', permissions: ['admin'] }; next() })
+    app2.use((req, res, next) => { req.user = { id: 'user-1', role: 'admin', email: 'admin@example.com', permissions: ['admin'] }; next() })
     app2.use('/api/projects', projectsRouter)
+
+    await expect(projectService.update('proj-1', { program_id: 'invalid-prog' }, 'admin-1')).rejects.toMatchObject({ code: 'PROGRAM_NOT_FOUND' })
 
     const res = await request(app2).put('/api/projects/proj-1').send({ program_id: 'invalid-prog' })
     expect(res.status).toBe(404)

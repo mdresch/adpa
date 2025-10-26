@@ -68,7 +68,7 @@ export function OptimizationTab({
                 <span className="text-sm font-medium">{formatNumber(documentContentTokens)} tokens</span>
               </div>
               <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Compression: {(workflowConfig.compressionLevel * 100).toFixed(0)}% ({workflowConfig.compressionMethod})</span>
+                <span>Compression: {(workflowConfig.compressionLevel * 100).toFixed(0)}%</span>
                 <span>Raw: {formatNumber(Math.ceil(documentContentTokens / workflowConfig.compressionLevel))} tokens</span>
               </div>
               <div className="border-t pt-2">
