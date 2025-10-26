@@ -71,19 +71,8 @@ router.post('/', authenticateToken, requirePermission('programs.manage'), valida
   }
 })
 
-// Get program
-router.get('/:id', authenticateToken, requirePermission('programs.view'), async (req, res) => {
-  const log = childLogger({ requestId: (req as any).requestId })
-  try {
-    const id = req.params.id
-    const program = await programService.getProgramById(id)
-    if (!program) return res.status(404).json({ error: 'Program not found' })
-    res.json({ success: true, data: program })
-  } catch (error) {
-    log.error('Failed to fetch program', error)
-    res.status(500).json({ error: 'Failed to fetch program' })
-  }
-})
+// IMPORTANT: Specific routes (/:id/projects, /:id/metrics) must come BEFORE generic /:id route
+// Express matches routes in order, so /:id would catch /:id/projects if placed first
 
 // List projects belonging to a program
 router.get('/:id/projects', authenticateToken, requirePermission('programs.view'), async (req, res) => {
@@ -119,6 +108,20 @@ router.get("/:id/metrics", authenticateToken, async (req, res) => {
       success: false,
       error: "Failed to fetch program metrics"
     })
+  }
+})
+
+// Get program (must come AFTER specific routes like /:id/projects and /:id/metrics)
+router.get('/:id', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const id = req.params.id
+    const program = await programService.getProgramById(id)
+    if (!program) return res.status(404).json({ error: 'Program not found' })
+    res.json({ success: true, data: program })
+  } catch (error) {
+    log.error('Failed to fetch program', error)
+    res.status(500).json({ error: 'Failed to fetch program' })
   }
 })
 
