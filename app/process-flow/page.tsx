@@ -4,44 +4,14 @@ import React, { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
+import { Card } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Slider } from "@/components/ui/slider"
-import { Textarea } from "@/components/ui/textarea"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { 
-  FileText, 
-  ArrowRight, 
-  Plus, 
-  Edit, 
-  Trash2, 
-  BarChart3, 
   Settings,
-  Zap,
-  TrendingUp,
-  Layers,
-  Database,
-  Cpu,
-  MemoryStickIcon,
-  Clock,
-  CheckCircle,
-  AlertCircle,
   Play,
-  Pause,
   RotateCcw,
-  ChevronDown,
-  XCircle,
-  ExternalLink,
-  Download,
-  Brain,
-  Wand2,
-  Crosshair,
-  Sparkles
 } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
@@ -59,6 +29,17 @@ import ReactMarkdown from "react-markdown"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 // @ts-ignore
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
+
+// Imported components
+import { ProcessFlowMetrics } from "./components/ProcessFlowMetrics"
+import { ProcessingProgressVisualization } from "./components/ProcessingProgressVisualization"
+import { WorkflowTab } from "./components/WorkflowTab"
+import { ConfigurationTab } from "./components/ConfigurationTab"
+import { DocumentsTab } from "./components/DocumentsTab"
+import { OptimizationTab } from "./components/OptimizationTab"
+import { ContentStructuringTab } from "./components/ContentStructuringTab"
+import { formatNumber } from "./utils/formatters"
+import type { Template, Project, AIProvider, ProcessingStep, WorkflowConfig } from "./types"
 
 // Status configuration for template badges
 const statusConfig = {
