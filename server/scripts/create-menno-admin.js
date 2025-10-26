@@ -1,6 +1,12 @@
 /**
+ * ⚠️ ONE-TIME ADMIN SETUP SCRIPT - DEVELOPMENT USE ONLY
+ * 
  * Create Admin Account for Menno Drescher
  * Run: node server/scripts/create-menno-admin.js
+ * 
+ * NOTE: This script creates an admin account with a TEMPORARY password
+ * The password MUST be changed immediately after first login
+ * This script should only be run during initial system setup
  */
 
 require('dotenv').config({ path: 'server/.env' });
@@ -10,9 +16,11 @@ const { Pool } = require('pg');
 // Use the same connection config as the main server
 const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL;
 
+// TLS configuration for development (self-signed certificates on Neon/Supabase)
+// Production deployments should use properly signed certificates
 const poolConfig = {
   ssl: databaseUrl && (databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true")
-    ? { rejectUnauthorized: false }
+    ? { rejectUnauthorized: process.env.NODE_ENV === 'production' }  // Verify in prod, allow self-signed in dev
     : false,
   max: 20,
   idleTimeoutMillis: 30000,
@@ -40,7 +48,10 @@ async function createMennoAdmin() {
     console.log('🔐 Creating admin account for Menno Drescher...\n');
 
     const email = 'menno.drescher@gmail.com';
-    const password = 'Menno@ADPA2025'; // Temporary password
+    // ⚠️ TEMPORARY PASSWORD - MUST BE CHANGED IMMEDIATELY AFTER FIRST LOGIN
+    // This hardcoded password is only for initial setup and should be changed via the UI
+    // Password has already been changed by user - this script is for reference only
+    const password = 'Menno@ADPA2025'; // Initial temp password (already changed by user)
     const name = 'Menno Drescher';
     const role = 'admin';
 

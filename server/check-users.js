@@ -1,9 +1,14 @@
 require('dotenv').config();
 const { Pool } = require('pg');
 
+// ⚠️ DEVELOPMENT SCRIPT ONLY - NOT FOR PRODUCTION USE
+// This script is used to check database users during local development
+// TLS verification disabled for self-signed certificates (Neon/Supabase dev)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: true }  // Production: verify certificates
+    : { rejectUnauthorized: false }  // Development: allow self-signed
 });
 
 pool.query('SELECT id, email, role, created_at FROM users ORDER BY created_at DESC LIMIT 5')
