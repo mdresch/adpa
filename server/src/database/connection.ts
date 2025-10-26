@@ -87,6 +87,12 @@ export async function connectDatabase() {
       // Manually resolve hostname to IPv4 address using dns.resolve4 (queries A records only)
       console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
       const addresses = await dnsResolve4(dbUrl.hostname)
+      
+      // Validate that DNS resolution returned at least one IPv4 address
+      if (!addresses || addresses.length === 0) {
+        throw new Error(`No IPv4 addresses found for hostname: ${dbUrl.hostname}`)
+      }
+      
       const ipv4Address = addresses[0] // Use first IPv4 address
       console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
       
