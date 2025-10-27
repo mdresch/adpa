@@ -5,7 +5,7 @@
  * Dialog for configuring document regeneration with AI
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -94,31 +94,26 @@ export function RegenerateVersionModal({
     }
   }, [providers, selectedProvider])
   
-  // Debug: Track selectedProvider state
+  // Debug: Track selectedProvider state (only in development)
   useEffect(() => {
-    console.log('[RegenerateModal] selectedProvider state:', selectedProvider)
-    console.log('[RegenerateModal] Button disabled:', !selectedProvider || loading)
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[RegenerateModal] selectedProvider:', selectedProvider, 'Button enabled:', !!selectedProvider && !loading)
+    }
   }, [selectedProvider, loading])
 
   const fetchData = async () => {
     try {
-      console.log('[RegenerateModal] Fetching AI providers...')
-      
       // Fetch AI providers
       const providersResponse = await apiClient.request<AIProvider[]>('/ai-providers')
-      console.log('[RegenerateModal] Providers response:', providersResponse)
       
       if (Array.isArray(providersResponse)) {
         const activeProviders = providersResponse.filter((p: any) => p.is_active)
-        console.log('[RegenerateModal] Active providers:', activeProviders)
-        console.log('[RegenerateModal] First provider object:', activeProviders[0])
         setProviders(activeProviders)
         
         // Set default provider (use provider.name like the working dialog)
         if (activeProviders.length > 0) {
           const firstProvider = activeProviders[0]
           const defaultProvider = firstProvider.name // Use name, not provider_type
-          console.log('[RegenerateModal] Setting default provider:', defaultProvider, 'from object:', firstProvider)
           setSelectedProvider(defaultProvider)
           
           // Set default model if available (handle both singular and array)
@@ -129,36 +124,27 @@ export function RegenerateVersionModal({
           }
         }
       }
-
-      // Note: Project stats display is informational
-      // The actual context gathering happens on the backend
-      // Stats shown here are just for user awareness
-      console.log('[RegenerateModal] Project stats will be gathered by backend during generation')
     } catch (error) {
       console.error('[RegenerateModal] Failed to fetch data:', error)
     }
   }
 
-  // Get available models for selected provider
-  const getModelsForProvider = () => {
-    const provider = providers.find(p => p.name === selectedProvider) // Find by name
-    console.log('[RegenerateModal] Getting models for provider:', selectedProvider, 'found:', provider)
-    if (!provider) {
-      console.warn('[RegenerateModal] Provider not found for:', selectedProvider)
-      return []
-    }
+  // Get available models for selected provider (memoized to prevent re-renders)
+  const availableModels = useMemo(() => {
+    if (!selectedProvider) return []
+    
+    const provider = providers.find(p => p.name === selectedProvider)
+    if (!provider) return []
     
     // Handle both models (array) and model (singular)
-    let models: string[] = []
     if (provider.models && Array.isArray(provider.models)) {
-      models = provider.models
+      return provider.models
     } else if (provider.model) {
-      models = [provider.model] // Convert singular model to array
+      return [provider.model] // Convert singular model to array
     }
     
-    console.log('[RegenerateModal] Models for', provider.name, ':', models)
-    return models
-  }
+    return []
+  }, [providers, selectedProvider])
 
   const handleGenerate = () => {
     // Find the provider to get its provider_type for the backend
@@ -287,7 +273,7 @@ export function RegenerateVersionModal({
           </div>
 
           {/* Model Selection */}
-          {selectedProvider && getModelsForProvider().length > 0 && (
+          {selectedProvider && availableModels.length > 0 && (
             <div className="space-y-2">
               <Label htmlFor="model">
                 Model 
@@ -300,7 +286,7 @@ export function RegenerateVersionModal({
                   <SelectValue placeholder={selectedModel || "Select model"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {getModelsForProvider().map((model) => (
+                  {availableModels.map((model) => (
                     <SelectItem key={model} value={model}>
                       {model}
                     </SelectItem>
@@ -308,7 +294,7 @@ export function RegenerateVersionModal({
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                Showing {getModelsForProvider().length} model(s) available for {selectedProvider}
+                Showing {availableModels.length} model(s) available for {selectedProvider}
               </p>
             </div>
           )}
