@@ -597,11 +597,57 @@ The ADPA system represents a significant advancement in document processing auto
 
   // Refresh document when regeneration completes
   useEffect(() => {
-    if (result && documentId) {
-      // Reload the document and versions
-      loadDocument()
+    const reloadAfterRegeneration = async () => {
+      if (result && documentId && projectId) {
+        try {
+          // Reload document and versions
+          const [documentResponse, versionsResponse] = await Promise.all([
+            apiClient.get(`/projects/${projectId}/documents/${documentId}`),
+            apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
+          ])
+          
+          const documentData = documentResponse
+          const versionsData = versionsResponse || []
+          
+          // Convert content to string
+          let contentString = ''
+          if (typeof documentData.content === 'string') {
+            contentString = documentData.content
+          } else if (documentData.content && typeof documentData.content === 'object') {
+            if (documentData.content.text) {
+              contentString = documentData.content.text
+            } else if (documentData.content.markdown) {
+              contentString = documentData.content.markdown
+            } else {
+              contentString = JSON.stringify(documentData.content, null, 2)
+            }
+          }
+          
+          const sourceDocuments = documentData.metadata?.source_documents || 
+                                 documentData.generation_metadata?.source_documents || 
+                                 []
+          
+          setDocument({
+            ...documentData, 
+            content: contentString,
+            source_documents: sourceDocuments
+          })
+          setVersions(versionsData)
+          setEditedContent(contentString)
+          
+          if (contentString) {
+            extractTableOfContents(contentString)
+          }
+          
+          toast.success('Document reloaded with new version!')
+        } catch (error) {
+          console.error('Failed to reload after regeneration:', error)
+        }
+      }
     }
-  }, [result, documentId])
+    
+    reloadAfterRegeneration()
+  }, [result, documentId, projectId])
 
   const addComment = async () => {
     if (!newComment.trim() || !document) return
