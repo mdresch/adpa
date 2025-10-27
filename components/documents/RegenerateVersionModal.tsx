@@ -53,7 +53,8 @@ interface AIProvider {
   name: string
   provider_type?: string
   type?: string
-  models?: string[]
+  model?: string // Singular model property
+  models?: string[] // Array of models
 }
 
 export function RegenerateVersionModal({
@@ -120,9 +121,11 @@ export function RegenerateVersionModal({
           console.log('[RegenerateModal] Setting default provider:', defaultProvider, 'from object:', firstProvider)
           setSelectedProvider(defaultProvider)
           
-          // Set default model if available
+          // Set default model if available (handle both singular and array)
           if (firstProvider.models && firstProvider.models.length > 0) {
             setSelectedModel(firstProvider.models[0])
+          } else if (firstProvider.model) {
+            setSelectedModel(firstProvider.model)
           }
         }
       }
@@ -145,7 +148,14 @@ export function RegenerateVersionModal({
       return []
     }
     
-    const models = provider.models || []
+    // Handle both models (array) and model (singular)
+    let models: string[] = []
+    if (provider.models && Array.isArray(provider.models)) {
+      models = provider.models
+    } else if (provider.model) {
+      models = [provider.model] // Convert singular model to array
+    }
+    
     console.log('[RegenerateModal] Models for', provider.name, ':', models)
     return models
   }
