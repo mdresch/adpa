@@ -2080,6 +2080,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
         onOpenChange={setShowRegenerateModal}
         documentId={docId}
         currentTemplate={document?.template_id}
+        currentTemplateName={document?.template_name}
         currentVersion={document?.version?.toString() || '1.0'}
         projectId={projectId}
         onRegenerate={handleRegenerate}

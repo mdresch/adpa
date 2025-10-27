@@ -36,6 +36,7 @@ interface RegenerateVersionModalProps {
   onOpenChange: (open: boolean) => void
   documentId: string
   currentTemplate?: string
+  currentTemplateName?: string
   currentVersion?: string
   projectId?: string
   onRegenerate: (params: {
@@ -45,12 +46,6 @@ interface RegenerateVersionModalProps {
     versionType: 'patch' | 'minor' | 'major'
     temperature: number
   }) => void
-}
-
-interface Template {
-  id: string
-  name: string
-  description?: string
 }
 
 interface AIProvider {
@@ -71,28 +66,20 @@ export function RegenerateVersionModal({
   onOpenChange,
   documentId,
   currentTemplate,
+  currentTemplateName,
   currentVersion = '1.0',
   projectId,
   onRegenerate
 }: RegenerateVersionModalProps) {
-  const [templates, setTemplates] = useState<Template[]>([])
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [projectStats, setProjectStats] = useState<ProjectStats>({ documents: 0, stakeholders: 0, baselines: 0 })
   
-  const [selectedTemplate, setSelectedTemplate] = useState<string>(currentTemplate || 'none')
   const [selectedProvider, setSelectedProvider] = useState<string>('')
-  const [selectedModel, setSelectedModel] = useState<string>('')
+  const [selectedModel, setSelectedModel] = useState<string>('default')
   const [versionType, setVersionType] = useState<'patch' | 'minor' | 'major'>('patch')
   const [temperature, setTemperature] = useState<number>(0.7)
   
   const [loading, setLoading] = useState(false)
-
-  // Reset to current template when modal opens
-  useEffect(() => {
-    if (open && currentTemplate) {
-      setSelectedTemplate(currentTemplate)
-    }
-  }, [open, currentTemplate])
 
   // Fetch templates and providers
   useEffect(() => {
@@ -103,12 +90,6 @@ export function RegenerateVersionModal({
 
   const fetchData = async () => {
     try {
-      // Fetch templates
-      const templatesResponse = await apiClient.request<Template[]>('/templates')
-      if (Array.isArray(templatesResponse)) {
-        setTemplates(templatesResponse)
-      }
-
       // Fetch AI providers
       const providersResponse = await apiClient.request<AIProvider[]>('/ai-providers')
       if (Array.isArray(providersResponse)) {
@@ -116,8 +97,9 @@ export function RegenerateVersionModal({
         setProviders(activeProviders)
         
         // Set default provider
-        if (activeProviders.length > 0 && !selectedProvider) {
+        if (activeProviders.length > 0) {
           setSelectedProvider(activeProviders[0].provider_type)
+          setSelectedModel('default')
         }
       }
 
@@ -159,7 +141,7 @@ export function RegenerateVersionModal({
 
   const handleGenerate = () => {
     onRegenerate({
-      templateId: selectedTemplate, // Template is always required
+      templateId: currentTemplate, // Use current template (locked)
       provider: selectedProvider,
       model: selectedModel && selectedModel !== 'default' ? selectedModel : undefined,
       versionType,
@@ -171,10 +153,7 @@ export function RegenerateVersionModal({
   }
 
   const calculateNextVersion = () => {
-    // Get the template's current version (if template is changing, start fresh)
-    const baseVersion = selectedTemplate === currentTemplate ? currentVersion : '1.0.0'
-    
-    const parts = baseVersion.split('.')
+    const parts = currentVersion.split('.')
     const major = parseInt(parts[0] || '1')
     const minor = parseInt(parts[1] || '0')
     const patch = parseInt(parts[2] || '0')
@@ -197,11 +176,28 @@ export function RegenerateVersionModal({
             <span>Create New Version with AI</span>
           </DialogTitle>
           <DialogDescription>
-            Regenerate this document with all the latest project context (documents, stakeholders, baselines). Templates are required for proper metadata and structure.
+            Create a new version of this document with updated project context. The same template will be used to ensure consistency.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Template Info (Read-only) */}
+          <Card className="bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800">
+            <CardContent className="pt-4">
+              <div className="flex items-start space-x-3">
+                <FileText className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                    Template: {currentTemplateName || 'Document Template'}
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    This version will use the same template as the current document. To use a different template, create a new document instead.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Context Preview */}
           <Card className="bg-muted/50">
             <CardContent className="pt-4">
@@ -229,41 +225,12 @@ export function RegenerateVersionModal({
                 </div>
               </div>
               <p className="text-xs text-muted-foreground mt-3">
-                This context will be included in the AI generation
+                Latest project context will be included in the regeneration
               </p>
             </CardContent>
           </Card>
 
           <Separator />
-
-          {/* Template Selection */}
-          <div className="space-y-2">
-            <Label htmlFor="template">
-              Document Template *
-            </Label>
-            <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
-              <SelectTrigger id="template">
-                <SelectValue placeholder="Select template" />
-              </SelectTrigger>
-              <SelectContent>
-                {currentTemplate && (
-                  <SelectItem value={currentTemplate}>
-                    ✓ Keep current template (Recommended)
-                  </SelectItem>
-                )}
-                {templates.filter(t => t.id !== currentTemplate).map((template) => (
-                  <SelectItem key={template.id} value={template.id}>
-                    {template.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground">
-              {selectedTemplate === currentTemplate
-                ? `✓ Current: ${templates.find(t => t.id === currentTemplate)?.name || 'Loading...'} - Ensures consistency and proper metadata`
-                : `Changing to: ${templates.find(t => t.id === selectedTemplate)?.name || 'Select a template'} - Document will be restructured`}
-            </p>
-          </div>
 
           {/* AI Provider Selection */}
           <div className="space-y-2">
@@ -334,11 +301,7 @@ export function RegenerateVersionModal({
               </div>
             </RadioGroup>
             <p className="text-xs text-muted-foreground">
-              {selectedTemplate !== currentTemplate ? (
-                <>Template changed - New version will be: <strong>1.0.0</strong> (reset for new template)</>
-              ) : (
-                <>Next version will be: <strong>{calculateNextVersion()}</strong></>
-              )}
+              Next version will be: <strong>{calculateNextVersion()}</strong>
             </p>
           </div>
 
@@ -370,7 +333,7 @@ export function RegenerateVersionModal({
           </Button>
           <Button 
             onClick={handleGenerate}
-            disabled={!selectedProvider || !selectedTemplate || loading}
+            disabled={!selectedProvider || loading}
           >
             <Sparkles className="h-4 w-4 mr-2" />
             Generate New Version

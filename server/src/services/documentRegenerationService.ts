@@ -131,7 +131,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
 
       const aiResponse = await ContextAwareAIService.generateWithContext(aiRequest)
 
-      // Step 4: Calculate version number based on template (70%)
+      // Step 4: Calculate version number (70%)
       log.info('Calculating version number')
       await this.updateJobStatus(params.jobId, 'processing', 70, 'Creating new version...')
       this.emitProgress({
@@ -141,24 +141,15 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         userId: params.userId
       })
 
-      // Check if template is changing
-      const templateId = params.templateId || document.template_id
-      const templateChanged = templateId !== document.template_id
+      // Use current template (template is locked for versions)
+      const templateId = document.template_id
       
-      let nextVersion: string
-      
-      if (templateChanged) {
-        // Template changed - start from 1.0.0
-        nextVersion = '1.0.0'
-        log.info(`Template changed from ${document.template_id} to ${templateId}, resetting version to 1.0.0`)
-      } else {
-        // Same template - increment version
-        const versionResult = await pool.query(
-          `SELECT calculate_next_version($1, $2) as next_version`,
-          [params.documentId, params.versionType]
-        )
-        nextVersion = versionResult.rows[0].next_version
-      }
+      // Calculate next version
+      const versionResult = await pool.query(
+        `SELECT calculate_next_version($1, $2) as next_version`,
+        [params.documentId, params.versionType]
+      )
+      const nextVersion = versionResult.rows[0].next_version
 
       // Step 5: Create document version (85%)
       log.info(`Creating version ${nextVersion}`)
@@ -170,14 +161,6 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         userId: params.userId
       })
 
-      const changeSummary = templateChanged
-        ? `Template changed and regenerated with updated project context`
-        : `Regenerated with updated project context`
-      
-      const changeReason = templateChanged
-        ? `Template change from ${document.template_name || 'unknown'} - AI regeneration using ${params.provider}`
-        : `AI regeneration using ${params.provider}`
-
       const versionId = await pool.query(
         `SELECT create_document_version(
           $1::UUID, $2::VARCHAR(20), $3::VARCHAR(20), $4::TEXT, $5::VARCHAR(100),
@@ -186,9 +169,9 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         [
           params.documentId,
           nextVersion,
-          templateChanged ? 'major' : params.versionType, // Major version when template changes
-          changeSummary,
-          changeReason,
+          params.versionType,
+          `Regenerated with updated project context`,
+          `AI regeneration using ${params.provider}`,
           params.userId,
           JSON.stringify({ content: aiResponse.content }),
           JSON.stringify({
@@ -197,24 +180,13 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             temperature: params.temperature || 0.7,
             context_summary: aiResponse.context_summary,
             context_token_usage: aiResponse.context_token_usage,
-            template_changed: templateChanged,
-            old_template_id: document.template_id,
-            new_template_id: templateId,
+            template_id: templateId,
             generated_at: new Date().toISOString()
           })
         ]
       )
 
       const newVersionId = versionId.rows[0].version_id
-
-      // If template changed, update the document's template_id
-      if (templateChanged && templateId) {
-        await pool.query(
-          `UPDATE documents SET template_id = $1, updated_at = NOW() WHERE id = $2`,
-          [templateId, params.documentId]
-        )
-        log.info(`Updated document template_id to ${templateId}`)
-      }
 
       // Step 6: Complete job (100%)
       log.info('Regeneration completed successfully')

@@ -62,6 +62,9 @@ interface DocumentData {
   status: string
   project_id: string
   project_name: string
+  template_id?: string
+  template_name?: string
+  version?: number
   word_count: number
   character_count: number
   compression_ratio: number
@@ -1989,6 +1992,7 @@ The ADPA system represents a significant advancement in document processing auto
         onOpenChange={setShowRegenerateModal}
         documentId={documentId}
         currentTemplate={document?.template_id}
+        currentTemplateName={document?.template_name || (document as any)?.metadata?.templateName}
         currentVersion={document?.version?.toString() || '1.0'}
         projectId={projectId}
         onRegenerate={handleRegenerate}

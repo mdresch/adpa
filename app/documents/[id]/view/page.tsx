@@ -1143,6 +1143,7 @@ ${doc.content}
         onOpenChange={setShowRegenerateModal}
         documentId={documentId}
         currentTemplate={document?.template_id}
+        currentTemplateName={document?.metadata?.templateId || (document as any)?.template_name}
         currentVersion={document?.version || '1.0'}
         projectId={document?.project_id}
         onRegenerate={handleRegenerate}
