@@ -107,12 +107,12 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user?.id
 
-    // Get project details with document count
+    // Get project details with document count (exclude AI-regenerated versions)
     const projectResult = await pool.query(
       `
       SELECT p.*, 
              u.name as owner_name,
-             COUNT(DISTINCT d.id) as documents_count,
+             COUNT(DISTINCT d.id) FILTER (WHERE d.parent_document_id IS NULL) as documents_count,
              MAX(d.updated_at) as last_document_update
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
@@ -127,19 +127,20 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Project not found" })
     }
 
-    // Get recent documents (last 10) with title only
+    // Get recent documents (last 10) with title only - exclude AI regenerations
     const documentsResult = await pool.query(
       `
       SELECT id, title, template_id, created_at, updated_at
       FROM documents 
       WHERE project_id = $1 
+        AND parent_document_id IS NULL
       ORDER BY updated_at DESC 
       LIMIT 10
     `,
       [id]
     )
 
-    // Get recent changes (last 5 documents created/updated)
+    // Get recent changes (last 5 documents created/updated) - exclude AI regenerations
     const recentChangesResult = await pool.query(
       `
       SELECT 
@@ -152,6 +153,7 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
         END as change_type
       FROM documents 
       WHERE project_id = $1 
+        AND parent_document_id IS NULL
       ORDER BY GREATEST(created_at, updated_at) DESC 
       LIMIT 5
     `,
@@ -215,13 +217,14 @@ router.get("/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Project not found" })
     }
 
-    // Get project documents
+    // Get project documents (only original/parent documents, hide AI-regenerated versions)
     const documentsResult = await pool.query(
       `
       SELECT d.*, u.name as created_by_name
       FROM documents d
       LEFT JOIN users u ON d.created_by = u.id
-      WHERE d.project_id = $1
+      WHERE d.project_id = $1 
+        AND d.parent_document_id IS NULL
       ORDER BY d.created_at DESC
     `,
       [id],
