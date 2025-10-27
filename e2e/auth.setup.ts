@@ -22,16 +22,33 @@ setup('authenticate', async ({ page }) => {
   // Click login button
   await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
   
-  // Wait for navigation (any page is fine - login was successful if we leave /auth/login)
-  try {
-    await page.waitForURL(/^(?!.*\/auth\/login).*$/, { timeout: 10000 });
-  } catch {
-    // If redirect times out, check if we're already logged in by looking for projects or user menu
-    const isLoggedIn = await page.locator('text=Projects, button:has-text("Logout"), .user-menu').first().isVisible();
-    if (!isLoggedIn) {
-      throw new Error('Login failed - still on login page or no user menu found');
-    }
+  // Wait a bit for login to process
+  await page.waitForTimeout(2000);
+  
+  // Check if login was successful by multiple criteria
+  const currentUrl = page.url();
+  console.log('Current URL after login attempt:', currentUrl);
+  
+  // Success if:
+  // 1. We're no longer on /auth/login
+  // 2. OR we can see typical logged-in elements
+  const isOnLoginPage = currentUrl.includes('/auth/login');
+  const hasProjects = await page.locator('text=Projects').count() > 0;
+  const hasUserMenu = await page.locator('button:has-text("Logout"), [aria-label*="menu"], .user-menu, [data-testid*="user"]').count() > 0;
+  const hasSidebar = await page.locator('nav, aside, [role="navigation"]').count() > 0;
+  
+  const isLoggedIn = !isOnLoginPage || hasProjects || hasUserMenu || hasSidebar;
+  
+  if (!isLoggedIn) {
+    // Take screenshot for debugging
+    await page.screenshot({ path: 'debug-login-failed.png', fullPage: true });
+    console.log('Login failed. Screenshot saved to debug-login-failed.png');
+    console.log('Current URL:', currentUrl);
+    console.log('Page title:', await page.title());
+    throw new Error(`Login failed - still on login page. Check debug-login-failed.png for details.`);
   }
+  
+  console.log('✅ Login successful! Saving authentication state...');
   
   // Save authentication state
   await page.context().storageState({ path: authFile });
