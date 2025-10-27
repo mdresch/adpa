@@ -49,6 +49,7 @@ import { Document, Packer, Paragraph, TextRun } from "docx"
 import { saveAs } from "file-saver"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
+import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { Sparkles } from "@/components/ui/icons-shim"
 
@@ -122,6 +123,8 @@ export default function ProjectDocumentViewer() {
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [selectedVersion, setSelectedVersion] = useState<any>(null)
+  const [showVersionDialog, setShowVersionDialog] = useState(false)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -1833,7 +1836,14 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">
                                   {version.word_count} words
                                 </span>
-                                <Button variant="outline" size="sm">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedVersion(version)
+                                    setShowVersionDialog(true)
+                                  }}
+                                >
                                   <Eye className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -2051,6 +2061,14 @@ The ADPA system represents a significant advancement in document processing auto
         result={result}
         onClose={resetRegeneration}
         documentId={documentId}
+      />
+
+      {/* Version Viewer Dialog */}
+      <VersionViewerDialog
+        open={showVersionDialog}
+        onOpenChange={setShowVersionDialog}
+        version={selectedVersion}
+        documentName={document?.name}
       />
     </div>
   )
