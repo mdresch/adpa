@@ -234,7 +234,11 @@ export function RegenerateVersionModal({
                 <SelectValue placeholder="Select template (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">No template (freeform)</SelectItem>
+                <SelectItem value="none">
+                  <div className="flex flex-col">
+                    <span>No template - Freeform generation</span>
+                  </div>
+                </SelectItem>
                 {templates.map((template) => (
                   <SelectItem key={template.id} value={template.id}>
                     {template.name}
@@ -243,7 +247,11 @@ export function RegenerateVersionModal({
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {currentTemplate ? `Current: ${templates.find(t => t.id === currentTemplate)?.name || 'Unknown'}` : 'No template currently applied'}
+              {selectedTemplate === 'none' 
+                ? 'AI will regenerate content without template constraints, using project context'
+                : currentTemplate 
+                ? `Current: ${templates.find(t => t.id === currentTemplate)?.name || 'Unknown'}` 
+                : 'Select a template to structure the regenerated document'}
             </p>
           </div>
 
