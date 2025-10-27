@@ -87,15 +87,36 @@ export class DocumentRegenerationService {
       })
 
       // Get document count for context summary
-      const contextStats = await pool.query(
-        `SELECT 
-          (SELECT COUNT(*) FROM documents WHERE project_id = $1 AND id != $2) as doc_count,
-          (SELECT COUNT(*) FROM stakeholders WHERE project_id = $1) as stakeholder_count,
-          (SELECT COUNT(*) FROM baselines WHERE project_id = $1) as baseline_count`,
-        [projectId, params.documentId]
-      )
-
-      const stats = contextStats.rows[0]
+      let stats = { doc_count: 0, stakeholder_count: 0, baseline_count: 0 }
+      
+      try {
+        const contextStats = await pool.query(
+          `SELECT 
+            (SELECT COUNT(*) FROM documents WHERE project_id = $1 AND id != $2) as doc_count,
+            (SELECT COUNT(*) FROM stakeholders WHERE project_id = $1) as stakeholder_count,
+            (SELECT COUNT(*) FROM baselines WHERE project_id = $1) as baseline_count`,
+          [projectId, params.documentId]
+        )
+        stats = contextStats.rows[0]
+      } catch (error: any) {
+        // Handle missing tables gracefully
+        log.warn('Could not fetch all context stats, fetching available data', { error: error.message })
+        
+        try {
+          // Try without baselines table
+          const contextStats = await pool.query(
+            `SELECT 
+              (SELECT COUNT(*) FROM documents WHERE project_id = $1 AND id != $2) as doc_count,
+              (SELECT COUNT(*) FROM stakeholders WHERE project_id = $1) as stakeholder_count,
+              0 as baseline_count`,
+            [projectId, params.documentId]
+          )
+          stats = contextStats.rows[0]
+        } catch (fallbackError: any) {
+          log.warn('Could not fetch context stats, continuing without them', { error: fallbackError.message })
+          // Continue with default stats
+        }
+      }
 
       // Step 3: Generate content with AI (50%)
       log.info('Generating document content with AI')
@@ -109,12 +130,24 @@ export class DocumentRegenerationService {
 
       // Prepare AI request with context
       const templateId = params.templateId || document.template_id
+      
+      // Build context description based on what's available
+      const contextParts = []
+      if (stats.doc_count > 0) contextParts.push(`${stats.doc_count} related document(s)`)
+      if (stats.stakeholder_count > 0) contextParts.push(`${stats.stakeholder_count} stakeholder(s)`)
+      if (stats.baseline_count > 0) contextParts.push(`${stats.baseline_count} baseline(s)`)
+      
+      const contextDescription = contextParts.length > 0 
+        ? `Available context: ${contextParts.join(', ')}.`
+        : 'Generating with available project information.'
+      
       const userPrompt = `Regenerate this ${document.name || 'document'} with updated project context. 
 Original document type: ${document.template_name || 'General Document'}
 Project: ${document.project_name}
 Framework: ${document.framework || 'General'}
+${contextDescription}
 
-Please generate a comprehensive, updated version that incorporates all recent project information, stakeholders, and baselines.`
+Please generate a comprehensive, updated version that incorporates all recent project information.`
 
       const aiRequest: EnhancedAIRequest = {
         prompt: userPrompt,
