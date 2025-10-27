@@ -122,7 +122,7 @@ const regenerateDocumentSchema = Joi.object({
   templateId: Joi.string().uuid().optional(),
   provider: Joi.string().required(),
   model: Joi.string().optional(),
-  versionType: Joi.string().valid('patch', 'minor', 'major').default('patch'),
+  versionType: Joi.string().valid('patch', 'minor', 'major').default('minor'), // AI regenerations default to minor
   temperature: Joi.number().min(0).max(2).default(0.7),
 })
 

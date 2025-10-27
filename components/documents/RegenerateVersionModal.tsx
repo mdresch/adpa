@@ -70,7 +70,7 @@ export function RegenerateVersionModal({
   const [providers, setProviders] = useState<AIProvider[]>([])
   const [selectedProvider, setSelectedProvider] = useState<string>('')
   const [selectedModel, setSelectedModel] = useState<string>('default')
-  const [versionType, setVersionType] = useState<'patch' | 'minor' | 'major'>('patch')
+  const [versionType, setVersionType] = useState<'patch' | 'minor' | 'major'>('minor') // Default to minor for AI regenerations
   const [temperature, setTemperature] = useState<number>(0.7)
   
   const [loading, setLoading] = useState(false)
@@ -307,8 +307,8 @@ export function RegenerateVersionModal({
                 <RadioGroupItem value="patch" id="patch" />
                 <Label htmlFor="patch" className="font-normal cursor-pointer flex-1">
                   <div className="flex items-center justify-between">
-                    <span>Patch</span>
-                    <Badge variant="secondary" className="text-xs">Bug fixes, minor updates</Badge>
+                    <span>Patch (v1.0.1)</span>
+                    <Badge variant="secondary" className="text-xs">Manual edits</Badge>
                   </div>
                 </Label>
               </div>
@@ -316,8 +316,17 @@ export function RegenerateVersionModal({
                 <RadioGroupItem value="minor" id="minor" />
                 <Label htmlFor="minor" className="font-normal cursor-pointer flex-1">
                   <div className="flex items-center justify-between">
-                    <span>Minor</span>
-                    <Badge variant="secondary" className="text-xs">New content, features</Badge>
+                    <span>Minor (v1.1.0)</span>
+                    <Badge variant="default" className="text-xs">AI regeneration (Recommended)</Badge>
+                  </div>
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="major" id="major" />
+                <Label htmlFor="major" className="font-normal cursor-pointer flex-1">
+                  <div className="flex items-center justify-between">
+                    <span>Major (v2.0.0)</span>
+                    <Badge variant="secondary" className="text-xs">Template version change</Badge>
                   </div>
                 </Label>
               </div>
