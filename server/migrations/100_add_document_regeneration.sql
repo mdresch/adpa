@@ -115,8 +115,7 @@ BEGIN
   -- Generate new UUID for version
   v_version_id := gen_random_uuid();
   
-  -- Insert new document version (without metadata column - doesn't exist in schema)
-  -- Calculate word count from content
+  -- Insert new document version with content, word_count, and metadata
   INSERT INTO document_versions (
     id,
     document_id,
@@ -125,6 +124,7 @@ BEGIN
     changes,
     author_id,
     word_count,
+    metadata,
     created_at
   ) VALUES (
     v_version_id,
@@ -141,6 +141,7 @@ BEGIN
       ), 
       0
     ),
+    p_metadata,
     NOW()
   );
   
@@ -157,8 +158,20 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Add metadata column to document_versions if it doesn't exist
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'document_versions' AND column_name = 'metadata'
+  ) THEN
+    ALTER TABLE document_versions ADD COLUMN metadata JSONB;
+  END IF;
+END $$;
+
 COMMENT ON TABLE regeneration_jobs IS 'Tracks document version regeneration jobs with AI and updated project context';
 COMMENT ON FUNCTION calculate_next_version IS 'Calculates the next version number based on version type (major, minor, patch)';
 COMMENT ON FUNCTION create_document_version IS 'Creates a new document version and updates the main document record';
 COMMENT ON FUNCTION cleanup_old_regeneration_jobs IS 'Removes old completed/failed jobs older than 30 days';
+COMMENT ON COLUMN document_versions.metadata IS 'Version-specific metadata (AI provider, model, temperature, context, etc.)';
 

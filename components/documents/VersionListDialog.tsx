@@ -59,6 +59,16 @@ interface DocumentVersion {
   author?: string
   created_at: string
   word_count?: number
+  metadata?: {
+    provider?: string
+    model?: string
+    temperature?: number
+    context_summary?: string
+    context_token_usage?: number
+    template_id?: string
+    generated_at?: string
+    [key: string]: any
+  }
 }
 
 interface VersionListDialogProps {
@@ -233,6 +243,25 @@ export function VersionListDialog({
                             </>
                           )}
                         </div>
+                        
+                        {/* AI Metadata (if AI-generated) */}
+                        {version.metadata && version.metadata.provider && (
+                          <div className="flex items-center space-x-2 text-xs text-purple-600 dark:text-purple-400 mt-1">
+                            <span>{version.metadata.provider}</span>
+                            {version.metadata.model && (
+                              <>
+                                <span>•</span>
+                                <span>{version.metadata.model}</span>
+                              </>
+                            )}
+                            {version.metadata.temperature !== undefined && (
+                              <>
+                                <span>•</span>
+                                <span>temp: {version.metadata.temperature}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Right: Actions */}

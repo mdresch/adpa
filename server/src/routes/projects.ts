@@ -567,7 +567,8 @@ router.get("/:projectId/documents/:documentId/versions", authenticateToken, asyn
         dv.created_at,
         COALESCE(u.name, 'Unknown') as author,
         dv.changes,
-        dv.word_count
+        dv.word_count,
+        dv.metadata
       FROM document_versions dv
       LEFT JOIN users u ON dv.author_id = u.id
       WHERE dv.document_id = $1

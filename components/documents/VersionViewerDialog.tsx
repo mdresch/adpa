@@ -28,6 +28,16 @@ interface DocumentVersion {
   author?: string
   created_at: string
   word_count?: number
+  metadata?: {
+    provider?: string
+    model?: string
+    temperature?: number
+    context_summary?: string
+    context_token_usage?: number
+    template_id?: string
+    generated_at?: string
+    [key: string]: any
+  }
 }
 
 interface VersionViewerDialogProps {
@@ -129,6 +139,46 @@ export function VersionViewerDialog({
           <div className="bg-muted/50 p-3 rounded-lg">
             <p className="text-sm font-medium mb-1">Changes</p>
             <p className="text-sm text-muted-foreground">{version.changes}</p>
+          </div>
+        )}
+
+        {/* AI Generation Metadata */}
+        {version.metadata && (version.metadata.provider || version.metadata.model) && (
+          <div className="bg-purple-50 dark:bg-purple-950 border border-purple-200 dark:border-purple-800 p-3 rounded-lg">
+            <p className="text-sm font-medium mb-2 text-purple-900 dark:text-purple-100">
+              AI Generation Details
+            </p>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              {version.metadata.provider && (
+                <div>
+                  <span className="text-purple-700 dark:text-purple-300">Provider:</span>
+                  <span className="ml-2 font-medium">{version.metadata.provider}</span>
+                </div>
+              )}
+              {version.metadata.model && (
+                <div>
+                  <span className="text-purple-700 dark:text-purple-300">Model:</span>
+                  <span className="ml-2 font-medium">{version.metadata.model}</span>
+                </div>
+              )}
+              {version.metadata.temperature !== undefined && (
+                <div>
+                  <span className="text-purple-700 dark:text-purple-300">Temperature:</span>
+                  <span className="ml-2 font-medium">{version.metadata.temperature}</span>
+                </div>
+              )}
+              {version.metadata.context_token_usage && (
+                <div>
+                  <span className="text-purple-700 dark:text-purple-300">Context Tokens:</span>
+                  <span className="ml-2 font-medium">{version.metadata.context_token_usage.toLocaleString()}</span>
+                </div>
+              )}
+            </div>
+            {version.metadata.context_summary && (
+              <p className="text-xs text-purple-700 dark:text-purple-300 mt-2">
+                {version.metadata.context_summary}
+              </p>
+            )}
           </div>
         )}
 
