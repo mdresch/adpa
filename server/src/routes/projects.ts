@@ -47,7 +47,7 @@ router.get("/", authenticateToken, async (req, res) => {
       params.push(`%${search}%`)
     }
 
-    query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST`
+    query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST, p.name ASC, p.id ASC`
 
     paramCount++
     query += ` LIMIT $${paramCount}`
