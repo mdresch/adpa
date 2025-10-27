@@ -563,6 +563,7 @@ router.get("/:projectId/documents/:documentId/versions", authenticateToken, asyn
       SELECT 
         dv.id,
         dv.version,
+        dv.content,
         dv.created_at,
         COALESCE(u.name, 'Unknown') as author,
         dv.changes,

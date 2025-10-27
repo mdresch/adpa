@@ -345,7 +345,13 @@ The ADPA system represents a significant advancement in document processing auto
         const versionsData = versionsResponse || []
         
         console.log('[DocumentView] Loaded document:', documentData)
+        console.log('[DocumentView] Loaded versions count:', versionsData.length)
         console.log('[DocumentView] Loaded versions:', versionsData)
+        console.log('[DocumentView] Version contents available:', versionsData.map((v: any) => ({
+          version: v.version,
+          hasContent: !!v.content,
+          contentLength: v.content?.length || 0
+        })))
         
         // Convert content to string if it's an object
         let contentString = ''

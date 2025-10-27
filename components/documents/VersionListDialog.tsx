@@ -120,9 +120,8 @@ export function VersionListDialog({
   }
   
   // Add historical versions from document_versions table
-  // Filter out any with missing content
-  const validVersions = versions.filter(v => v.content && v.content.trim().length > 0)
-  allVersions.push(...validVersions)
+  // Don't filter - show all versions even if content is missing
+  allVersions.push(...versions)
   
   // Sort all versions by created_at descending (newest first)
   const sortedVersions = allVersions.sort((a, b) => 
@@ -250,7 +249,8 @@ export function VersionListDialog({
                             variant="default" 
                             size="sm"
                             onClick={() => handleLoadVersion(version)}
-                            title="Load this version"
+                            title={version.content ? "Load this version" : "Content not available"}
+                            disabled={!version.content}
                           >
                             <ArrowRight className="h-4 w-4" />
                           </Button>

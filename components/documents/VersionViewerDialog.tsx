@@ -49,7 +49,8 @@ export function VersionViewerDialog({
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(version.content)
+      const content = version.content || '(No content available)'
+      await navigator.clipboard.writeText(content)
       setCopied(true)
       toast.success('Content copied to clipboard!')
       setTimeout(() => setCopied(false), 2000)
@@ -59,7 +60,8 @@ export function VersionViewerDialog({
   }
 
   const handleDownload = () => {
-    const blob = new Blob([version.content], { type: 'text/markdown' })
+    const content = version.content || '(No content available)'
+    const blob = new Blob([content], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -68,6 +70,8 @@ export function VersionViewerDialog({
     URL.revokeObjectURL(url)
     toast.success('Downloaded version as Markdown')
   }
+
+  const hasContent = version.content && version.content.trim().length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -146,11 +150,23 @@ export function VersionViewerDialog({
 
         {/* Content Preview */}
         <div className="flex-1 overflow-y-auto">
-          <div className="prose prose-sm dark:prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {version.content}
-            </ReactMarkdown>
-          </div>
+          {hasContent ? (
+            <div className="prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {version.content}
+              </ReactMarkdown>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-full text-center p-8">
+              <FileText className="h-16 w-16 text-muted-foreground opacity-50 mb-4" />
+              <p className="text-sm text-muted-foreground">
+                Content not available for this version
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                This version may not have content stored in the database
+              </p>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
