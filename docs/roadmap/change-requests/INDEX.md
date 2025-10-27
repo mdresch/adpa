@@ -1,9 +1,9 @@
 # ADPA Strategic Change Requests - Index
 
-**Last Updated:** October 20, 2025  
-**Status:** All CRs pending sponsor review  
-**Total Investment Requested:** $1.65M over 18 months (recommended strategy)  
-**Expected 3-Year ROI:** 250-500%
+**Last Updated:** October 27, 2025  
+**Status:** CR-2025-001 pending approval | Previous CRs pending sponsor review  
+**Total Investment Requested:** $1.66M over 18 months (recommended strategy)  
+**Expected 3-Year ROI:** 250-750%
 
 ---
 
@@ -13,15 +13,16 @@
 
 | CR ID | Feature | Investment | Timeline | ROI (3-yr) | Status | Priority |
 |-------|---------|------------|----------|------------|--------|----------|
+| **CR-2025-001** | RAG Integration for Document Generation | $10K | 8-10 days | 420-750% | ⏳ Pending Approval | ⭐⭐ CRITICAL |
 | **CR-2026-001** | Baseline & Drift Detection | $400K | 12 months | 300-500% | ✅ Complete | ⭐ High |
 | **CR-2026-002** | Document Review & Feedback | $400K | 7 months | 150-300% | ✅ Complete | Medium |
 | **CR-2026-003** | Hierarchical Project Mgmt | $600K | 8 months | 200-400% | ✅ Complete | ⭐ High |
 | **CR-2027-001** | Resource Allocation Intelligence | $200K | 5 months | 150-300% | ✅ Complete | Medium |
 | **CR-2026-005** | Supabase Realtime Migration | $50K | 6 weeks | N/A (Tech Debt) | ✅ Complete | Medium (Tech) |
 
-**Total:** $1.65M investment | Expected annual value: $1.5M-$4.5M + tech efficiency
+**Total:** $1.66M investment | Expected annual value: $1.5M-$4.5M + $42K-$75K (RAG) + tech efficiency
 
-**All CRs complete and ready for technical/sponsor prioritization!** 🎯
+**CR-2025-001 (RAG Integration) ready for immediate approval - highest ROI, fastest delivery!** 🎯
 
 ---
 
@@ -601,6 +602,38 @@ Assuming only **50% of projected value** is realized:
 ---
 
 ## 📝 Individual Change Request Details
+
+### CR-2025-001: RAG Integration for Intelligent Document Generation ⭐⭐ NEW
+
+**File:** `../CR-2025-001_RAG_INTEGRATION.md`  
+**Detailed Plan:** `../RAG_INTEGRATION_PLAN.md`
+
+**Executive Summary:**
+Integrate existing RAG (Retrieval-Augmented Generation) infrastructure with Stage 1 (Context Gathering) to enable semantic search-powered context retrieval. This is primarily an **integration project** (90% infrastructure exists) - not building from scratch.
+
+**Key Benefits:**
+- 40-60% improvement in document quality
+- 30-45 minutes saved per document generation
+- 80-95% context coverage (vs. 20-30% current)
+- 20-30% reduction in LLM API costs
+- Cross-document knowledge reuse (break down silos)
+
+**Investment:** $5K-$10K over 8-10 days  
+**ROI:** 420-750% first year (2-3 month payback)  
+**Risk:** Low (leveraging existing proven components)  
+**Priority:** ⭐⭐ **CRITICAL - HIGHEST ROI, FASTEST IMPLEMENTATION**
+
+**Why First:**
+- **Lowest investment:** $10K vs. $200K-$600K for other CRs
+- **Fastest delivery:** 2 weeks vs. 5-12 months
+- **Highest ROI:** 420-750% vs. 150-500%
+- **90% done:** Just needs integration, not building
+- **Immediate value:** Improves all document generation today
+
+**Type:** Integration Enhancement  
+**Category:** AI/ML, Document Quality, User Experience
+
+---
 
 ### CR-2026-001: Project Baseline & Drift Detection System
 
