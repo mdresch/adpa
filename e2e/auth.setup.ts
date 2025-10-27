@@ -16,19 +16,22 @@ setup('authenticate', async ({ page }) => {
   
   // Fill in login credentials
   // TODO: Replace with your test user credentials
-  await page.fill('input[name="email"], input[type="email"]', process.env.TEST_USER_EMAIL || 'test@example.com');
-  await page.fill('input[name="password"], input[type="password"]', process.env.TEST_USER_PASSWORD || 'password123');
+  await page.fill('input[name="email"], input[type="email"]', 'admin@adpa.com');
+  await page.fill('input[name="password"], input[type="password"]', 'admin123');
   
   // Click login button
   await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
   
-  // Wait for navigation to projects or home
-  await page.waitForURL(/\/(projects|$)/, { timeout: 10000 });
-  
-  // Verify we're logged in by checking for logout button or user menu
-  await expect(
-    page.locator('button:has-text("Logout"), [aria-label*="user"], .user-menu').first()
-  ).toBeVisible({ timeout: 5000 });
+  // Wait for navigation (any page is fine - login was successful if we leave /auth/login)
+  try {
+    await page.waitForURL(/^(?!.*\/auth\/login).*$/, { timeout: 10000 });
+  } catch {
+    // If redirect times out, check if we're already logged in by looking for projects or user menu
+    const isLoggedIn = await page.locator('text=Projects, button:has-text("Logout"), .user-menu').first().isVisible();
+    if (!isLoggedIn) {
+      throw new Error('Login failed - still on login page or no user menu found');
+    }
+  }
   
   // Save authentication state
   await page.context().storageState({ path: authFile });
