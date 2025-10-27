@@ -23,9 +23,32 @@ import {
   FileText, 
   CheckCircle,
   Clock,
-  ArrowRight
+  ArrowRight,
+  Sparkles
 } from 'lucide-react'
 import { VersionViewerDialog } from './VersionViewerDialog'
+
+// Helper function to format time ago (Vercel-style)
+function formatTimeAgo(date: string | Date): string {
+  const now = Date.now()
+  const then = new Date(date).getTime()
+  const diffMs = now - then
+  
+  const diffSec = Math.floor(diffMs / 1000)
+  const diffMin = Math.floor(diffSec / 60)
+  const diffHr = Math.floor(diffMin / 60)
+  const diffDay = Math.floor(diffHr / 24)
+  const diffWeek = Math.floor(diffDay / 7)
+  const diffMonth = Math.floor(diffDay / 30)
+  
+  if (diffSec < 60) return `${diffSec}s ago`
+  if (diffMin < 60) return `${diffMin}m ago`
+  if (diffHr < 24) return `${diffHr}h ago`
+  if (diffDay < 7) return `${diffDay}d ago`
+  if (diffWeek < 4) return `${diffWeek}w ago`
+  if (diffMonth < 12) return `${diffMonth}mo ago`
+  return new Date(date).toLocaleDateString()
+}
 
 interface DocumentVersion {
   id: string
@@ -83,26 +106,35 @@ export function VersionListDialog({
   // Combine current document with versions
   const allVersions: DocumentVersion[] = []
   
-  // Add current document as a version
-  if (currentDocument) {
+  // Add current document as a version (always show as base version)
+  if (currentDocument && currentDocument.content) {
     allVersions.push({
       id: currentDocument.id,
-      version: currentDocument.version || '1.0.0',
-      content: currentDocument.content,
-      changes: 'Current version',
+      version: currentDocument.version || '1.0',
+      content: currentDocument.content || '',
+      changes: 'Current active document',
       author: currentDocument.author || 'System',
-      created_at: currentDocument.updated_at,
-      word_count: currentDocument.word_count
+      created_at: currentDocument.updated_at || new Date().toISOString(),
+      word_count: currentDocument.word_count || Math.round((currentDocument.content?.length || 0) / 6)
     })
   }
   
   // Add historical versions from document_versions table
-  allVersions.push(...versions)
+  // Filter out any with missing content
+  const validVersions = versions.filter(v => v.content && v.content.trim().length > 0)
+  allVersions.push(...validVersions)
   
   // Sort all versions by created_at descending (newest first)
   const sortedVersions = allVersions.sort((a, b) => 
-    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
   )
+
+  // Debug logging
+  if (open && process.env.NODE_ENV === 'development') {
+    console.log('[VersionListDialog] Current document:', currentDocument)
+    console.log('[VersionListDialog] Historical versions:', versions)
+    console.log('[VersionListDialog] All sorted versions:', sortedVersions)
+  }
 
   return (
     <>
@@ -140,85 +172,92 @@ export function VersionListDialog({
               sortedVersions.map((version, index) => {
                 const isCurrentVersion = version.version === currentVersion
                 const isLatest = index === 0
+                const isAIGenerated = version.changes?.includes('AI') || version.changes?.includes('Regenerated')
                 
                 return (
-                  <Card 
+                  <div 
                     key={version.id} 
-                    className={`transition-all hover:shadow-md ${
-                      isCurrentVersion ? 'border-primary ring-2 ring-primary/20' : ''
+                    className={`group relative border rounded-lg p-4 transition-all hover:border-primary/50 hover:shadow-sm ${
+                      isCurrentVersion ? 'bg-primary/5 border-primary' : 'bg-card'
                     }`}
                   >
-                    <CardContent className="pt-4 pb-4">
-                      <div className="flex items-start justify-between">
-                        {/* Left: Version Info */}
-                        <div className="flex-1 space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <Badge 
-                              variant={isCurrentVersion ? "default" : "outline"}
-                              className="text-sm"
-                            >
-                              v{version.version}
-                            </Badge>
-                            {isLatest && (
-                              <Badge variant="secondary" className="text-xs">
-                                Latest
-                              </Badge>
-                            )}
-                            {isCurrentVersion && (
-                              <Badge variant="default" className="text-xs">
-                                <CheckCircle className="h-3 w-3 mr-1" />
-                                Current
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          <p className="text-sm font-medium">
-                            {version.changes || 'No change description'}
-                          </p>
-                          
-                          <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                            <div className="flex items-center space-x-1">
-                              <User className="h-3 w-3" />
-                              <span>{version.author || 'Unknown'}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>{new Date(version.created_at).toLocaleDateString()}</span>
-                            </div>
-                            {version.word_count && (
-                              <div className="flex items-center space-x-1">
-                                <FileText className="h-3 w-3" />
-                                <span>{version.word_count.toLocaleString()} words</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Right: Actions */}
-                        <div className="ml-4 flex items-center space-x-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => handleViewVersion(version)}
+                    <div className="flex items-center justify-between">
+                      {/* Left: Status and Version Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center space-x-3 mb-2">
+                          <Badge 
+                            variant={isCurrentVersion ? "default" : "secondary"}
+                            className="font-mono"
                           >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
-                          {!isCurrentVersion && onLoadVersion && (
-                            <Button 
-                              variant="default" 
-                              size="sm"
-                              onClick={() => handleLoadVersion(version)}
-                              title="Load this version into the editor"
-                            >
-                              <ArrowRight className="h-4 w-4 mr-2" />
-                              Load
-                            </Button>
+                            v{version.version}
+                          </Badge>
+                          
+                          {isCurrentVersion && (
+                            <Badge variant="default" className="bg-green-600">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Current
+                            </Badge>
+                          )}
+                          
+                          {isLatest && !isCurrentVersion && (
+                            <Badge variant="outline">
+                              Latest
+                            </Badge>
+                          )}
+                          
+                          {isAIGenerated && (
+                            <Badge variant="secondary" className="bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              AI Generated
+                            </Badge>
+                          )}
+                          
+                          <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">
+                            Ready
+                          </Badge>
+                        </div>
+                        
+                        <p className="text-sm font-medium mb-1 truncate">
+                          {version.changes || 'No description'}
+                        </p>
+                        
+                        <div className="flex items-center space-x-2 text-xs text-muted-foreground">
+                          <span className="font-medium">
+                            {formatTimeAgo(version.created_at || Date.now())}
+                          </span>
+                          <span>•</span>
+                          <span>by {version.author || 'System'}</span>
+                          {version.word_count && (
+                            <>
+                              <span>•</span>
+                              <span>{version.word_count.toLocaleString()} words</span>
+                            </>
                           )}
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      {/* Right: Actions */}
+                      <div className="ml-4 flex items-center space-x-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleViewVersion(version)}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        {!isCurrentVersion && onLoadVersion && (
+                          <Button 
+                            variant="default" 
+                            size="sm"
+                            onClick={() => handleLoadVersion(version)}
+                            title="Load this version"
+                          >
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
                 )
               })
             )}
