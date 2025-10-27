@@ -600,56 +600,103 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
     const { content, title, tags } = req.body
     const userId = (req as any).user.id
 
-    // First, verify the document exists and belongs to the project
-    const verifyQuery = `
-      SELECT id FROM documents 
-      WHERE id = $1 AND project_id = $2
+    // Get the current document with template info
+    const documentQuery = `
+      SELECT d.*, 
+             t.name as template_name,
+             t.prompt_version as current_template_version
+      FROM documents d 
+      LEFT JOIN templates t ON d.template_id = t.id
+      WHERE d.id = $1 AND d.project_id = $2
     `
-    const verifyResult = await pool.query(verifyQuery, [documentId, projectId])
+    const docResult = await pool.query(documentQuery, [documentId, projectId])
 
-    if (verifyResult.rows.length === 0) {
+    if (docResult.rows.length === 0) {
       return res.status(404).json({ error: "Document not found" })
     }
 
-    // Update the document
-    const updateQuery = `
-      UPDATE documents 
-      SET 
-        content = $1,
-        title = COALESCE($2, title),
-        tags = COALESCE($3, tags),
-        updated_at = NOW()
-      WHERE id = $4 AND project_id = $5
-      RETURNING *
-    `
+    const currentDoc = docResult.rows[0]
+    
+    // Calculate next patch version
+    const versionResult = await pool.query(
+      `SELECT calculate_next_document_version($1::UUID, 'patch'::VARCHAR(10)) as next_version`,
+      [documentId]
+    )
+    const nextVersion = versionResult.rows[0].next_version
 
-    const result = await pool.query(updateQuery, [
-      content,
-      title,
-      tags ? JSON.stringify(tags) : null,
-      documentId,
-      projectId
-    ])
+    // Calculate word count
+    const wordCount = content ? content.trim().split(/\s+/).filter(Boolean).length : 0
 
-    // Create a new version entry
-    const versionQuery = `
-      INSERT INTO document_versions (id, document_id, version, changes, word_count, author_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `
+    // Create a new document with patch version (manual edit)
+    const newDocResult = await pool.query(
+      `INSERT INTO documents (
+        id,
+        name,
+        content,
+        template_id,
+        template_version,
+        project_id,
+        created_by,
+        author,
+        parent_document_id,
+        is_regeneration,
+        semantic_version,
+        version,
+        word_count,
+        generation_metadata,
+        status,
+        title,
+        tags,
+        created_at,
+        updated_at
+      ) VALUES (
+        gen_random_uuid(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        false,
+        $9,
+        1,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        NOW(),
+        NOW()
+      ) RETURNING *`,
+      [
+        `${currentDoc.name} (${nextVersion})`, // Append version to name
+        content,
+        currentDoc.template_id,
+        currentDoc.template_version || currentDoc.current_template_version?.toString() || '1',
+        projectId,
+        userId,
+        (req as any).user?.name || 'User', // Author name
+        documentId, // Link to parent
+        nextVersion,
+        wordCount,
+        JSON.stringify({
+          edit_type: 'manual',
+          edited_at: new Date().toISOString(),
+          edited_by: userId,
+          parent_version: currentDoc.semantic_version || currentDoc.version?.toString() || '1.0.0',
+          changes: 'Manual edit'
+        }),
+        currentDoc.status,
+        title || currentDoc.title || currentDoc.name,
+        tags ? JSON.stringify(tags) : currentDoc.tags
+      ]
+    )
 
-    const wordCount = content ? content.split(/\s+/).length : 0
-    const versionNumber = `1.${Date.now()}` // Simple versioning for now
+    log.info(`Manual edit saved as patch version ${nextVersion}`)
 
-    await pool.query(versionQuery, [
-      uuidv4(),
-      documentId,
-      versionNumber,
-      "Document updated",
-      wordCount,
-      userId
-    ])
-
-    res.json(result.rows[0])
+    res.json(newDocResult.rows[0])
   } catch (error) {
     log.error("Update document error:", error)
     res.status(500).json({ error: "Internal server error" })
