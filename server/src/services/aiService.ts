@@ -524,7 +524,7 @@ class AIService {
             }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
           })
           
-          logger.info(`[AI] ✓ Google AI/${request.model || 'gemini-2.5-flash'} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
+          logger.info(`[AI] ✓ Mistral AI/${modelName} - ${mistralResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: mistralResult.text,
