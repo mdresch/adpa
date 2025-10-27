@@ -115,7 +115,7 @@ BEGIN
   -- Generate new UUID for version
   v_version_id := gen_random_uuid();
   
-  -- Insert new document version
+  -- Insert new document version (without metadata column - doesn't exist in schema)
   INSERT INTO document_versions (
     id,
     document_id,
@@ -123,7 +123,6 @@ BEGIN
     content,
     changes,
     author_id,
-    metadata,
     created_at
   ) VALUES (
     v_version_id,
@@ -132,7 +131,6 @@ BEGIN
     p_content->>'content',  -- Extract content string from JSONB
     p_change_summary,
     p_created_by,
-    p_metadata,
     NOW()
   );
   
