@@ -55,10 +55,13 @@ interface DocumentVersion {
   version: string
   content: string
   changes: string
+  name?: string
   author_id?: string
   author?: string
   created_at: string
   word_count?: number
+  is_regeneration?: boolean
+  is_current?: boolean
   metadata?: {
     provider?: string
     model?: string
@@ -75,16 +78,6 @@ interface VersionListDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   versions: DocumentVersion[]
-  currentDocument?: {
-    id: string
-    version: string
-    content: string
-    name: string
-    updated_at: string
-    author?: string
-    word_count?: number
-  }
-  currentVersion?: string
   documentName?: string
   onLoadVersion?: (version: DocumentVersion) => void
 }
@@ -93,8 +86,6 @@ export function VersionListDialog({
   open,
   onOpenChange,
   versions,
-  currentDocument,
-  currentVersion,
   documentName,
   onLoadVersion
 }: VersionListDialogProps) {
@@ -113,40 +104,14 @@ export function VersionListDialog({
     }
   }
 
-  // Combine current document with versions
-  const allVersions: DocumentVersion[] = []
-  
-  // Add current document as a version (always show as base version)
-  if (currentDocument && currentDocument.content) {
-    // Calculate word count if not available
-    const wordCount = currentDocument.word_count || 
-                     (currentDocument.content ? currentDocument.content.trim().split(/\s+/).length : 0)
-    
-    allVersions.push({
-      id: currentDocument.id,
-      version: currentDocument.version || '1.0',
-      content: currentDocument.content || '',
-      changes: documentName || currentDocument.name || 'Current document',
-      author: currentDocument.author || 'System',
-      created_at: currentDocument.updated_at || new Date().toISOString(),
-      word_count: wordCount
-    })
-  }
-  
-  // Add historical versions from document_versions table
-  // Don't filter - show all versions even if content is missing
-  allVersions.push(...versions)
-  
-  // Sort all versions by created_at descending (newest first)
-  const sortedVersions = allVersions.sort((a, b) => 
-    new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-  )
+  // API now returns all related documents (including current), already sorted
+  // Just use the versions array directly
+  const sortedVersions = versions
 
   // Debug logging
   if (open && process.env.NODE_ENV === 'development') {
-    console.log('[VersionListDialog] Current document:', currentDocument)
-    console.log('[VersionListDialog] Historical versions:', versions)
-    console.log('[VersionListDialog] All sorted versions:', sortedVersions)
+    console.log('[VersionListDialog] All versions:', versions)
+    console.log('[VersionListDialog] Current version:', versions.find(v => v.is_current))
   }
 
   return (
@@ -161,7 +126,6 @@ export function VersionListDialog({
             <DialogDescription>
               {documentName && `${documentName} - `}
               {sortedVersions.length} version{sortedVersions.length !== 1 ? 's' : ''} available
-              {currentDocument && versions.length === 0 && ' (current document only)'}
             </DialogDescription>
           </DialogHeader>
 
@@ -183,9 +147,9 @@ export function VersionListDialog({
               </Card>
             ) : (
               sortedVersions.map((version, index) => {
-                const isCurrentVersion = version.version === currentVersion
+                const isCurrentVersion = version.is_current === true
                 const isLatest = index === 0
-                const isAIGenerated = version.changes?.includes('AI') || version.changes?.includes('Regenerated')
+                const isAIGenerated = version.is_regeneration === true
                 
                 // Calculate word count on the fly if not available or is 0
                 const displayWordCount = (version.word_count && version.word_count > 0) 

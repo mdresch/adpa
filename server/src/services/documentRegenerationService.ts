@@ -174,15 +174,15 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         userId: params.userId
       })
 
-      // Calculate next version (templateId already declared on line 111)
+      // Calculate next version using the new function for documents
       const versionResult = await pool.query(
-        `SELECT calculate_next_version($1, $2) as next_version`,
+        `SELECT calculate_next_document_version($1::UUID, $2::VARCHAR(10)) as next_version`,
         [params.documentId, params.versionType]
       )
       const nextVersion = versionResult.rows[0].next_version
 
-      // Step 5: Create document version (85%)
-      log.info(`Creating version ${nextVersion}`)
+      // Step 5: Create new document (not a version entry) (85%)
+      log.info(`Creating new document with version ${nextVersion}`)
       await this.updateJobStatus(params.jobId, 'processing', 85, `Creating version ${nextVersion}...`)
       this.emitProgress({
         jobId: params.jobId,
@@ -191,19 +191,53 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         userId: params.userId
       })
 
-      const versionId = await pool.query(
-        `SELECT create_document_version(
-          $1::UUID, $2::VARCHAR(20), $3::VARCHAR(20), $4::TEXT, $5::VARCHAR(100),
-          $6::UUID, $7::JSONB, $8::JSONB
-        ) as version_id`,
+      // Calculate word count
+      const wordCount = aiResponse.content.trim().split(/\s+/).length
+
+      // Create a new document entry (not a version)
+      const newDocResult = await pool.query(
+        `INSERT INTO documents (
+          id,
+          name,
+          content,
+          template_id,
+          project_id,
+          author_id,
+          parent_document_id,
+          is_regeneration,
+          semantic_version,
+          version,
+          word_count,
+          generation_metadata,
+          status,
+          created_at,
+          updated_at
+        ) VALUES (
+          gen_random_uuid(),
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          true,
+          $7,
+          1,
+          $8,
+          $9,
+          'published',
+          NOW(),
+          NOW()
+        ) RETURNING id, name, semantic_version`,
         [
-          params.documentId,
-          nextVersion,
-          params.versionType,
-          `Regenerated with updated project context`,
-          `AI regeneration using ${params.provider}`,
+          `${document.name} (${nextVersion})`, // Append version to name
+          aiResponse.content,
+          templateId,
+          projectId,
           params.userId,
-          JSON.stringify({ content: aiResponse.content }),
+          params.documentId, // Link to parent
+          nextVersion,
+          wordCount,
           JSON.stringify({
             provider: params.provider,
             model: params.model || 'default',
@@ -211,12 +245,15 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             context_summary: aiResponse.context_summary,
             context_token_usage: aiResponse.context_token_usage,
             template_id: templateId,
-            generated_at: new Date().toISOString()
+            generated_at: new Date().toISOString(),
+            parent_document_id: params.documentId,
+            regeneration_type: params.versionType
           })
         ]
       )
 
-      const newVersionId = versionId.rows[0].version_id
+      const newDocument = newDocResult.rows[0]
+      const newDocumentId = newDocument.id
 
       // Step 6: Complete job (100%)
       log.info('Regeneration completed successfully')
@@ -225,20 +262,26 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         'completed', 
         100, 
         'Regeneration completed successfully',
-        newVersionId
+        newDocumentId
       )
       
-      // Update job with context summary
+      // Update job with context summary and new document ID
       await pool.query(
         `UPDATE regeneration_jobs 
-         SET context_summary = $1
-         WHERE id = $2`,
+         SET context_summary = $1,
+             metadata = $2
+         WHERE id = $3`,
         [
           JSON.stringify({
             documents: stats.doc_count,
             stakeholders: stats.stakeholder_count,
             baselines: stats.baseline_count,
             ai_summary: aiResponse.context_summary
+          }),
+          JSON.stringify({
+            new_document_id: newDocumentId,
+            new_document_name: newDocument.name,
+            new_document_version: nextVersion
           }),
           params.jobId
         ]
@@ -247,8 +290,9 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       this.emitComplete({
         jobId: params.jobId,
         userId: params.userId,
-        versionId: newVersionId,
-        versionNumber: nextVersion
+        versionId: newDocumentId,
+        versionNumber: nextVersion,
+        documentName: newDocument.name
       })
 
       log.info('Document regeneration job completed successfully')
@@ -339,12 +383,14 @@ Please generate a comprehensive, updated version that incorporates all recent pr
     userId: string
     versionId: string
     versionNumber: string
+    documentName?: string
   }): void {
     if (io) {
       io.to(`user:${data.userId}`).emit('document:regeneration:completed', {
         jobId: data.jobId,
         versionId: data.versionId,
-        versionNumber: data.versionNumber
+        versionNumber: data.versionNumber,
+        documentName: data.documentName
       })
     }
   }

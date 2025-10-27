@@ -542,7 +542,7 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
   }
 })
 
-// Get document versions
+// Get document versions (now queries documents table, not document_versions)
 router.get("/:projectId/documents/:documentId/versions", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
@@ -559,20 +559,26 @@ router.get("/:projectId/documents/:documentId/versions", authenticateToken, asyn
       return res.status(404).json({ error: "Document not found" })
     }
 
+    // Use the get_document_versions function to get all related documents
     const query = `
       SELECT 
-        dv.id,
-        dv.version,
-        dv.content,
-        dv.created_at,
-        COALESCE(u.name, 'Unknown') as author,
-        dv.changes,
-        dv.word_count,
-        dv.metadata
-      FROM document_versions dv
-      LEFT JOIN users u ON dv.author_id = u.id
-      WHERE dv.document_id = $1
-      ORDER BY dv.created_at DESC
+        id,
+        name,
+        semantic_version as version,
+        content,
+        created_at,
+        updated_at,
+        author_name as author,
+        word_count,
+        is_regeneration,
+        generation_metadata as metadata,
+        is_current,
+        CASE 
+          WHEN is_regeneration THEN 'Regenerated with updated project context'
+          ELSE name
+        END as changes
+      FROM get_document_versions($1::UUID)
+      ORDER BY created_at DESC
     `
 
     const result = await pool.query(query, [documentId])
