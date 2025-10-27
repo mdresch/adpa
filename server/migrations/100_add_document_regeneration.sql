@@ -43,7 +43,7 @@ DECLARE
   v_parts TEXT[];
 BEGIN
   -- Get current version
-  SELECT version_number INTO v_current_version
+  SELECT version INTO v_current_version
   FROM document_versions
   WHERE document_id = p_document_id
   ORDER BY created_at DESC
