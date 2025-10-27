@@ -15,29 +15,25 @@ setup('authenticate', async ({ page }) => {
   await page.goto('/auth/login');
   
   // Fill in login credentials
-  // TODO: Replace with your test user credentials
-  await page.fill('input[name="email"], input[type="email"]', 'admin@adpa.com');
-  await page.fill('input[name="password"], input[type="password"]', 'admin123');
+  // Using credentials from your actual login page (lines 184, 202)
+  await page.fill('input[name="email"]', 'admin@adpa.com');
+  await page.fill('input[name="password"]', 'admin123');
   
-  // Click login button
-  await page.click('button[type="submit"], button:has-text("Login"), button:has-text("Sign In")');
+  // Click login button (your form uses "Sign In" text - line 247)
+  await page.click('button[type="submit"]:has-text("Sign In")');
   
-  // Wait a bit for login to process
-  await page.waitForTimeout(2000);
+  // Wait for redirect to homepage (your app redirects to "/" - line 45 of login page)
+  await page.waitForURL('/', { timeout: 10000 });
   
-  // Check if login was successful by multiple criteria
+  // Verify we're logged in
   const currentUrl = page.url();
-  console.log('Current URL after login attempt:', currentUrl);
+  console.log('✅ Redirected to:', currentUrl);
   
-  // Success if:
-  // 1. We're no longer on /auth/login
-  // 2. OR we can see typical logged-in elements
-  const isOnLoginPage = currentUrl.includes('/auth/login');
-  const hasProjects = await page.locator('text=Projects').count() > 0;
-  const hasUserMenu = await page.locator('button:has-text("Logout"), [aria-label*="menu"], .user-menu, [data-testid*="user"]').count() > 0;
-  const hasSidebar = await page.locator('nav, aside, [role="navigation"]').count() > 0;
+  // Additional verification - check for logged-in UI elements
+  const hasContent = await page.locator('body').isVisible();
+  const notOnLogin = !currentUrl.includes('/auth/login');
   
-  const isLoggedIn = !isOnLoginPage || hasProjects || hasUserMenu || hasSidebar;
+  const isLoggedIn = hasContent && notOnLogin;
   
   if (!isLoggedIn) {
     // Take screenshot for debugging
