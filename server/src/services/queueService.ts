@@ -138,6 +138,27 @@ const processFlowQueueOptions = {
 
 export const processFlowQueue = new Bull("process-flow-processing", processFlowQueueOptions)
 
+const regenerationQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 3000,
+    },
+    timeout: 600000, // 10 minutes timeout for regeneration
+  },
+  settings: {
+    lockDuration: 600000, // 10 minutes lock
+    stallInterval: 30000,
+    maxStalledCount: 2,
+  },
+}
+
+export const regenerationQueue = new Bull("document-regeneration", regenerationQueueOptions)
+
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
   const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data
@@ -944,6 +965,44 @@ processFlowQueue.process("process-flow", async (job) => {
   }
 })
 
+// Document Regeneration job processor
+regenerationQueue.process("document-regeneration", async (job) => {
+  const { jobId, documentId, templateId, provider, model, versionType, temperature, userId } = job.data
+
+  try {
+    logger.info(`Starting document regeneration job ${jobId} for document ${documentId}`)
+    
+    // Execute regeneration using the service
+    const { DocumentRegenerationService } = await import('./documentRegenerationService')
+    await DocumentRegenerationService.executeRegenerationJob({
+      documentId,
+      templateId,
+      provider,
+      model,
+      versionType,
+      temperature,
+      userId,
+      jobId
+    })
+    
+    logger.info(`Document regeneration job completed: ${jobId}`)
+    
+    return { success: true, jobId }
+  } catch (error) {
+    logger.error(`Document regeneration job failed: ${jobId}`, error)
+    throw error
+  }
+})
+
+// Regeneration queue event listeners
+regenerationQueue.on("completed", (job, result) => {
+  logger.info(`Regeneration job completed: ${job.id}`)
+})
+
+regenerationQueue.on("failed", (job, err) => {
+  logger.error(`Regeneration job failed: ${job.id}`, err)
+})
+
 // Job management functions
 export async function addJob(type: string, data: any, options?: any): Promise<string> {
   try {
@@ -1008,6 +1067,9 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
         break
       case "process-flow":
         queue = processFlowQueue
+        break
+      case "document-regeneration":
+        queue = regenerationQueue
         break
       default:
         throw new Error(`Unknown job type: ${type}`)
@@ -1208,4 +1270,19 @@ export async function initializeQueues() {
   } catch (error) {
     logger.error("Failed to initialize queues:", error)
   }
+}
+
+// Export queue service object
+export const queueService = {
+  addJob,
+  getJobStatus,
+  updateJobStatus,
+  cancelJob,
+  initializeQueues,
+  aiQueue,
+  documentQueue,
+  pipelineQueue,
+  baselineQueue,
+  processFlowQueue,
+  regenerationQueue,
 }
