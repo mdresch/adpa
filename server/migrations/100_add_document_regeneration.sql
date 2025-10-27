@@ -98,7 +98,59 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Function to create document versions
+CREATE OR REPLACE FUNCTION create_document_version(
+  p_document_id UUID,
+  p_version VARCHAR(20),
+  p_version_type VARCHAR(20),
+  p_change_summary TEXT,
+  p_change_reason VARCHAR(100),
+  p_created_by UUID,
+  p_content JSONB,
+  p_metadata JSONB
+) RETURNS UUID AS $$
+DECLARE
+  v_version_id UUID;
+BEGIN
+  -- Generate new UUID for version
+  v_version_id := gen_random_uuid();
+  
+  -- Insert new document version
+  INSERT INTO document_versions (
+    id,
+    document_id,
+    version,
+    content,
+    changes,
+    author_id,
+    metadata,
+    created_at
+  ) VALUES (
+    v_version_id,
+    p_document_id,
+    p_version,
+    p_content->>'content',  -- Extract content string from JSONB
+    p_change_summary,
+    p_created_by,
+    p_metadata,
+    NOW()
+  );
+  
+  -- Update the main documents table with the new version
+  UPDATE documents
+  SET 
+    version = p_version,
+    content = p_content->>'content',
+    updated_at = NOW()
+  WHERE id = p_document_id;
+  
+  -- Return the new version ID
+  RETURN v_version_id;
+END;
+$$ LANGUAGE plpgsql;
+
 COMMENT ON TABLE regeneration_jobs IS 'Tracks document version regeneration jobs with AI and updated project context';
 COMMENT ON FUNCTION calculate_next_version IS 'Calculates the next version number based on version type (major, minor, patch)';
+COMMENT ON FUNCTION create_document_version IS 'Creates a new document version and updates the main document record';
 COMMENT ON FUNCTION cleanup_old_regeneration_jobs IS 'Removes old completed/failed jobs older than 30 days';
 
