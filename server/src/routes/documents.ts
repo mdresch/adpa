@@ -418,7 +418,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
       LEFT JOIN users u ON d.created_by = u.id
       LEFT JOIN users u2 ON d.updated_by = u2.id
       LEFT JOIN templates t ON d.template_id = t.id
-      WHERE d.project_id = $1 AND d.deleted_at IS NULL
+      WHERE d.project_id = $1 AND d.deleted_at IS NULL AND d.parent_document_id IS NULL
     `
 
     const params: any[] = [projectId]
