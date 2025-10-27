@@ -2091,15 +2091,26 @@ The ADPA system represents a significant advancement in document processing auto
         currentVersion={document?.version?.toString()}
         documentName={document?.name}
         onLoadVersion={(version) => {
-          // Load selected version into the main view
+          // Load selected version into the main view with all metadata
           setDocument({
             ...document!,
             content: version.content,
-            version: parseFloat(version.version)
-          })
+            version: parseFloat(version.version),
+            word_count: version.word_count || 0,
+            // Preserve version metadata
+            generation_metadata: version.metadata || {},
+            // Add version tracking
+            loaded_version: version.version,
+            loaded_version_id: version.id
+          } as any)
           setEditedContent(version.content)
           extractTableOfContents(version.content)
-          toast.success(`Loaded version ${version.version}`)
+          
+          // Show success with metadata info
+          const metaInfo = version.metadata?.provider 
+            ? ` (Generated with ${version.metadata.provider}${version.metadata.model ? ` - ${version.metadata.model}` : ''})`
+            : ''
+          toast.success(`Loaded version ${version.version}${metaInfo}`)
         }}
       />
 

@@ -118,14 +118,18 @@ export function VersionListDialog({
   
   // Add current document as a version (always show as base version)
   if (currentDocument && currentDocument.content) {
+    // Calculate word count if not available
+    const wordCount = currentDocument.word_count || 
+                     (currentDocument.content ? currentDocument.content.trim().split(/\s+/).length : 0)
+    
     allVersions.push({
       id: currentDocument.id,
       version: currentDocument.version || '1.0',
       content: currentDocument.content || '',
-      changes: 'Current active document',
+      changes: documentName || currentDocument.name || 'Current document',
       author: currentDocument.author || 'System',
       created_at: currentDocument.updated_at || new Date().toISOString(),
-      word_count: currentDocument.word_count || Math.round((currentDocument.content?.length || 0) / 6)
+      word_count: wordCount
     })
   }
   
@@ -183,6 +187,11 @@ export function VersionListDialog({
                 const isLatest = index === 0
                 const isAIGenerated = version.changes?.includes('AI') || version.changes?.includes('Regenerated')
                 
+                // Calculate word count on the fly if not available or is 0
+                const displayWordCount = (version.word_count && version.word_count > 0) 
+                  ? version.word_count 
+                  : (version.content ? version.content.trim().split(/\s+/).filter(w => w.length > 0).length : 0)
+                
                 return (
                   <div 
                     key={version.id} 
@@ -236,10 +245,10 @@ export function VersionListDialog({
                           </span>
                           <span>•</span>
                           <span>by {version.author || 'System'}</span>
-                          {version.word_count && (
+                          {displayWordCount > 0 && (
                             <>
                               <span>•</span>
-                              <span>{version.word_count.toLocaleString()} words</span>
+                              <span>{displayWordCount.toLocaleString()} words</span>
                             </>
                           )}
                         </div>
