@@ -85,9 +85,9 @@ BEGIN
     INNER JOIN parent_tree pt ON p.id = pt.parent_document_id
     WHERE pt.parent_document_id IS NOT NULL
   )
-  SELECT id INTO root_id
+  SELECT parent_tree.id INTO root_id
   FROM parent_tree
-  WHERE parent_document_id IS NULL
+  WHERE parent_tree.parent_document_id IS NULL
   LIMIT 1;
   
   -- If no parent chain found, use the provided document as root
