@@ -21,7 +21,7 @@ interface Document {
   title: string
   type: string
   status?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 interface TimelineTabProps {

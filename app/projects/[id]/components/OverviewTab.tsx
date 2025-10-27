@@ -132,7 +132,7 @@ export function OverviewTab({
                   cx="50%"
                   cy="50%"
                   labelLine={false}
-                  label={(entry: any) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
+                  label={(entry: { name: string; value: number }) => entry.value > 0 ? `${entry.name}: ${entry.value}` : ''}
                   outerRadius={80}
                   dataKey="value"
                 >

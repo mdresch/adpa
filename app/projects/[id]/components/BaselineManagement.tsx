@@ -34,7 +34,7 @@ interface Document {
   id: string
   project_id: string
   name: string
-  content?: any
+  content?: Record<string, unknown>
   template_id?: string
   template_name?: string
   status: string
@@ -47,7 +47,44 @@ interface Document {
   dependency_level?: number
   character_count?: number
   word_count?: number
-  document?: any
+  document?: Record<string, unknown>
+}
+
+interface Baseline {
+  id: string
+  project_id: string
+  version: number
+  scope_baseline?: string
+  technical_baseline?: string
+  timeline_baseline?: string
+  cost_baseline?: string
+  success_criteria?: string
+  extracted_from_documents?: string[]
+  status: 'pending' | 'approved' | 'declined' | 'active'
+  created_by: string
+  approved_by?: string
+  approved_at?: string
+  created_at: string
+  updated_at: string
+  metadata?: Record<string, unknown>
+}
+
+interface DriftDetection {
+  id: string
+  baseline_id: string
+  drift_type: 'scope' | 'technical' | 'timeline' | 'cost' | 'criteria'
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  description: string
+  detected_at: string
+  resolved: boolean
+  resolution_notes?: string
+}
+
+interface MissingDocument {
+  id: string
+  name: string
+  type: string
+  reason: string
 }
 
 interface BaselineManagementProps {
@@ -56,30 +93,31 @@ interface BaselineManagementProps {
 }
 
 export function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
-  const [baseline, setBaseline] = useState<any>(null)
-  const [baselines, setBaselines] = useState<any[]>([])
-  const [drifts, setDrifts] = useState<any[]>([])
+  const [baseline, setBaseline] = useState<Baseline | null>(null)
+  const [baselines, setBaselines] = useState<Baseline[]>([])
+  const [drifts, setDrifts] = useState<DriftDetection[]>([])
   const [loading, setLoading] = useState(false)
   const [extracting, setExtracting] = useState(false)
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
   const [showExtractDialog, setShowExtractDialog] = useState(false)
-  const [viewingBaseline, setViewingBaseline] = useState<any>(null)
+  const [viewingBaseline, setViewingBaseline] = useState<Baseline | null>(null)
   const [showDetailsDialog, setShowDetailsDialog] = useState(false)
   const [formalDocument, setFormalDocument] = useState<string>('')
-  const [missingDocuments, setMissingDocuments] = useState<any[]>([])
+  const [missingDocuments, setMissingDocuments] = useState<MissingDocument[]>([])
   const [showFormalDocDialog, setShowFormalDocDialog] = useState(false)
 
   // Fetch active baseline
   const fetchBaseline = async () => {
     try {
-      const response = await apiClient.request<{ baseline: any }>(
+      const response = await apiClient.request<{ baseline: Baseline }>(
         `/baselines/project/${projectId}/active`,
-        { suppressNotFoundError: true } as any // 404 is expected when no baseline exists yet
+        { suppressNotFoundError: true } as Record<string, unknown> // 404 is expected when no baseline exists yet
       )
       setBaseline(response.baseline)
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 404 is expected when no baseline has been created yet - gracefully handle it
-      if (error?.status === 404) {
+      const err = error as { status?: number; message?: string }
+      if (err?.status === 404) {
         setBaseline(null) // Ensure baseline is null when not found
       } else {
         console.error('Error fetching baseline:', error)
@@ -90,17 +128,18 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
   // Fetch all baselines
   const fetchBaselines = async () => {
     try {
-      const response = await apiClient.request<{ baselines: any[] }>(
+      const response = await apiClient.request<{ baselines: Baseline[] }>(
         `/baselines/project/${projectId}`,
-        { suppressNotFoundError: true } as any // 404 is expected when no baselines exist yet
+        { suppressNotFoundError: true } as Record<string, unknown> // 404 is expected when no baselines exist yet
       )
       setBaselines(response.baselines || [])
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 404 is expected when no baselines have been created yet
-      if (error?.status === 404) {
+      const err = error as { status?: number; message?: string }
+      if (err?.status === 404) {
         setBaselines([]) // Empty array when none found
       } else {
-      console.error('Error fetching baselines:', error)
+        console.error('Error fetching baselines:', error)
       }
     }
   }
@@ -109,7 +148,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
   const fetchDrifts = async () => {
     if (!baseline) return
     try {
-      const response = await apiClient.request<{ drifts: any[] }>(`/baselines/${baseline.id}/drift`)
+      const response = await apiClient.request<{ drifts: DriftDetection[] }>(`/baselines/${baseline.id}/drift`)
       setDrifts(response.drifts || [])
     } catch (error) {
       console.error('Error fetching drifts:', error)
@@ -118,7 +157,9 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchBaseline(), fetchBaselines()]).finally(() => setLoading(false))
+    Promise.all([fetchBaseline(), fetchBaselines()]).finally(() => {
+      setLoading(false)
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
 

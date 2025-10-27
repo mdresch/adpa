@@ -371,7 +371,12 @@ export function StakeholdersTab({
 
                     {/* Actions */}
                     <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm" onClick={() => onEditStakeholder(stakeholder)}>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => onEditStakeholder(stakeholder)}
+                        aria-label={`Edit stakeholder ${stakeholder.role}`}
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
                       <Button 
@@ -379,6 +384,7 @@ export function StakeholdersTab({
                         size="sm"
                         onClick={() => onDeleteStakeholder(stakeholder.id)}
                         className="text-destructive hover:text-destructive"
+                        aria-label={`Delete stakeholder ${stakeholder.role}`}
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

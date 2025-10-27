@@ -37,7 +37,7 @@ interface Document {
   version: number
   updated_at: string
   updated_by: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 interface DocumentStats {

@@ -8,8 +8,8 @@ import { toast } from "sonner"
 import { Project } from "@/lib/api"
 
 interface ExtendedProject extends Project {
-  settings?: any
-  metadata?: any
+  settings?: Record<string, unknown>
+  metadata?: Record<string, unknown>
 }
 
 interface Document {
@@ -59,8 +59,9 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
                   variant="ghost" 
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(project?.name || '')
-                    toast.success('Copied to clipboard')
+                    void navigator.clipboard.writeText(project?.name || '').then(() => {
+                      toast.success('Copied to clipboard')
+                    })
                   }}
                 >
                   <Copy className="h-4 w-4" />
@@ -76,10 +77,11 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
                   <Button 
                     variant="ghost" 
                     size="sm"
-                    onClick={() => {
-                      navigator.clipboard.writeText(project?.description || '')
+                  onClick={() => {
+                    void navigator.clipboard.writeText(project?.description || '').then(() => {
                       toast.success('Copied to clipboard')
-                    }}
+                    })
+                  }}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
@@ -95,8 +97,9 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
                   variant="ghost" 
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText(project?.id || '')
-                    toast.success('Copied to clipboard')
+                    void navigator.clipboard.writeText(project?.id || '').then(() => {
+                      toast.success('Copied to clipboard')
+                    })
                   }}
                 >
                   <Copy className="h-4 w-4" />
@@ -243,7 +246,7 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
         </div>
 
         {/* Custom Variables from Settings & Metadata */}
-        {(project as any)?.settings && Object.keys((project as any).settings).length > 0 && (
+        {project?.settings && Object.keys(project.settings).length > 0 && (
           <div className="mt-6">
             <Card>
               <CardHeader>
@@ -257,7 +260,7 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {Object.entries((project as any).settings).map(([key, value]) => (
+                  {project.settings && Object.entries(project.settings).map(([key, value]) => (
                     <div key={key} className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
                       <div className="flex-1">
                         <p className="text-xs font-medium text-muted-foreground mb-1">{key}</p>
@@ -267,8 +270,9 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
                         variant="ghost" 
                         size="sm"
                         onClick={() => {
-                          navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value) : String(value))
-                          toast.success('Copied to clipboard')
+                          void navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value) : String(value)).then(() => {
+                            toast.success('Copied to clipboard')
+                          })
                         }}
                       >
                         <Copy className="h-4 w-4" />
@@ -281,7 +285,7 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
           </div>
         )}
         
-        {(project as any)?.metadata && Object.keys((project as any).metadata).length > 0 && (
+        {project?.metadata && Object.keys(project.metadata).length > 0 && (
           <div className="mt-6">
             <Card>
               <CardHeader>
@@ -295,7 +299,7 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  {Object.entries((project as any).metadata).map(([key, value]) => (
+                  {project.metadata && Object.entries(project.metadata).map(([key, value]) => (
                     <div key={key} className="flex items-start justify-between p-3 rounded-lg border bg-muted/30">
                       <div className="flex-1">
                         <p className="text-xs font-medium text-muted-foreground mb-1">{key}</p>
@@ -305,8 +309,9 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
                         variant="ghost" 
                         size="sm"
                         onClick={() => {
-                          navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value) : String(value))
-                          toast.success('Copied to clipboard')
+                          void navigator.clipboard.writeText(typeof value === 'object' ? JSON.stringify(value) : String(value)).then(() => {
+                            toast.success('Copied to clipboard')
+                          })
                         }}
                       >
                         <Copy className="h-4 w-4" />
@@ -343,27 +348,27 @@ export function VariablesTab({ project, documents, stakeholders }: VariablesTabP
                 <p>{"{{document_count}}"} → {documents.length}</p>
                 <p>{"{{stakeholder_count}}"} → {stakeholders.length}</p>
                 
-                {(project as any)?.team_members && (project as any).team_members.length > 0 && (
+                {project?.team_members && project.team_members.length > 0 && (
                   <>
                     <p className="font-semibold mt-2 mb-1">Team Variables:</p>
-                    <p>{"{{team_size}}"} → {(project as any).team_members.length}</p>
+                    <p>{"{{team_size}}"} → {project.team_members.length}</p>
                   </>
                 )}
                 
-                {(project as any)?.settings && Object.keys((project as any).settings).length > 0 && (
+                {project?.settings && Object.keys(project.settings).length > 0 && (
                   <>
                     <p className="font-semibold mt-2 mb-1">Custom Settings:</p>
-                    {Object.keys((project as any).settings).map(key => (
-                      <p key={key}>{"{{settings." + key + "}}"} → {String((project as any).settings[key])}</p>
+                    {Object.keys(project.settings).map(key => (
+                      <p key={key}>{"{{settings." + key + "}}"} → {String(project.settings![key])}</p>
                     ))}
                   </>
                 )}
                 
-                {(project as any)?.metadata && Object.keys((project as any).metadata).length > 0 && (
+                {project?.metadata && Object.keys(project.metadata).length > 0 && (
                   <>
                     <p className="font-semibold mt-2 mb-1">Custom Metadata:</p>
-                    {Object.keys((project as any).metadata).map(key => (
-                      <p key={key}>{"{{metadata." + key + "}}"} → {String((project as any).metadata[key])}</p>
+                    {Object.keys(project.metadata).map(key => (
+                      <p key={key}>{"{{metadata." + key + "}}"} → {String(project.metadata![key])}</p>
                     ))}
                   </>
                 )}
