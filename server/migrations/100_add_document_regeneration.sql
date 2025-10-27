@@ -134,10 +134,10 @@ BEGIN
     NOW()
   );
   
-  -- Update the main documents table with the new version
+  -- Update the main documents table with content only
+  -- (documents.version is INTEGER, document_versions.version is VARCHAR with semantic versioning)
   UPDATE documents
   SET 
-    version = p_version,
     content = p_content->>'content',
     updated_at = NOW()
   WHERE id = p_document_id;
