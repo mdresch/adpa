@@ -152,9 +152,9 @@ export function RegenerateVersionModal({
 
   const handleGenerate = () => {
     onRegenerate({
-      templateId: selectedTemplate || undefined,
+      templateId: selectedTemplate && selectedTemplate !== 'none' ? selectedTemplate : undefined,
       provider: selectedProvider,
-      model: selectedModel || undefined,
+      model: selectedModel && selectedModel !== 'default' ? selectedModel : undefined,
       versionType,
       temperature
     })
@@ -234,7 +234,7 @@ export function RegenerateVersionModal({
                 <SelectValue placeholder="Select template (optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No template (freeform)</SelectItem>
+                <SelectItem value="none">No template (freeform)</SelectItem>
                 {templates.map((template) => (
                   <SelectItem key={template.id} value={template.id}>
                     {template.name}
@@ -281,7 +281,7 @@ export function RegenerateVersionModal({
                   <SelectValue placeholder="Select model" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Default model</SelectItem>
+                  <SelectItem value="default">Default model</SelectItem>
                   {getModelsForProvider().map((model) => (
                     <SelectItem key={model} value={model}>
                       {model}

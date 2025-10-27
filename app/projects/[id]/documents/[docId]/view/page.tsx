@@ -47,6 +47,10 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun } from "docx"
 import { saveAs } from "file-saver"
+import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
+import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
+import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
+import { Sparkles } from "@/components/ui/icons-shim"
 
 interface DocumentData {
   id: string
@@ -114,6 +118,10 @@ export default function ProjectDocumentViewer() {
   const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+
+  // Document regeneration hook
+  const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -564,6 +572,36 @@ The ADPA system represents a significant advancement in document processing auto
     setIsEditing(false)
   }
 
+  // Handle document regeneration
+  const handleRegenerate = async (params: {
+    templateId?: string
+    provider: string
+    model?: string
+    versionType: 'patch' | 'minor' | 'major'
+    temperature: number
+  }) => {
+    if (!documentId) return
+    
+    try {
+      await regenerate({
+        documentId,
+        ...params
+      })
+    } catch (error) {
+      console.error('Regeneration failed:', error)
+    }
+  }
+
+  // Refresh document when regeneration completes
+  useEffect(() => {
+    if (result && documentId) {
+      // Reload the document
+      fetchDocument()
+      // Reload versions
+      fetchVersions()
+    }
+  }, [result, documentId])
+
   const addComment = async () => {
     if (!newComment.trim() || !document) return
     
@@ -757,6 +795,15 @@ The ADPA system represents a significant advancement in document processing auto
                                 <Button variant="outline" size="sm" onClick={shareDocument}>
                                   <Share className="h-4 w-4 mr-2" />
                                   Share
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => setShowRegenerateModal(true)}
+                                  disabled={isRegenerating}
+                                >
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                  Create new Version
                                 </Button>
                                 <Link href={`/projects/${projectId}/documents/${documentId}`}>
                                   <Button variant="default" size="sm">
@@ -1935,6 +1982,28 @@ The ADPA system represents a significant advancement in document processing auto
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {/* Regeneration Modal */}
+      <RegenerateVersionModal
+        open={showRegenerateModal}
+        onOpenChange={setShowRegenerateModal}
+        documentId={documentId}
+        currentTemplate={document?.template_id}
+        currentVersion={document?.version?.toString() || '1.0'}
+        projectId={projectId}
+        onRegenerate={handleRegenerate}
+      />
+
+      {/* Regeneration Progress */}
+      <RegenerationProgress
+        jobId={progress?.jobId || null}
+        progress={progress}
+        isRegenerating={isRegenerating}
+        error={regenerationError}
+        result={result}
+        onClose={resetRegeneration}
+        documentId={documentId}
+      />
     </div>
   )
 }
