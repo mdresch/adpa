@@ -1163,12 +1163,12 @@ The ADPA system represents a significant advancement in document processing auto
                         <div className="space-y-2">
                           <p className="text-sm font-medium">File Information</p>
                           <div className="space-y-2 text-sm">
-                            {(document as any).version && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Version:</span>
-                                <span className="font-medium">v{(document as any).version}</span>
-                              </div>
-                            )}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Version:</span>
+                              <span className="font-medium font-mono">
+                                v{versions.length > 0 ? versions[0].version : ((document as any).version || '1.0')}
+                              </span>
+                            </div>
                             {((document as any).template_id || templateName) && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Template:</span>

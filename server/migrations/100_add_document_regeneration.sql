@@ -116,6 +116,7 @@ BEGIN
   v_version_id := gen_random_uuid();
   
   -- Insert new document version (without metadata column - doesn't exist in schema)
+  -- Calculate word count from content
   INSERT INTO document_versions (
     id,
     document_id,
@@ -123,6 +124,7 @@ BEGIN
     content,
     changes,
     author_id,
+    word_count,
     created_at
   ) VALUES (
     v_version_id,
@@ -131,6 +133,14 @@ BEGIN
     p_content->>'content',  -- Extract content string from JSONB
     p_change_summary,
     p_created_by,
+    -- Calculate word count (split by whitespace and count)
+    COALESCE(
+      array_length(
+        regexp_split_to_array(trim(p_content->>'content'), E'\\s+'), 
+        1
+      ), 
+      0
+    ),
     NOW()
   );
   
