@@ -141,10 +141,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         userId: params.userId
       })
 
-      // Use current template (template is locked for versions)
-      const templateId = document.template_id
-      
-      // Calculate next version
+      // Calculate next version (templateId already declared on line 111)
       const versionResult = await pool.query(
         `SELECT calculate_next_version($1, $2) as next_version`,
         [params.documentId, params.versionType]
