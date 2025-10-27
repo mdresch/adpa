@@ -13,6 +13,10 @@
     "test:db": "tsx scripts/test-db-connection.ts",
     "test:db-unit": "jest __tests__/lib/db.test.ts",
     "test:db-integration": "jest __tests__/integration/db-integration.test.ts",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report",
     "demo:db": "tsx scripts/demo-db-usage.ts",
     "select-provider": "cd scripts && npm install && npm run select-provider",
     "ai-config": "tsx scripts/ai-provider-selector.ts",
@@ -103,6 +107,7 @@
   },
   "devDependencies": {
     "@jest/globals": "^30.0.5",
+    "@playwright/test": "^1.56.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/inquirer": "^9.0.0",
     "@types/jest": "^30.0.0",

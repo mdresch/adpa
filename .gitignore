@@ -45,6 +45,11 @@ next-env.d.ts
 .vscode/
 .idea/
 
+# Playwright
+test-results/
+playwright-report/
+playwright/.cache/
+
 # Package manager stores
 .pnpm-store/
 
