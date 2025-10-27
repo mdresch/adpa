@@ -74,30 +74,28 @@ BEGIN
   WITH base_doc AS (
     -- Find the root parent document
     SELECT COALESCE(
-      (SELECT id FROM documents WHERE id = (SELECT parent_document_id FROM documents WHERE id = p_document_id)),
+      (SELECT d1.id FROM documents d1 WHERE d1.id = (SELECT d2.parent_document_id FROM documents d2 WHERE d2.id = p_document_id)),
       p_document_id
     ) as root_id
   )
   SELECT 
     d.id,
-    d.name,
+    d.name::TEXT,
     d.semantic_version,
     d.content,
     d.created_at,
     d.updated_at,
-    d.author_id,
-    COALESCE(u.name, 'System') as author_name,
-    COALESCE(
-      array_length(regexp_split_to_array(trim(d.content), E'\\s+'), 1),
-      0
-    ) as word_count,
-    d.is_regeneration,
+    d.created_by as author_id,
+    COALESCE(d.author, u.name, 'System')::TEXT as author_name,
+    COALESCE(d.word_count, 0)::INTEGER as word_count,
+    COALESCE(d.is_regeneration, FALSE)::BOOLEAN as is_regeneration,
     d.generation_metadata,
-    (d.id = p_document_id) as is_current
+    (d.id = p_document_id)::BOOLEAN as is_current
   FROM documents d
-  LEFT JOIN users u ON d.author_id = u.id
-  WHERE d.id = (SELECT root_id FROM base_doc)
-     OR d.parent_document_id = (SELECT root_id FROM base_doc)
+  LEFT JOIN users u ON d.created_by = u.id,
+  base_doc
+  WHERE d.id = base_doc.root_id
+     OR d.parent_document_id = base_doc.root_id
      OR d.id = p_document_id
   ORDER BY d.created_at ASC;
 END;
