@@ -10,6 +10,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createMistral } from "@ai-sdk/mistral"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
+import AnalyticsTrackingService from "./analyticsTrackingService"
 
 export interface AIProvider {
   name: string
@@ -298,6 +299,8 @@ class AIService {
   }
 
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
+    const startTime = Date.now()  // Capture start time for analytics
+    
     logger.info('🚀 [AI-SERVICE-1/8] Generate method called')
     logger.info('📊 [AI-SERVICE] Request:', {
       provider: request.provider,
@@ -456,6 +459,16 @@ class AIService {
             total_tokens: estimatedTokens,
           })
           
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, request.model || 'gemini-2.5-flash', {
+              prompt_tokens: Math.ceil(promptLength / 4),
+              completion_tokens: Math.ceil(text.length / 4),
+              total_tokens: estimatedTokens,
+            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+          })
+          
           logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
           
           return {
@@ -510,6 +523,16 @@ class AIService {
             total_tokens: mistralResult.usage?.totalTokens || 0,
           })
           
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: mistralResult.usage?.promptTokens || 0,
+              completion_tokens: mistralResult.usage?.completionTokens || 0,
+              total_tokens: mistralResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+          })
+          
           logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
           
           return {
@@ -545,6 +568,16 @@ class AIService {
       // Update usage stats
       await this.updateUsageStats(request.provider, {
         total_tokens: result.usage.totalTokens,
+      })
+
+      // Track detailed AI usage for analytics (background, non-blocking)
+      const responseTimeMs = Date.now() - startTime
+      setImmediate(() => {
+        this.trackAIUsageAsync(request.provider, request.model || gatewayModelId, {
+          prompt_tokens: (result.usage as any).promptTokens || 0,
+          completion_tokens: (result.usage as any).completionTokens || 0,
+          total_tokens: result.usage.totalTokens,
+        }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
       })
 
       logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
@@ -704,6 +737,84 @@ class AIService {
     } catch (error) {
       logger.error(`Failed to update usage stats for ${provider}:`, error)
     }
+  }
+
+  /**
+   * Track detailed AI usage for analytics (async, non-blocking)
+   * Integrates AI generation with analytics tracking system
+   */
+  private async trackAIUsageAsync(
+    providerName: string,
+    modelName: string,
+    usage: { prompt_tokens: number; completion_tokens: number; total_tokens: number },
+    responseTimeMs: number,
+    success: boolean,
+    userId?: string,
+    projectId?: string,
+    documentId?: string
+  ) {
+    try {
+      // Get provider details
+      const providerResult = await pool.query(
+        'SELECT id, provider_type FROM ai_providers WHERE name = $1 LIMIT 1',
+        [providerName]
+      )
+      
+      if (providerResult.rows.length === 0) {
+        logger.warn(`📊 [ANALYTICS] Provider ${providerName} not found, skipping tracking`)
+        return
+      }
+      
+      const provider = providerResult.rows[0]
+      
+      // Calculate estimated cost
+      const estimatedCost = this.calculateCost(provider.provider_type, usage.total_tokens)
+      
+      // Track usage
+      await AnalyticsTrackingService.trackAIUsage({
+        providerId: provider.id,
+        modelId: null,  // Can be enhanced later with model table
+        providerType: provider.provider_type,
+        modelName,
+        requestType: 'text_generation',
+        inputTokens: usage.prompt_tokens,
+        outputTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        responseTimeMs,
+        success,
+        errorMessage: null,
+        statusCode: null,
+        userId: userId || null,
+        projectId: projectId || null,
+        documentId: documentId || null,
+        estimatedCost,
+        requestPayload: null,  // Can be enhanced later
+        responseMetadata: null,
+      })
+      
+      logger.info(`📊 [ANALYTICS] Tracked: ${providerName}/${modelName} - ${usage.total_tokens} tokens, $${estimatedCost.toFixed(4)}`)
+    } catch (error) {
+      logger.error('📊 [ANALYTICS] Failed to track AI usage:', error)
+      // Don't throw - tracking failures shouldn't break main flow
+    }
+  }
+
+  /**
+   * Calculate estimated cost based on provider pricing
+   */
+  private calculateCost(providerType: string, tokens: number): number {
+    // Approximate cost per 1M tokens (in USD) - Updated pricing as of 2024
+    const costPer1M: Record<string, number> = {
+      'openai': 30.00,      // GPT-4o average
+      'google': 0.50,       // Gemini 2.5 Flash
+      'anthropic': 24.00,   // Claude Sonnet
+      'mistral': 0.70,      // Mistral Small
+      'groq': 0.00,         // Groq free tier
+      'azure': 30.00,       // Similar to OpenAI
+    }
+    
+    const rate = costPer1M[providerType.toLowerCase()] || 10.00
+    return (tokens / 1000000) * rate
   }
 
   /**
