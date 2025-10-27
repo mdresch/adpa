@@ -51,14 +51,9 @@ interface RegenerateVersionModalProps {
 interface AIProvider {
   id: string
   name: string
-  provider_type: string
+  provider_type?: string
+  type?: string
   models?: string[]
-}
-
-interface ProjectStats {
-  documents: number
-  stakeholders: number
-  baselines: number
 }
 
 export function RegenerateVersionModal({
@@ -72,8 +67,6 @@ export function RegenerateVersionModal({
   onRegenerate
 }: RegenerateVersionModalProps) {
   const [providers, setProviders] = useState<AIProvider[]>([])
-  const [projectStats, setProjectStats] = useState<ProjectStats>({ documents: 0, stakeholders: 0, baselines: 0 })
-  
   const [selectedProvider, setSelectedProvider] = useState<string>('')
   const [selectedModel, setSelectedModel] = useState<string>('default')
   const [versionType, setVersionType] = useState<'patch' | 'minor' | 'major'>('patch')
@@ -81,12 +74,30 @@ export function RegenerateVersionModal({
   
   const [loading, setLoading] = useState(false)
 
-  // Fetch templates and providers
+  // Fetch providers when modal opens
   useEffect(() => {
     if (open) {
       fetchData()
     }
   }, [open, projectId])
+  
+  // Auto-select first provider after providers load
+  useEffect(() => {
+    if (providers.length > 0 && !selectedProvider) {
+      const firstProviderName = providers[0].name // Use name like the working dialog
+      console.log('[RegenerateModal] Auto-selecting first provider:', firstProviderName)
+      setSelectedProvider(firstProviderName)
+      if (providers[0].models && providers[0].models.length > 0) {
+        setSelectedModel(providers[0].models[0])
+      }
+    }
+  }, [providers, selectedProvider])
+  
+  // Debug: Track selectedProvider state
+  useEffect(() => {
+    console.log('[RegenerateModal] selectedProvider state:', selectedProvider)
+    console.log('[RegenerateModal] Button disabled:', !selectedProvider || loading)
+  }, [selectedProvider, loading])
 
   const fetchData = async () => {
     try {
@@ -99,56 +110,27 @@ export function RegenerateVersionModal({
       if (Array.isArray(providersResponse)) {
         const activeProviders = providersResponse.filter((p: any) => p.is_active)
         console.log('[RegenerateModal] Active providers:', activeProviders)
+        console.log('[RegenerateModal] First provider object:', activeProviders[0])
         setProviders(activeProviders)
         
-        // Set default provider
+        // Set default provider (use provider.name like the working dialog)
         if (activeProviders.length > 0) {
-          const defaultProvider = activeProviders[0].provider_type
-          console.log('[RegenerateModal] Setting default provider:', defaultProvider)
+          const firstProvider = activeProviders[0]
+          const defaultProvider = firstProvider.name // Use name, not provider_type
+          console.log('[RegenerateModal] Setting default provider:', defaultProvider, 'from object:', firstProvider)
           setSelectedProvider(defaultProvider)
-          setSelectedModel('default')
+          
+          // Set default model if available
+          if (firstProvider.models && firstProvider.models.length > 0) {
+            setSelectedModel(firstProvider.models[0])
+          }
         }
       }
 
-      // Fetch project stats if projectId is available
-      if (projectId) {
-        console.log('[RegenerateModal] Fetching project stats for:', projectId)
-        
-        try {
-          // Try multiple endpoints for stats
-          let statsResponse = null
-          
-          try {
-            statsResponse = await apiClient.request<any>(`/projects/${projectId}/stats`)
-          } catch (err) {
-            console.log('[RegenerateModal] Stats endpoint failed, trying alternative...')
-            // Fallback: fetch counts directly
-            const [docsRes, stakeholdersRes, baselinesRes] = await Promise.all([
-              apiClient.request<any>(`/projects/${projectId}/documents`).catch(() => ({ length: 0 })),
-              apiClient.request<any>(`/projects/${projectId}/stakeholders`).catch(() => ({ length: 0 })),
-              apiClient.request<any>(`/projects/${projectId}/baselines`).catch(() => ({ length: 0 }))
-            ])
-            
-            statsResponse = {
-              document_count: Array.isArray(docsRes) ? docsRes.length : 0,
-              stakeholder_count: Array.isArray(stakeholdersRes) ? stakeholdersRes.length : 0,
-              baseline_count: Array.isArray(baselinesRes) ? baselinesRes.length : 0
-            }
-          }
-          
-          console.log('[RegenerateModal] Project stats:', statsResponse)
-          
-          if (statsResponse) {
-            setProjectStats({
-              documents: statsResponse.document_count || 0,
-              stakeholders: statsResponse.stakeholder_count || 0,
-              baselines: statsResponse.baseline_count || 0
-            })
-          }
-        } catch (err) {
-          console.error('[RegenerateModal] Failed to fetch project stats:', err)
-        }
-      }
+      // Note: Project stats display is informational
+      // The actual context gathering happens on the backend
+      // Stats shown here are just for user awareness
+      console.log('[RegenerateModal] Project stats will be gathered by backend during generation')
     } catch (error) {
       console.error('[RegenerateModal] Failed to fetch data:', error)
     }
@@ -156,25 +138,20 @@ export function RegenerateVersionModal({
 
   // Get available models for selected provider
   const getModelsForProvider = () => {
-    const provider = providers.find(p => p.provider_type === selectedProvider)
+    const provider = providers.find(p => p.name === selectedProvider) // Find by name
     if (!provider) return []
     
-    // Default models by provider type
-    const defaultModels: Record<string, string[]> = {
-      openai: ['gpt-4', 'gpt-4-turbo', 'gpt-3.5-turbo'],
-      google: ['gemini-pro', 'gemini-1.5-pro'],
-      anthropic: ['claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'],
-      mistral: ['mistral-small', 'mistral-medium', 'mistral-large']
-    }
-    
-    return provider.models || defaultModels[selectedProvider] || []
+    return provider.models || []
   }
 
   const handleGenerate = () => {
+    // Find the provider to get its provider_type for the backend
+    const provider = providers.find(p => p.name === selectedProvider)
+    
     onRegenerate({
       templateId: currentTemplate, // Use current template (locked)
-      provider: selectedProvider,
-      model: selectedModel && selectedModel !== 'default' ? selectedModel : undefined,
+      provider: provider?.provider_type || provider?.name || selectedProvider, // Send provider_type to backend
+      model: selectedModel || undefined,
       versionType,
       temperature
     })
@@ -230,34 +207,19 @@ export function RegenerateVersionModal({
           </Card>
 
           {/* Context Preview */}
-          <Card className="bg-muted/50">
+          <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
             <CardContent className="pt-4">
-              <div className="grid grid-cols-3 gap-4 text-sm">
-                <div className="flex items-center space-x-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{projectStats.documents}</p>
-                    <p className="text-xs text-muted-foreground">Documents</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{projectStats.stakeholders}</p>
-                    <p className="text-xs text-muted-foreground">Stakeholders</p>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Target className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{projectStats.baselines}</p>
-                    <p className="text-xs text-muted-foreground">Baselines</p>
-                  </div>
+              <div className="flex items-start space-x-3">
+                <Target className="h-5 w-5 text-green-600 dark:text-green-400 mt-0.5" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                    Full Project Context Included
+                  </p>
+                  <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                    All project documents, stakeholders, and baselines will be gathered and included in the AI generation to ensure the new version has the latest information.
+                  </p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-3">
-                Latest project context will be included in the regeneration
-              </p>
             </CardContent>
           </Card>
 
@@ -270,12 +232,18 @@ export function RegenerateVersionModal({
               value={selectedProvider} 
               onValueChange={(val) => {
                 console.log('[RegenerateModal] Provider changed to:', val)
+                const provider = providers.find(p => p.name === val)
                 setSelectedProvider(val)
-                setSelectedModel('default') // Reset model when provider changes
+                // Set first model if available, like the working dialog
+                if (provider && provider.models && provider.models.length > 0) {
+                  setSelectedModel(provider.models[0])
+                } else {
+                  setSelectedModel('default')
+                }
               }}
             >
               <SelectTrigger id="provider">
-                <SelectValue placeholder={selectedProvider ? providers.find(p => p.provider_type === selectedProvider)?.name : "Select AI provider"} />
+                <SelectValue placeholder={selectedProvider || "Select AI provider"} />
               </SelectTrigger>
               <SelectContent>
                 {providers.length === 0 && (
@@ -284,7 +252,7 @@ export function RegenerateVersionModal({
                   </div>
                 )}
                 {providers.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.provider_type}>
+                  <SelectItem key={provider.id} value={provider.name}>
                     {provider.name}
                   </SelectItem>
                 ))}
@@ -292,7 +260,7 @@ export function RegenerateVersionModal({
             </Select>
             {selectedProvider && (
               <p className="text-xs text-green-600">
-                ✓ Selected: {providers.find(p => p.provider_type === selectedProvider)?.name}
+                ✓ Selected: {providers.find(p => p.name === selectedProvider)?.name || selectedProvider}
               </p>
             )}
             {!selectedProvider && providers.length > 0 && (
@@ -305,13 +273,12 @@ export function RegenerateVersionModal({
           {/* Model Selection */}
           {selectedProvider && getModelsForProvider().length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="model">Model (optional)</Label>
+              <Label htmlFor="model">Model</Label>
               <Select value={selectedModel} onValueChange={setSelectedModel}>
                 <SelectTrigger id="model">
-                  <SelectValue placeholder="Select model" />
+                  <SelectValue placeholder={selectedModel || "Select model"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="default">Default model</SelectItem>
                   {getModelsForProvider().map((model) => (
                     <SelectItem key={model} value={model}>
                       {model}

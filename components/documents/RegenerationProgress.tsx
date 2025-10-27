@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, CheckCircle2, XCircle, ExternalLink } from '@/components/ui/icons-shim'
+import { Loader2, CheckCircle, XCircle, ExternalLink } from '@/components/ui/icons-shim'
 import { useRouter } from 'next/navigation'
 
 interface RegenerationProgressProps {
@@ -75,7 +75,7 @@ export function RegenerationProgress({
                     <Loader2 className="h-5 w-5 animate-spin text-primary" />
                   )}
                   {result && !error && (
-                    <CheckCircle2 className="h-5 w-5 text-green-600" />
+                    <CheckCircle className="h-5 w-5 text-green-600" />
                   )}
                   {error && (
                     <XCircle className="h-5 w-5 text-red-600" />
