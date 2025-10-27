@@ -22,7 +22,8 @@ import {
   User, 
   FileText, 
   CheckCircle,
-  Clock
+  Clock,
+  ArrowRight
 } from 'lucide-react'
 import { VersionViewerDialog } from './VersionViewerDialog'
 
@@ -41,16 +42,28 @@ interface VersionListDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   versions: DocumentVersion[]
+  currentDocument?: {
+    id: string
+    version: string
+    content: string
+    name: string
+    updated_at: string
+    author?: string
+    word_count?: number
+  }
   currentVersion?: string
   documentName?: string
+  onLoadVersion?: (version: DocumentVersion) => void
 }
 
 export function VersionListDialog({
   open,
   onOpenChange,
   versions,
+  currentDocument,
   currentVersion,
-  documentName
+  documentName,
+  onLoadVersion
 }: VersionListDialogProps) {
   const [selectedVersion, setSelectedVersion] = useState<DocumentVersion | null>(null)
   const [showVersionViewer, setShowVersionViewer] = useState(false)
@@ -60,8 +73,34 @@ export function VersionListDialog({
     setShowVersionViewer(true)
   }
 
-  // Sort versions by created_at descending (newest first)
-  const sortedVersions = [...versions].sort((a, b) => 
+  const handleLoadVersion = (version: DocumentVersion) => {
+    if (onLoadVersion) {
+      onLoadVersion(version)
+      onOpenChange(false) // Close dialog after loading
+    }
+  }
+
+  // Combine current document with versions
+  const allVersions: DocumentVersion[] = []
+  
+  // Add current document as a version
+  if (currentDocument) {
+    allVersions.push({
+      id: currentDocument.id,
+      version: currentDocument.version || '1.0.0',
+      content: currentDocument.content,
+      changes: 'Current version',
+      author: currentDocument.author || 'System',
+      created_at: currentDocument.updated_at,
+      word_count: currentDocument.word_count
+    })
+  }
+  
+  // Add historical versions from document_versions table
+  allVersions.push(...versions)
+  
+  // Sort all versions by created_at descending (newest first)
+  const sortedVersions = allVersions.sort((a, b) => 
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   )
 
@@ -76,7 +115,8 @@ export function VersionListDialog({
             </DialogTitle>
             <DialogDescription>
               {documentName && `${documentName} - `}
-              {versions.length} version{versions.length !== 1 ? 's' : ''} available
+              {sortedVersions.length} version{sortedVersions.length !== 1 ? 's' : ''} available
+              {currentDocument && versions.length === 0 && ' (current document only)'}
             </DialogDescription>
           </DialogHeader>
 
@@ -155,7 +195,7 @@ export function VersionListDialog({
                         </div>
 
                         {/* Right: Actions */}
-                        <div className="ml-4">
+                        <div className="ml-4 flex items-center space-x-2">
                           <Button 
                             variant="outline" 
                             size="sm"
@@ -164,6 +204,17 @@ export function VersionListDialog({
                             <Eye className="h-4 w-4 mr-2" />
                             View
                           </Button>
+                          {!isCurrentVersion && onLoadVersion && (
+                            <Button 
+                              variant="default" 
+                              size="sm"
+                              onClick={() => handleLoadVersion(version)}
+                              title="Load this version into the editor"
+                            >
+                              <ArrowRight className="h-4 w-4 mr-2" />
+                              Load
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardContent>
