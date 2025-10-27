@@ -216,7 +216,7 @@ console.log("✅ All API routes registered")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
-  logger.info(`Client connected: ${socket.id}`)
+  logger.debug(`[WS] Client connected: ${socket.id}`)
 
   // Support generic join/leave with room names supplied by client
   socket.on("join", async (room: string) => {
@@ -299,7 +299,7 @@ io.on("connection", (socket) => {
   })
 
   socket.on("disconnect", () => {
-    logger.info(`Client disconnected: ${socket.id}`)
+    logger.debug(`[WS] Client disconnected: ${socket.id}`)
   })
 })
 

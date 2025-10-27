@@ -301,8 +301,7 @@ class AIService {
   async generate(request: AIGenerateRequest): Promise<AIGenerateResponse> {
     const startTime = Date.now()  // Capture start time for analytics
     
-    logger.info('🚀 [AI-SERVICE-1/8] Generate method called')
-    logger.info('📊 [AI-SERVICE] Request:', {
+    logger.debug('[AI-SERVICE] Generate called', {
       provider: request.provider,
       model: request.model,
       temperature: request.temperature,
@@ -314,39 +313,37 @@ class AIService {
     const gatewayApiKey = await getAIGatewayKey()
     
     if (!gatewayApiKey) {
-      logger.error('❌ [AI-SERVICE] No AI Gateway API key configured')
+      logger.error('[AI-SERVICE] No AI Gateway API key configured')
       throw new Error("AI Gateway API key not configured. Please configure it in Settings.")
     }
-    logger.info('✅ [AI-SERVICE-2/8] AI Gateway API key retrieved from database')
+    logger.debug('[AI-SERVICE] Gateway API key retrieved')
 
     // KISS: Build system and user messages separately
     let systemMessage: string | undefined = undefined
     let userMessage: string = request.prompt
     
     if (request.template_id) {
-      logger.info('🔄 [AI-SERVICE-3/8] Loading template system prompt (KISS)...')
       const templateSystemPrompt = await this.getTemplateSystemPrompt(request.template_id)
       if (templateSystemPrompt) {
         systemMessage = templateSystemPrompt
-        // Build user message with ALL context
         userMessage = this.buildUserMessage(request.prompt, request.variables)
-        logger.info('✅ [AI-SERVICE-3/8] KISS architecture applied: System=Template, User=Context')
+        logger.debug('[AI-SERVICE] Template loaded - using KISS architecture')
       } else {
-        logger.warn('⚠️ [AI-SERVICE-3/8] Template not found, using direct prompt')
+        logger.warn('[AI-SERVICE] Template not found, using direct prompt')
       }
     } else {
-      logger.info('✅ [AI-SERVICE-3/8] No template, using direct prompt')
+      logger.debug('[AI-SERVICE] No template, using direct prompt')
     }
     
     // If system_prompt provided directly in request, use that
     if (request.system_prompt) {
       systemMessage = request.system_prompt
-      logger.info('✅ [AI-SERVICE-3/8] Using provided system_prompt')
+      logger.debug('[AI-SERVICE] Using provided system_prompt')
     }
 
     try {
       // Get provider type from database to build the model ID
-      logger.info('🔍 [AI-SERVICE-4/8] Looking up provider type...')
+      logger.debug('[AI-SERVICE] Looking up provider type')
       // Try to find provider by provider_type first (e.g., "mistral", "openai"), then by name
       const providerResult = await pool.query(
         "SELECT provider_type, configuration FROM ai_providers WHERE (provider_type = $1 OR LOWER(name) = LOWER($1)) AND is_active = true LIMIT 1",
@@ -359,7 +356,7 @@ class AIService {
       }
 
       const providerType = providerResult.rows[0].provider_type
-      logger.info('✅ [AI-SERVICE-5/8] Provider type:', providerType, 'for requested provider:', request.provider)
+      logger.debug('[AI-SERVICE] Provider type:', providerType)
       
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
@@ -434,11 +431,9 @@ class AIService {
             throw new Error('Direct Google AI API key not found in provider configuration')
           }
           
-          logger.info('✅ [AI-SERVICE] Direct Google AI API key found')
+          logger.debug('[AI-SERVICE] Using direct Google AI')
           const genAI = new GoogleGenerativeAI(directApiKey)
           const model = genAI.getGenerativeModel({ model: request.model || 'gemini-2.5-flash' })
-          
-          logger.info('🚀 [AI-SERVICE] Calling direct Google AI with KISS architecture...')
           // KISS: Combine system and user message for Google AI (it doesn't have separate system role)
           const combinedPrompt = systemMessage 
             ? `${systemMessage}\n\n---\n\n${userMessage}`
@@ -447,8 +442,7 @@ class AIService {
           const response = await googleResult.response
           const text = response.text()
           
-          logger.info('✅ [AI-SERVICE-7/8] Direct Google AI generation successful!')
-          logger.info('📝 [AI-SERVICE] Content length:', text.length, 'chars')
+          logger.debug('[AI-SERVICE] Google AI successful:', { contentLength: text.length })
           
           // Estimate token usage (Google AI doesn't always provide it)
           const promptLength = systemMessage ? systemMessage.length + userMessage.length : userMessage.length
@@ -469,7 +463,7 @@ class AIService {
             }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
           })
           
-          logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+          logger.info(`[AI] ✓ Google AI/${request.model || 'gemini-2.5-flash'} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: text,
@@ -493,7 +487,7 @@ class AIService {
             throw new Error('Direct Mistral AI API key not found in provider configuration')
           }
           
-          logger.info('✅ [AI-SERVICE] Direct Mistral AI API key found')
+          logger.debug('[AI-SERVICE] Using direct Mistral AI')
           
           const mistral = createMistral({ apiKey: directApiKey })
           
@@ -502,8 +496,6 @@ class AIService {
           const modelName = mistralModels.includes(request.model || '') 
             ? request.model 
             : 'mistral-small-latest' // Default to small (free tier)
-          
-          logger.info(`🚀 [AI-SERVICE] Calling direct Mistral AI with model: ${modelName}`)
           
           const mistralResult = await generateText({
             model: mistral(modelName),
@@ -515,8 +507,7 @@ class AIService {
             maxTokens: request.max_tokens
           })
           
-          logger.info('✅ [AI-SERVICE-7/8] Direct Mistral AI generation successful!')
-          logger.info('📝 [AI-SERVICE] Content length:', mistralResult.text.length, 'chars')
+          logger.debug('[AI-SERVICE] Mistral AI successful:', { contentLength: mistralResult.text.length })
           
           // Update usage stats
           await this.updateUsageStats(request.provider, {
@@ -533,7 +524,7 @@ class AIService {
             }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
           })
           
-          logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+          logger.info(`[AI] ✓ Google AI/${request.model || 'gemini-2.5-flash'} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: mistralResult.text,
@@ -561,9 +552,7 @@ class AIService {
       }
 
       // AI Gateway success path
-      logger.info('✅ [AI-SERVICE-7/8] Generation successful!')
-      logger.info('📊 [AI-SERVICE] Tokens used:', result.usage.totalTokens)
-      logger.info('📝 [AI-SERVICE] Content length:', result.text.length, 'chars')
+      logger.info(`[AI] ✓ ${request.provider}/${request.model || gatewayModelId} - ${result.usage.totalTokens} tokens - ${Date.now() - startTime}ms`)
 
       // Update usage stats
       await this.updateUsageStats(request.provider, {
@@ -656,7 +645,7 @@ class AIService {
 
   async getAvailableProviders(): Promise<Array<{ name: string; type: string; models: string[]; is_active: boolean; id: string; configuration: any; usage_stats?: any; default_model?: string; created_at?: string; updated_at?: string }>> {
     try {
-      logger.info("Getting available providers from database")
+      logger.debug("[AI] Getting available providers")
       const result = await pool.query(
         `SELECT 
           id, name, provider_type, configuration, is_active, 
@@ -666,7 +655,7 @@ class AIService {
         ORDER BY name`
       )
 
-      logger.info(`Found ${result.rows.length} providers in database`)
+      logger.debug(`[AI] Found ${result.rows.length} providers`)
       const providers = []
 
       for (const provider of result.rows) {
@@ -691,7 +680,7 @@ class AIService {
         })
       }
 
-      logger.info(`Returning ${providers.length} providers`)
+      logger.debug(`[AI] Returning ${providers.length} providers`)
       return providers
     } catch (error) {
       logger.error("Failed to get available providers:", error)

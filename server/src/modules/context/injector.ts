@@ -42,7 +42,7 @@ export class ContextInjector {
    */
   static async injectContext(request: ContextRequest, config: ContextConfig = this.DEFAULT_CONFIG): Promise<ContextResponse> {
     try {
-      logger.info(`Starting context injection for user ${request.user_id}`)
+      logger.debug(`[Context] Starting injection for user ${request.user_id}`)
 
       // Calculate available tokens for context
       const availableTokens = TokenManager.calculateAvailableTokens(
@@ -95,7 +95,7 @@ export class ContextInjector {
       // Check for warnings
       const warnings = this.generateWarnings(contextSections, tokenUsage, contextTokenLimit)
 
-      logger.info(`Context injection completed. Used ${tokenUsage.context_tokens} tokens for context`)
+      logger.info(`[Context] ${tokenUsage.context_tokens} tokens injected`)
 
       return {
         enhanced_prompt: enhancedPrompt,
