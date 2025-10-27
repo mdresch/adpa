@@ -90,23 +90,54 @@ export function RegenerateVersionModal({
 
   const fetchData = async () => {
     try {
+      console.log('[RegenerateModal] Fetching AI providers...')
+      
       // Fetch AI providers
       const providersResponse = await apiClient.request<AIProvider[]>('/ai-providers')
+      console.log('[RegenerateModal] Providers response:', providersResponse)
+      
       if (Array.isArray(providersResponse)) {
         const activeProviders = providersResponse.filter((p: any) => p.is_active)
+        console.log('[RegenerateModal] Active providers:', activeProviders)
         setProviders(activeProviders)
         
         // Set default provider
         if (activeProviders.length > 0) {
-          setSelectedProvider(activeProviders[0].provider_type)
+          const defaultProvider = activeProviders[0].provider_type
+          console.log('[RegenerateModal] Setting default provider:', defaultProvider)
+          setSelectedProvider(defaultProvider)
           setSelectedModel('default')
         }
       }
 
       // Fetch project stats if projectId is available
       if (projectId) {
+        console.log('[RegenerateModal] Fetching project stats for:', projectId)
+        
         try {
-          const statsResponse = await apiClient.request<any>(`/projects/${projectId}/stats`)
+          // Try multiple endpoints for stats
+          let statsResponse = null
+          
+          try {
+            statsResponse = await apiClient.request<any>(`/projects/${projectId}/stats`)
+          } catch (err) {
+            console.log('[RegenerateModal] Stats endpoint failed, trying alternative...')
+            // Fallback: fetch counts directly
+            const [docsRes, stakeholdersRes, baselinesRes] = await Promise.all([
+              apiClient.request<any>(`/projects/${projectId}/documents`).catch(() => ({ length: 0 })),
+              apiClient.request<any>(`/projects/${projectId}/stakeholders`).catch(() => ({ length: 0 })),
+              apiClient.request<any>(`/projects/${projectId}/baselines`).catch(() => ({ length: 0 }))
+            ])
+            
+            statsResponse = {
+              document_count: Array.isArray(docsRes) ? docsRes.length : 0,
+              stakeholder_count: Array.isArray(stakeholdersRes) ? stakeholdersRes.length : 0,
+              baseline_count: Array.isArray(baselinesRes) ? baselinesRes.length : 0
+            }
+          }
+          
+          console.log('[RegenerateModal] Project stats:', statsResponse)
+          
           if (statsResponse) {
             setProjectStats({
               documents: statsResponse.document_count || 0,
@@ -115,11 +146,11 @@ export function RegenerateVersionModal({
             })
           }
         } catch (err) {
-          console.error('Failed to fetch project stats:', err)
+          console.error('[RegenerateModal] Failed to fetch project stats:', err)
         }
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error)
+      console.error('[RegenerateModal] Failed to fetch data:', error)
     }
   }
 
@@ -235,14 +266,23 @@ export function RegenerateVersionModal({
           {/* AI Provider Selection */}
           <div className="space-y-2">
             <Label htmlFor="provider">AI Provider *</Label>
-            <Select value={selectedProvider} onValueChange={(val) => {
-              setSelectedProvider(val)
-              setSelectedModel('default') // Reset model when provider changes
-            }}>
+            <Select 
+              value={selectedProvider} 
+              onValueChange={(val) => {
+                console.log('[RegenerateModal] Provider changed to:', val)
+                setSelectedProvider(val)
+                setSelectedModel('default') // Reset model when provider changes
+              }}
+            >
               <SelectTrigger id="provider">
-                <SelectValue placeholder="Select AI provider" />
+                <SelectValue placeholder={selectedProvider ? providers.find(p => p.provider_type === selectedProvider)?.name : "Select AI provider"} />
               </SelectTrigger>
               <SelectContent>
+                {providers.length === 0 && (
+                  <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                    No AI providers available
+                  </div>
+                )}
                 {providers.map((provider) => (
                   <SelectItem key={provider.id} value={provider.provider_type}>
                     {provider.name}
@@ -251,8 +291,13 @@ export function RegenerateVersionModal({
               </SelectContent>
             </Select>
             {selectedProvider && (
-              <p className="text-xs text-muted-foreground">
-                Using: {providers.find(p => p.provider_type === selectedProvider)?.name}
+              <p className="text-xs text-green-600">
+                ✓ Selected: {providers.find(p => p.provider_type === selectedProvider)?.name}
+              </p>
+            )}
+            {!selectedProvider && providers.length > 0 && (
+              <p className="text-xs text-red-600">
+                Please select an AI provider
               </p>
             )}
           </div>
@@ -334,10 +379,14 @@ export function RegenerateVersionModal({
           <Button 
             onClick={handleGenerate}
             disabled={!selectedProvider || loading}
+            title={!selectedProvider ? 'Please select an AI provider' : 'Generate new version'}
           >
             <Sparkles className="h-4 w-4 mr-2" />
-            Generate New Version
+            {loading ? 'Loading...' : 'Generate New Version'}
           </Button>
+          {!selectedProvider && (
+            <p className="text-xs text-red-600 mt-2">Please select an AI provider to continue</p>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
