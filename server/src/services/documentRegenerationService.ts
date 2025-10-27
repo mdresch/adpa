@@ -61,7 +61,11 @@ export class DocumentRegenerationService {
       })
 
       const documentResult = await pool.query(
-        `SELECT d.*, p.name as project_name, p.framework, t.name as template_name
+        `SELECT d.*, 
+                p.name as project_name, 
+                p.framework, 
+                t.name as template_name,
+                t.prompt_version as current_template_version
          FROM documents d
          LEFT JOIN projects p ON d.project_id = p.id
          LEFT JOIN templates t ON d.template_id = t.id
@@ -75,6 +79,30 @@ export class DocumentRegenerationService {
 
       const document = documentResult.rows[0]
       const projectId = document.project_id
+      
+      // Check if template version changed → force major version bump
+      let actualVersionType = params.versionType
+      const currentTemplateVersion = document.current_template_version
+      const documentTemplateVersion = document.template_version
+      
+      if (currentTemplateVersion && documentTemplateVersion && 
+          parseInt(currentTemplateVersion) !== parseInt(documentTemplateVersion)) {
+        log.info(`Template version changed: v${documentTemplateVersion} → v${currentTemplateVersion}, forcing MAJOR version bump`)
+        actualVersionType = 'major'
+        
+        await this.updateJobStatus(
+          params.jobId, 
+          'processing', 
+          15, 
+          `Template version changed (v${documentTemplateVersion} → v${currentTemplateVersion}), upgrading to major version...`
+        )
+        this.emitProgress({
+          jobId: params.jobId,
+          progress: 15,
+          message: `Template version changed, upgrading to major version...`,
+          userId: params.userId
+        })
+      }
 
       // Step 2: Gather project context (30%)
       log.info('Gathering project context')
@@ -175,11 +203,18 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       })
 
       // Calculate next version using the new function for documents
+      // Use actualVersionType (may be upgraded to 'major' if template changed)
       const versionResult = await pool.query(
         `SELECT calculate_next_document_version($1::UUID, $2::VARCHAR(10)) as next_version`,
-        [params.documentId, params.versionType]
+        [params.documentId, actualVersionType]
       )
       const nextVersion = versionResult.rows[0].next_version
+      
+      log.info(`Version calculation: ${actualVersionType} → ${nextVersion}`, {
+        requestedType: params.versionType,
+        actualType: actualVersionType,
+        templateChanged: actualVersionType === 'major' && params.versionType !== 'major'
+      })
 
       // Step 5: Create new document (not a version entry) (85%)
       log.info(`Creating new document with version ${nextVersion}`)
@@ -201,8 +236,10 @@ Please generate a comprehensive, updated version that incorporates all recent pr
           name,
           content,
           template_id,
+          template_version,
           project_id,
-          author_id,
+          created_by,
+          author,
           parent_document_id,
           is_regeneration,
           semantic_version,
@@ -220,11 +257,13 @@ Please generate a comprehensive, updated version that incorporates all recent pr
           $4,
           $5,
           $6,
-          true,
           $7,
-          1,
           $8,
+          true,
           $9,
+          1,
+          $10,
+          $11,
           'published',
           NOW(),
           NOW()
@@ -233,8 +272,10 @@ Please generate a comprehensive, updated version that incorporates all recent pr
           `${document.name} (${nextVersion})`, // Append version to name
           aiResponse.content,
           templateId,
+          currentTemplateVersion?.toString() || '1', // Store current template version
           projectId,
           params.userId,
+          'System Administrator', // Author name
           params.documentId, // Link to parent
           nextVersion,
           wordCount,
@@ -245,9 +286,12 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             context_summary: aiResponse.context_summary,
             context_token_usage: aiResponse.context_token_usage,
             template_id: templateId,
+            template_version: currentTemplateVersion,
             generated_at: new Date().toISOString(),
             parent_document_id: params.documentId,
-            regeneration_type: params.versionType
+            regeneration_type: actualVersionType,
+            requested_version_type: params.versionType,
+            version_upgraded: actualVersionType !== params.versionType
           })
         ]
       )

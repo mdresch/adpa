@@ -77,13 +77,26 @@ router.post("/generate",
       const wordCount = result.content.trim().split(/\s+/).filter(Boolean).length
       const characterCount = result.content.length
 
+      // Get template version if template is specified
+      let templateVersion = '1'
+      if (templateId) {
+        const templateResult = await pool.query(
+          `SELECT prompt_version FROM templates WHERE id = $1`,
+          [templateId]
+        )
+        if (templateResult.rows.length > 0) {
+          templateVersion = templateResult.rows[0].prompt_version?.toString() || '1'
+        }
+      }
+
       // Create document in database
       const documentId = uuidv4()
       const documentResult = await pool.query(
         `INSERT INTO documents 
-         (id, project_id, name, content, template_id, created_by, metadata, status, 
-          word_count, character_count, version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         (id, project_id, name, content, template_id, template_version, 
+          created_by, metadata, status, word_count, character_count, 
+          version, semantic_version)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
          RETURNING *`,
         [
           documentId,
@@ -91,12 +104,14 @@ router.post("/generate",
           name,
           result.content,  // Markdown string
           templateId || null,
+          templateVersion,
           req.user?.id,
           JSON.stringify(result.metadata),
           'draft',
           wordCount,
           characterCount,
           1,
+          '1.0.0', // Initial semantic version
         ]
       )
 
