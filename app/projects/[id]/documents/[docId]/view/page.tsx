@@ -598,10 +598,8 @@ The ADPA system represents a significant advancement in document processing auto
   // Refresh document when regeneration completes
   useEffect(() => {
     if (result && documentId) {
-      // Reload the document
-      fetchDocument()
-      // Reload versions
-      fetchVersions()
+      // Reload the document and versions
+      loadDocument()
     }
   }, [result, documentId])
 
