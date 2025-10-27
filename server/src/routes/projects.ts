@@ -22,7 +22,7 @@ router.get("/", authenticateToken, async (req, res) => {
              GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
-      LEFT JOIN documents d ON p.id = d.project_id
+      LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
       WHERE 1=1
     `
 
