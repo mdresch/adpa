@@ -50,6 +50,7 @@ import { saveAs } from "file-saver"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
+import { VersionListDialog } from "@/components/documents/VersionListDialog"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { Sparkles } from "@/components/ui/icons-shim"
 
@@ -113,7 +114,8 @@ export default function ProjectDocumentViewer() {
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState("")
-  const [showVersions, setShowVersions] = useState(false)
+  const [showVersions, setShowVersions] = useState(false) // For dialog
+  const [showVersionsDialog, setShowVersionsDialog] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [showSummaries, setShowSummaries] = useState(false)
   const [summaries, setSummaries] = useState<any[]>([])
@@ -796,7 +798,7 @@ The ADPA system represents a significant advancement in document processing auto
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => setShowVersions(!showVersions)}
+                        onClick={() => setShowVersionsDialog(true)}
                       >
                         <History className="h-4 w-4 mr-2" />
                         Versions ({versions.length})
@@ -2063,7 +2065,16 @@ The ADPA system represents a significant advancement in document processing auto
         documentId={documentId}
       />
 
-      {/* Version Viewer Dialog */}
+      {/* Version List Dialog */}
+      <VersionListDialog
+        open={showVersionsDialog}
+        onOpenChange={setShowVersionsDialog}
+        versions={versions}
+        currentVersion={document?.version?.toString()}
+        documentName={document?.name}
+      />
+
+      {/* Version Viewer Dialog (standalone - for inline history) */}
       <VersionViewerDialog
         open={showVersionDialog}
         onOpenChange={setShowVersionDialog}
