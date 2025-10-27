@@ -161,7 +161,7 @@ router.get("/system",
           ap.name as provider_name,
           ap.provider_type,
           COUNT(al.*) as usage_count,
-          SUM((al.new_values->>'usage'->>'total_tokens')::int) as total_tokens
+          SUM(COALESCE((al.new_values->'usage'->>'total_tokens')::int, 0)) as total_tokens
         FROM audit_logs al
         JOIN ai_providers ap ON al.resource_id::uuid = ap.id
         WHERE al.action = 'ai_generate' AND al.created_at >= NOW() - INTERVAL '${interval}'
