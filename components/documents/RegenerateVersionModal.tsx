@@ -139,9 +139,15 @@ export function RegenerateVersionModal({
   // Get available models for selected provider
   const getModelsForProvider = () => {
     const provider = providers.find(p => p.name === selectedProvider) // Find by name
-    if (!provider) return []
+    console.log('[RegenerateModal] Getting models for provider:', selectedProvider, 'found:', provider)
+    if (!provider) {
+      console.warn('[RegenerateModal] Provider not found for:', selectedProvider)
+      return []
+    }
     
-    return provider.models || []
+    const models = provider.models || []
+    console.log('[RegenerateModal] Models for', provider.name, ':', models)
+    return models
   }
 
   const handleGenerate = () => {
@@ -273,7 +279,12 @@ export function RegenerateVersionModal({
           {/* Model Selection */}
           {selectedProvider && getModelsForProvider().length > 0 && (
             <div className="space-y-2">
-              <Label htmlFor="model">Model</Label>
+              <Label htmlFor="model">
+                Model 
+                <span className="text-xs font-normal text-muted-foreground ml-2">
+                  (for {selectedProvider})
+                </span>
+              </Label>
               <Select value={selectedModel} onValueChange={setSelectedModel}>
                 <SelectTrigger id="model">
                   <SelectValue placeholder={selectedModel || "Select model"} />
@@ -286,6 +297,9 @@ export function RegenerateVersionModal({
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Showing {getModelsForProvider().length} model(s) available for {selectedProvider}
+              </p>
             </div>
           )}
 
