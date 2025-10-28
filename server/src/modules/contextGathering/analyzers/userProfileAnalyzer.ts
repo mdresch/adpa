@@ -5,9 +5,15 @@
 
 import { logger } from '@/utils/logger'
 import { pool } from '@/database/connection'
+import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
 import type { UserProfileContextData } from '../types'
 
 export class UserProfileAnalyzer {
+  private retrieval?: ContextRetrievalService
+
+  constructor(retrieval?: ContextRetrievalService) {
+    this.retrieval = retrieval
+  }
   async analyzeUserProfile(userId: string): Promise<UserProfileContextData> {
     try {
       logger.debug('Analyzing user profile context', { userId })
@@ -35,6 +41,15 @@ export class UserProfileAnalyzer {
         user_writing_style: userWritingStyle,
         user_domain_knowledge: userDomainKnowledge,
         user_collaboration_preferences: userCollaborationPreferences,
+        user_locale_preferences: await this.gatherUserLocalePreferences(userId),
+        user_notification_preferences: await this.gatherUserNotificationPreferences(userId),
+        user_accessibility_preferences: await this.gatherUserAccessibilityPreferences(userId),
+        user_device_profile: await this.gatherUserDeviceProfile(userId),
+        user_security_posture: await this.gatherUserSecurityPosture(userId),
+        user_time_preferences: await this.gatherUserTimePreferences(userId),
+        user_project_affiliations: await this.gatherUserProjectAffiliations(userId),
+        user_recent_successes: await this.gatherUserRecentSuccesses(userId),
+        user_known_gaps: await this.gatherUserKnownGaps(userId),
         user_performance_history: performanceHistory,
         user_learning_preferences: await this.gatherUserLearningPreferences(userId),
         user_access_patterns: accessPatterns,
@@ -50,9 +65,40 @@ export class UserProfileAnalyzer {
         metadata: {
           analysis_timestamp: new Date(),
           analysis_duration: Date.now() - startTime,
-          data_sources: ['user_profile', 'user_preferences', 'user_expertise'],
+          data_sources: ['user_profile', 'user_preferences', 'user_expertise', 'user_locale', 'user_notifications', 'user_accessibility', 'user_devices', 'user_security', 'user_time', 'user_projects'],
           data_freshness: new Date(),
           analysis_confidence: 0.9
+        }
+      }
+
+      // Optional RAG enrichment of user-authored semantic context (notes, prior docs)
+      if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
+        try {
+          const queries = [
+            'writing tone and style preferences',
+            'recent successful documents and reasons',
+            'domain-specific playbooks and checklists',
+            'common pitfalls and lessons learned'
+          ]
+          const ragChunks = [] as Array<{ chunk_id: string; document_id: string; title: string | null; score: number; content_preview: string }>
+          for (const q of queries) {
+            const found = await this.retrieval.searchChunks({ projectId: userProfile?.project_id || '', query: `${q} by user:${userId}`, topK: 5 })
+            for (const c of found) {
+              ragChunks.push({
+                chunk_id: c.id,
+                document_id: c.document_id,
+                title: c.title,
+                score: c.score,
+                content_preview: c.content.substring(0, 400)
+              })
+            }
+          }
+          if (ragChunks.length > 0) {
+            ;(userProfileContext as any).rag_user_context = ragChunks
+            userProfileContext.metadata.data_sources.push('rag_user_chunks')
+          }
+        } catch (e: any) {
+          logger.warn('RAG user context enrichment skipped', { error: e.message })
         }
       }
 
@@ -374,6 +420,137 @@ export class UserProfileAnalyzer {
       preferred_examples: true,
       preferred_exercises: true,
       metadata: {}
+    }
+  }
+
+  private async gatherUserLocalePreferences(userId: string): Promise<any> {
+    try {
+      const res = await pool.query('SELECT * FROM user_locale_preferences WHERE user_id = $1', [userId])
+      if (res.rows.length === 0) return { locale: 'en-US', timezone: 'UTC', date_format: 'YYYY-MM-DD', number_format: '1,234.56', metadata: {} }
+      const r = res.rows[0]
+      return {
+        locale: r.locale || 'en-US',
+        timezone: r.timezone || 'UTC',
+        date_format: r.date_format || 'YYYY-MM-DD',
+        number_format: r.number_format || '1,234.56',
+        metadata: {}
+      }
+    } catch (e: any) {
+      logger.warn('gatherUserLocalePreferences failed', { userId, error: e.message })
+      return { locale: 'en-US', timezone: 'UTC', date_format: 'YYYY-MM-DD', number_format: '1,234.56', metadata: {} }
+    }
+  }
+
+  private async gatherUserNotificationPreferences(userId: string): Promise<any> {
+    try {
+      const res = await pool.query('SELECT * FROM user_notification_preferences WHERE user_id = $1', [userId])
+      if (res.rows.length === 0) return { channels: ['email'], frequency: 'daily', quiet_hours: { start: '21:00', end: '07:00' }, metadata: {} }
+      const r = res.rows[0]
+      return {
+        channels: r.channels || ['email'],
+        frequency: r.frequency || 'daily',
+        quiet_hours: r.quiet_hours || { start: '21:00', end: '07:00' },
+        metadata: {}
+      }
+    } catch (e: any) {
+      logger.warn('gatherUserNotificationPreferences failed', { userId, error: e.message })
+      return { channels: ['email'], frequency: 'daily', quiet_hours: { start: '21:00', end: '07:00' }, metadata: {} }
+    }
+  }
+
+  private async gatherUserAccessibilityPreferences(userId: string): Promise<any> {
+    try {
+      const res = await pool.query('SELECT * FROM user_accessibility_preferences WHERE user_id = $1', [userId])
+      if (res.rows.length === 0) return { font_size: 'medium', contrast: 'standard', reduce_motion: false, metadata: {} }
+      const r = res.rows[0]
+      return {
+        font_size: r.font_size || 'medium',
+        contrast: r.contrast || 'standard',
+        reduce_motion: !!r.reduce_motion,
+        metadata: {}
+      }
+    } catch (e: any) {
+      logger.warn('gatherUserAccessibilityPreferences failed', { userId, error: e.message })
+      return { font_size: 'medium', contrast: 'standard', reduce_motion: false, metadata: {} }
+    }
+  }
+
+  private async gatherUserDeviceProfile(userId: string): Promise<any> {
+    try {
+      const res = await pool.query('SELECT * FROM user_devices WHERE user_id = $1 ORDER BY last_seen DESC LIMIT 1', [userId])
+      if (res.rows.length === 0) return { device_type: 'web', os: 'unknown', browser: 'unknown', last_seen: null, metadata: {} }
+      const r = res.rows[0]
+      return { device_type: r.device_type || 'web', os: r.os || 'unknown', browser: r.browser || 'unknown', last_seen: r.last_seen, metadata: {} }
+    } catch (e: any) {
+      logger.warn('gatherUserDeviceProfile failed', { userId, error: e.message })
+      return { device_type: 'web', os: 'unknown', browser: 'unknown', last_seen: null, metadata: {} }
+    }
+  }
+
+  private async gatherUserSecurityPosture(userId: string): Promise<any> {
+    try {
+      const res = await pool.query('SELECT * FROM user_security_settings WHERE user_id = $1', [userId])
+      if (res.rows.length === 0) return { mfa_enabled: false, last_password_change_days: null, allowed_ip_ranges: [], metadata: {} }
+      const r = res.rows[0]
+      return { mfa_enabled: !!r.mfa_enabled, last_password_change_days: r.last_password_change_days, allowed_ip_ranges: r.allowed_ip_ranges || [], metadata: {} }
+    } catch (e: any) {
+      logger.warn('gatherUserSecurityPosture failed', { userId, error: e.message })
+      return { mfa_enabled: false, last_password_change_days: null, allowed_ip_ranges: [], metadata: {} }
+    }
+  }
+
+  private async gatherUserTimePreferences(userId: string): Promise<any> {
+    try {
+      const res = await pool.query('SELECT * FROM user_time_preferences WHERE user_id = $1', [userId])
+      if (res.rows.length === 0) return { working_hours: { start: '09:00', end: '17:00' }, meeting_preferences: ['morning'], metadata: {} }
+      const r = res.rows[0]
+      return { working_hours: r.working_hours || { start: '09:00', end: '17:00' }, meeting_preferences: r.meeting_preferences || ['morning'], metadata: {} }
+    } catch (e: any) {
+      logger.warn('gatherUserTimePreferences failed', { userId, error: e.message })
+      return { working_hours: { start: '09:00', end: '17:00' }, meeting_preferences: ['morning'], metadata: {} }
+    }
+  }
+
+  private async gatherUserProjectAffiliations(userId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT p.id, p.name, up.role
+        FROM user_projects up
+        JOIN projects p ON p.id = up.project_id
+        WHERE up.user_id = $1
+        ORDER BY p.created_at DESC
+      `, [userId])
+      return res.rows.map(r => ({ project_id: r.id, project_name: r.name, role: r.role || 'member' }))
+    } catch (e: any) {
+      logger.warn('gatherUserProjectAffiliations failed', { userId, error: e.message })
+      return []
+    }
+  }
+
+  private async gatherUserRecentSuccesses(userId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT id, title, quality_score, created_at
+        FROM document_history
+        WHERE created_by = $1 AND quality_score >= 0.85
+        ORDER BY created_at DESC
+        LIMIT 10
+      `, [userId])
+    
+      return res.rows.map(r => ({ document_id: r.id, title: r.title, quality_score: r.quality_score, created_at: r.created_at }))
+    } catch (e: any) {
+      logger.warn('gatherUserRecentSuccesses failed', { userId, error: e.message })
+      return []
+    }
+  }
+
+  private async gatherUserKnownGaps(userId: string): Promise<any[]> {
+    try {
+      const res = await pool.query('SELECT * FROM user_known_gaps WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20', [userId])
+      return res.rows.map(r => ({ gap_id: r.id, domain: r.domain, description: r.description, priority: r.priority || 'medium', created_at: r.created_at }))
+    } catch (e: any) {
+      logger.warn('gatherUserKnownGaps failed', { userId, error: e.message })
+      return []
     }
   }
 

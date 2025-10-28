@@ -558,6 +558,55 @@ export class DocumentHistoryAnalyzer {
     }
   }
 
+  // Baseline-aware gathers
+  private async gatherBaselineAlignmentChecks(templateId: string, projectId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT c.id, c.check_name, c.check_type, c.last_run_at, c.last_result
+        FROM document_consistency_checks c
+        WHERE c.target_document_id IN (
+          SELECT id FROM documents WHERE project_id = $1 AND title ILIKE '%' || $2 || '%'
+        )
+        ORDER BY c.last_run_at DESC NULLS LAST
+      `, [projectId, templateId])
+      return res.rows.map(r => ({
+        check_id: r.id,
+        check_name: r.check_name,
+        check_type: r.check_type,
+        last_run_at: r.last_run_at,
+        last_result: r.last_result || {},
+        metadata: {}
+      }))
+    } catch (e: any) {
+      logger.warn('gatherBaselineAlignmentChecks failed', { projectId, templateId, error: e.message })
+      return []
+    }
+  }
+
+  private async gatherDocumentDriftImpacts(templateId: string, projectId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT d.id, d.title, d.updated_at, dv.version_number, dv.status
+        FROM documents d
+        LEFT JOIN document_versions dv ON dv.document_id = d.id AND dv.status = 'published'
+        WHERE d.project_id = $1 AND d.title ILIKE '%' || $2 || '%'
+        ORDER BY d.updated_at DESC
+      `, [projectId, templateId])
+      return res.rows.map(r => ({
+        document_id: r.id,
+        title: r.title,
+        version: r.version_number || null,
+        status: r.status || 'unknown',
+        last_updated: r.updated_at,
+        impact_summary: 'Potential drift impact — requires validation',
+        metadata: {}
+      }))
+    } catch (e: any) {
+      logger.warn('gatherDocumentDriftImpacts failed', { projectId, templateId, error: e.message })
+      return []
+    }
+  }
+
   // Additional helper methods
   private calculateUsageFrequency(usageCount: number): string {
     if (usageCount >= 100) return 'high'
