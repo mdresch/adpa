@@ -29,11 +29,15 @@ import {
   Settings,
   History,
   Star,
+  Sparkles,
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
+import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
+import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
+import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 // @ts-ignore
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 // @ts-ignore
@@ -98,6 +102,10 @@ export default function DocumentViewerPage() {
   const [readingMode, setReadingMode] = useState<'normal' | 'focus' | 'print'>('normal')
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base')
   const [lineHeight, setLineHeight] = useState<'tight' | 'normal' | 'relaxed'>('normal')
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  
+  // Document regeneration hook
+  const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
 
   useEffect(() => {
     if (documentId && user) {
@@ -471,6 +479,13 @@ ${doc.content}
     }
   }, [document])
 
+  // Refresh versions when regeneration completes
+  useEffect(() => {
+    if (result && document?.project_id) {
+      void fetchVersions(document.project_id)
+    }
+  }, [result, document])
+
   // Auto-save effect
   useEffect(() => {
     if (!autoSaveEnabled || !isEditing || !editedContent || !document) return
@@ -505,6 +520,25 @@ ${doc.content}
       console.error("Auto-save failed:", error)
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleRegenerate = async (params: {
+    templateId?: string
+    provider: string
+    model?: string
+    versionType: 'patch' | 'minor' | 'major'
+    temperature: number
+  }) => {
+    if (!documentId) return
+    
+    try {
+      await regenerate({
+        documentId,
+        ...params
+      })
+    } catch (error) {
+      console.error('Regeneration failed:', error)
     }
   }
 
@@ -703,6 +737,15 @@ ${doc.content}
                       onClick={() => setIsEditing(!isEditing)}
                     >
                       <Edit className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowRegenerateModal(true)}
+                      disabled={isRegenerating}
+                    >
+                      <Sparkles className="h-4 w-4 mr-2" />
+                      Create new Version
                     </Button>
                     <div className="relative group">
                       <Button variant="outline" size="sm">
@@ -1093,6 +1136,32 @@ ${doc.content}
           </div>
         </main>
       </div>
+
+      {/* Regeneration Modal */}
+      <RegenerateVersionModal
+        open={showRegenerateModal}
+        onOpenChange={setShowRegenerateModal}
+        documentId={documentId}
+        currentTemplate={document?.template_id}
+        currentTemplateName={
+          document?.metadata?.templateId || 
+          (document && 'template_name' in document ? (document as { template_name?: string }).template_name : undefined)
+        }
+        currentVersion={document ? String(document.version) : '1.0'}
+        projectId={document?.project_id}
+        onRegenerate={handleRegenerate}
+      />
+
+      {/* Regeneration Progress */}
+      <RegenerationProgress
+        jobId={progress?.jobId || null}
+        progress={progress}
+        isRegenerating={isRegenerating}
+        error={regenerationError}
+        result={result}
+        onClose={resetRegeneration}
+        documentId={documentId}
+      />
     </div>
   )
 }

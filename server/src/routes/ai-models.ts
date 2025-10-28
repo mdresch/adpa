@@ -84,7 +84,7 @@ router.get("/providers/:providerId/models/:modelId",
   requirePermission("ai.read"),
   validateParams(Joi.object({ 
     providerId: Joi.string().uuid().required(),
-    modelId: Joi.string().uuid().required()
+    modelId: Joi.string().required() // Allow any string (e.g., "llama3.1:latest" for Ollama)
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -246,7 +246,7 @@ router.put("/providers/:providerId/models/:modelId",
   requirePermission("ai.configure"),
   validateParams(Joi.object({ 
     providerId: Joi.string().uuid().required(),
-    modelId: Joi.string().uuid().required()
+    modelId: Joi.string().required() // Allow any string (e.g., "llama3.1:latest" for Ollama)
   })),
   validate(Joi.object({
     modelName: Joi.string().optional(),
@@ -353,7 +353,7 @@ router.delete("/providers/:providerId/models/:modelId",
   requirePermission("ai.configure"),
   validateParams(Joi.object({ 
     providerId: Joi.string().uuid().required(),
-    modelId: Joi.string().uuid().required()
+    modelId: Joi.string().required() // Allow any string (e.g., "llama3.1:latest" for Ollama)
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -394,7 +394,7 @@ router.post("/providers/:providerId/models/:modelId/test",
   requirePermission("ai.read"),
   validateParams(Joi.object({ 
     providerId: Joi.string().uuid().required(),
-    modelId: Joi.string().uuid().required()
+    modelId: Joi.string().required() // Allow any string (e.g., "llama3.1:latest" for Ollama)
   })),
   validate(Joi.object({
     testType: Joi.string().valid('connectivity', 'performance', 'quality', 'capability', 'edge_cases').optional(),

@@ -45,7 +45,7 @@ export class ContextAwareAIService {
    */
   static async generateWithContext(request: EnhancedAIRequest): Promise<EnhancedAIResponse> {
     try {
-      logger.info(`Starting context-aware AI generation for user ${request.user_id}`)
+      logger.debug(`[Context-AI] Starting for user ${request.user_id}`)
 
       // Validate the enhanced request
       this.validateEnhancedRequest(request)
@@ -96,7 +96,7 @@ export class ContextAwareAIService {
         }
       }
 
-      logger.info(`Context-aware AI generation completed. Context: ${contextResponse.context_summary}`)
+      logger.info(`[Context-AI] ✓ ${contextResponse.context_summary}`)
 
       return enhancedResponse
 

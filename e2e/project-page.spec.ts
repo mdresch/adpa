@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { getProjectUrl } from './helpers/test-config';
 
 /**
  * E2E Tests for Project Page - All Refactored Tab Components
@@ -12,14 +13,15 @@ import { test, expect } from '@playwright/test';
  * - TimelineTab (322 lines) ✅
  * 
  * All components render correctly and functionality is intact.
+ * 
+ * NOTE: These tests use authenticated state from auth.setup.ts
  */
 
 test.describe('Project Page - Component Refactoring Tests', () => {
-  // Skip if not authenticated
+  // Tests will automatically use authenticated state from auth.setup.ts
   test.beforeEach(async ({ page }) => {
-    // Note: In a real scenario, you'd handle authentication here
-    // For now, we'll check if the page loads
-    await page.goto('/projects');
+    // Navigate directly to test project (already authenticated)
+    await page.goto(getProjectUrl());
     
     // Wait for page to be ready
     await page.waitForLoadState('networkidle');
@@ -47,32 +49,18 @@ test.describe('Project Page - Component Refactoring Tests', () => {
   });
 
   test.describe('Documents Tab (DocumentsTab component)', () => {
-    test('should display documents tab by default', async ({ page, context }) => {
-      // Create a page that might have a project
-      const projectsPage = await context.newPage();
-      await projectsPage.goto('/projects');
+    test('should display documents tab by default', async ({ page }) => {
+      // Documents tab should be active by default (already navigated in beforeEach)
       
-      // Look for first project link
-      const projectLink = projectsPage.locator('a[href*="/projects/"]').first();
+      // Check for document stats cards
+      const stats = page.locator('text=/Total Documents|Draft|Published|In Review/');
+      await expect(stats.first()).toBeVisible();
       
-      if (await projectLink.count() > 0) {
-        await projectLink.click();
-        await projectsPage.waitForLoadState('networkidle');
-        
-        // Documents tab should be active by default
-        const documentsTab = projectsPage.locator('[role="tab"][value="documents"], [data-state="active"]');
-        await expect(documentsTab.first()).toBeVisible();
-        
-        // Check for document stats cards
-        const stats = projectsPage.locator('text=/Total Documents|Draft|Published|In Review/');
-        expect(await stats.count()).toBeGreaterThan(0);
-        
-        // Check for search input
-        await expect(projectsPage.locator('input[placeholder*="Search"]')).toBeVisible();
-        
-        // Check for "Generate Document" button
-        await expect(projectsPage.locator('button:has-text("Generate Document")')).toBeVisible();
-      }
+      // Check for search input
+      await expect(page.locator('input[placeholder*="Search"]')).toBeVisible();
+      
+      // Check for "Generate Document" button
+      await expect(page.locator('button:has-text("Generate Document")')).toBeVisible();
     });
   });
 

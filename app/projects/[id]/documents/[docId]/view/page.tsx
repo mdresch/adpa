@@ -47,6 +47,12 @@ import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
 import { jsPDF } from "jspdf"
 import { Document, Packer, Paragraph, TextRun } from "docx"
 import { saveAs } from "file-saver"
+import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
+import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
+import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
+import { VersionListDialog } from "@/components/documents/VersionListDialog"
+import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
+import { Sparkles } from "@/components/ui/icons-shim"
 
 interface DocumentData {
   id: string
@@ -58,6 +64,9 @@ interface DocumentData {
   status: string
   project_id: string
   project_name: string
+  template_id?: string
+  template_name?: string
+  version?: number
   word_count: number
   character_count: number
   compression_ratio: number
@@ -105,7 +114,8 @@ export default function ProjectDocumentViewer() {
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
   const [editedContent, setEditedContent] = useState("")
-  const [showVersions, setShowVersions] = useState(false)
+  const [showVersions, setShowVersions] = useState(false) // For dialog
+  const [showVersionsDialog, setShowVersionsDialog] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [showSummaries, setShowSummaries] = useState(false)
   const [summaries, setSummaries] = useState<any[]>([])
@@ -114,6 +124,12 @@ export default function ProjectDocumentViewer() {
   const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [selectedVersion, setSelectedVersion] = useState<VersionData | null>(null)
+  const [showVersionDialog, setShowVersionDialog] = useState(false)
+
+  // Document regeneration hook
+  const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -328,19 +344,61 @@ The ADPA system represents a significant advancement in document processing auto
         const documentData = documentResponse
         const versionsData = versionsResponse || []
         
+        console.log('[DocumentView] Loaded document:', documentData)
+        console.log('[DocumentView] Loaded versions count:', versionsData.length)
+        console.log('[DocumentView] All versions with timestamps:', versionsData.map((v: any) => ({
+          version: v.version,
+          created_at: v.created_at,
+          timestamp: new Date(v.created_at).getTime()
+        })))
+        
+        // 🆕 Find the latest version (highest semantic version)
+        let latestVersion = null
+        if (versionsData.length > 0) {
+          // Helper function to parse semantic version
+          const parseVersion = (versionStr: string): [number, number, number] => {
+            const parts = versionStr.split('.').map(p => parseInt(p, 10) || 0)
+            return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+          }
+          
+          // Sort by semantic version DESC (highest version first)
+          const sortedVersions = [...versionsData].sort((a: any, b: any) => {
+            const [aMajor, aMinor, aPatch] = parseVersion(a.version)
+            const [bMajor, bMinor, bPatch] = parseVersion(b.version)
+            
+            // Compare major, then minor, then patch
+            if (bMajor !== aMajor) return bMajor - aMajor
+            if (bMinor !== aMinor) return bMinor - aMinor
+            return bPatch - aPatch
+          })
+          latestVersion = sortedVersions[0]
+          console.log('[DocumentView] Sorted versions (highest first):', sortedVersions.map((v: any) => v.version))
+          console.log('[DocumentView] Latest version selected:', latestVersion.version, 'created:', latestVersion.created_at)
+        }
+        
+        // Use latest version's content if available, otherwise fall back to current document
+        const dataToDisplay = latestVersion || documentData
+        
+        console.log('[DocumentView] Displaying version:', latestVersion ? latestVersion.version : 'current')
+        console.log('[DocumentView] Version contents available:', versionsData.map((v: any) => ({
+          version: v.version,
+          hasContent: !!v.content,
+          contentLength: v.content?.length || 0
+        })))
+        
         // Convert content to string if it's an object
         let contentString = ''
-        if (typeof documentData.content === 'string') {
-          contentString = documentData.content
-        } else if (documentData.content && typeof documentData.content === 'object') {
+        if (typeof dataToDisplay.content === 'string') {
+          contentString = dataToDisplay.content
+        } else if (dataToDisplay.content && typeof dataToDisplay.content === 'object') {
           // Handle different content object formats
-          if (documentData.content.text) {
-            contentString = documentData.content.text
-          } else if (documentData.content.markdown) {
-            contentString = documentData.content.markdown
+          if (dataToDisplay.content.text) {
+            contentString = dataToDisplay.content.text
+          } else if (dataToDisplay.content.markdown) {
+            contentString = dataToDisplay.content.markdown
           } else {
             // Fallback: stringify the object
-            contentString = JSON.stringify(documentData.content, null, 2)
+            contentString = JSON.stringify(dataToDisplay.content, null, 2)
           }
         }
         
@@ -359,14 +417,17 @@ The ADPA system represents a significant advancement in document processing auto
         }
         
         // 🆕 Extract source_documents from metadata if available
-        const sourceDocuments = documentData.metadata?.source_documents || 
-                               documentData.generation_metadata?.source_documents || 
+        const sourceDocuments = dataToDisplay.metadata?.source_documents || 
+                               dataToDisplay.generation_metadata?.source_documents || 
                                []
         
         setDocument({
-          ...documentData, 
+          ...documentData, // Keep base document metadata (project_id, template_id, etc.)
+          ...dataToDisplay, // Override with latest version's data
           content: contentString,
-          source_documents: sourceDocuments // Expose at top level for UI
+          source_documents: sourceDocuments, // Expose at top level for UI
+          loaded_version: latestVersion ? latestVersion.version : null,
+          loaded_version_id: latestVersion ? latestVersion.id : null
         })
         setVersions(versionsData)
         setEditedContent(contentString)
@@ -564,6 +625,80 @@ The ADPA system represents a significant advancement in document processing auto
     setIsEditing(false)
   }
 
+  // Handle document regeneration
+  const handleRegenerate = async (params: {
+    templateId?: string
+    provider: string
+    model?: string
+    versionType: 'patch' | 'minor' | 'major'
+    temperature: number
+  }) => {
+    if (!documentId) return
+    
+    try {
+      await regenerate({
+        documentId,
+        ...params
+      })
+    } catch (error) {
+      console.error('Regeneration failed:', error)
+    }
+  }
+
+  // Refresh document when regeneration completes
+  useEffect(() => {
+    const reloadAfterRegeneration = async () => {
+      if (result && documentId && projectId) {
+        try {
+          // Reload document and versions
+          const [documentResponse, versionsResponse] = await Promise.all([
+            apiClient.get(`/projects/${projectId}/documents/${documentId}`),
+            apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
+          ])
+          
+          const documentData = documentResponse
+          const versionsData = versionsResponse || []
+          
+          // Convert content to string
+          let contentString = ''
+          if (typeof documentData.content === 'string') {
+            contentString = documentData.content
+          } else if (documentData.content && typeof documentData.content === 'object') {
+            if (documentData.content.text) {
+              contentString = documentData.content.text
+            } else if (documentData.content.markdown) {
+              contentString = documentData.content.markdown
+            } else {
+              contentString = JSON.stringify(documentData.content, null, 2)
+            }
+          }
+          
+          const sourceDocuments = documentData.metadata?.source_documents || 
+                                 documentData.generation_metadata?.source_documents || 
+                                 []
+          
+          setDocument({
+            ...documentData, 
+            content: contentString,
+            source_documents: sourceDocuments
+          })
+          setVersions(versionsData)
+          setEditedContent(contentString)
+          
+          if (contentString) {
+            extractTableOfContents(contentString)
+          }
+          
+          toast.success('Document reloaded with new version!')
+        } catch (error) {
+          console.error('Failed to reload after regeneration:', error)
+        }
+      }
+    }
+    
+    reloadAfterRegeneration()
+  }, [result, documentId, projectId])
+
   const addComment = async () => {
     if (!newComment.trim() || !document) return
     
@@ -708,10 +843,13 @@ The ADPA system represents a significant advancement in document processing auto
                       <Button 
                         variant="outline" 
                         size="sm" 
-                        onClick={() => setShowVersions(!showVersions)}
+                        onClick={() => setShowVersionsDialog(true)}
                       >
                         <History className="h-4 w-4 mr-2" />
-                        Versions ({versions.length})
+                        {(document as any).loaded_version 
+                          ? `v${(document as any).loaded_version} (${versions.length} versions)`
+                          : `Versions (${versions.length})`
+                        }
                       </Button>
                       <Button 
                         variant="outline" 
@@ -757,6 +895,15 @@ The ADPA system represents a significant advancement in document processing auto
                                 <Button variant="outline" size="sm" onClick={shareDocument}>
                                   <Share className="h-4 w-4 mr-2" />
                                   Share
+                                </Button>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm" 
+                                  onClick={() => setShowRegenerateModal(true)}
+                                  disabled={isRegenerating}
+                                >
+                                  <Sparkles className="h-4 w-4 mr-2" />
+                                  Create new Version
                                 </Button>
                                 <Link href={`/projects/${projectId}/documents/${documentId}`}>
                                   <Button variant="default" size="sm">
@@ -1055,12 +1202,12 @@ The ADPA system represents a significant advancement in document processing auto
                         <div className="space-y-2">
                           <p className="text-sm font-medium">File Information</p>
                           <div className="space-y-2 text-sm">
-                            {(document as any).version && (
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Version:</span>
-                                <span className="font-medium">v{(document as any).version}</span>
-                              </div>
-                            )}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Version:</span>
+                              <span className="font-medium font-mono">
+                                v{(document as any).loaded_version || (versions.length > 0 ? versions[versions.length - 1].version : ((document as any).version || '1.0'))}
+                              </span>
+                            </div>
                             {((document as any).template_id || templateName) && (
                               <div className="flex justify-between">
                                 <span className="text-muted-foreground">Template:</span>
@@ -1739,7 +1886,14 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">
                                   {version.word_count} words
                                 </span>
-                                <Button variant="outline" size="sm">
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => {
+                                    setSelectedVersion(version)
+                                    setShowVersionDialog(true)
+                                  }}
+                                >
                                   <Eye className="h-4 w-4" />
                                 </Button>
                               </div>
@@ -1935,6 +2089,68 @@ The ADPA system represents a significant advancement in document processing auto
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {/* Regeneration Modal */}
+      <RegenerateVersionModal
+        open={showRegenerateModal}
+        onOpenChange={setShowRegenerateModal}
+        documentId={documentId}
+        currentTemplate={document?.template_id}
+        currentTemplateName={document?.template_name || (document as any)?.metadata?.templateName}
+        currentVersion={document?.version?.toString() || '1.0'}
+        projectId={projectId}
+        onRegenerate={handleRegenerate}
+      />
+
+      {/* Regeneration Progress */}
+      <RegenerationProgress
+        jobId={progress?.jobId || null}
+        progress={progress}
+        isRegenerating={isRegenerating}
+        error={regenerationError}
+        result={result}
+        onClose={resetRegeneration}
+        documentId={documentId}
+      />
+
+      {/* Version List Dialog */}
+      <VersionListDialog
+        open={showVersionsDialog}
+        onOpenChange={setShowVersionsDialog}
+        versions={versions}
+        documentName={document?.name}
+        loadedVersionId={(document as any)?.loaded_version_id}
+        onLoadVersion={(version) => {
+          // Load selected version into the main view with all metadata
+          setDocument({
+            ...document!,
+            content: version.content,
+            version: parseFloat(version.version),
+            word_count: version.word_count || 0,
+            // Preserve version metadata
+            generation_metadata: version.metadata || {},
+            // Add version tracking
+            loaded_version: version.version,
+            loaded_version_id: version.id
+          } as any)
+          setEditedContent(version.content)
+          extractTableOfContents(version.content)
+          
+          // Show success with metadata info
+          const metaInfo = version.metadata?.provider 
+            ? ` (Generated with ${version.metadata.provider}${version.metadata.model ? ` - ${version.metadata.model}` : ''})`
+            : ''
+          toast.success(`Loaded version ${version.version}${metaInfo}`)
+        }}
+      />
+
+      {/* Version Viewer Dialog (standalone - for inline history) */}
+      <VersionViewerDialog
+        open={showVersionDialog}
+        onOpenChange={setShowVersionDialog}
+        version={selectedVersion}
+        documentName={document?.name}
+      />
     </div>
   )
 }

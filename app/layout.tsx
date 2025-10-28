@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/toaster"
 import { Toaster as SonnerToaster } from "@/components/ui/sonner"
 import { RouteProgress } from "@/components/route-progress"
+import { MobileWarning } from "@/components/MobileWarning"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { WebSocketProvider } from "@/contexts/WebSocketContext"
 import RoomStatusList from "@/components/room-status-list"
@@ -31,6 +32,8 @@ export default function RootLayout({
               <Suspense fallback={null}>
                 <RouteProgress />
               </Suspense>
+              {/* Mobile/Phone Warning (tablets OK!) */}
+              <MobileWarning mode="warning" />
               {children}
               {/* Floating realtime rooms panel */}
               <div className="fixed bottom-6 right-6 z-50 w-80">

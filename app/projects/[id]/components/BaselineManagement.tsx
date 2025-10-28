@@ -25,7 +25,8 @@ import {
   Copy,
   Lightbulb,
   Database,
-  BarChart3
+  BarChart3,
+  DollarSign
 } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
@@ -379,7 +380,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm space-y-1">
-                      {baseline.scope_baseline.key_deliverables && (
+                      {baseline.scope_baseline.key_deliverables && Array.isArray(baseline.scope_baseline.key_deliverables) && (
                         <div>
                           <p className="font-medium">Deliverables:</p>
                           <ul className="list-disc list-inside text-muted-foreground">
@@ -402,7 +403,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="text-sm space-y-1">
-                      {baseline.technical_baseline.technology_stack && (
+                      {baseline.technical_baseline.technology_stack && Array.isArray(baseline.technical_baseline.technology_stack) && (
                         <div>
                           <p className="font-medium">Tech Stack:</p>
                           <div className="flex flex-wrap gap-1 mt-1">
@@ -428,8 +429,31 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       {baseline.timeline_baseline.project_duration && (
                         <p><span className="font-medium">Duration:</span> {baseline.timeline_baseline.project_duration}</p>
                       )}
-                      {baseline.timeline_baseline.key_milestones && (
+                      {Array.isArray(baseline.timeline_baseline.key_milestones) && baseline.timeline_baseline.key_milestones.length > 0 && (
                         <p className="text-muted-foreground">{baseline.timeline_baseline.key_milestones.length} milestones</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {baseline.cost_baseline && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Cost Baseline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      {baseline.cost_baseline.total_budget && (
+                        <p className="text-lg font-semibold text-green-600">
+                          {typeof baseline.cost_baseline.total_budget === 'number' 
+                            ? `$${baseline.cost_baseline.total_budget.toLocaleString()}`
+                            : baseline.cost_baseline.total_budget}
+                        </p>
+                      )}
+                      {baseline.cost_baseline.cost_categories && Array.isArray(baseline.cost_baseline.cost_categories) && (
+                        <p className="text-muted-foreground text-xs">{baseline.cost_baseline.cost_categories.length} cost categories</p>
                       )}
                     </CardContent>
                   </Card>
@@ -679,7 +703,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
               </div>
 
               {/* Quality Audit: Red Flags */}
-              {viewingBaseline.ai_processing_metadata?.quality_audit?.red_flags?.length > 0 && (
+              {viewingBaseline.ai_processing_metadata?.quality_audit?.red_flags && Array.isArray(viewingBaseline.ai_processing_metadata.quality_audit.red_flags) && viewingBaseline.ai_processing_metadata.quality_audit.red_flags.length > 0 && (
                 <Card className="border-red-200 bg-red-50">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold text-red-900 flex items-center gap-2">
@@ -700,7 +724,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                         <div className="space-y-1 text-xs">
                           <p className="font-medium text-gray-900">Evidence:</p>
                           <ul className="list-disc list-inside text-gray-600 space-y-0.5">
-                            {flag.evidence.map((e: string, i: number) => (
+                            {Array.isArray(flag.evidence) && flag.evidence.map((e: string, i: number) => (
                               <li key={i}>{e}</li>
                             ))}
                           </ul>
@@ -721,7 +745,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
               )}
 
               {/* Quality Audit: Warnings */}
-              {viewingBaseline.ai_processing_metadata?.quality_audit?.warnings?.length > 0 && (
+              {viewingBaseline.ai_processing_metadata?.quality_audit?.warnings && Array.isArray(viewingBaseline.ai_processing_metadata.quality_audit.warnings) && viewingBaseline.ai_processing_metadata.quality_audit.warnings.length > 0 && (
                 <Card className="border-yellow-200 bg-yellow-50">
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm font-semibold text-yellow-900 flex items-center gap-2">
@@ -817,7 +841,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.scope_baseline.key_deliverables && (
+                    {viewingBaseline.scope_baseline.key_deliverables && Array.isArray(viewingBaseline.scope_baseline.key_deliverables) && (
                       <div>
                         <p className="font-medium mb-1">Key Deliverables:</p>
                         <ul className="list-disc list-inside space-y-1">
@@ -827,7 +851,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                         </ul>
                       </div>
                     )}
-                    {viewingBaseline.scope_baseline.scope_boundaries && (
+                    {viewingBaseline.scope_baseline.scope_boundaries && Array.isArray(viewingBaseline.scope_baseline.scope_boundaries) && (
                       <div>
                         <p className="font-medium mb-1">Scope Boundaries:</p>
                         <ul className="list-disc list-inside space-y-1">
@@ -851,7 +875,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.technical_baseline.technology_stack && (
+                    {viewingBaseline.technical_baseline.technology_stack && Array.isArray(viewingBaseline.technical_baseline.technology_stack) && (
                       <div>
                         <p className="font-medium mb-1">Technology Stack:</p>
                         <div className="flex flex-wrap gap-1">
@@ -894,7 +918,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <BaselineGanttChart baseline={viewingBaseline} viewMode="Month" />
                     </div>
                     
-                    {viewingBaseline.timeline_baseline.key_milestones && (
+                    {viewingBaseline.timeline_baseline.key_milestones && Array.isArray(viewingBaseline.timeline_baseline.key_milestones) && (
                       <div className="pt-4 border-t">
                         <p className="font-medium mb-1">Key Milestones:</p>
                         <ul className="list-disc list-inside space-y-1">
@@ -902,6 +926,71 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                             <li key={i} className="text-muted-foreground">
                               {typeof m === 'string' ? m : (m.name || `Milestone ${i + 1}`)}
                               {m.target_date && ` - ${m.target_date}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Cost Baseline */}
+              {viewingBaseline.cost_baseline && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Cost Baseline
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    {viewingBaseline.cost_baseline.total_budget && (
+                      <div>
+                        <p className="font-medium mb-1">Total Budget:</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {typeof viewingBaseline.cost_baseline.total_budget === 'number' 
+                            ? `$${viewingBaseline.cost_baseline.total_budget.toLocaleString()}`
+                            : viewingBaseline.cost_baseline.total_budget}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {viewingBaseline.cost_baseline.budget_by_phase && (
+                      <div>
+                        <p className="font-medium mb-1">Budget by Phase:</p>
+                        <div className="space-y-1">
+                          {Object.entries(viewingBaseline.cost_baseline.budget_by_phase).map(([phase, amount]: [string, any], i: number) => (
+                            <div key={i} className="flex justify-between items-center text-sm">
+                              <span className="text-muted-foreground">{phase}:</span>
+                              <span className="font-semibold">
+                                {typeof amount === 'number' ? `$${amount.toLocaleString()}` : amount}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {viewingBaseline.cost_baseline.contingency_reserve && (
+                      <div className="pt-2 border-t">
+                        <p className="font-medium mb-1">Contingency Reserve:</p>
+                        <p className="text-lg font-semibold text-orange-600">
+                          {typeof viewingBaseline.cost_baseline.contingency_reserve === 'number'
+                            ? `$${viewingBaseline.cost_baseline.contingency_reserve.toLocaleString()}`
+                            : viewingBaseline.cost_baseline.contingency_reserve}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {viewingBaseline.cost_baseline.cost_categories && Array.isArray(viewingBaseline.cost_baseline.cost_categories) && (
+                      <div className="pt-2 border-t">
+                        <p className="font-medium mb-1">Cost Categories:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {viewingBaseline.cost_baseline.cost_categories.map((category: any, i: number) => (
+                            <li key={i} className="text-muted-foreground">
+                              {typeof category === 'string' ? category : (category.name || category.category)}
+                              {category.amount && ` - $${typeof category.amount === 'number' ? category.amount.toLocaleString() : category.amount}`}
                             </li>
                           ))}
                         </ul>
@@ -921,7 +1010,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.success_criteria.kpis && (
+                    {viewingBaseline.success_criteria.kpis && Array.isArray(viewingBaseline.success_criteria.kpis) && (
                       <div>
                         <p className="font-medium mb-1">KPIs:</p>
                         <ul className="list-disc list-inside space-y-1">

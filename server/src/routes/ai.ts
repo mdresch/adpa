@@ -1131,7 +1131,7 @@ router.get(
       
       // Get provider details from database
       const providerResult = await pool.query(
-        "SELECT id, name, provider_type, api_key_encrypted, available_models, default_model FROM ai_providers WHERE id = $1",
+        "SELECT id, name, provider_type, api_key_encrypted, available_models, default_model, configuration FROM ai_providers WHERE id = $1",
         [id]
       )
       
@@ -1141,7 +1141,8 @@ router.get(
       
       const provider = providerResult.rows[0]
       
-      if (!provider.api_key_encrypted || provider.api_key_encrypted.includes('your-')) {
+      // Skip API key check for Ollama (local provider doesn't need API key)
+      if (provider.provider_type !== 'ollama' && (!provider.api_key_encrypted || provider.api_key_encrypted.includes('your-'))) {
         return res.status(400).json({ 
           error: "No valid API key configured",
           message: "Please configure a valid API key before discovering models"
@@ -1166,6 +1167,59 @@ router.get(
             await mistralConnector.initializeProviders()
             discoveredModels = await mistralConnector.getAvailableModels(provider.name)
             break
+          case 'ollama': {
+            // Discover models from Ollama API
+            const ollamaEndpoint = provider.configuration?.endpoint || 
+                                  provider.configuration?.baseURL || 
+                                  'http://localhost:11434'
+            log.info(`Fetching Ollama models from ${ollamaEndpoint}/api/tags`)
+            
+            try {
+              const ollamaResponse = await fetch(`${ollamaEndpoint}/api/tags`)
+              if (!ollamaResponse.ok) {
+                throw new Error(`Ollama API returned ${ollamaResponse.status}: ${ollamaResponse.statusText}`)
+              }
+              
+              const ollamaData = await ollamaResponse.json()
+              
+              // Transform Ollama models to our format
+              interface OllamaModel {
+                name?: string
+                model?: string
+                size: number
+                digest: string
+                modified_at: string
+                details?: {
+                  family?: string
+                  parameter_size?: string
+                  quantization_level?: string
+                }
+              }
+              
+              discoveredModels = (ollamaData.models || []).map((model: OllamaModel) => ({
+                id: model.name || model.model,
+                name: model.name || model.model,
+                description: `${model.details?.family || 'Unknown'} - ${model.details?.parameter_size || 'Unknown size'} - ${(model.size / 1024 / 1024 / 1024).toFixed(2)}GB`,
+                context_window: 8192, // Default, can be adjusted per model
+                capabilities: ['chat', 'completion'],
+                metadata: {
+                  size: model.size,
+                  digest: model.digest,
+                  modified_at: model.modified_at,
+                  family: model.details?.family,
+                  parameter_size: model.details?.parameter_size,
+                  quantization: model.details?.quantization_level
+                }
+              }))
+              
+              log.info(`Discovered ${discoveredModels.length} Ollama models`)
+            } catch (fetchError: unknown) {
+              const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error'
+              log.error(`Failed to fetch models from Ollama:`, fetchError)
+              throw new Error(`Failed to connect to Ollama at ${ollamaEndpoint}: ${errorMessage}`)
+            }
+            break
+          }
           case 'groq':
           case 'anthropic':
           case 'azure':

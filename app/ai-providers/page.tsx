@@ -101,6 +101,24 @@ export default function AIProviders() {
 
   // Add dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  
+  // Real usage analytics state
+  const [usageAnalytics, setUsageAnalytics] = useState<{
+    summary?: {
+      totalRequests: number
+      totalTokens: number
+      avgResponseTime: number
+      overallSuccessRate: number
+    }
+    providerStats?: Array<{
+      provider_name: string
+      provider_type: string
+      usage_count: number
+      total_tokens: number
+      avg_response_time: number
+      success_rate: number
+    }>
+  }>({})
 
   const [formState, setFormState] = useState<{
     id: string
@@ -419,9 +437,25 @@ export default function AIProviders() {
     }
   }
 
+  // Load usage analytics
+  const loadUsageAnalytics = async (): Promise<void> => {
+    try {
+      const response = await apiClient.get<any>('/ai-analytics/models?period=30d')
+      if (response.success) {
+        setUsageAnalytics({
+          summary: response.summary,
+          providerStats: response.providerStats
+        })
+      }
+    } catch (error) {
+      console.error('Error loading usage analytics:', error)
+    }
+  }
+
   useEffect(() => {
     loadProviders()
     loadHealthDashboard()
+    loadUsageAnalytics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1335,9 +1369,11 @@ export default function AIProviders() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold">12,479</div>
-                      <p className="text-xs text-green-600 mt-2">
-                        ↑ 12% from last week
+                      <div className="text-3xl font-bold">
+                        {usageAnalytics.summary?.totalRequests ? usageAnalytics.summary.totalRequests.toLocaleString() : 0}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Last 30 days
                       </p>
                     </CardContent>
                   </Card>
@@ -1349,9 +1385,18 @@ export default function AIProviders() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold">2.4M</div>
-                      <p className="text-xs text-blue-600 mt-2">
-                        ↑ 8% from last week
+                      <div className="text-3xl font-bold">
+                        {(() => {
+                          const tokens = usageAnalytics.summary?.totalTokens || 0
+                          if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`
+                          if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`
+                          return tokens.toString()
+                        })()}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        {usageAnalytics.summary?.totalRequests 
+                          ? `${Math.round(usageAnalytics.summary.totalTokens / usageAnalytics.summary.totalRequests).toLocaleString()} avg/request`
+                          : 'No data yet'}
                       </p>
                     </CardContent>
                   </Card>
@@ -1363,9 +1408,15 @@ export default function AIProviders() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold">2.3s</div>
-                      <p className="text-xs text-green-600 mt-2">
-                        ↓ 0.5s faster
+                      <div className="text-3xl font-bold">
+                        {(() => {
+                          const ms = usageAnalytics.summary?.avgResponseTime || 0
+                          if (ms < 1000) return `${Math.round(ms)}ms`
+                          return `${(ms / 1000).toFixed(1)}s`
+                        })()}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Average latency
                       </p>
                     </CardContent>
                   </Card>
@@ -1377,9 +1428,13 @@ export default function AIProviders() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="text-3xl font-bold text-green-600">99.8%</div>
-                      <p className="text-xs text-green-600 mt-2">
-                        ↑ 0.3% improvement
+                      <div className={`text-3xl font-bold ${(usageAnalytics.summary?.overallSuccessRate || 0) >= 95 ? 'text-green-600' : 'text-yellow-600'}`}>
+                        {usageAnalytics.summary?.overallSuccessRate 
+                          ? `${usageAnalytics.summary.overallSuccessRate.toFixed(1)}%`
+                          : 'N/A'}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        Overall reliability
                       </p>
                     </CardContent>
                   </Card>
@@ -1394,44 +1449,52 @@ export default function AIProviders() {
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-4">
-                      {providers.filter(p => p.enabled).map((provider, index) => (
-                        <div key={provider.id}>
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-3">
-                              <div className={`w-3 h-3 rounded-full ${
-                                index === 0 ? 'bg-blue-500' :
-                                index === 1 ? 'bg-green-500' :
-                                index === 2 ? 'bg-purple-500' : 'bg-orange-500'
-                              }`} />
-                              <span className="font-medium">{provider.name}</span>
-                              <Badge variant="outline" className="text-xs capitalize">{provider.type}</Badge>
+                    {usageAnalytics.providerStats && usageAnalytics.providerStats.length > 0 ? (
+                      <div className="space-y-4">
+                        {usageAnalytics.providerStats.map((providerStat, index) => {
+                          const totalRequests = usageAnalytics.summary?.totalRequests || 0
+                          const percentage = totalRequests > 0 ? (providerStat.usage_count / totalRequests) * 100 : 0
+                          const usageCount = typeof providerStat.usage_count === 'number' ? providerStat.usage_count : parseInt(providerStat.usage_count) || 0
+                          
+                          return (
+                            <div key={providerStat.provider_name}>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-3">
+                                  <div className={`w-3 h-3 rounded-full ${
+                                    index === 0 ? 'bg-blue-500' :
+                                    index === 1 ? 'bg-green-500' :
+                                    index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                  }`} />
+                                  <span className="font-medium">{providerStat.provider_name}</span>
+                                  <Badge variant="outline" className="text-xs capitalize">{providerStat.provider_type}</Badge>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                  <span className="text-sm text-muted-foreground">
+                                    {usageCount.toLocaleString()} requests ({percentage.toFixed(1)}%)
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="w-full bg-muted rounded-full h-2.5">
+                                <div 
+                                  className={`h-2.5 rounded-full transition-all ${
+                                    index === 0 ? 'bg-blue-500' :
+                                    index === 1 ? 'bg-green-500' :
+                                    index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                  }`}
+                                  style={{ width: `${percentage}%` }}
+                                ></div>
+                              </div>
                             </div>
-                            <div className="flex items-center gap-4">
-                              <span className="text-sm text-muted-foreground">
-                                {index === 0 ? '5,234 requests (42%)' :
-                                 index === 1 ? '4,123 requests (33%)' :
-                                 index === 2 ? '2,122 requests (17%)' : '1,000 requests (8%)'}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-full bg-muted rounded-full h-2.5">
-                            <div 
-                              className={`h-2.5 rounded-full transition-all ${
-                                index === 0 ? 'bg-blue-500' :
-                                index === 1 ? 'bg-green-500' :
-                                index === 2 ? 'bg-purple-500' : 'bg-orange-500'
-                              }`}
-                              style={{
-                                width: index === 0 ? '42%' :
-                                       index === 1 ? '33%' :
-                                       index === 2 ? '17%' : '8%'
-                              }}
-                            ></div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-sm text-muted-foreground">No usage data yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Generate documents to see provider usage</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 
@@ -1439,39 +1502,63 @@ export default function AIProviders() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Cost Breakdown</CardTitle>
+                      <CardTitle>Token Distribution</CardTitle>
                       <CardDescription>
-                        Estimated costs by provider (last 30 days)
+                        Token usage by provider (last 30 days)
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-3">
-                        {providers.filter(p => p.enabled).slice(0, 3).map((provider, index) => (
-                          <div key={provider.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                            <div className="flex items-center gap-3">
-                              <span className="capitalize font-medium">{provider.name}</span>
-                            </div>
-                            <div className="text-right">
-                              <div className="font-bold">
-                                ${index === 0 ? '142.50' : index === 1 ? '98.30' : '65.20'}
+                      {usageAnalytics.providerStats && usageAnalytics.providerStats.length > 0 ? (
+                        <div className="space-y-3">
+                          {usageAnalytics.providerStats.map((providerStat, index) => {
+                            const totalTokens = usageAnalytics.summary?.totalTokens || 0
+                            const tokens = typeof providerStat.total_tokens === 'number' ? providerStat.total_tokens : parseInt(providerStat.total_tokens) || 0
+                            const percentage = totalTokens > 0 ? (tokens / totalTokens) * 100 : 0
+                            
+                            return (
+                              <div key={providerStat.provider_name} className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <span className="capitalize font-medium">{providerStat.provider_name}</span>
+                                </div>
+                                <div className="text-right">
+                                  <div className="font-bold">
+                                    {(() => {
+                                      if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`
+                                      if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`
+                                      return tokens.toString()
+                                    })()} tokens
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {percentage.toFixed(1)}% of total
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-xs text-muted-foreground">
-                                {index === 0 ? '42%' : index === 1 ? '29%' : '19%'} of total
-                              </div>
+                            )
+                          })}
+                          
+                          <div className="pt-3 border-t">
+                            <div className="flex items-center justify-between font-bold">
+                              <span>Total Tokens Processed</span>
+                              <span className="text-xl text-primary">
+                                {(() => {
+                                  const total = usageAnalytics.summary?.totalTokens || 0
+                                  if (total >= 1000000) return `${(total / 1000000).toFixed(1)}M`
+                                  if (total >= 1000) return `${(total / 1000).toFixed(1)}K`
+                                  return total.toString()
+                                })()}
+                              </span>
                             </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Across {usageAnalytics.summary?.totalRequests || 0} requests
+                            </p>
                           </div>
-                        ))}
-                        
-                        <div className="pt-3 border-t">
-                          <div className="flex items-center justify-between font-bold">
-                            <span>Total Estimated Cost</span>
-                            <span className="text-xl text-primary">$342.80</span>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Based on 2.4M tokens processed
-                          </p>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                          <p className="text-sm text-muted-foreground">No token usage data yet</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
 
@@ -1483,71 +1570,106 @@ export default function AIProviders() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        {providers.filter(p => p.enabled).slice(0, 3).map((provider) => (
-                          <div key={provider.id} className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm font-medium">{provider.name}</span>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs">
-                                  {provider.type === 'groq' ? '⚡ Fastest' :
-                                   provider.type === 'google' ? '⭐ Balanced' :
-                                   provider.type === 'mistral' ? '🎯 Quality' : '✨ Premium'}
-                                </Badge>
-                              </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2 text-xs">
-                              <div className="p-2 bg-muted rounded">
-                                <div className="text-muted-foreground">Avg Speed</div>
-                                <div className="font-semibold">
-                                  {provider.type === 'groq' ? '0.9s' :
-                                   provider.type === 'google' ? '2.3s' :
-                                   provider.type === 'mistral' ? '3.1s' : '2.8s'}
+                      {usageAnalytics.providerStats && usageAnalytics.providerStats.length > 0 ? (
+                        <div className="space-y-4">
+                          {usageAnalytics.providerStats.map((providerStat) => {
+                            const responseTime = typeof providerStat.avg_response_time === 'number' 
+                              ? providerStat.avg_response_time 
+                              : parseFloat(providerStat.avg_response_time) || 0
+                            const successRate = typeof providerStat.success_rate === 'number'
+                              ? providerStat.success_rate
+                              : parseFloat(providerStat.success_rate) || 0
+                              
+                            return (
+                              <div key={providerStat.provider_name} className="space-y-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium">{providerStat.provider_name}</span>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant="outline" className="text-xs">
+                                      {responseTime < 1500 ? '⚡ Fastest' :
+                                       responseTime < 3000 ? '⭐ Fast' :
+                                       successRate >= 95 ? '🎯 Reliable' : '✨ Active'}
+                                    </Badge>
+                                  </div>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div className="p-2 bg-muted rounded">
+                                    <div className="text-muted-foreground">Avg Speed</div>
+                                    <div className="font-semibold">
+                                      {responseTime < 1000 ? `${Math.round(responseTime)}ms` : `${(responseTime / 1000).toFixed(1)}s`}
+                                    </div>
+                                  </div>
+                                  <div className="p-2 bg-muted rounded">
+                                    <div className="text-muted-foreground">Reliability</div>
+                                    <div className={`font-semibold ${successRate >= 95 ? 'text-green-600' : 'text-yellow-600'}`}>
+                                      {successRate.toFixed(1)}%
+                                    </div>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="p-2 bg-muted rounded">
-                                <div className="text-muted-foreground">Reliability</div>
-                                <div className="font-semibold text-green-600">100%</div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <Clock className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                          <p className="text-sm text-muted-foreground">No performance data yet</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 </div>
 
-                {/* Usage Timeline */}
+                {/* Usage Summary */}
                 <Card>
                   <CardHeader>
-                    <CardTitle>Usage Timeline</CardTitle>
+                    <CardTitle>Usage Summary</CardTitle>
                     <CardDescription>
-                      Request volume over the past 7 days
+                      Provider request distribution and efficiency
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => (
-                        <div key={day} className="flex items-center gap-4">
-                          <div className="w-12 text-sm text-muted-foreground">{day}</div>
-                          <div className="flex-1">
-                            <div className="w-full bg-muted rounded-full h-6 relative">
-                              <div 
-                                className="h-6 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-end pr-3 transition-all"
-                                style={{
-                                  width: `${[65, 72, 68, 85, 78, 45, 38][index]}%`
-                                }}
-                              >
-                                <span className="text-xs font-medium text-white">
-                                  {[1200, 1350, 1280, 1580, 1450, 850, 720][index]} reqs
-                                </span>
+                    {usageAnalytics.providerStats && usageAnalytics.providerStats.length > 0 ? (
+                      <div className="space-y-4">
+                        {usageAnalytics.providerStats.map((providerStat) => {
+                          const tokens = typeof providerStat.total_tokens === 'number' ? providerStat.total_tokens : parseInt(providerStat.total_tokens) || 0
+                          const requests = typeof providerStat.usage_count === 'number' ? providerStat.usage_count : parseInt(providerStat.usage_count) || 0
+                          const tokensPerRequest = requests > 0 ? Math.round(tokens / requests) : 0
+                          
+                          return (
+                            <div key={providerStat.provider_name} className="p-4 border rounded-lg">
+                              <div className="flex items-center justify-between mb-3">
+                                <span className="font-medium">{providerStat.provider_name}</span>
+                                <Badge variant="outline" className="capitalize">{providerStat.provider_type}</Badge>
+                              </div>
+                              <div className="grid grid-cols-3 gap-3 text-sm">
+                                <div className="text-center p-2 bg-muted rounded">
+                                  <div className="text-muted-foreground text-xs">Requests</div>
+                                  <div className="font-bold text-blue-600">{requests.toLocaleString()}</div>
+                                </div>
+                                <div className="text-center p-2 bg-muted rounded">
+                                  <div className="text-muted-foreground text-xs">Tokens/Req</div>
+                                  <div className="font-bold text-green-600">{tokensPerRequest.toLocaleString()}</div>
+                                </div>
+                                <div className="text-center p-2 bg-muted rounded">
+                                  <div className="text-muted-foreground text-xs">Success</div>
+                                  <div className={`font-bold ${(typeof providerStat.success_rate === 'number' ? providerStat.success_rate : parseFloat(providerStat.success_rate) || 0) >= 95 ? 'text-green-600' : 'text-yellow-600'}`}>
+                                    {(typeof providerStat.success_rate === 'number' ? providerStat.success_rate : parseFloat(providerStat.success_rate) || 0).toFixed(1)}%
+                                  </div>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                        <p className="text-sm text-muted-foreground">No usage summary data yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Generate documents to see provider statistics</p>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
 

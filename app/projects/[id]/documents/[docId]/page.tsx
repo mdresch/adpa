@@ -125,6 +125,9 @@ import {
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { toast } from "sonner"
+import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
+import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
+import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 
 interface Document {
   id: string
@@ -216,6 +219,10 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     rating: 5,
     category: "general"
   })
+  const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+
+  // Document regeneration hook
+  const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
 
   // Metadata form state
   const [metadataForm, setMetadataForm] = useState<DocumentMetadata>({
@@ -526,6 +533,33 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     }
   }
 
+  // Handle document regeneration
+  const handleRegenerate = async (params: {
+    templateId?: string
+    provider: string
+    model?: string
+    versionType: 'patch' | 'minor' | 'major'
+    temperature: number
+  }) => {
+    if (!docId) return
+    
+    try {
+      await regenerate({
+        documentId: docId,
+        ...params
+      })
+    } catch (error) {
+      console.error('Regeneration failed:', error)
+    }
+  }
+
+  // Refresh document when regeneration completes
+  useEffect(() => {
+    if (result) {
+      void fetchDocument()
+    }
+  }, [result])
+
   // Format file size
   const formatFileSize = (bytes: number) => {
     if (bytes === 0) return '0 Bytes'
@@ -802,6 +836,15 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       <Button variant="outline" className="w-full justify-start">
                         <History className="h-4 w-4 mr-2" />
                         Version History
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => setShowRegenerateModal(true)}
+                        disabled={isRegenerating}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Create new Version
                       </Button>
                       <Button variant="outline" className="w-full justify-start">
                         <ExternalLink className="h-4 w-4 mr-2" />
@@ -2030,6 +2073,29 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
           </PageTransition>
         </main>
       </div>
+
+      {/* Regeneration Modal */}
+      <RegenerateVersionModal
+        open={showRegenerateModal}
+        onOpenChange={setShowRegenerateModal}
+        documentId={docId}
+        currentTemplate={document?.template_id}
+        currentTemplateName={document?.template_name}
+        currentVersion={document?.version?.toString() || '1.0'}
+        projectId={projectId}
+        onRegenerate={handleRegenerate}
+      />
+
+      {/* Regeneration Progress */}
+      <RegenerationProgress
+        jobId={progress?.jobId || null}
+        progress={progress}
+        isRegenerating={isRegenerating}
+        error={regenerationError}
+        result={result}
+        onClose={resetRegeneration}
+        documentId={docId}
+      />
     </div>
   )
 }

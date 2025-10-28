@@ -22,7 +22,7 @@ router.get("/", authenticateToken, async (req, res) => {
              GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
-      LEFT JOIN documents d ON p.id = d.project_id
+      LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
       WHERE 1=1
     `
 
@@ -47,7 +47,7 @@ router.get("/", authenticateToken, async (req, res) => {
       params.push(`%${search}%`)
     }
 
-    query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST`
+    query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST, p.name ASC, p.id ASC`
 
     paramCount++
     query += ` LIMIT $${paramCount}`
@@ -107,12 +107,12 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user?.id
 
-    // Get project details with document count
+    // Get project details with document count (exclude AI-regenerated versions)
     const projectResult = await pool.query(
       `
       SELECT p.*, 
              u.name as owner_name,
-             COUNT(DISTINCT d.id) as documents_count,
+             COUNT(DISTINCT d.id) FILTER (WHERE d.parent_document_id IS NULL) as documents_count,
              MAX(d.updated_at) as last_document_update
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
@@ -127,19 +127,20 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Project not found" })
     }
 
-    // Get recent documents (last 10) with title only
+    // Get recent documents (last 10) with title only - exclude AI regenerations
     const documentsResult = await pool.query(
       `
       SELECT id, title, template_id, created_at, updated_at
       FROM documents 
       WHERE project_id = $1 
+        AND parent_document_id IS NULL
       ORDER BY updated_at DESC 
       LIMIT 10
     `,
       [id]
     )
 
-    // Get recent changes (last 5 documents created/updated)
+    // Get recent changes (last 5 documents created/updated) - exclude AI regenerations
     const recentChangesResult = await pool.query(
       `
       SELECT 
@@ -152,6 +153,7 @@ router.get("/:id/context", authenticateToken, async (req, res) => {
         END as change_type
       FROM documents 
       WHERE project_id = $1 
+        AND parent_document_id IS NULL
       ORDER BY GREATEST(created_at, updated_at) DESC 
       LIMIT 5
     `,
@@ -215,13 +217,14 @@ router.get("/:id", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Project not found" })
     }
 
-    // Get project documents
+    // Get project documents (only original/parent documents, hide AI-regenerated versions)
     const documentsResult = await pool.query(
       `
       SELECT d.*, u.name as created_by_name
       FROM documents d
       LEFT JOIN users u ON d.created_by = u.id
-      WHERE d.project_id = $1
+      WHERE d.project_id = $1 
+        AND d.parent_document_id IS NULL
       ORDER BY d.created_at DESC
     `,
       [id],
@@ -542,7 +545,7 @@ router.get("/:projectId/documents/:documentId", authenticateToken, async (req, r
   }
 })
 
-// Get document versions
+// Get document versions (now queries documents table, not document_versions)
 router.get("/:projectId/documents/:documentId/versions", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
@@ -559,18 +562,26 @@ router.get("/:projectId/documents/:documentId/versions", authenticateToken, asyn
       return res.status(404).json({ error: "Document not found" })
     }
 
+    // Use the get_document_versions function to get all related documents
     const query = `
       SELECT 
-        dv.id,
-        dv.version,
-        dv.created_at,
-        COALESCE(u.name, 'Unknown') as author,
-        dv.changes,
-        dv.word_count
-      FROM document_versions dv
-      LEFT JOIN users u ON dv.author_id = u.id
-      WHERE dv.document_id = $1
-      ORDER BY dv.created_at DESC
+        id,
+        name,
+        semantic_version as version,
+        content,
+        created_at,
+        updated_at,
+        author_name as author,
+        word_count,
+        is_regeneration,
+        generation_metadata as metadata,
+        is_current,
+        CASE 
+          WHEN is_regeneration THEN 'Regenerated with updated project context'
+          ELSE name
+        END as changes
+      FROM get_document_versions($1::UUID)
+      ORDER BY created_at DESC
     `
 
     const result = await pool.query(query, [documentId])
@@ -589,56 +600,103 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
     const { content, title, tags } = req.body
     const userId = (req as any).user.id
 
-    // First, verify the document exists and belongs to the project
-    const verifyQuery = `
-      SELECT id FROM documents 
-      WHERE id = $1 AND project_id = $2
+    // Get the current document with template info
+    const documentQuery = `
+      SELECT d.*, 
+             t.name as template_name,
+             t.prompt_version as current_template_version
+      FROM documents d 
+      LEFT JOIN templates t ON d.template_id = t.id
+      WHERE d.id = $1 AND d.project_id = $2
     `
-    const verifyResult = await pool.query(verifyQuery, [documentId, projectId])
+    const docResult = await pool.query(documentQuery, [documentId, projectId])
 
-    if (verifyResult.rows.length === 0) {
+    if (docResult.rows.length === 0) {
       return res.status(404).json({ error: "Document not found" })
     }
 
-    // Update the document
-    const updateQuery = `
-      UPDATE documents 
-      SET 
-        content = $1,
-        title = COALESCE($2, title),
-        tags = COALESCE($3, tags),
-        updated_at = NOW()
-      WHERE id = $4 AND project_id = $5
-      RETURNING *
-    `
+    const currentDoc = docResult.rows[0]
+    
+    // Calculate next patch version
+    const versionResult = await pool.query(
+      `SELECT calculate_next_document_version($1::UUID, 'patch'::VARCHAR(10)) as next_version`,
+      [documentId]
+    )
+    const nextVersion = versionResult.rows[0].next_version
 
-    const result = await pool.query(updateQuery, [
-      content,
-      title,
-      tags ? JSON.stringify(tags) : null,
-      documentId,
-      projectId
-    ])
+    // Calculate word count
+    const wordCount = content ? content.trim().split(/\s+/).filter(Boolean).length : 0
 
-    // Create a new version entry
-    const versionQuery = `
-      INSERT INTO document_versions (id, document_id, version, changes, word_count, author_id)
-      VALUES ($1, $2, $3, $4, $5, $6)
-    `
+    // Create a new document with patch version (manual edit)
+    const newDocResult = await pool.query(
+      `INSERT INTO documents (
+        id,
+        name,
+        content,
+        template_id,
+        template_version,
+        project_id,
+        created_by,
+        author,
+        parent_document_id,
+        is_regeneration,
+        semantic_version,
+        version,
+        word_count,
+        generation_metadata,
+        status,
+        title,
+        tags,
+        created_at,
+        updated_at
+      ) VALUES (
+        gen_random_uuid(),
+        $1,
+        $2,
+        $3,
+        $4,
+        $5,
+        $6,
+        $7,
+        $8,
+        false,
+        $9,
+        1,
+        $10,
+        $11,
+        $12,
+        $13,
+        $14,
+        NOW(),
+        NOW()
+      ) RETURNING *`,
+      [
+        `${currentDoc.name} (${nextVersion})`, // Append version to name
+        content,
+        currentDoc.template_id,
+        currentDoc.template_version || currentDoc.current_template_version?.toString() || '1',
+        projectId,
+        userId,
+        req.user?.name || 'User', // Author name
+        documentId, // Link to parent
+        nextVersion,
+        wordCount,
+        JSON.stringify({
+          edit_type: 'manual',
+          edited_at: new Date().toISOString(),
+          edited_by: userId,
+          parent_version: currentDoc.semantic_version || currentDoc.version?.toString() || '1.0.0',
+          changes: 'Manual edit'
+        }),
+        currentDoc.status,
+        title || currentDoc.title || currentDoc.name,
+        tags ? JSON.stringify(tags) : currentDoc.tags
+      ]
+    )
 
-    const wordCount = content ? content.split(/\s+/).length : 0
-    const versionNumber = `1.${Date.now()}` // Simple versioning for now
+    log.info(`Manual edit saved as patch version ${nextVersion}`)
 
-    await pool.query(versionQuery, [
-      uuidv4(),
-      documentId,
-      versionNumber,
-      "Document updated",
-      wordCount,
-      userId
-    ])
-
-    res.json(result.rows[0])
+    res.json(newDocResult.rows[0])
   } catch (error) {
     log.error("Update document error:", error)
     res.status(500).json({ error: "Internal server error" })
