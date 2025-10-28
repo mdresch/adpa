@@ -1,3 +1,106 @@
+/*
+ * Seed Baseline Data
+ * Creates initial baseline snapshots per project if none exist yet.
+ */
+import { pool } from '../src/database/connection'
+import { logger } from '../src/utils/logger'
+
+async function main(): Promise<void> {
+  const client = await pool.connect()
+  try {
+    logger.info('Seeding baseline data...')
+
+    const projectsRes = await client.query(`
+      SELECT id, name
+      FROM projects
+      WHERE deleted_at IS NULL OR deleted_at IS NULL
+    `)
+
+    let created = 0
+    for (const p of projectsRes.rows) {
+      const projectId: string = p.id
+
+      // Skip if baseline already exists
+      const existing = await client.query(
+        'SELECT 1 FROM baselines WHERE project_id = $1 LIMIT 1',
+        [projectId]
+      )
+      if (existing.rows.length > 0) continue
+
+      // Derive simple snapshots from available data
+      const scopeSnapshot = await deriveScopeSnapshot(client, projectId)
+      const scheduleSnapshot = await deriveScheduleSnapshot(client, projectId)
+      const costSnapshot = await deriveCostSnapshot(client, projectId)
+
+      await client.query(
+        `
+        INSERT INTO baselines (
+          project_id,
+          baseline_type,
+          scope_snapshot,
+          schedule_snapshot,
+          cost_snapshot,
+          created_at
+        ) VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, NOW())
+        `,
+        [projectId, 'initial', JSON.stringify(scopeSnapshot), JSON.stringify(scheduleSnapshot), JSON.stringify(costSnapshot)]
+      )
+      created++
+    }
+
+    logger.info('Baseline seeding completed', { projects: projectsRes.rowCount, created })
+  } catch (err: any) {
+    logger.error('Baseline seeding failed', { error: err.message })
+    process.exitCode = 1
+  } finally {
+    client.release()
+  }
+}
+
+async function deriveScopeSnapshot(client: any, projectId: string): Promise<Record<string, unknown>> {
+  const requirements = await client.query(
+    `SELECT COUNT(*)::int AS total FROM requirements WHERE project_id = $1`,
+    [projectId]
+  )
+  const risks = await client.query(
+    `SELECT COUNT(*)::int AS total FROM risks WHERE project_id = $1`,
+    [projectId]
+  )
+  return {
+    requirement_count: requirements.rows[0]?.total ?? 0,
+    risk_count: risks.rows[0]?.total ?? 0
+  }
+}
+
+async function deriveScheduleSnapshot(client: any, projectId: string): Promise<Record<string, unknown>> {
+  const milestones = await client.query(
+    `SELECT COUNT(*)::int AS total, AVG(variance_days)::float AS avg_variance FROM milestones WHERE project_id = $1`,
+    [projectId]
+  )
+  return {
+    milestone_count: milestones.rows[0]?.total ?? 0,
+    avg_variance_days: milestones.rows[0]?.avg_variance ?? 0
+  }
+}
+
+async function deriveCostSnapshot(client: any, projectId: string): Promise<Record<string, unknown>> {
+  // If a proper cost table exists, prefer it; else derive simple proxies from documents metadata
+  const docs = await client.query(
+    `SELECT AVG(NULLIF(output_tokens,0))::float AS avg_tokens, COUNT(*)::int AS doc_count
+     FROM documents WHERE project_id = $1`,
+    [projectId]
+  )
+  return {
+    avg_output_tokens: docs.rows[0]?.avg_tokens ?? 0,
+    document_count: docs.rows[0]?.doc_count ?? 0
+  }
+}
+
+// Execute if invoked directly
+if (require.main === module) {
+  main().then(() => process.exit()).catch(() => process.exit(1))
+}
+
 /**
  * Seed Baseline Tables with Realistic Data
  * Tests that baseline_components, baseline_drift_detection, and baseline_compliance_reviews work
