@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS regeneration_jobs (
   started_at TIMESTAMP,
   completed_at TIMESTAMP,
   error_message TEXT,
-  new_version_id UUID REFERENCES document_versions(id) ON DELETE SET NULL,
+  new_version_id UUID REFERENCES documents(id) ON DELETE SET NULL,
   context_summary JSONB,
   metadata JSONB
 );

@@ -429,7 +429,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       {baseline.timeline_baseline.project_duration && (
                         <p><span className="font-medium">Duration:</span> {baseline.timeline_baseline.project_duration}</p>
                       )}
-                      {baseline.timeline_baseline.key_milestones && (
+                      {Array.isArray(baseline.timeline_baseline.key_milestones) && baseline.timeline_baseline.key_milestones.length > 0 && (
                         <p className="text-muted-foreground">{baseline.timeline_baseline.key_milestones.length} milestones</p>
                       )}
                     </CardContent>

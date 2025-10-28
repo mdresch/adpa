@@ -14,10 +14,13 @@ setup('authenticate', async ({ page }) => {
   // Navigate to login page
   await page.goto('/auth/login');
   
+  // Get credentials from environment variables (fallback to defaults for local dev)
+  const email = process.env.TEST_USER_EMAIL || 'admin@adpa.com';
+  const password = process.env.TEST_USER_PASSWORD || 'admin123';
+  
   // Fill in login credentials
-  // Using credentials from your actual login page (lines 184, 202)
-  await page.fill('input[name="email"]', 'admin@adpa.com');
-  await page.fill('input[name="password"]', 'admin123');
+  await page.fill('input[name="email"]', email);
+  await page.fill('input[name="password"]', password);
   
   // Click login button (your form uses "Sign In" text - line 247)
   await page.click('button[type="submit"]:has-text("Sign In")');

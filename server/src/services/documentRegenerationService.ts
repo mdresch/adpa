@@ -126,9 +126,10 @@ export class DocumentRegenerationService {
           [projectId, params.documentId]
         )
         stats = contextStats.rows[0]
-      } catch (error: any) {
+      } catch (error: unknown) {
         // Handle missing tables gracefully
-        log.warn('Could not fetch all context stats, fetching available data', { error: error.message })
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+        log.warn('Could not fetch all context stats, fetching available data', { error: errorMessage })
         
         try {
           // Try without baselines table
@@ -140,8 +141,9 @@ export class DocumentRegenerationService {
             [projectId, params.documentId]
           )
           stats = contextStats.rows[0]
-        } catch (fallbackError: any) {
-          log.warn('Could not fetch context stats, continuing without them', { error: fallbackError.message })
+        } catch (fallbackError: unknown) {
+          const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : 'Unknown error'
+          log.warn('Could not fetch context stats, continuing without them', { error: fallbackMessage })
           // Continue with default stats
         }
       }
@@ -341,7 +343,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
 
       log.info('Document regeneration job completed successfully')
       
-    } catch (error) {
+    } catch (error: unknown) {
       log.error('Document regeneration failed:', error)
       
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'

@@ -29,6 +29,10 @@ export interface AIGenerateRequest {
   template_id?: string
   variables?: Record<string, any>
   system_prompt?: string
+  // Analytics tracking (optional)
+  userId?: string
+  projectId?: string
+  documentId?: string
 }
 
 export interface AIGenerateResponse {
@@ -461,7 +465,7 @@ class AIService {
               prompt_tokens: Math.ceil(promptLength / 4),
               completion_tokens: Math.ceil(text.length / 4),
               total_tokens: estimatedTokens,
-            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
           logger.info(`[AI] ✓ Google AI/${request.model || 'gemini-2.5-flash'} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
@@ -522,7 +526,7 @@ class AIService {
               prompt_tokens: mistralResult.usage?.promptTokens || 0,
               completion_tokens: mistralResult.usage?.completionTokens || 0,
               total_tokens: mistralResult.usage?.totalTokens || 0,
-            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
           logger.info(`[AI] ✓ Mistral AI/${modelName} - ${mistralResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
@@ -586,7 +590,7 @@ class AIService {
               prompt_tokens: deepseekResult.usage?.promptTokens || 0,
               completion_tokens: deepseekResult.usage?.completionTokens || 0,
               total_tokens: deepseekResult.usage?.totalTokens || 0,
-            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
           logger.info(`[AI] ✓ DeepSeek/${modelName} - ${deepseekResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
@@ -650,7 +654,7 @@ class AIService {
               prompt_tokens: moonshotResult.usage?.promptTokens || 0,
               completion_tokens: moonshotResult.usage?.completionTokens || 0,
               total_tokens: moonshotResult.usage?.totalTokens || 0,
-            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
           logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${moonshotResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
@@ -740,9 +744,9 @@ class AIService {
                 },
                 responseTimeMs,
                 true,
-                (request as any).userId,
-                (request as any).projectId,
-                (request as any).documentId
+                request.userId,
+                request.projectId,
+                request.documentId
               )
             })
             
@@ -792,7 +796,7 @@ class AIService {
           prompt_tokens: (result.usage as any).promptTokens || 0,
           completion_tokens: (result.usage as any).completionTokens || 0,
           total_tokens: result.usage.totalTokens,
-        }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+        }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
       })
 
       logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
@@ -1016,16 +1020,22 @@ class AIService {
 
   /**
    * Calculate estimated cost based on provider pricing
+   * TODO: Move pricing to database configuration table for easier updates
+   * @see https://github.com/mdresch/adpa/issues/XXX
    */
   private calculateCost(providerType: string, tokens: number): number {
-    // Approximate cost per 1M tokens (in USD) - Updated pricing as of 2024
+    // Approximate cost per 1M tokens (in USD) - Updated October 2025
+    // NOTE: These rates should be moved to a database table for dynamic updates
     const costPer1M: Record<string, number> = {
       'openai': 30.00,      // GPT-4o average
       'google': 0.50,       // Gemini 2.5 Flash
       'anthropic': 24.00,   // Claude Sonnet
       'mistral': 0.70,      // Mistral Small
+      'deepseek': 0.60,     // DeepSeek Chat (competitive pricing)
+      'moonshot': 12.00,    // Kimi K2 128K context
       'groq': 0.00,         // Groq free tier
       'azure': 30.00,       // Similar to OpenAI
+      'ollama': 0.00,       // Local deployment - FREE
     }
     
     const rate = costPer1M[providerType.toLowerCase()] || 10.00
