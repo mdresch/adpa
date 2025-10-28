@@ -372,6 +372,12 @@ export default function AIProviders() {
     digest: string
     modified_at: string
   }>> => {
+    // Only attempt to connect to Ollama in development
+    if (typeof window !== 'undefined' && !window.location.hostname.includes('localhost') && !window.location.hostname.includes('127.0.0.1')) {
+      console.log('Skipping Ollama connection in production environment')
+      return []
+    }
+
     try {
       const response = await fetch('http://localhost:11434/api/tags', {
         method: 'GET',
