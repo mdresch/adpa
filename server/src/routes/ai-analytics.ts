@@ -143,6 +143,16 @@ router.get("/models",
         ORDER BY avg_tokens_per_request DESC
       `)
       
+      // Debug: Check for suspicious token counts
+      log.info(`📊 Provider stats raw data:`, {
+        providers: providerStats.rows.map(p => ({
+          name: p.provider_name,
+          usage_count: p.usage_count,
+          total_tokens: p.total_tokens,
+          total_tokens_type: typeof p.total_tokens
+        }))
+      })
+      
       const analytics = {
         success: true,
         period,
@@ -153,14 +163,16 @@ router.get("/models",
         errorPatterns: errorPatterns.rows,
         tokenEfficiency: tokenEfficiency.rows,
         summary: {
-          totalRequests: providerStats.rows.reduce((sum, p) => sum + p.usage_count, 0),
-          totalTokens: providerStats.rows.reduce((sum, p) => sum + p.total_tokens, 0),
-          avgResponseTime: providerStats.rows.reduce((sum, p) => sum + p.avg_response_time, 0) / providerStats.rows.length || 0,
-          overallSuccessRate: providerStats.rows.reduce((sum, p) => sum + p.success_rate, 0) / providerStats.rows.length || 0
+          totalRequests: providerStats.rows.reduce((sum, p) => sum + parseInt(p.usage_count), 0),
+          totalTokens: providerStats.rows.reduce((sum, p) => sum + parseInt(p.total_tokens || 0), 0),
+          avgResponseTime: providerStats.rows.reduce((sum, p) => sum + parseFloat(p.avg_response_time || 0), 0) / providerStats.rows.length || 0,
+          overallSuccessRate: providerStats.rows.reduce((sum, p) => sum + parseFloat(p.success_rate || 0), 0) / providerStats.rows.length || 0
         }
       }
       
-      log.info(`AI analytics fetched successfully for period: ${period}`)
+      log.info(`AI analytics fetched successfully for period: ${period}`, {
+        summary: analytics.summary
+      })
       res.json(analytics)
       
     } catch (error) {
