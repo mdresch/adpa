@@ -78,7 +78,7 @@ if (this.retrieval) {
 }
 ```
 
-### 4. ✅ Added Semantic Search to All Analyzers
+### 4. ✅ Added Semantic Search to ALL Analyzers (Complete Coverage)
 
 #### ProjectContextAnalyzer
 **File**: `server/src/modules/contextGathering/analyzers/projectContextAnalyzer.ts`
@@ -103,6 +103,26 @@ if (this.retrieval) {
 - Semantic query: `'user generated documents writing style preferences successful patterns collaboration history'`
 - topK: **10 chunks** (smaller set for user-specific context)
 - Returns: User's relevant document history and patterns
+
+#### ExternalContextAnalyzer ⭐ NEW
+**File**: `server/src/modules/contextGathering/analyzers/externalContextAnalyzer.ts`
+
+**New Method**: `gatherSemanticExternalContext(projectId, query?)`
+- Semantic query: `'external references third-party integrations confluence sharepoint github documentation standards compliance'`
+- topK: **10 chunks** (smaller set for external references)
+- Returns: Semantically relevant external context and third-party integrations
+
+#### DocumentHistoryAnalyzer (RAG-Enabled Internally)
+**File**: `server/src/modules/contextGathering/analyzers/documentHistoryAnalyzer.ts`
+
+**RAG by Default**: `analyzeDocumentHistory()` now uses RAG semantic search as primary method
+- topK: **25 chunks**
+- Returns: Document history with semantic context embedded
+
+**✅ COMPLETE COVERAGE**: All 5 analyzers now have RAG-powered semantic search!
+- **Total Potential Chunks**: ~80 chunks per request (20+15+10+10+25)
+- **Weight in Stage 1**: 40% of total context
+- **Parallel Execution**: All semantic searches run concurrently via `Promise.all()`
 
 ### 5. ✅ Refactored ContextGatheringStage (5-Stage Pattern)
 **File**: `server/src/modules/contextGathering/contextGatheringStage.ts`
@@ -282,18 +302,22 @@ Post-Generation Drift Detection
    - Added `buildSemanticQuery()` method
 
 3. **`server/src/modules/contextGathering/analyzers/projectContextAnalyzer.ts`**
-   - Added `gatherSemanticProjectContext()` method
+   - Added `gatherSemanticProjectContext()` method (20 chunks)
 
 4. **`server/src/modules/contextGathering/analyzers/templateContextAnalyzer.ts`**
-   - Added `gatherSemanticTemplateExamples()` method
+   - Added `gatherSemanticTemplateExamples()` method (15 chunks)
 
 5. **`server/src/modules/contextGathering/analyzers/userProfileAnalyzer.ts`**
-   - Added `gatherSemanticUserHistory()` method
+   - Added `gatherSemanticUserHistory()` method (10 chunks)
 
-6. **`server/src/modules/contextGathering/contextGatheringStage.ts`**
+6. **`server/src/modules/contextGathering/analyzers/externalContextAnalyzer.ts`** ⭐ NEW
+   - Added `gatherSemanticExternalContext()` method (10 chunks)
+
+7. **`server/src/modules/contextGathering/contextGatheringStage.ts`**
    - Updated constructor to inject `ContextRetrievalService` into all analyzers
    - Refactored `execute()` method to 5-stage pattern
    - Added 5 new stage methods: `gatherRAGContext()`, `gatherBaselineContext()`, `gatherDirectContext()`, `gatherExternalContext()`, `optimizeAndMergeContext()`
+   - Updated `gatherRAGContext()` to call all 5 semantic analyzers in parallel
 
 ### Files NOT Modified (As Per Plan)
 1. **`server/src/services/queueService.ts`** (lines 388-426)
