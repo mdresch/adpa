@@ -17,15 +17,18 @@ const createRedisConfig = (host: string) => {
       }
     }
     
-    // Enable TLS for Upstash and other cloud providers
-    if (process.env.REDIS_TLS === "true" || process.env.REDIS_URL.includes('upstash.io')) {
+    // Enable TLS ONLY if URL protocol is rediss:// (secure Redis)
+    // Railway internal Redis uses redis:// (no TLS needed)
+    // External services like Upstash use rediss:// (TLS required)
+    if (process.env.REDIS_URL.startsWith('rediss://')) {
       config.socket.tls = true
       config.socket.rejectUnauthorized = false // For self-signed certificates
     }
     
     logger.info("Redis config (from REDIS_URL):", { 
       url: config.url.replace(/:[^:@]+@/, ':***@'), // Hide password in logs
-      tls: !!config.socket.tls 
+      tls: !!config.socket.tls,
+      protocol: process.env.REDIS_URL.split(':')[0]
     })
     return config
   }
