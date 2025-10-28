@@ -677,7 +677,7 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
         currentDoc.template_version || currentDoc.current_template_version?.toString() || '1',
         projectId,
         userId,
-        (req as any).user?.name || 'User', // Author name
+        req.user?.name || 'User', // Author name
         documentId, // Link to parent
         nextVersion,
         wordCount,

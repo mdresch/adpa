@@ -1370,7 +1370,7 @@ export default function AIProviders() {
                     </CardHeader>
                     <CardContent>
                       <div className="text-3xl font-bold">
-                        {usageAnalytics.summary?.totalRequests?.toLocaleString() || 0}
+                        {usageAnalytics.summary?.totalRequests ? usageAnalytics.summary.totalRequests.toLocaleString() : 0}
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">
                         Last 30 days

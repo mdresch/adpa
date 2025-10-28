@@ -1167,7 +1167,7 @@ router.get(
             await mistralConnector.initializeProviders()
             discoveredModels = await mistralConnector.getAvailableModels(provider.name)
             break
-          case 'ollama':
+          case 'ollama': {
             // Discover models from Ollama API
             const ollamaEndpoint = provider.configuration?.endpoint || 
                                   provider.configuration?.baseURL || 
@@ -1183,7 +1183,20 @@ router.get(
               const ollamaData = await ollamaResponse.json()
               
               // Transform Ollama models to our format
-              discoveredModels = (ollamaData.models || []).map((model: any) => ({
+              interface OllamaModel {
+                name?: string
+                model?: string
+                size: number
+                digest: string
+                modified_at: string
+                details?: {
+                  family?: string
+                  parameter_size?: string
+                  quantization_level?: string
+                }
+              }
+              
+              discoveredModels = (ollamaData.models || []).map((model: OllamaModel) => ({
                 id: model.name || model.model,
                 name: model.name || model.model,
                 description: `${model.details?.family || 'Unknown'} - ${model.details?.parameter_size || 'Unknown size'} - ${(model.size / 1024 / 1024 / 1024).toFixed(2)}GB`,
@@ -1200,11 +1213,13 @@ router.get(
               }))
               
               log.info(`Discovered ${discoveredModels.length} Ollama models`)
-            } catch (fetchError: any) {
+            } catch (fetchError: unknown) {
+              const errorMessage = fetchError instanceof Error ? fetchError.message : 'Unknown error'
               log.error(`Failed to fetch models from Ollama:`, fetchError)
-              throw new Error(`Failed to connect to Ollama at ${ollamaEndpoint}: ${fetchError.message}`)
+              throw new Error(`Failed to connect to Ollama at ${ollamaEndpoint}: ${errorMessage}`)
             }
             break
+          }
           case 'groq':
           case 'anthropic':
           case 'azure':

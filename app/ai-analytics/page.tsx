@@ -59,12 +59,12 @@ export default function AIAnalyticsPage() {
 
   const [timeRange, setTimeRange] = useState("30d")
   const [loading, setLoading] = useState(true)
-  const [analyticsData, setAnalyticsData] = useState<any>(null)
+  const [analyticsData, setAnalyticsData] = useState<Record<string, unknown> | null>(null)
   const [modelUsageData, setModelUsageData] = useState<ModelUsageData[]>([])
   const [providerStats, setProviderStats] = useState<ProviderStats[]>([])
   const [modelStats, setModelStats] = useState<ModelStats[]>([])
-  const [aiSummary, setAiSummary] = useState<any>(null)
-  const [hourlyUsage, setHourlyUsage] = useState<any[]>([])
+  const [aiSummary, setAiSummary] = useState<Record<string, unknown> | null>(null)
+  const [hourlyUsage, setHourlyUsage] = useState<Array<Record<string, unknown>>>([])
 
   const fetchAIAnalytics = async () => {
     try {
@@ -104,7 +104,7 @@ export default function AIAnalyticsPage() {
   }
 
   useEffect(() => {
-    fetchAIAnalytics()
+    void fetchAIAnalytics()
   }, [timeRange])
 
   const formatNumber = (num: number | string | undefined | null) => {

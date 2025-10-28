@@ -36,7 +36,7 @@ router.get("/models",
       }
       const interval = intervalMap[period as keyof typeof intervalMap]
       
-      log.info(`Fetching AI model analytics for period: ${period}`)
+      log.info(`Fetching AI model analytics for period: ${String(period)}`)
       
       // Get model usage over time
       const usageOverTime = await pool.query(`

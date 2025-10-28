@@ -125,7 +125,7 @@ export default function ProjectDocumentViewer() {
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
-  const [selectedVersion, setSelectedVersion] = useState<any>(null)
+  const [selectedVersion, setSelectedVersion] = useState<VersionData | null>(null)
   const [showVersionDialog, setShowVersionDialog] = useState(false)
 
   // Document regeneration hook

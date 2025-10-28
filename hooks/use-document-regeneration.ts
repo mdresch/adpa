@@ -28,6 +28,18 @@ interface RegenerationResult {
   versionNumber: string
 }
 
+interface JobResponse {
+  id: string
+  progress?: number
+  status: string
+  progress_message?: string
+  new_version_id?: string
+  error_message?: string
+  metadata?: {
+    versionNumber?: string
+  }
+}
+
 interface UseDocumentRegenerationReturn {
   regenerate: (params: RegenerationParams) => Promise<void>
   progress: RegenerationProgress | null
@@ -50,7 +62,7 @@ export function useDocumentRegeneration(): UseDocumentRegenerationReturn {
   // Poll for job status (fallback if WebSocket fails)
   const pollJobStatus = useCallback(async (jobId: string) => {
     try {
-      const response = await apiClient.request<{ job: any }>(
+      const response = await apiClient.request<{ job: JobResponse }>(
         `/document-generation/regenerate/job/${jobId}`
       )
 
@@ -191,7 +203,7 @@ export function useDocumentRegeneration(): UseDocumentRegenerationReturn {
 
         // Start polling as fallback
         pollingIntervalRef.current = setInterval(() => {
-          pollJobStatus(response.jobId)
+          void pollJobStatus(response.jobId)
         }, 3000) // Poll every 3 seconds
 
         toast.info('Regeneration started')

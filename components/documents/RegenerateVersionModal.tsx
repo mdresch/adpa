@@ -55,6 +55,7 @@ interface AIProvider {
   type?: string
   model?: string // Singular model property
   models?: string[] // Array of models
+  is_active?: boolean
 }
 
 export function RegenerateVersionModal({
@@ -107,7 +108,7 @@ export function RegenerateVersionModal({
       const providersResponse = await apiClient.request<AIProvider[]>('/ai-providers')
       
       if (Array.isArray(providersResponse)) {
-        const activeProviders = providersResponse.filter((p: any) => p.is_active)
+        const activeProviders = providersResponse.filter((p: AIProvider) => p.is_active === true)
         setProviders(activeProviders)
         
         // Set default provider (use provider.name like the working dialog)
@@ -302,7 +303,9 @@ export function RegenerateVersionModal({
           {/* Version Type */}
           <div className="space-y-3">
             <Label>Version Type *</Label>
-            <RadioGroup value={versionType} onValueChange={(val) => setVersionType(val as any)}>
+            <RadioGroup value={versionType} onValueChange={(val) => {
+              setVersionType(val as 'patch' | 'minor' | 'major')
+            }}>
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="patch" id="patch" />
                 <Label htmlFor="patch" className="font-normal cursor-pointer flex-1">
@@ -359,7 +362,9 @@ export function RegenerateVersionModal({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => {
+            onOpenChange(false)
+          }}>
             Cancel
           </Button>
           <Button 

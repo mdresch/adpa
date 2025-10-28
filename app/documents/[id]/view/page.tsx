@@ -482,7 +482,7 @@ ${doc.content}
   // Refresh versions when regeneration completes
   useEffect(() => {
     if (result && document?.project_id) {
-      fetchVersions(document.project_id)
+      void fetchVersions(document.project_id)
     }
   }, [result, document])
 
@@ -1143,8 +1143,11 @@ ${doc.content}
         onOpenChange={setShowRegenerateModal}
         documentId={documentId}
         currentTemplate={document?.template_id}
-        currentTemplateName={document?.metadata?.templateId || (document as any)?.template_name}
-        currentVersion={document?.version || '1.0'}
+        currentTemplateName={
+          document?.metadata?.templateId || 
+          (document && 'template_name' in document ? (document as { template_name?: string }).template_name : undefined)
+        }
+        currentVersion={document ? String(document.version) : '1.0'}
         projectId={document?.project_id}
         onRegenerate={handleRegenerate}
       />

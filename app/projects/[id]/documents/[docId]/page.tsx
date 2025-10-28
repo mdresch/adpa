@@ -556,7 +556,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
   // Refresh document when regeneration completes
   useEffect(() => {
     if (result) {
-      fetchDocument()
+      void fetchDocument()
     }
   }, [result])
 

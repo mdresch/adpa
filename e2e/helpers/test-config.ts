@@ -4,6 +4,8 @@
  * Centralized configuration for test users, projects, and environment settings.
  */
 
+import type { Page } from '@playwright/test'
+
 export const testConfig = {
   // Test user credentials
   // Set these in your environment or .env.test file
@@ -40,7 +42,7 @@ export function getProjectUrl(projectId?: string): string {
 /**
  * Login helper for tests that don't use auth.setup
  */
-export async function login(page: any) {
+export async function login(page: Page) {
   await page.goto('/auth/login');
   await page.fill('input[name="email"], input[type="email"]', testConfig.testUser.email);
   await page.fill('input[name="password"], input[type="password"]', testConfig.testUser.password);

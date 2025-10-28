@@ -245,7 +245,9 @@ export function VersionListDialog({
                         <Button 
                           variant="outline" 
                           size="sm"
-                          onClick={() => handleViewVersion(version)}
+                          onClick={() => {
+                            handleViewVersion(version)
+                          }}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -253,7 +255,9 @@ export function VersionListDialog({
                           <Button 
                             variant="default" 
                             size="sm"
-                            onClick={() => handleLoadVersion(version)}
+                            onClick={() => {
+                              handleLoadVersion(version)
+                            }}
                             title={version.content ? "Load this version" : "Content not available"}
                             disabled={!version.content}
                           >
