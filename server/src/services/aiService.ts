@@ -667,7 +667,7 @@ class AIService {
           }
         }
         
-        // FALLBACK: Try direct Ollama
+        // FALLBACK: Try direct Ollama (uses native API, not OpenAI-compatible)
         if (providerType === 'ollama') {
           logger.info('🔄 [AI-SERVICE] Falling back to direct Ollama...')
           
@@ -676,56 +676,91 @@ class AIService {
                                 providerResult.rows[0].configuration?.baseURL || 
                                 'http://localhost:11434'
           
-          logger.debug('[AI-SERVICE] Using direct Ollama (OpenAI-compatible)', { endpoint: ollamaEndpoint })
-          
-          const ollama = createOpenAI({ 
-            apiKey: 'ollama', // Ollama doesn't validate API keys for local connections
-            baseURL: `${ollamaEndpoint}/v1`
-          })
-          
           // Use the model specified in request, or default to llama3.1
           const modelName = request.model || 'llama3.1:latest'
           
-          logger.debug('[AI-SERVICE] Using Ollama model:', modelName)
+          logger.debug('[AI-SERVICE] Using Ollama native API', { endpoint: ollamaEndpoint, model: modelName })
           
-          const ollamaResult = await generateText({
-            model: ollama(modelName),
-            messages: [
-              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
-              { role: 'user' as const, content: userMessage }
-            ],
-            temperature: request.temperature,
-            maxTokens: request.max_tokens
-          })
-          
-          logger.debug('[AI-SERVICE] Ollama successful:', { contentLength: ollamaResult.text.length })
-          
-          // Update usage stats
-          await this.updateUsageStats(request.provider, {
-            total_tokens: ollamaResult.usage?.totalTokens || 0,
-          })
-          
-          // Track detailed AI usage for analytics (background, non-blocking)
-          const responseTimeMs = Date.now() - startTime
-          setImmediate(() => {
-            this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: ollamaResult.usage?.promptTokens || 0,
-              completion_tokens: ollamaResult.usage?.completionTokens || 0,
-              total_tokens: ollamaResult.usage?.totalTokens || 0,
-            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
-          })
-          
-          logger.info(`[AI] ✓ Ollama/${modelName} - ${ollamaResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
-          
-          return {
-            content: ollamaResult.text,
-            provider: request.provider,
-            model: modelName,
-            usage: {
-              prompt_tokens: ollamaResult.usage?.promptTokens || 0,
-              completion_tokens: ollamaResult.usage?.completionTokens || 0,
-              total_tokens: ollamaResult.usage?.totalTokens || 0,
-            },
+          try {
+            // Build messages for Ollama chat API
+            const messages = [
+              ...(systemMessage ? [{ role: 'system', content: systemMessage }] : []),
+              { role: 'user', content: userMessage }
+            ]
+            
+            // Call Ollama's native /api/chat endpoint
+            const ollamaResponse = await fetch(`${ollamaEndpoint}/api/chat`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                model: modelName,
+                messages,
+                stream: false,
+                options: {
+                  temperature: request.temperature || 0.7,
+                  num_predict: request.max_tokens || 4096
+                }
+              })
+            })
+            
+            if (!ollamaResponse.ok) {
+              const errorText = await ollamaResponse.text()
+              throw new Error(`Ollama API error (${ollamaResponse.status}): ${errorText}`)
+            }
+            
+            const ollamaData = await ollamaResponse.json()
+            const generatedText = ollamaData.message?.content || ollamaData.response || ''
+            
+            logger.debug('[AI-SERVICE] Ollama successful:', { 
+              contentLength: generatedText.length,
+              totalDuration: ollamaData.total_duration,
+              loadDuration: ollamaData.load_duration,
+              promptEvalCount: ollamaData.prompt_eval_count,
+              evalCount: ollamaData.eval_count
+            })
+            
+            // Calculate tokens (Ollama returns token counts in response)
+            const promptTokens = ollamaData.prompt_eval_count || 0
+            const completionTokens = ollamaData.eval_count || 0
+            const totalTokens = promptTokens + completionTokens
+            
+            // Update usage stats
+            await this.updateUsageStats(request.provider, { total_tokens: totalTokens })
+            
+            // Track detailed AI usage for analytics (background, non-blocking)
+            const responseTimeMs = Date.now() - startTime
+            setImmediate(() => {
+              this.trackAIUsageAsync(
+                request.provider,
+                modelName,
+                {
+                  prompt_tokens: promptTokens,
+                  completion_tokens: completionTokens,
+                  total_tokens: totalTokens,
+                },
+                responseTimeMs,
+                true,
+                (request as any).userId,
+                (request as any).projectId,
+                (request as any).documentId
+              )
+            })
+            
+            logger.info(`[AI] ✓ Ollama/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
+            
+            return {
+              content: generatedText,
+              provider: request.provider,
+              model: modelName,
+              usage: {
+                prompt_tokens: promptTokens,
+                completion_tokens: completionTokens,
+                total_tokens: totalTokens,
+              },
+            }
+          } catch (ollamaError: any) {
+            logger.error('[AI-SERVICE] Ollama native API failed:', ollamaError)
+            throw new Error(`Ollama generation failed: ${ollamaError.message}`)
           }
         }
         
