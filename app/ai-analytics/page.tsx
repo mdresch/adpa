@@ -510,10 +510,10 @@ export default function AIAnalyticsPage() {
                           {modelStats.length > 0 ? (
                             <div className="h-80">
                               <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={modelStats} layout="horizontal">
+                                <BarChart data={modelStats}>
                                   <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis type="number" />
-                                  <YAxis dataKey="model_name" type="category" width={150} />
+                                  <XAxis dataKey="model_name" angle={-45} textAnchor="end" height={100} />
+                                  <YAxis />
                                   <Tooltip />
                                   <Bar dataKey="usage_count" fill="#3B82F6" name="Requests" />
                                 </BarChart>
@@ -541,10 +541,10 @@ export default function AIAnalyticsPage() {
                           {modelStats.length > 0 ? (
                             <div className="h-80">
                               <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={modelStats} layout="horizontal">
+                                <BarChart data={modelStats}>
                                   <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis type="number" />
-                                  <YAxis dataKey="model_name" type="category" width={150} />
+                                  <XAxis dataKey="model_name" angle={-45} textAnchor="end" height={100} />
+                                  <YAxis tickFormatter={(value) => formatNumber(value)} />
                                   <Tooltip formatter={(value: any) => formatNumber(value)} />
                                   <Bar dataKey="total_tokens" fill="#10B981" name="Tokens" />
                                 </BarChart>
