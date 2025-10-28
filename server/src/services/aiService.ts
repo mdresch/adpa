@@ -15,7 +15,7 @@ import AnalyticsTrackingService from "./analyticsTrackingService"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot"
+  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "ollama"
   apiKey: string
   configuration?: any
 }
@@ -663,6 +663,68 @@ class AIService {
               prompt_tokens: moonshotResult.usage?.promptTokens || 0,
               completion_tokens: moonshotResult.usage?.completionTokens || 0,
               total_tokens: moonshotResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        // FALLBACK: Try direct Ollama
+        if (providerType === 'ollama') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Ollama...')
+          
+          // Ollama doesn't require API key for local connections
+          const ollamaEndpoint = providerResult.rows[0].configuration?.endpoint || 
+                                providerResult.rows[0].configuration?.baseURL || 
+                                'http://localhost:11434'
+          
+          logger.debug('[AI-SERVICE] Using direct Ollama (OpenAI-compatible)', { endpoint: ollamaEndpoint })
+          
+          const ollama = createOpenAI({ 
+            apiKey: 'ollama', // Ollama doesn't validate API keys for local connections
+            baseURL: `${ollamaEndpoint}/v1`
+          })
+          
+          // Use the model specified in request, or default to llama3.1
+          const modelName = request.model || 'llama3.1:latest'
+          
+          logger.debug('[AI-SERVICE] Using Ollama model:', modelName)
+          
+          const ollamaResult = await generateText({
+            model: ollama(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.debug('[AI-SERVICE] Ollama successful:', { contentLength: ollamaResult.text.length })
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: ollamaResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: ollamaResult.usage?.promptTokens || 0,
+              completion_tokens: ollamaResult.usage?.completionTokens || 0,
+              total_tokens: ollamaResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+          })
+          
+          logger.info(`[AI] ✓ Ollama/${modelName} - ${ollamaResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          return {
+            content: ollamaResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: ollamaResult.usage?.promptTokens || 0,
+              completion_tokens: ollamaResult.usage?.completionTokens || 0,
+              total_tokens: ollamaResult.usage?.totalTokens || 0,
             },
           }
         }

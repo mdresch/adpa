@@ -72,7 +72,7 @@ router.post('/', async (req, res) => {
     }
 
     // Validate provider type
-    const validTypes = ['openai', 'google', 'azure', 'anthropic', 'cohere', 'huggingface', 'deepseek', 'moonshot']
+    const validTypes = ['openai', 'google', 'azure', 'anthropic', 'cohere', 'huggingface', 'deepseek', 'moonshot', 'ollama']
     if (!validTypes.includes(provider_type)) {
       return res.status(400).json({
         error: `Invalid provider type. Must be one of: ${validTypes.join(', ')}`
