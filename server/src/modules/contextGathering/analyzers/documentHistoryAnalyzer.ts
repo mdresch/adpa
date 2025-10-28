@@ -5,9 +5,15 @@
 
 import { logger } from '@/utils/logger'
 import { pool } from '@/database/connection'
+import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
 import type { DocumentHistoryContextData } from '../types'
 
 export class DocumentHistoryAnalyzer {
+  private retrieval?: ContextRetrievalService
+
+  constructor(retrieval?: ContextRetrievalService) {
+    this.retrieval = retrieval
+  }
   async analyzeDocumentHistory(templateId: string, projectId: string, userId: string): Promise<DocumentHistoryContextData> {
     try {
       logger.debug('Analyzing document history context', {
@@ -61,6 +67,26 @@ export class DocumentHistoryAnalyzer {
           data_sources: ['document_history', 'usage_patterns', 'quality_metrics'],
           data_freshness: new Date(),
           analysis_confidence: 0.9
+        }
+      }
+
+      // Optional: enrich with RAG chunks when feature flag is enabled
+      if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
+        try {
+          const query = 'recent risks issues milestones scope changes';
+          const topChunks = await this.retrieval.searchChunks({ projectId, query, topK: 10, templateId })
+          if (topChunks.length > 0) {
+            ;(documentHistoryContext as any).rag_context = topChunks.map(c => ({
+              chunk_id: c.id,
+              document_id: c.document_id,
+              title: c.title,
+              content_preview: c.content.substring(0, 400),
+              score: c.score
+            }))
+            documentHistoryContext.metadata.data_sources.push('rag_chunks')
+          }
+        } catch (e: any) {
+          logger.warn('RAG enrichment skipped', { error: e.message })
         }
       }
 

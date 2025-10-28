@@ -40,6 +40,56 @@ export class ContextRetrievalService implements IContextRetrievalService {
     this.relevanceScoringEngine = new RelevanceScoringEngine(relevanceScoringConfig)
   }
 
+  /**
+   * Search precomputed document chunks (RAG) using hybrid strategy
+   */
+  async searchChunks(params: {
+    projectId: string
+    query: string
+    topK?: number
+    templateId?: string
+  }): Promise<Array<{ id: string; document_id: string; title: string | null; content: string; score: number }>> {
+    const { projectId, query, topK = 20, templateId } = params
+    try {
+      // Keyword pre-filter using full text search
+      const keywordRes = await pool.query(
+        `
+        SELECT id, document_id, title, content,
+               ts_rank(to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')), plainto_tsquery('english', $1)) AS kw_rank
+        FROM document_chunks
+        WHERE project_id = $2
+          AND to_tsvector('english', coalesce(title,'') || ' ' || coalesce(content,'')) @@ plainto_tsquery('english', $1)
+          ${templateId ? 'AND template_id = $3' : ''}
+        ORDER BY kw_rank DESC
+        LIMIT $${templateId ? 4 : 3}
+        `,
+        templateId ? [query, projectId, templateId, Math.max(topK * 3, 50)] : [query, projectId, Math.max(topK * 3, 50)]
+      )
+
+      const preCandidates = keywordRes.rows as Array<{ id: string; document_id: string; title: string | null; content: string; kw_rank: number }>
+
+      // If no candidates, return empty
+      if (preCandidates.length === 0) return []
+
+      // Semantic rerank: compute similarity between query and candidate content
+      const semanticScored: Array<{ id: string; document_id: string; title: string | null; content: string; score: number }> = []
+      for (const c of preCandidates) {
+        const similarity = await this.relevanceScoringEngine.calculateSemanticRelevance(query, c.content)
+        // Simple hybrid score: 0.6 semantic + 0.4 normalized kw
+        const kw = Number(c.kw_rank) || 0
+        const kwNorm = isFinite(kw) ? Math.min(1, kw / (preCandidates[0]?.kw_rank || 1)) : 0
+        const score = 0.6 * similarity + 0.4 * kwNorm
+        semanticScored.push({ id: c.id, document_id: c.document_id, title: c.title, content: c.content, score })
+      }
+
+      // Sort and topK
+      return semanticScored.sort((a, b) => b.score - a.score).slice(0, topK)
+    } catch (error: any) {
+      logger.error('searchChunks failed', { error: error.message })
+      return []
+    }
+  }
+
   async retrieveContext(request: ContextRetrievalRequest): Promise<ContextRetrievalResponse> {
     const startTime = Date.now()
     
