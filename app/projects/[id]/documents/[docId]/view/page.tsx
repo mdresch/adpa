@@ -2119,6 +2119,7 @@ The ADPA system represents a significant advancement in document processing auto
         onOpenChange={setShowVersionsDialog}
         versions={versions}
         documentName={document?.name}
+        loadedVersionId={(document as any)?.loaded_version_id}
         onLoadVersion={(version) => {
           // Load selected version into the main view with all metadata
           setDocument({

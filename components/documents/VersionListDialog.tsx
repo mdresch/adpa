@@ -80,6 +80,7 @@ interface VersionListDialogProps {
   versions: DocumentVersion[]
   documentName?: string
   onLoadVersion?: (version: DocumentVersion) => void
+  loadedVersionId?: string // ID of the currently loaded version
 }
 
 export function VersionListDialog({
@@ -87,7 +88,8 @@ export function VersionListDialog({
   onOpenChange,
   versions,
   documentName,
-  onLoadVersion
+  onLoadVersion,
+  loadedVersionId
 }: VersionListDialogProps) {
   const [selectedVersion, setSelectedVersion] = useState<DocumentVersion | null>(null)
   const [showVersionViewer, setShowVersionViewer] = useState(false)
@@ -147,7 +149,8 @@ export function VersionListDialog({
               </Card>
             ) : (
               sortedVersions.map((version, index) => {
-                const isCurrentVersion = version.is_current === true
+                // Check if this version is the one currently loaded (not just the URL document)
+                const isCurrentVersion = loadedVersionId ? version.id === loadedVersionId : version.is_current === true
                 const isLatest = index === 0
                 const isAIGenerated = version.is_regeneration === true
                 
