@@ -498,41 +498,69 @@ export default function AIAnalyticsPage() {
 
                   {/* Model Performance */}
                   <TabsContent value="models" className="space-y-6">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Model Performance Comparison</CardTitle>
-                        <CardDescription>
-                          Compare performance metrics across different AI models
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        {modelStats.length > 0 ? (
-                          <div className="h-96">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={modelStats} layout="horizontal">
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis type="number" />
-                                <YAxis dataKey="model_name" type="category" width={120} />
-                                <Tooltip />
-                                <Legend />
-                                <Bar dataKey="usage_count" fill="#3B82F6" name="Requests" />
-                                <Bar dataKey="total_tokens" fill="#10B981" name="Tokens" />
-                              </BarChart>
-                            </ResponsiveContainer>
-                          </div>
-                        ) : (
-                          <div className="h-96 flex items-center justify-center">
-                            <div className="text-center">
-                              <Zap className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                              <p className="text-lg font-medium text-muted-foreground mb-2">No Model Data Yet</p>
-                              <p className="text-sm text-muted-foreground max-w-md">
-                                Generate documents to see which AI models are being used
-                              </p>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Model Usage - Requests</CardTitle>
+                          <CardDescription>
+                            Number of AI requests per model
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {modelStats.length > 0 ? (
+                            <div className="h-80">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={modelStats} layout="horizontal">
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis type="number" />
+                                  <YAxis dataKey="model_name" type="category" width={150} />
+                                  <Tooltip />
+                                  <Bar dataKey="usage_count" fill="#3B82F6" name="Requests" />
+                                </BarChart>
+                              </ResponsiveContainer>
                             </div>
-                          </div>
-                        )}
-                      </CardContent>
-                    </Card>
+                          ) : (
+                            <div className="h-80 flex items-center justify-center">
+                              <div className="text-center">
+                                <Zap className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                                <p className="text-sm text-muted-foreground">No model data yet</p>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Model Usage - Tokens</CardTitle>
+                          <CardDescription>
+                            Total tokens processed per model
+                          </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          {modelStats.length > 0 ? (
+                            <div className="h-80">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={modelStats} layout="horizontal">
+                                  <CartesianGrid strokeDasharray="3 3" />
+                                  <XAxis type="number" />
+                                  <YAxis dataKey="model_name" type="category" width={150} />
+                                  <Tooltip formatter={(value: any) => formatNumber(value)} />
+                                  <Bar dataKey="total_tokens" fill="#10B981" name="Tokens" />
+                                </BarChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="h-80 flex items-center justify-center">
+                              <div className="text-center">
+                                <Zap className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                                <p className="text-sm text-muted-foreground">No model data yet</p>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
 
                     {/* Model Stats Table */}
                     <Card>
