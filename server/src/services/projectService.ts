@@ -58,9 +58,9 @@ export async function update(projectId: string, data: any, userId: string) {
     // Build dynamic update with SQL injection protection
     // Whitelist of allowed updatable fields to prevent SQL injection
     const ALLOWED_FIELDS = [
-      'name', 'description', 'status', 'priority', 'start_date', 
+      'name', 'description', 'framework', 'status', 'priority', 'start_date', 
       'end_date', 'budget', 'currency', 'owner_id', 'program_id',
-      'metadata', 'settings'
+      'team_members', 'metadata', 'settings'
     ]
     
     const keys = Object.keys(data)
