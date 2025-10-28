@@ -75,7 +75,7 @@ export default function AIAnalyticsPage() {
       setAnalyticsData(systemData)
       
       // Fetch detailed AI model usage data
-      const response = await apiClient.request('GET', `/ai-analytics/models?period=${timeRange}`)
+      const response = await apiClient.get<any>(`/ai-analytics/models?period=${timeRange}`)
       if (response.success) {
         setModelUsageData(response.usageOverTime || [])
         setProviderStats(response.providerStats || [])
