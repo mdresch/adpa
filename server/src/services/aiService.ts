@@ -617,14 +617,14 @@ class AIService {
           
           const moonshot = createOpenAI({ 
             apiKey: directApiKey,
-            baseURL: 'https://api.moonshot.cn/v1'
+            baseURL: 'https://api.moonshot.ai/v1'
           })
           
           // Use appropriate Moonshot model
-          const moonshotModels = ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
+          const moonshotModels = ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
           const modelName = moonshotModels.includes(request.model || '') 
             ? request.model 
-            : 'moonshot-v1-8k' // Default to 8k context
+            : 'kimi-k2-0905-preview' // Default to latest Kimi K2
           
           const moonshotResult = await generateText({
             model: moonshot(modelName),
