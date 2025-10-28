@@ -15,7 +15,7 @@ import AnalyticsTrackingService from "./analyticsTrackingService"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek"
+  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot"
   apiKey: string
   configuration?: any
 }
@@ -599,6 +599,70 @@ class AIService {
               prompt_tokens: deepseekResult.usage?.promptTokens || 0,
               completion_tokens: deepseekResult.usage?.completionTokens || 0,
               total_tokens: deepseekResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        // FALLBACK: Try direct Moonshot AI
+        if (providerType === 'moonshot') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct Moonshot AI...')
+          
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          if (!directApiKey) {
+            throw new Error('Direct Moonshot AI API key not found in provider configuration')
+          }
+          
+          logger.debug('[AI-SERVICE] Using direct Moonshot AI (OpenAI-compatible)')
+          
+          const moonshot = createOpenAI({ 
+            apiKey: directApiKey,
+            baseURL: 'https://api.moonshot.cn/v1'
+          })
+          
+          // Use appropriate Moonshot model
+          const moonshotModels = ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
+          const modelName = moonshotModels.includes(request.model || '') 
+            ? request.model 
+            : 'moonshot-v1-8k' // Default to 8k context
+          
+          const moonshotResult = await generateText({
+            model: moonshot(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.debug('[AI-SERVICE] Moonshot AI successful:', { contentLength: moonshotResult.text.length })
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: moonshotResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: moonshotResult.usage?.promptTokens || 0,
+              completion_tokens: moonshotResult.usage?.completionTokens || 0,
+              total_tokens: moonshotResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, (request as any).userId, (request as any).projectId, (request as any).documentId)
+          })
+          
+          logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${moonshotResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          return {
+            content: moonshotResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: moonshotResult.usage?.promptTokens || 0,
+              completion_tokens: moonshotResult.usage?.completionTokens || 0,
+              total_tokens: moonshotResult.usage?.totalTokens || 0,
             },
           }
         }
