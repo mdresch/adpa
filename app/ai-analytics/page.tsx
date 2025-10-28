@@ -107,14 +107,16 @@ export default function AIAnalyticsPage() {
     fetchAIAnalytics()
   }, [timeRange])
 
-  const formatNumber = (num: number) => {
+  const formatNumber = (num: number | undefined | null) => {
+    if (!num && num !== 0) return '0'
     if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
     if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
     return num.toString()
   }
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`
+  const formatDuration = (ms: number | undefined | null) => {
+    if (!ms && ms !== 0) return 'N/A'
+    if (ms < 1000) return `${Math.round(ms)}ms`
     return `${(ms / 1000).toFixed(1)}s`
   }
 
@@ -456,8 +458,8 @@ export default function AIAnalyticsPage() {
                                     <td className="p-4 text-right">{formatNumber(provider.total_tokens)}</td>
                                     <td className="p-4 text-right">{formatDuration(provider.avg_response_time)}</td>
                                     <td className="p-4 text-right">
-                                      <span className={provider.success_rate >= 95 ? 'text-green-600 font-semibold' : provider.success_rate >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
-                                        {provider.success_rate.toFixed(1)}%
+                                      <span className={(provider.success_rate || 0) >= 95 ? 'text-green-600 font-semibold' : (provider.success_rate || 0) >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
+                                        {provider.success_rate ? provider.success_rate.toFixed(1) : '0.0'}%
                                       </span>
                                     </td>
                                   </tr>
@@ -547,8 +549,8 @@ export default function AIAnalyticsPage() {
                                     <td className="p-4 text-right">{formatNumber(model.total_tokens)}</td>
                                     <td className="p-4 text-right">{formatDuration(model.avg_response_time)}</td>
                                     <td className="p-4 text-right">
-                                      <span className={model.success_rate >= 95 ? 'text-green-600 font-semibold' : model.success_rate >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
-                                        {model.success_rate.toFixed(1)}%
+                                      <span className={(model.success_rate || 0) >= 95 ? 'text-green-600 font-semibold' : (model.success_rate || 0) >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
+                                        {model.success_rate ? model.success_rate.toFixed(1) : '0.0'}%
                                       </span>
                                     </td>
                                   </tr>
@@ -754,15 +756,15 @@ export default function AIAnalyticsPage() {
                                   <div key={index}>
                                     <div className="flex justify-between text-xs mb-1">
                                       <span>{provider.provider_name}</span>
-                                      <span className="font-medium">{provider.success_rate?.toFixed(1)}% success</span>
+                                      <span className="font-medium">{provider.success_rate?.toFixed(1) || '0.0'}% success</span>
                                     </div>
                                     <div className="w-full bg-muted rounded-full h-2">
                                       <div 
                                         className={`h-2 rounded-full ${
-                                          provider.success_rate >= 95 ? 'bg-green-500' : 
-                                          provider.success_rate >= 90 ? 'bg-blue-500' : 'bg-yellow-500'
+                                          (provider.success_rate || 0) >= 95 ? 'bg-green-500' : 
+                                          (provider.success_rate || 0) >= 90 ? 'bg-blue-500' : 'bg-yellow-500'
                                         }`} 
-                                        style={{ width: `${provider.success_rate}%` }}
+                                        style={{ width: `${provider.success_rate || 0}%` }}
                                       ></div>
                                     </div>
                                   </div>
