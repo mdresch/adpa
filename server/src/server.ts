@@ -22,6 +22,7 @@ import authRoutes from "./routes/auth"
 import projectRoutes from "./routes/projects"
 import programRoutes from "./routes/programRoutes"
 import documentRoutes from "./routes/documents"
+import projectDataExtractionRoutes from "./routes/projectDataExtraction"
 import userRoutes from "./routes/users"
 import aiRoutes from "./routes/ai"
 import aiProvidersRoutes from "./routes/ai-providers"
@@ -180,6 +181,7 @@ console.log("✅ Auth routes registered")
 app.use("/api/projects", projectRoutes)
 app.use("/api/programs", programRoutes)
 app.use("/api/documents", documentRoutes)
+app.use("/api/project-data-extraction", projectDataExtractionRoutes)
 app.use("/api/document-generation", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
 app.use("/api/ai", aiRoutes)

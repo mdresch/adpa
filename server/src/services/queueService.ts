@@ -159,6 +159,23 @@ const regenerationQueueOptions = {
 
 export const regenerationQueue = new Bull("document-regeneration", regenerationQueueOptions)
 
+// Project Data Extraction Queue Options
+const extractionQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 25,
+    attempts: 2,
+    backoff: {
+      type: "exponential",
+      delay: 5000,
+    },
+    timeout: 300000, // 5 minutes timeout for AI extraction
+  },
+}
+
+export const extractionQueue = new Bull("project-data-extraction", extractionQueueOptions)
+
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
   const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data
@@ -1001,6 +1018,154 @@ regenerationQueue.on("completed", (job, result) => {
 
 regenerationQueue.on("failed", (job, err) => {
   logger.error(`Regeneration job failed: ${job.id}`, err)
+})
+
+// Project Data Extraction job processor
+extractionQueue.process("extract-project-data", async (job) => {
+  const { jobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+
+  try {
+    logger.info(`[EXTRACTION-JOB] Starting project data extraction: ${jobId}`, { projectId })
+    
+    // Update job status
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID)
+    
+    // Step 1: Extract entities from documents (30-60% of time)
+    const { projectDataExtractionService } = await import('./projectDataExtractionService')
+    
+    await updateJobStatus(jobId, "processing", 20, WORKER_ID)
+    
+    const extractionResult = await projectDataExtractionService.extractProjectEntities(
+      projectId,
+      userId,
+      {
+        aiProvider,
+        aiModel,
+        documentIds
+      }
+    )
+    
+    await updateJobStatus(jobId, "processing", 70, WORKER_ID)
+    
+    // Step 2: Save extracted entities to database (70-90% of time)
+    await projectDataExtractionService.saveExtractedEntities(
+      projectId,
+      userId,
+      extractionResult
+    )
+    
+    await updateJobStatus(jobId, "processing", 90, WORKER_ID)
+    
+    // Step 3: Calculate totals
+    const totalEntities = 
+      extractionResult.stakeholders.length +
+      extractionResult.requirements.length +
+      extractionResult.risks.length +
+      extractionResult.milestones.length +
+      extractionResult.constraints.length +
+      extractionResult.success_criteria.length +
+      extractionResult.best_practices.length +
+      extractionResult.phases.length +
+      extractionResult.resources.length +
+      extractionResult.quality_standards.length +
+      extractionResult.deliverables.length +
+      extractionResult.scope_items.length +
+      extractionResult.activities.length
+    
+    // Update job to completed
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [JSON.stringify({ 
+        totalEntities,
+        entityCounts: {
+          stakeholders: extractionResult.stakeholders.length,
+          requirements: extractionResult.requirements.length,
+          risks: extractionResult.risks.length,
+          milestones: extractionResult.milestones.length,
+          constraints: extractionResult.constraints.length,
+          successCriteria: extractionResult.success_criteria.length,
+          bestPractices: extractionResult.best_practices.length,
+          phases: extractionResult.phases.length,
+          resources: extractionResult.resources.length,
+          qualityStandards: extractionResult.quality_standards.length,
+          deliverables: extractionResult.deliverables.length,
+          scopeItems: extractionResult.scope_items.length,
+          activities: extractionResult.activities.length
+        }
+      }), jobId]
+    )
+    
+    // Emit success notification
+    io.emit("job:completed", {
+      jobId,
+      userId,
+      status: "completed",
+      message: `Successfully extracted ${totalEntities} entities from project documents`,
+      projectId,
+      totalEntities
+    })
+    
+    // Emit project:entities-extracted event
+    io.to(`project:${projectId}`).emit("project:entities-extracted", {
+      projectId,
+      totalEntities,
+      entityCounts: {
+        stakeholders: extractionResult.stakeholders.length,
+        requirements: extractionResult.requirements.length,
+        risks: extractionResult.risks.length,
+        milestones: extractionResult.milestones.length,
+        constraints: extractionResult.constraints.length,
+        successCriteria: extractionResult.success_criteria.length,
+        bestPractices: extractionResult.best_practices.length,
+        phases: extractionResult.phases.length,
+        resources: extractionResult.resources.length,
+        qualityStandards: extractionResult.quality_standards.length,
+        deliverables: extractionResult.deliverables.length,
+        scopeItems: extractionResult.scope_items.length,
+        activities: extractionResult.activities.length
+      }
+    })
+    
+    logger.info(`[EXTRACTION-JOB] Extraction completed: ${jobId}`, { 
+      projectId, 
+      totalEntities 
+    })
+    
+    return { success: true, totalEntities, jobId }
+  } catch (error) {
+    logger.error(`[EXTRACTION-JOB] Extraction failed: ${jobId}`, error)
+    
+    // Update job with error
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [error instanceof Error ? error.message : "Unknown error", jobId]
+    )
+    
+    // Emit failure notification
+    io.emit("job:failed", {
+      jobId,
+      userId,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Unknown error",
+      message: `Failed to extract project data`,
+      projectId
+    })
+    
+    throw error
+  }
+})
+
+// Extraction queue event listeners
+extractionQueue.on("completed", (job, result) => {
+  logger.info(`[EXTRACTION-JOB] Completed: ${job.id}`, { totalEntities: result.totalEntities })
+})
+
+extractionQueue.on("failed", (job, err) => {
+  logger.error(`[EXTRACTION-JOB] Failed: ${job.id}`, err)
 })
 
 // Job management functions
