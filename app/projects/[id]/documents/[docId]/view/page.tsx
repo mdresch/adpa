@@ -346,17 +346,34 @@ The ADPA system represents a significant advancement in document processing auto
         
         console.log('[DocumentView] Loaded document:', documentData)
         console.log('[DocumentView] Loaded versions count:', versionsData.length)
-        console.log('[DocumentView] Loaded versions:', versionsData)
+        console.log('[DocumentView] All versions with timestamps:', versionsData.map((v: any) => ({
+          version: v.version,
+          created_at: v.created_at,
+          timestamp: new Date(v.created_at).getTime()
+        })))
         
-        // 🆕 Find the latest version (highest semantic version, most recent created_at)
+        // 🆕 Find the latest version (highest semantic version)
         let latestVersion = null
         if (versionsData.length > 0) {
-          // Sort by created_at DESC to get the most recent
-          const sortedVersions = [...versionsData].sort((a: any, b: any) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-          )
+          // Helper function to parse semantic version
+          const parseVersion = (versionStr: string): [number, number, number] => {
+            const parts = versionStr.split('.').map(p => parseInt(p, 10) || 0)
+            return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
+          }
+          
+          // Sort by semantic version DESC (highest version first)
+          const sortedVersions = [...versionsData].sort((a: any, b: any) => {
+            const [aMajor, aMinor, aPatch] = parseVersion(a.version)
+            const [bMajor, bMinor, bPatch] = parseVersion(b.version)
+            
+            // Compare major, then minor, then patch
+            if (bMajor !== aMajor) return bMajor - aMajor
+            if (bMinor !== aMinor) return bMinor - aMinor
+            return bPatch - aPatch
+          })
           latestVersion = sortedVersions[0]
-          console.log('[DocumentView] Latest version:', latestVersion.version, latestVersion.name)
+          console.log('[DocumentView] Sorted versions (highest first):', sortedVersions.map((v: any) => v.version))
+          console.log('[DocumentView] Latest version selected:', latestVersion.version, 'created:', latestVersion.created_at)
         }
         
         // Use latest version's content if available, otherwise fall back to current document
