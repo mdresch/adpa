@@ -609,20 +609,17 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.2 }}
-                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8"
+                    className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 mb-8"
                   >
                     <AnimatedCard className="border-l-4 border-l-blue-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Documents</CardTitle>
+                        <CardTitle className="text-sm font-medium">Total</CardTitle>
                         <FileText className="h-4 w-4 text-blue-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-3xl font-bold text-blue-600">{stats.totalDocuments}</div>
+                        <div className="text-2xl font-bold text-blue-600">{stats.totalDocuments}</div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          📊 {stats.totalWords.toLocaleString()} total words
-                        </p>
-                        <p className="text-xs text-blue-600 font-medium mt-1">
-                          Across all pages
+                          {stats.totalWords.toLocaleString()} words
                         </p>
                       </CardContent>
                     </AnimatedCard>
@@ -633,14 +630,26 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         <CheckCircle className="h-4 w-4 text-green-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-3xl font-bold text-green-600">{stats.counts.published}</div>
+                        <div className="text-2xl font-bold text-green-600">{stats.counts.published || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {stats.totalDocuments > 0 
                             ? ((stats.counts.published / stats.totalDocuments) * 100).toFixed(1) 
                             : 0}% of total
                         </p>
-                        <p className="text-xs text-green-600 font-medium mt-1">
-                          Live documents
+                      </CardContent>
+                    </AnimatedCard>
+
+                    <AnimatedCard className="border-l-4 border-l-cyan-500">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Generated</CardTitle>
+                        <FileText className="h-4 w-4 text-cyan-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-cyan-600">{stats.counts.generated || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.generated / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
                         </p>
                       </CardContent>
                     </AnimatedCard>
@@ -651,30 +660,64 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         <AlertCircle className="h-4 w-4 text-yellow-500" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-3xl font-bold text-yellow-600">{stats.counts.underReview}</div>
+                        <div className="text-2xl font-bold text-yellow-600">{stats.counts.underReview || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">
                           {stats.totalDocuments > 0 
                             ? ((stats.counts.underReview / stats.totalDocuments) * 100).toFixed(1) 
                             : 0}% of total
                         </p>
-                        <p className="text-xs text-yellow-600 font-medium mt-1">
-                          Awaiting approval
+                      </CardContent>
+                    </AnimatedCard>
+
+                    <AnimatedCard className="border-l-4 border-l-orange-500">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Reviewed</CardTitle>
+                        <CheckCircle className="h-4 w-4 text-orange-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-orange-600">{stats.counts.reviewed || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.reviewed / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
                         </p>
                       </CardContent>
                     </AnimatedCard>
 
+                    <AnimatedCard className="border-l-4 border-l-gray-500">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Drafts</CardTitle>
+                        <FileText className="h-4 w-4 text-gray-500" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-gray-600">{stats.counts.draft || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {stats.totalDocuments > 0 
+                            ? ((stats.counts.draft / stats.totalDocuments) * 100).toFixed(1) 
+                            : 0}% of total
+                        </p>
+                      </CardContent>
+                    </AnimatedCard>
+                  </motion.div>
+                )}
+                
+                {/* Reading Time Card - Separate Row */}
+                {stats && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.25 }}
+                    className="mb-8"
+                  >
                     <AnimatedCard className="border-l-4 border-l-purple-500">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Reading Time</CardTitle>
+                        <CardTitle className="text-sm font-medium">Total Reading Time</CardTitle>
                         <Clock className="h-4 w-4 text-purple-500" />
                       </CardHeader>
                       <CardContent>
                         <div className="text-3xl font-bold text-purple-600">{stats.readingTimeFormatted}</div>
                         <p className="text-xs text-muted-foreground mt-1">
-                          {stats.readingTimeMinutes.toLocaleString()} minutes total
-                        </p>
-                        <p className="text-xs text-purple-600 font-medium mt-1">
-                          @ 225 words/min
+                          {stats.readingTimeMinutes.toLocaleString()} minutes total @ 225 words/min
                         </p>
                       </CardContent>
                     </AnimatedCard>
