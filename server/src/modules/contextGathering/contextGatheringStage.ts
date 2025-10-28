@@ -582,25 +582,28 @@ export class ContextGatheringStage implements IContextGatheringStage {
       const { project_id, template_id, user_id } = request
       
       // Gather semantic context from all RAG-enabled analyzers
-      const [projectChunks, templateChunks, documentChunks, userChunks] = await Promise.all([
+      const [projectChunks, templateChunks, documentChunks, userChunks, externalChunks] = await Promise.all([
         this.projectContextAnalyzer.gatherSemanticProjectContext(project_id),
         this.templateContextAnalyzer.gatherSemanticTemplateExamples(template_id, project_id),
         this.documentHistoryAnalyzer.analyzeDocumentHistory(template_id, project_id, user_id), // This now uses RAG internally
-        this.userProfileAnalyzer.gatherSemanticUserHistory(user_id, project_id)
+        this.userProfileAnalyzer.gatherSemanticUserHistory(user_id, project_id),
+        this.externalContextAnalyzer.gatherSemanticExternalContext(project_id) // NEW: External context via RAG
       ])
 
       const allChunks = [
         ...projectChunks,
         ...templateChunks,
         ...(documentChunks as any).rag_semantic_context || [],
-        ...userChunks
+        ...userChunks,
+        ...externalChunks // NEW: Include external chunks
       ]
 
       logger.info('[STAGE-1] RAG context gathered', {
         totalChunks: allChunks.length,
         projectChunks: projectChunks.length,
         templateChunks: templateChunks.length,
-        userChunks: userChunks.length
+        userChunks: userChunks.length,
+        externalChunks: externalChunks.length // NEW: Log external chunks
       })
 
       return {

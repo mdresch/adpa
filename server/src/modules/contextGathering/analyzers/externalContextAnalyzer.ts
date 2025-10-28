@@ -635,4 +635,45 @@ export class ExternalContextAnalyzer {
       source: source.source_id
     }
   }
+
+  /**
+   * Gather semantic external context using RAG
+   * CR-2025-001: RAG Integration - Find relevant external references and integrations
+   */
+  async gatherSemanticExternalContext(projectId: string, query?: string): Promise<any[]> {
+    if (!this.retrieval) {
+      logger.warn('[RAG] ContextRetrievalService not available for semantic external context')
+      return []
+    }
+
+    try {
+      const semanticQuery = query || 'external references third-party integrations confluence sharepoint github documentation standards compliance'
+      
+      logger.info('[RAG-EXTERNAL] Performing semantic search for external context')
+      
+      const chunks = await this.retrieval.searchChunks({
+        projectId,
+        query: semanticQuery,
+        topK: 10 // Smaller set for external references
+      })
+
+      logger.info(`[RAG-EXTERNAL] Retrieved ${chunks.length} semantically relevant external context chunks`)
+
+      return chunks.map(chunk => ({
+        chunk_id: chunk.id,
+        document_id: chunk.document_id,
+        document_title: chunk.title,
+        content: chunk.content,
+        relevance_score: chunk.score,
+        retrieval_method: 'semantic_search',
+        context_type: 'external_references'
+      }))
+
+    } catch (error: unknown) {
+      logger.error('[RAG-EXTERNAL] Semantic search failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
 }
