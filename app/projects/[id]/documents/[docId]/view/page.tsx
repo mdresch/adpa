@@ -347,6 +347,22 @@ The ADPA system represents a significant advancement in document processing auto
         console.log('[DocumentView] Loaded document:', documentData)
         console.log('[DocumentView] Loaded versions count:', versionsData.length)
         console.log('[DocumentView] Loaded versions:', versionsData)
+        
+        // 🆕 Find the latest version (highest semantic version, most recent created_at)
+        let latestVersion = null
+        if (versionsData.length > 0) {
+          // Sort by created_at DESC to get the most recent
+          const sortedVersions = [...versionsData].sort((a: any, b: any) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+          latestVersion = sortedVersions[0]
+          console.log('[DocumentView] Latest version:', latestVersion.version, latestVersion.name)
+        }
+        
+        // Use latest version's content if available, otherwise fall back to current document
+        const dataToDisplay = latestVersion || documentData
+        
+        console.log('[DocumentView] Displaying version:', latestVersion ? latestVersion.version : 'current')
         console.log('[DocumentView] Version contents available:', versionsData.map((v: any) => ({
           version: v.version,
           hasContent: !!v.content,
@@ -355,17 +371,17 @@ The ADPA system represents a significant advancement in document processing auto
         
         // Convert content to string if it's an object
         let contentString = ''
-        if (typeof documentData.content === 'string') {
-          contentString = documentData.content
-        } else if (documentData.content && typeof documentData.content === 'object') {
+        if (typeof dataToDisplay.content === 'string') {
+          contentString = dataToDisplay.content
+        } else if (dataToDisplay.content && typeof dataToDisplay.content === 'object') {
           // Handle different content object formats
-          if (documentData.content.text) {
-            contentString = documentData.content.text
-          } else if (documentData.content.markdown) {
-            contentString = documentData.content.markdown
+          if (dataToDisplay.content.text) {
+            contentString = dataToDisplay.content.text
+          } else if (dataToDisplay.content.markdown) {
+            contentString = dataToDisplay.content.markdown
           } else {
             // Fallback: stringify the object
-            contentString = JSON.stringify(documentData.content, null, 2)
+            contentString = JSON.stringify(dataToDisplay.content, null, 2)
           }
         }
         
@@ -384,14 +400,17 @@ The ADPA system represents a significant advancement in document processing auto
         }
         
         // 🆕 Extract source_documents from metadata if available
-        const sourceDocuments = documentData.metadata?.source_documents || 
-                               documentData.generation_metadata?.source_documents || 
+        const sourceDocuments = dataToDisplay.metadata?.source_documents || 
+                               dataToDisplay.generation_metadata?.source_documents || 
                                []
         
         setDocument({
-          ...documentData, 
+          ...documentData, // Keep base document metadata (project_id, template_id, etc.)
+          ...dataToDisplay, // Override with latest version's data
           content: contentString,
-          source_documents: sourceDocuments // Expose at top level for UI
+          source_documents: sourceDocuments, // Expose at top level for UI
+          loaded_version: latestVersion ? latestVersion.version : null,
+          loaded_version_id: latestVersion ? latestVersion.id : null
         })
         setVersions(versionsData)
         setEditedContent(contentString)
@@ -810,7 +829,10 @@ The ADPA system represents a significant advancement in document processing auto
                         onClick={() => setShowVersionsDialog(true)}
                       >
                         <History className="h-4 w-4 mr-2" />
-                        Versions ({versions.length})
+                        {(document as any).loaded_version 
+                          ? `v${(document as any).loaded_version} (${versions.length} versions)`
+                          : `Versions (${versions.length})`
+                        }
                       </Button>
                       <Button 
                         variant="outline" 
@@ -1166,7 +1188,7 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Version:</span>
                               <span className="font-medium font-mono">
-                                v{versions.length > 0 ? versions[0].version : ((document as any).version || '1.0')}
+                                v{(document as any).loaded_version || (versions.length > 0 ? versions[versions.length - 1].version : ((document as any).version || '1.0'))}
                               </span>
                             </div>
                             {((document as any).template_id || templateName) && (
