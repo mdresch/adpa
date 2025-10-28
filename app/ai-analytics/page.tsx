@@ -107,17 +107,19 @@ export default function AIAnalyticsPage() {
     fetchAIAnalytics()
   }, [timeRange])
 
-  const formatNumber = (num: number | undefined | null) => {
+  const formatNumber = (num: number | string | undefined | null) => {
     if (!num && num !== 0) return '0'
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
-    return num.toString()
+    const value = typeof num === 'number' ? num : parseFloat(num as string) || 0
+    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`
+    if (value >= 1000) return `${(value / 1000).toFixed(1)}K`
+    return value.toString()
   }
 
-  const formatDuration = (ms: number | undefined | null) => {
+  const formatDuration = (ms: number | string | undefined | null) => {
     if (!ms && ms !== 0) return 'N/A'
-    if (ms < 1000) return `${Math.round(ms)}ms`
-    return `${(ms / 1000).toFixed(1)}s`
+    const value = typeof ms === 'number' ? ms : parseFloat(ms as string) || 0
+    if (value < 1000) return `${Math.round(value)}ms`
+    return `${(value / 1000).toFixed(1)}s`
   }
 
   const getProviderColor = (providerType: string) => {
@@ -283,12 +285,21 @@ export default function AIAnalyticsPage() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className={`text-3xl font-bold ${aiSummary?.overallSuccessRate >= 95 ? 'text-green-600' : 'text-yellow-600'}`}>
-                        {aiSummary?.overallSuccessRate ? `${aiSummary.overallSuccessRate.toFixed(1)}%` : 'N/A'}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        {aiSummary?.totalRequests ? `${aiSummary.totalRequests} total requests` : 'No data yet'}
-                      </p>
+                      {(() => {
+                        const rate = aiSummary?.overallSuccessRate 
+                          ? (typeof aiSummary.overallSuccessRate === 'number' ? aiSummary.overallSuccessRate : parseFloat(aiSummary.overallSuccessRate) || 0)
+                          : 0
+                        return (
+                          <>
+                            <div className={`text-3xl font-bold ${rate >= 95 ? 'text-green-600' : 'text-yellow-600'}`}>
+                              {aiSummary?.overallSuccessRate ? `${rate.toFixed(1)}%` : 'N/A'}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              {aiSummary?.totalRequests ? `${formatNumber(aiSummary.totalRequests)} total requests` : 'No data yet'}
+                            </p>
+                          </>
+                        )
+                      })()}
                     </CardContent>
                   </Card>
                 </div>
@@ -458,9 +469,14 @@ export default function AIAnalyticsPage() {
                                     <td className="p-4 text-right">{formatNumber(provider.total_tokens)}</td>
                                     <td className="p-4 text-right">{formatDuration(provider.avg_response_time)}</td>
                                     <td className="p-4 text-right">
-                                      <span className={(provider.success_rate || 0) >= 95 ? 'text-green-600 font-semibold' : (provider.success_rate || 0) >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
-                                        {provider.success_rate ? provider.success_rate.toFixed(1) : '0.0'}%
-                                      </span>
+                                      {(() => {
+                                        const rate = typeof provider.success_rate === 'number' ? provider.success_rate : parseFloat(provider.success_rate) || 0
+                                        return (
+                                          <span className={rate >= 95 ? 'text-green-600 font-semibold' : rate >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
+                                            {rate.toFixed(1)}%
+                                          </span>
+                                        )
+                                      })()}
                                     </td>
                                   </tr>
                                 ))}
@@ -549,9 +565,14 @@ export default function AIAnalyticsPage() {
                                     <td className="p-4 text-right">{formatNumber(model.total_tokens)}</td>
                                     <td className="p-4 text-right">{formatDuration(model.avg_response_time)}</td>
                                     <td className="p-4 text-right">
-                                      <span className={(model.success_rate || 0) >= 95 ? 'text-green-600 font-semibold' : (model.success_rate || 0) >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
-                                        {model.success_rate ? model.success_rate.toFixed(1) : '0.0'}%
-                                      </span>
+                                      {(() => {
+                                        const rate = typeof model.success_rate === 'number' ? model.success_rate : parseFloat(model.success_rate) || 0
+                                        return (
+                                          <span className={rate >= 95 ? 'text-green-600 font-semibold' : rate >= 90 ? 'text-blue-600' : 'text-yellow-600'}>
+                                            {rate.toFixed(1)}%
+                                          </span>
+                                        )
+                                      })()}
                                     </td>
                                   </tr>
                                 ))}
@@ -593,7 +614,10 @@ export default function AIAnalyticsPage() {
                               <div className="pt-3 border-t">
                                 <p className="text-sm text-muted-foreground">Performance</p>
                                 <p className="text-xs mt-1">⚡ {formatDuration(modelStats[0].avg_response_time)} avg response</p>
-                                <p className="text-xs">✅ {modelStats[0].success_rate?.toFixed(1)}% success rate</p>
+                                <p className="text-xs">✅ {(() => {
+                                  const rate = typeof modelStats[0].success_rate === 'number' ? modelStats[0].success_rate : parseFloat(modelStats[0].success_rate) || 0
+                                  return rate.toFixed(1)
+                                })()}% success rate</p>
                                 <p className="text-xs">🔢 {formatNumber(modelStats[0].total_tokens)} tokens</p>
                               </div>
                             </div>
@@ -643,11 +667,16 @@ export default function AIAnalyticsPage() {
                               <div>
                                 <p className="text-sm text-muted-foreground">Highest Success Rate</p>
                                 {(() => {
-                                  const mostReliable = [...modelStats].sort((a, b) => (b.success_rate || 0) - (a.success_rate || 0))[0]
+                                  const mostReliable = [...modelStats].sort((a, b) => {
+                                    const aRate = typeof a.success_rate === 'number' ? a.success_rate : parseFloat(a.success_rate) || 0
+                                    const bRate = typeof b.success_rate === 'number' ? b.success_rate : parseFloat(b.success_rate) || 0
+                                    return bRate - aRate
+                                  })[0]
+                                  const rate = typeof mostReliable.success_rate === 'number' ? mostReliable.success_rate : parseFloat(mostReliable.success_rate) || 0
                                   return (
                                     <>
                                       <p className="text-xl font-bold">{mostReliable.model_name}</p>
-                                      <p className="text-xs text-purple-600 mt-1">{mostReliable.success_rate?.toFixed(1)}% success rate</p>
+                                      <p className="text-xs text-purple-600 mt-1">{rate.toFixed(1)}% success rate</p>
                                     </>
                                   )
                                 })()}
@@ -730,21 +759,39 @@ export default function AIAnalyticsPage() {
                           <div className="grid grid-cols-2 gap-4">
                             <div className="p-4 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 rounded-lg">
                               <p className="text-sm text-muted-foreground">Avg Response Time</p>
-                              <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">
-                                {aiSummary?.avgResponseTime ? formatDuration(aiSummary.avgResponseTime) : 'N/A'}
-                              </p>
-                              <p className="text-xs text-blue-600 mt-1">
-                                {aiSummary?.avgResponseTime < 2000 ? 'Excellent' : aiSummary?.avgResponseTime < 5000 ? 'Good' : 'Needs improvement'}
-                              </p>
+                              {(() => {
+                                const responseTime = aiSummary?.avgResponseTime 
+                                  ? (typeof aiSummary.avgResponseTime === 'number' ? aiSummary.avgResponseTime : parseFloat(aiSummary.avgResponseTime) || 0)
+                                  : 0
+                                return (
+                                  <>
+                                    <p className="text-3xl font-bold text-blue-700 dark:text-blue-400">
+                                      {aiSummary?.avgResponseTime ? formatDuration(responseTime) : 'N/A'}
+                                    </p>
+                                    <p className="text-xs text-blue-600 mt-1">
+                                      {responseTime < 2000 ? 'Excellent' : responseTime < 5000 ? 'Good' : responseTime > 0 ? 'Needs improvement' : 'No data'}
+                                    </p>
+                                  </>
+                                )
+                              })()}
                             </div>
                             <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-lg">
                               <p className="text-sm text-muted-foreground">Success Rate</p>
-                              <p className="text-3xl font-bold text-purple-700 dark:text-purple-400">
-                                {aiSummary?.overallSuccessRate ? `${aiSummary.overallSuccessRate.toFixed(1)}%` : 'N/A'}
-                              </p>
-                              <p className="text-xs text-purple-600 mt-1">
-                                {aiSummary?.overallSuccessRate >= 95 ? 'Excellent' : aiSummary?.overallSuccessRate >= 90 ? 'Good' : 'Monitor closely'}
-                              </p>
+                              {(() => {
+                                const rate = aiSummary?.overallSuccessRate 
+                                  ? (typeof aiSummary.overallSuccessRate === 'number' ? aiSummary.overallSuccessRate : parseFloat(aiSummary.overallSuccessRate) || 0)
+                                  : 0
+                                return (
+                                  <>
+                                    <p className="text-3xl font-bold text-purple-700 dark:text-purple-400">
+                                      {aiSummary?.overallSuccessRate ? `${rate.toFixed(1)}%` : 'N/A'}
+                                    </p>
+                                    <p className="text-xs text-purple-600 mt-1">
+                                      {rate >= 95 ? 'Excellent' : rate >= 90 ? 'Good' : 'Monitor closely'}
+                                    </p>
+                                  </>
+                                )
+                              })()}
                             </div>
                           </div>
 
@@ -752,23 +799,26 @@ export default function AIAnalyticsPage() {
                             <p className="text-sm font-medium">Provider Reliability</p>
                             <div className="space-y-2">
                               {providerStats.length > 0 ? (
-                                providerStats.slice(0, 5).map((provider, index) => (
-                                  <div key={index}>
-                                    <div className="flex justify-between text-xs mb-1">
-                                      <span>{provider.provider_name}</span>
-                                      <span className="font-medium">{provider.success_rate?.toFixed(1) || '0.0'}% success</span>
+                                providerStats.slice(0, 5).map((provider, index) => {
+                                  const rate = typeof provider.success_rate === 'number' ? provider.success_rate : parseFloat(provider.success_rate) || 0
+                                  return (
+                                    <div key={index}>
+                                      <div className="flex justify-between text-xs mb-1">
+                                        <span>{provider.provider_name}</span>
+                                        <span className="font-medium">{rate.toFixed(1)}% success</span>
+                                      </div>
+                                      <div className="w-full bg-muted rounded-full h-2">
+                                        <div 
+                                          className={`h-2 rounded-full ${
+                                            rate >= 95 ? 'bg-green-500' : 
+                                            rate >= 90 ? 'bg-blue-500' : 'bg-yellow-500'
+                                          }`} 
+                                          style={{ width: `${rate}%` }}
+                                        ></div>
+                                      </div>
                                     </div>
-                                    <div className="w-full bg-muted rounded-full h-2">
-                                      <div 
-                                        className={`h-2 rounded-full ${
-                                          (provider.success_rate || 0) >= 95 ? 'bg-green-500' : 
-                                          (provider.success_rate || 0) >= 90 ? 'bg-blue-500' : 'bg-yellow-500'
-                                        }`} 
-                                        style={{ width: `${provider.success_rate || 0}%` }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                ))
+                                  )
+                                })
                               ) : (
                                 <p className="text-sm text-muted-foreground text-center py-4">No provider data yet</p>
                               )}
@@ -841,7 +891,12 @@ export default function AIAnalyticsPage() {
 
                               {/* Reliability Leader */}
                               {(() => {
-                                const mostReliable = [...providerStats].sort((a, b) => (b.success_rate || 0) - (a.success_rate || 0))[0]
+                                const mostReliable = [...providerStats].sort((a, b) => {
+                                  const aRate = typeof a.success_rate === 'number' ? a.success_rate : parseFloat(a.success_rate) || 0
+                                  const bRate = typeof b.success_rate === 'number' ? b.success_rate : parseFloat(b.success_rate) || 0
+                                  return bRate - aRate
+                                })[0]
+                                const rate = typeof mostReliable.success_rate === 'number' ? mostReliable.success_rate : parseFloat(mostReliable.success_rate) || 0
                                 return (
                                   <div className="p-4 border-l-4 border-l-orange-500 bg-orange-50 dark:bg-orange-900/20 rounded">
                                     <div className="flex items-start gap-3">
@@ -849,7 +904,7 @@ export default function AIAnalyticsPage() {
                                       <div>
                                         <h4 className="font-medium text-orange-900 dark:text-orange-100">Most Reliable: {mostReliable.provider_name}</h4>
                                         <p className="text-sm text-orange-700 dark:text-orange-300 mt-1">
-                                          {mostReliable.success_rate?.toFixed(1)}% success rate across {formatNumber(mostReliable.usage_count)} requests
+                                          {rate.toFixed(1)}% success rate across {formatNumber(mostReliable.usage_count)} requests
                                         </p>
                                       </div>
                                     </div>
