@@ -5,9 +5,16 @@
 
 import { logger } from '@/utils/logger'
 import { pool } from '@/database/connection'
+import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
 import type { ProjectContextData } from '../types'
 
 export class ProjectContextAnalyzer {
+  private retrieval?: ContextRetrievalService
+
+  constructor(retrieval?: ContextRetrievalService) {
+    this.retrieval = retrieval
+  }
+
   async analyzeProjectContext(projectId: string): Promise<ProjectContextData> {
     try {
       logger.debug('Analyzing project context', { projectId })
@@ -26,6 +33,11 @@ export class ProjectContextAnalyzer {
 
       // Analyze project performance
       const performanceMetrics = await this.analyzeProjectPerformance(projectId)
+
+      // Baseline & drift detection
+      const baselineSnapshots = await this.gatherBaselineSnapshots(projectId)
+      const baselineDriftFindings = await this.gatherBaselineDriftFindings(projectId)
+      const driftRootCauses = await this.gatherDriftRootCauses(projectId)
 
       // Gather lessons learned and best practices
       const lessonsLearned = await this.gatherLessonsLearned(projectId)
@@ -61,12 +73,46 @@ export class ProjectContextAnalyzer {
         lessons_learned: lessonsLearned,
         best_practices: bestPractices,
         performance_metrics: performanceMetrics,
+        baseline_snapshots: baselineSnapshots,
+        baseline_drift_findings: baselineDriftFindings,
+        drift_root_causes: driftRootCauses,
         metadata: {
           analysis_timestamp: new Date(),
           analysis_duration: Date.now() - startTime,
-          data_sources: ['project_database', 'stakeholder_database', 'requirement_database'],
+          data_sources: ['project_database', 'stakeholder_database', 'requirement_database', 'baseline', 'drift_detection'],
           data_freshness: new Date(),
           analysis_confidence: 0.9
+        }
+      }
+
+      // Optional RAG enrichment for baseline/drift context
+      if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
+        try {
+          const queries = [
+            'baseline variance causes and mitigations',
+            'schedule slippage justifications and impacts',
+            'scope change rationales and decisions',
+            'budget overrun corrective actions'
+          ]
+          const ragChunks = [] as Array<{ chunk_id: string; document_id: string; title: string | null; score: number; content_preview: string }>
+          for (const q of queries) {
+            const found = await this.retrieval.searchChunks({ projectId, query: q, topK: 10 })
+            for (const c of found) {
+              ragChunks.push({
+                chunk_id: c.id,
+                document_id: c.document_id,
+                title: c.title,
+                score: c.score,
+                content_preview: c.content.substring(0, 400)
+              })
+            }
+          }
+          if (ragChunks.length > 0) {
+            ;(projectContext as any).rag_baseline_context = ragChunks
+            projectContext.metadata.data_sources.push('rag_baseline_chunks')
+          }
+        } catch (e: any) {
+          logger.warn('RAG baseline context enrichment skipped', { error: e.message })
         }
       }
 
@@ -86,6 +132,87 @@ export class ProjectContextAnalyzer {
         error: error.message
       })
       throw error
+    }
+  }
+
+  private async gatherBaselineSnapshots(projectId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT b.id, b.project_id, b.baseline_type, b.created_at, b.created_by,
+               b.scope_snapshot, b.schedule_snapshot, b.cost_snapshot
+        FROM baselines b
+        WHERE b.project_id = $1
+        ORDER BY b.created_at DESC
+        LIMIT 10
+      `, [projectId])
+      return res.rows.map(r => ({
+        baseline_id: r.id,
+        baseline_type: r.baseline_type || 'initial',
+        created_at: r.created_at,
+        created_by: r.created_by,
+        scope_snapshot: r.scope_snapshot || {},
+        schedule_snapshot: r.schedule_snapshot || {},
+        cost_snapshot: r.cost_snapshot || {},
+        metadata: {}
+      }))
+    } catch (e: any) {
+      logger.warn('gatherBaselineSnapshots failed', { projectId, error: e.message })
+      return []
+    }
+  }
+
+  private async gatherBaselineDriftFindings(projectId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT d.id, d.project_id, d.category, d.severity, d.status, d.detected_at, d.resolved_at,
+               d.impact_area, d.variance_value, d.variance_units, d.description
+        FROM baseline_drift_findings d
+        WHERE d.project_id = $1
+        ORDER BY d.detected_at DESC
+        LIMIT 50
+      `, [projectId])
+      return res.rows.map(r => ({
+        drift_id: r.id,
+        category: r.category || 'schedule',
+        severity: r.severity || 'medium',
+        status: r.status || 'open',
+        detected_at: r.detected_at,
+        resolved_at: r.resolved_at,
+        impact_area: r.impact_area || 'unknown',
+        variance_value: r.variance_value,
+        variance_units: r.variance_units || '%',
+        description: r.description || '',
+        metadata: {}
+      }))
+    } catch (e: any) {
+      logger.warn('gatherBaselineDriftFindings failed', { projectId, error: e.message })
+      return []
+    }
+  }
+
+  private async gatherDriftRootCauses(projectId: string): Promise<any[]> {
+    try {
+      const res = await pool.query(`
+        SELECT r.id, r.project_id, r.cause_category, r.cause_detail, r.recurring,
+               r.proposed_actions, r.owner, r.last_updated
+        FROM drift_root_causes r
+        WHERE r.project_id = $1
+        ORDER BY r.last_updated DESC
+        LIMIT 50
+      `, [projectId])
+      return res.rows.map(r => ({
+        root_cause_id: r.id,
+        cause_category: r.cause_category || 'unknown',
+        cause_detail: r.cause_detail || '',
+        recurring: !!r.recurring,
+        proposed_actions: r.proposed_actions || [],
+        owner: r.owner || 'unassigned',
+        last_updated: r.last_updated,
+        metadata: {}
+      }))
+    } catch (e: any) {
+      logger.warn('gatherDriftRootCauses failed', { projectId, error: e.message })
+      return []
     }
   }
 

@@ -45,10 +45,19 @@ router.post("/generate",
 
       // Check if provider exists and is active
       log.info('🔍 [BACKEND-3/10] Checking if provider exists and is active...')
-      const providerCheck = await pool.query(
-        "SELECT id, name, provider_type FROM ai_providers WHERE name = $1 AND is_active = true",
-        [provider]
-      )
+      let providerCheck
+      try {
+        providerCheck = await pool.query(
+          "SELECT id, name, provider_type FROM ai_providers WHERE name = $1 AND is_active = true",
+          [provider]
+        )
+      } catch (dbError: unknown) {
+        log.error('❌ [DATABASE] Failed to query providers:', dbError)
+        return res.status(500).json({ 
+          error: "Database connection error",
+          details: dbError instanceof Error ? dbError.message : 'Unknown database error'
+        })
+      }
 
       if (providerCheck.rows.length === 0) {
         log.error('❌ [BACKEND] Provider not found or inactive:', provider)
@@ -65,7 +74,13 @@ router.post("/generate",
       
       // CRITICAL FIX: Prevent duplicate submissions within 10 seconds
       const dedupeKey = `ai-gen:${req.user?.id}:${template_id}:${req.body.project_id}`
-      const recentJobId = await cache.get(dedupeKey)
+      let recentJobId
+      try {
+        recentJobId = await cache.get(dedupeKey)
+      } catch (cacheError: unknown) {
+        log.warn('⚠️ [CACHE] Redis unavailable for deduplication, continuing:', cacheError)
+        // Continue without deduplication if Redis is down
+      }
       
       if (recentJobId) {
         log.warn('⚠️ [DEDUPE] Duplicate request detected, returning existing job ID:', recentJobId)
@@ -82,7 +97,12 @@ router.post("/generate",
       log.info('🆔 [BACKEND-7/10] Created job ID:', jobId)
       
       // Store job ID for deduplication (10 second window)
-      await cache.set(dedupeKey, jobId, 10)
+      try {
+        await cache.set(dedupeKey, jobId, 10)
+      } catch (cacheError: unknown) {
+        log.warn('⚠️ [CACHE] Failed to set deduplication key, continuing:', cacheError)
+        // Continue without caching if Redis is down
+      }
       
       // Add job to queue
       const jobData = {
@@ -103,8 +123,16 @@ router.post("/generate",
         custom_context: req.body.custom_context,
       }
       
-      await queueService.addJob('ai-generate', jobData)
-      log.info('✅ [BACKEND-8/10] Job added to queue')
+      try {
+        await queueService.addJob('ai-generate', jobData)
+        log.info('✅ [BACKEND-8/10] Job added to queue')
+      } catch (queueError: unknown) {
+        log.error('❌ [QUEUE] Failed to add job to queue:', queueError)
+        return res.status(500).json({ 
+          error: "Failed to queue document generation",
+          details: queueError instanceof Error ? queueError.message : 'Queue service unavailable'
+        })
+      }
       
       // Return immediately with job ID
       log.info('🎉 [BACKEND-9/10] Returning job ID to client')
@@ -296,15 +324,25 @@ router.post("/generate",
       })
       
       log.info('✅ [BACKEND] AI generation COMPLETE! Document ready.')
-    } catch (error) {
+    } catch (error: unknown) {
       log.error("❌ [BACKEND-ERROR] AI generation failed:", error)
       log.error("❌ [BACKEND-ERROR] Error details:", {
         message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined
+        stack: error instanceof Error ? error.stack : undefined,
+        type: error instanceof Error ? error.constructor.name : typeof error
       })
+      
+      // Provide detailed error information for debugging
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const isRedisError = errorMessage.includes('Redis') || errorMessage.includes('ECONNREFUSED')
+      const isDatabaseError = errorMessage.includes('database') || errorMessage.includes('postgres')
+      
       res.status(500).json({ 
         error: "AI generation failed",
-        details: error instanceof Error ? error.message : "Unknown error"
+        details: errorMessage,
+        hint: isRedisError ? 'Redis connection unavailable - check REDIS_URL environment variable' 
+              : isDatabaseError ? 'Database connection error - check DATABASE_URL' 
+              : 'Check backend logs for details'
       })
     }
   }

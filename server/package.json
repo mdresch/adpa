@@ -12,11 +12,13 @@
     "lint": "eslint src --ext .ts",
     "migrate": "node -r dotenv/config scripts/run-migrations.js",
     "create-admin": "tsx scripts/create-admin-user.ts",
-    "fix-encryption": "tsx scripts/fix-encryption-migration.ts"
+    "fix-encryption": "tsx scripts/fix-encryption-migration.ts",
+    "seed:baselines": "tsx scripts/seed-baseline-data.ts",
+    "drift:recompute": "tsx scripts/recompute-drift.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
-    "@ai-sdk/mistral": "^2.0.19",
+    "@ai-sdk/mistral": "^2.0.20",
     "@ai-sdk/openai": "^2.0.56",
     "@google/generative-ai": "^0.24.1",
     "@types/jsdom": "^27.0.0",

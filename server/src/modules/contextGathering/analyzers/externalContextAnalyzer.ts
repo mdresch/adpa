@@ -5,8 +5,15 @@
 
 import { logger } from '@/utils/logger'
 import type { ExternalContextData, ContextSource } from '../types'
+import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
 
 export class ExternalContextAnalyzer {
+  private retrieval?: ContextRetrievalService
+
+  constructor(retrieval?: ContextRetrievalService) {
+    this.retrieval = retrieval
+  }
+
   async analyzeExternalContext(projectId: string, contextSources: ContextSource[]): Promise<ExternalContextData> {
     try {
       logger.debug('Analyzing external context', {
@@ -67,6 +74,36 @@ export class ExternalContextAnalyzer {
           sources_analyzed: enabledSources.length,
           data_freshness: new Date(),
           analysis_confidence: 0.8
+        }
+      }
+
+      // Optional RAG enrichment: fetch top external policy/standard chunks
+      if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
+        try {
+          const queries = [
+            'regulatory requirements relevant to current project',
+            'industry standards and controls mapping',
+            'external policy constraints and guidance'
+          ]
+          const ragChunks = [] as Array<{ chunk_id: string; document_id: string; title: string | null; score: number; content_preview: string }>
+          for (const q of queries) {
+            const found = await this.retrieval.searchChunks({ projectId, query: q, topK: 10 })
+            for (const c of found) {
+              ragChunks.push({
+                chunk_id: c.id,
+                document_id: c.document_id,
+                title: c.title,
+                score: c.score,
+                content_preview: c.content.substring(0, 400)
+              })
+            }
+          }
+          if (ragChunks.length > 0) {
+            ;(externalContext as any).rag_external_context = ragChunks
+            externalContext.metadata.analysis_confidence = Math.min(1, externalContext.metadata.analysis_confidence + 0.05)
+          }
+        } catch (e: any) {
+          logger.warn('RAG external context enrichment skipped', { error: e.message })
         }
       }
 

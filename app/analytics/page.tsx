@@ -119,19 +119,29 @@ export default function AnalyticsPage() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true)
+      
+      // Only attempt to fetch system analytics if user is admin
+      if (!hasPermission('analytics.system')) {
+        console.log('User does not have analytics.system permission, using mock data')
+        setAnalyticsData(null) // Will fall back to mock data
+        return
+      }
+      
       const data = await apiClient.getSystemAnalytics(timeRange)
       setAnalyticsData(data)
     } catch (error) {
       console.error("Failed to fetch analytics:", error)
-      toast.error("Failed to load analytics data")
+      // Gracefully fall back to mock data instead of showing error
+      console.log('Falling back to mock analytics data')
+      setAnalyticsData(null)
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchAnalytics()
-  }, [timeRange])
+    void fetchAnalytics()
+  }, [timeRange, hasPermission])
 
   // Mock stats with real-time capability
   const stats = {
