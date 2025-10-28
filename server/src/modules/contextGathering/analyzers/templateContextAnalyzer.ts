@@ -5,9 +5,16 @@
 
 import { logger } from '@/utils/logger'
 import { pool } from '@/database/connection'
+import { ContextRetrievalService } from '@/modules/contextRetrieval/contextRetrievalService'
 import type { TemplateContextData } from '../types'
 
 export class TemplateContextAnalyzer {
+  private retrieval?: ContextRetrievalService
+
+  constructor(retrieval?: ContextRetrievalService) {
+    this.retrieval = retrieval
+  }
+
   async analyzeTemplateContext(templateId: string): Promise<TemplateContextData> {
     try {
       logger.debug('Analyzing template context', { templateId })
@@ -70,6 +77,38 @@ export class TemplateContextAnalyzer {
           data_sources: ['template_database', 'usage_metrics', 'feedback_data'],
           data_freshness: new Date(),
           analysis_confidence: 0.9
+        }
+      }
+
+      // Optional RAG enrichment for template-targeted context
+      if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
+        try {
+          const framework = templateData.framework || ''
+          const queries = [
+            `validation rules for ${framework} sections`,
+            'examples of high-quality outputs for this template',
+            'common pitfalls and corrections for this template type',
+            'variable resolution examples and guidance'
+          ]
+          const ragChunks = [] as Array<{ chunk_id: string; document_id: string; title: string | null; score: number; content_preview: string }>
+          for (const q of queries) {
+            const found = await this.retrieval.searchChunks({ projectId: templateMetadata?.project_id || '', query: q, topK: 8 })
+            for (const c of found) {
+              ragChunks.push({
+                chunk_id: c.id,
+                document_id: c.document_id,
+                title: c.title,
+                score: c.score,
+                content_preview: c.content.substring(0, 400)
+              })
+            }
+          }
+          if (ragChunks.length > 0) {
+            ;(templateContext as any).rag_template_context = ragChunks
+            templateContext.metadata.data_sources.push('rag_template_chunks')
+          }
+        } catch (e: any) {
+          logger.warn('RAG template context enrichment skipped', { error: e.message })
         }
       }
 
