@@ -25,7 +25,8 @@ import {
   Copy,
   Lightbulb,
   Database,
-  BarChart3
+  BarChart3,
+  DollarSign
 } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
@@ -430,6 +431,29 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       )}
                       {baseline.timeline_baseline.key_milestones && (
                         <p className="text-muted-foreground">{baseline.timeline_baseline.key_milestones.length} milestones</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+
+                {baseline.cost_baseline && (
+                  <Card>
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <DollarSign className="h-4 w-4" />
+                        Cost Baseline
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm space-y-1">
+                      {baseline.cost_baseline.total_budget && (
+                        <p className="text-lg font-semibold text-green-600">
+                          {typeof baseline.cost_baseline.total_budget === 'number' 
+                            ? `$${baseline.cost_baseline.total_budget.toLocaleString()}`
+                            : baseline.cost_baseline.total_budget}
+                        </p>
+                      )}
+                      {baseline.cost_baseline.cost_categories && Array.isArray(baseline.cost_baseline.cost_categories) && (
+                        <p className="text-muted-foreground text-xs">{baseline.cost_baseline.cost_categories.length} cost categories</p>
                       )}
                     </CardContent>
                   </Card>
@@ -902,6 +926,71 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                             <li key={i} className="text-muted-foreground">
                               {typeof m === 'string' ? m : (m.name || `Milestone ${i + 1}`)}
                               {m.target_date && ` - ${m.target_date}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Cost Baseline */}
+              {viewingBaseline.cost_baseline && (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Cost Baseline
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    {viewingBaseline.cost_baseline.total_budget && (
+                      <div>
+                        <p className="font-medium mb-1">Total Budget:</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {typeof viewingBaseline.cost_baseline.total_budget === 'number' 
+                            ? `$${viewingBaseline.cost_baseline.total_budget.toLocaleString()}`
+                            : viewingBaseline.cost_baseline.total_budget}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {viewingBaseline.cost_baseline.budget_by_phase && (
+                      <div>
+                        <p className="font-medium mb-1">Budget by Phase:</p>
+                        <div className="space-y-1">
+                          {Object.entries(viewingBaseline.cost_baseline.budget_by_phase).map(([phase, amount]: [string, any], i: number) => (
+                            <div key={i} className="flex justify-between items-center text-sm">
+                              <span className="text-muted-foreground">{phase}:</span>
+                              <span className="font-semibold">
+                                {typeof amount === 'number' ? `$${amount.toLocaleString()}` : amount}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {viewingBaseline.cost_baseline.contingency_reserve && (
+                      <div className="pt-2 border-t">
+                        <p className="font-medium mb-1">Contingency Reserve:</p>
+                        <p className="text-lg font-semibold text-orange-600">
+                          {typeof viewingBaseline.cost_baseline.contingency_reserve === 'number'
+                            ? `$${viewingBaseline.cost_baseline.contingency_reserve.toLocaleString()}`
+                            : viewingBaseline.cost_baseline.contingency_reserve}
+                        </p>
+                      </div>
+                    )}
+                    
+                    {viewingBaseline.cost_baseline.cost_categories && Array.isArray(viewingBaseline.cost_baseline.cost_categories) && (
+                      <div className="pt-2 border-t">
+                        <p className="font-medium mb-1">Cost Categories:</p>
+                        <ul className="list-disc list-inside space-y-1">
+                          {viewingBaseline.cost_baseline.cost_categories.map((category: any, i: number) => (
+                            <li key={i} className="text-muted-foreground">
+                              {typeof category === 'string' ? category : (category.name || category.category)}
+                              {category.amount && ` - $${typeof category.amount === 'number' ? category.amount.toLocaleString() : category.amount}`}
                             </li>
                           ))}
                         </ul>
