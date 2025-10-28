@@ -5,15 +5,12 @@ NIXPACKS_NODEJS_VERSION = "20"
 nixPkgs = ["nodejs_20"]
 
 [phases.install]
-cmds = ["cd server && npm install"]
+cmds = ["npm install --prefix server"]
 
 [phases.build]
-cmds = []
+cmds = ["npm run build --prefix server || true"]
 
 [start]
-cmd = "cd server && npm start"
-
-[staticAssets]
-"server" = "/"
+cmd = "npm start --prefix server"
 
 

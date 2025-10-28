@@ -70,24 +70,54 @@ export class DocumentHistoryAnalyzer {
         }
       }
 
-      // Optional: enrich with RAG chunks when feature flag is enabled
-      if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
+      // RAG Semantic Search is now PRIMARY retrieval method (CR-2025-001)
+      // This replaces direct SQL queries as the default context source
+      if (this.retrieval) {
         try {
-          const query = 'recent risks issues milestones scope changes';
-          const topChunks = await this.retrieval.searchChunks({ projectId, query, topK: 10, templateId })
+          logger.info('[RAG-PRIMARY] Using semantic search for document context')
+          
+          // Build template-specific semantic query
+          const semanticQuery = this.buildSemanticQuery(templateId, projectId)
+          
+          // Retrieve semantically relevant chunks (increased from 10 to 25)
+          const topChunks = await this.retrieval.searchChunks({ 
+            projectId, 
+            query: semanticQuery, 
+            topK: 25, // Increased for better coverage
+            templateId 
+          })
+          
           if (topChunks.length > 0) {
-            ;(documentHistoryContext as any).rag_context = topChunks.map(c => ({
+            logger.info(`[RAG-PRIMARY] Retrieved ${topChunks.length} relevant chunks via semantic search`)
+            
+            // Store RAG context as primary source
+            ;(documentHistoryContext as any).rag_semantic_context = topChunks.map(c => ({
               chunk_id: c.id,
               document_id: c.document_id,
               title: c.title,
+              content: c.content, // Full content, not preview
               content_preview: c.content.substring(0, 400),
-              score: c.score
+              relevance_score: c.score,
+              retrieval_method: 'semantic_search'
             }))
-            documentHistoryContext.metadata.data_sources.push('rag_chunks')
+            documentHistoryContext.metadata.data_sources.unshift('rag_semantic_search') // Primary source
+            documentHistoryContext.metadata.rag_enabled = true
+            documentHistoryContext.metadata.rag_chunks_retrieved = topChunks.length
+            documentHistoryContext.metadata.avg_relevance_score = 
+              topChunks.reduce((sum, c) => sum + c.score, 0) / topChunks.length
+          } else {
+            logger.warn('[RAG-PRIMARY] No semantic chunks found, falling back to direct SQL')
+            documentHistoryContext.metadata.rag_fallback_reason = 'no_chunks_found'
           }
-        } catch (e: any) {
-          logger.warn('RAG enrichment skipped', { error: e.message })
+        } catch (e: unknown) {
+          logger.error('[RAG-PRIMARY] Semantic search failed, falling back to direct SQL', {
+            error: e instanceof Error ? e.message : String(e)
+          })
+          documentHistoryContext.metadata.rag_fallback_reason = e instanceof Error ? e.message : 'unknown_error'
         }
+      } else {
+        logger.warn('[RAG-PRIMARY] ContextRetrievalService not available, using direct SQL only')
+        documentHistoryContext.metadata.rag_fallback_reason = 'service_not_injected'
       }
 
       logger.info('Document history context analysis completed', {
@@ -605,6 +635,21 @@ export class DocumentHistoryAnalyzer {
       logger.warn('gatherDocumentDriftImpacts failed', { projectId, templateId, error: e.message })
       return []
     }
+  }
+
+  /**
+   * Build template-specific semantic query for RAG retrieval
+   * CR-2025-001: RAG Integration
+   */
+  private buildSemanticQuery(templateId: string, projectId: string): string {
+    // Default comprehensive query
+    let query = 'project context requirements risks milestones deliverables technical approach stakeholders timeline scope'
+    
+    // Template-specific query enhancement (can be expanded based on template type)
+    // This could be enhanced to query template table for semantic_query_hints
+    // For now, use comprehensive default that works for all templates
+    
+    return query
   }
 
   // Additional helper methods
