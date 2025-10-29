@@ -6,12 +6,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Package, ListChecks } from "@/components/ui/icons-shim"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
@@ -308,64 +306,60 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               </div>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               {/* AI Provider Selection */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">AI Provider</Label>
-                <RadioGroup 
-                  value={selectedProvider} 
-                  onValueChange={(value) => {
-                    setSelectedProvider(value)
+              <div>
+                <Label htmlFor="ai-provider">AI Provider</Label>
+                <select
+                  id="ai-provider"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                  value={selectedProvider}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                    const providerType = e.target.value
+                    const provider = aiProviders.find(p => p.provider_type === providerType)
+                    setSelectedProvider(providerType)
+                    
                     // Auto-select first model for new provider
-                    const provider = aiProviders.find((p: any) => p.provider_type === value)
-                    const models = provider?.models || (provider?.model ? [provider.model] : [])
-                    if (models.length > 0) {
-                      setSelectedModel(models[0])
+                    if (provider) {
+                      const models = provider.models || (provider.model ? [provider.model] : [])
+                      if (models.length > 0) {
+                        setSelectedModel(models[0])
+                      }
                     }
                   }}
-                  className="space-y-3"
                 >
-                  {aiProviders.map((provider) => (
-                    <div key={provider.id} className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
-                      <RadioGroupItem value={provider.provider_type} id={provider.id} className="flex-shrink-0" />
-                      <Label htmlFor={provider.id} className="flex-1 cursor-pointer font-medium">
-                        {provider.name}
-                      </Label>
-                    </div>
+                  {aiProviders.filter(p => p.is_active).map((provider) => (
+                    <option key={provider.id} value={provider.provider_type}>
+                      {provider.name}
+                    </option>
                   ))}
-                </RadioGroup>
+                </select>
               </div>
 
               {/* AI Model Selection */}
-              <div className="space-y-3">
-                <Label className="text-base font-semibold">AI Model</Label>
-                <RadioGroup 
-                  value={selectedModel} 
-                  onValueChange={setSelectedModel}
-                  className="space-y-3"
+              <div>
+                <Label htmlFor="ai-model">AI Model</Label>
+                <select
+                  id="ai-model"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                  value={selectedModel}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedModel(e.target.value)}
                 >
                   {(() => {
                     const provider = aiProviders.find((p: any) => p.provider_type === selectedProvider)
                     const models = provider?.models || (provider?.model ? [provider.model] : [])
                     
                     if (models.length === 0) {
-                      return (
-                        <div className="rounded-lg border p-3 text-sm text-muted-foreground">
-                          No models available for {provider?.name || 'selected provider'}
-                        </div>
-                      )
+                      return <option value="">No models available</option>
                     }
                     
                     return models.map((model: string) => (
-                      <div key={model} className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
-                        <RadioGroupItem value={model} id={model} className="flex-shrink-0" />
-                        <Label htmlFor={model} className="flex-1 cursor-pointer text-sm">
-                          {model}
-                        </Label>
-                      </div>
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
                     ))
                   })()}
-                </RadioGroup>
+                </select>
               </div>
 
               <div className="space-y-2">
