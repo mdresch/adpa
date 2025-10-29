@@ -6,7 +6,7 @@
 import express, { Request, Response, NextFunction } from 'express'
 import Joi from 'joi'
 import { projectDataExtractionService } from '../services/projectDataExtractionService'
-import { authenticate } from '../middleware/auth'
+import { authenticateToken } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
@@ -46,7 +46,7 @@ const extractSchema = Joi.object({
 
 router.post(
   '/extract',
-  authenticate,
+  authenticateToken,
   validate(extractSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -109,7 +109,7 @@ router.post(
  */
 router.get(
   '/status/:jobId',
-  authenticate,
+  authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { jobId } = req.params
@@ -159,7 +159,7 @@ router.get(
  */
 router.get(
   '/results/:projectId',
-  authenticate,
+  authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params
@@ -222,7 +222,7 @@ router.get(
  */
 router.post(
   '/trigger-baseline',
-  authenticate,
+  authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.body
