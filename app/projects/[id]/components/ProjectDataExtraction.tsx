@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
-import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Package, ListChecks } from "@/components/ui/icons-shim"
+import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
@@ -56,7 +56,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const fetchEntityCounts = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/project-data-extraction/results/${projectId}`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -76,17 +76,30 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     try {
       const providers = await apiClient.getAIProviders()
       console.log('[EXTRACTION] Raw providers response:', providers)
+      console.log('[EXTRACTION] First provider object keys:', providers[0] ? Object.keys(providers[0]) : 'No providers')
+      console.log('[EXTRACTION] First provider full object:', providers[0])
       
       const activeProviders = providers.filter((p: any) => p.is_active).map((p: any) => {
         // Normalize models - handle both 'models' array and 'model' string
         const models = p.models || (p.model ? [p.model] : [])
-        console.log(`[EXTRACTION] Provider ${p.name} (${p.provider_type}):`, {
+        
+        // Try different possible property names for provider type
+        const providerType = p.provider_type || p.providerType || p.type || p.provider || p.name?.toLowerCase().replace(/\s+/g, '_')
+        
+        console.log(`[EXTRACTION] Provider ${p.name}:`, {
+          provider_type: p.provider_type,
+          providerType: p.providerType,
+          type: p.type,
+          provider: p.provider,
+          determined: providerType,
           hasModels: !!p.models,
           hasModel: !!p.model,
           modelsArray: models
         })
+        
         return {
           ...p,
+          provider_type: providerType, // Normalize to provider_type
           models: models
         }
       })
@@ -206,8 +219,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     { key: 'phases', label: 'Phases', icon: Calendar, color: 'text-indigo-500' },
     { key: 'resources', label: 'Resources', icon: DollarSign, color: 'text-emerald-500' },
     { key: 'qualityStandards', label: 'Quality Standards', icon: CheckCircle, color: 'text-cyan-500' },
-    { key: 'deliverables', label: 'Deliverables', icon: Package, color: 'text-pink-500' },
-    { key: 'scopeItems', label: 'Scope Items', icon: ListChecks, color: 'text-violet-500' },
+    { key: 'deliverables', label: 'Deliverables', icon: Archive, color: 'text-pink-500' },
+    { key: 'scopeItems', label: 'Scope Items', icon: ListOrdered, color: 'text-violet-500' },
     { key: 'activities', label: 'Activities', icon: Target, color: 'text-lime-500' }
   ]
 
