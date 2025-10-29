@@ -58,7 +58,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setLoading(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
       })
       if (response.ok) {
@@ -133,7 +133,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
         body: JSON.stringify({
           projectId,
@@ -178,7 +178,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       try {
         const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/status/${jobId}`, {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           }
         })
 
