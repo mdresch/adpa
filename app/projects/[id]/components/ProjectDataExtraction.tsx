@@ -144,7 +144,19 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       })
 
       if (!response.ok) {
-        throw new Error('Failed to start extraction')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[EXTRACTION] API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        })
+        
+        if (response.status === 403 || response.status === 401) {
+          toast.error('Authentication failed. Please logout and login again.')
+          throw new Error('Authentication required - please re-login')
+        }
+        
+        throw new Error(errorData.message || errorData.error || 'Failed to start extraction')
       }
 
       const data = await response.json()
