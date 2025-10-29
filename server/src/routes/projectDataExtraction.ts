@@ -39,7 +39,7 @@ const extractionQueue = new Bull('project-data-extraction', {
  */
 const extractSchema = Joi.object({
   projectId: Joi.string().uuid().required(),
-  aiProvider: Joi.string().valid('openai', 'google', 'azure', 'anthropic').optional(),
+  aiProvider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'mistral', 'groq', 'ollama').optional(),
   aiModel: Joi.string().optional(),
   documentIds: Joi.array().items(Joi.string().uuid()).optional()
 })
