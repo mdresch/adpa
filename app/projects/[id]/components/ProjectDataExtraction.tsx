@@ -77,24 +77,36 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       const providers = await apiClient.getAIProviders()
       console.log('[EXTRACTION] Raw providers response:', providers)
       
-      const activeProviders = providers.filter((p: any) => p.is_active)
-      console.log('[EXTRACTION] Active providers:', activeProviders)
+      const activeProviders = providers.filter((p: any) => p.is_active).map((p: any) => {
+        // Normalize models - handle both 'models' array and 'model' string
+        const models = p.models || (p.model ? [p.model] : [])
+        console.log(`[EXTRACTION] Provider ${p.name} (${p.provider_type}):`, {
+          hasModels: !!p.models,
+          hasModel: !!p.model,
+          modelsArray: models
+        })
+        return {
+          ...p,
+          models: models
+        }
+      })
+      
+      console.log('[EXTRACTION] Active providers with normalized models:', activeProviders)
       
       setAiProviders(activeProviders)
       
       // Set default to first active provider
       if (activeProviders.length > 0) {
         const firstProvider = activeProviders[0]
-        console.log('[EXTRACTION] First provider:', firstProvider)
+        console.log('[EXTRACTION] Setting default provider:', firstProvider.provider_type, 'with models:', firstProvider.models)
         
         setSelectedProvider(firstProvider.provider_type)
         
-        // Set first model if available
-        const models = firstProvider.models || firstProvider.model ? [firstProvider.model] : []
-        console.log('[EXTRACTION] Available models:', models)
-        
-        if (models.length > 0) {
-          setSelectedModel(models[0])
+        if (firstProvider.models.length > 0) {
+          console.log('[EXTRACTION] Setting default model:', firstProvider.models[0])
+          setSelectedModel(firstProvider.models[0])
+        } else {
+          console.warn('[EXTRACTION] No models available for default provider')
         }
       }
     } catch (error) {
@@ -316,19 +328,25 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   value={selectedProvider}
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     const providerType = e.target.value
+                    console.log('[EXTRACTION] Provider changed to:', providerType)
+                    
                     const provider = aiProviders.find(p => p.provider_type === providerType)
+                    console.log('[EXTRACTION] Found provider:', provider)
+                    console.log('[EXTRACTION] Provider models:', provider?.models)
+                    
                     setSelectedProvider(providerType)
                     
-                    // Auto-select first model for new provider
-                    if (provider) {
-                      const models = provider.models || (provider.model ? [provider.model] : [])
-                      if (models.length > 0) {
-                        setSelectedModel(models[0])
-                      }
+                    // Auto-select first model for new provider (models already normalized in state)
+                    if (provider && provider.models && provider.models.length > 0) {
+                      console.log('[EXTRACTION] Auto-selecting model:', provider.models[0])
+                      setSelectedModel(provider.models[0])
+                    } else {
+                      console.warn('[EXTRACTION] No models available for provider:', providerType)
+                      setSelectedModel('')
                     }
                   }}
                 >
-                  {aiProviders.filter(p => p.is_active).map((provider) => (
+                  {aiProviders.map((provider) => (
                     <option key={provider.id} value={provider.provider_type}>
                       {provider.name}
                     </option>
@@ -343,14 +361,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   id="ai-model"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                   value={selectedModel}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedModel(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                    console.log('[EXTRACTION] Model changed to:', e.target.value)
+                    setSelectedModel(e.target.value)
+                  }}
+                  disabled={!selectedProvider}
                 >
                   {(() => {
                     const provider = aiProviders.find((p: any) => p.provider_type === selectedProvider)
-                    const models = provider?.models || (provider?.model ? [provider.model] : [])
+                    console.log('[EXTRACTION] Rendering models for provider:', selectedProvider, 'models:', provider?.models)
+                    
+                    if (!provider) {
+                      return <option value="">Select a provider first</option>
+                    }
+                    
+                    const models = provider.models || []
                     
                     if (models.length === 0) {
-                      return <option value="">No models available</option>
+                      return <option value="">No models available for {provider.name}</option>
                     }
                     
                     return models.map((model: string) => (
@@ -360,6 +388,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     ))
                   })()}
                 </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedModel ? `Selected: ${selectedModel}` : 'No model selected'}
+                </p>
               </div>
 
               <div className="space-y-2">
