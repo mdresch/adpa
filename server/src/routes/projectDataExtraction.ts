@@ -7,7 +7,7 @@ import express, { Request, Response, NextFunction } from 'express'
 import Joi from 'joi'
 import { projectDataExtractionService } from '../services/projectDataExtractionService'
 import { authenticate } from '../middleware/auth'
-import { validateRequest } from '../middleware/validation'
+import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import Bull from 'bull'
@@ -47,7 +47,7 @@ const extractSchema = Joi.object({
 router.post(
   '/extract',
   authenticate,
-  validateRequest(extractSchema),
+  validate(extractSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, aiProvider, aiModel, documentIds } = req.body
