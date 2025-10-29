@@ -170,7 +170,7 @@ const extractionQueueOptions = {
       type: "exponential",
       delay: 5000,
     },
-    timeout: 300000, // 5 minutes timeout for AI extraction
+    timeout: 600000, // 10 minutes timeout for AI extraction (13 parallel calls)
   },
 }
 
