@@ -300,7 +300,14 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="provider">AI Provider</Label>
-                <Select value={selectedProvider} onValueChange={setSelectedProvider}>
+                <Select value={selectedProvider} onValueChange={(value) => {
+                  setSelectedProvider(value)
+                  // Auto-select first model for new provider
+                  const provider = aiProviders.find((p: any) => p.provider_type === value)
+                  if (provider?.models && provider.models.length > 0) {
+                    setSelectedModel(provider.models[0])
+                  }
+                }}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select provider" />
                   </SelectTrigger>
@@ -312,6 +319,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Selected: {aiProviders.find((p: any) => p.provider_type === selectedProvider)?.name || 'None'}
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -330,6 +340,9 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       )) || <SelectItem value="none" disabled>No models available</SelectItem>}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Model: {selectedModel || 'Not selected'}
+                </p>
               </div>
 
               <div className="space-y-2">
