@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Package, ListChecks } from "@/components/ui/icons-shim"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
@@ -76,21 +77,31 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const fetchAIProviders = async () => {
     try {
       const providers = await apiClient.getAIProviders()
-      setAiProviders(providers.filter((p: any) => p.is_active))
+      console.log('[EXTRACTION] Raw providers response:', providers)
+      
+      const activeProviders = providers.filter((p: any) => p.is_active)
+      console.log('[EXTRACTION] Active providers:', activeProviders)
+      
+      setAiProviders(activeProviders)
       
       // Set default to first active provider
-      if (providers.length > 0) {
-        const firstProvider = providers.find((p: any) => p.is_active)
-        if (firstProvider) {
-          setSelectedProvider(firstProvider.provider_type)
-          // Set first model if available
-          if (firstProvider.models && firstProvider.models.length > 0) {
-            setSelectedModel(firstProvider.models[0])
-          }
+      if (activeProviders.length > 0) {
+        const firstProvider = activeProviders[0]
+        console.log('[EXTRACTION] First provider:', firstProvider)
+        
+        setSelectedProvider(firstProvider.provider_type)
+        
+        // Set first model if available
+        const models = firstProvider.models || firstProvider.model ? [firstProvider.model] : []
+        console.log('[EXTRACTION] Available models:', models)
+        
+        if (models.length > 0) {
+          setSelectedModel(models[0])
         }
       }
     } catch (error) {
-      console.error('Failed to fetch AI providers:', error)
+      console.error('[EXTRACTION] Failed to fetch AI providers:', error)
+      toast.error('Failed to load AI providers')
     }
   }
 
@@ -297,52 +308,64 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               </div>
             </div>
           ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="provider">AI Provider</Label>
-                <Select value={selectedProvider} onValueChange={(value) => {
-                  setSelectedProvider(value)
-                  // Auto-select first model for new provider
-                  const provider = aiProviders.find((p: any) => p.provider_type === value)
-                  if (provider?.models && provider.models.length > 0) {
-                    setSelectedModel(provider.models[0])
-                  }
-                }}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select provider" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {aiProviders.map((provider) => (
-                      <SelectItem key={provider.id} value={provider.provider_type}>
+            <div className="space-y-6">
+              {/* AI Provider Selection */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">AI Provider</Label>
+                <RadioGroup 
+                  value={selectedProvider} 
+                  onValueChange={(value) => {
+                    setSelectedProvider(value)
+                    // Auto-select first model for new provider
+                    const provider = aiProviders.find((p: any) => p.provider_type === value)
+                    const models = provider?.models || (provider?.model ? [provider.model] : [])
+                    if (models.length > 0) {
+                      setSelectedModel(models[0])
+                    }
+                  }}
+                  className="space-y-3"
+                >
+                  {aiProviders.map((provider) => (
+                    <div key={provider.id} className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
+                      <RadioGroupItem value={provider.provider_type} id={provider.id} className="flex-shrink-0" />
+                      <Label htmlFor={provider.id} className="flex-1 cursor-pointer font-medium">
                         {provider.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Selected: {aiProviders.find((p: any) => p.provider_type === selectedProvider)?.name || 'None'}
-                </p>
+                      </Label>
+                    </div>
+                  ))}
+                </RadioGroup>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="model">AI Model</Label>
-                <Select value={selectedModel} onValueChange={setSelectedModel}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select model" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {aiProviders
-                      .find((p) => p.provider_type === selectedProvider)
-                      ?.models?.map((model: string) => (
-                        <SelectItem key={model} value={model}>
+              {/* AI Model Selection */}
+              <div className="space-y-3">
+                <Label className="text-base font-semibold">AI Model</Label>
+                <RadioGroup 
+                  value={selectedModel} 
+                  onValueChange={setSelectedModel}
+                  className="space-y-3"
+                >
+                  {(() => {
+                    const provider = aiProviders.find((p: any) => p.provider_type === selectedProvider)
+                    const models = provider?.models || (provider?.model ? [provider.model] : [])
+                    
+                    if (models.length === 0) {
+                      return (
+                        <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+                          No models available for {provider?.name || 'selected provider'}
+                        </div>
+                      )
+                    }
+                    
+                    return models.map((model: string) => (
+                      <div key={model} className="flex items-center space-x-3 rounded-lg border p-3 hover:bg-muted/50 transition-colors cursor-pointer">
+                        <RadioGroupItem value={model} id={model} className="flex-shrink-0" />
+                        <Label htmlFor={model} className="flex-1 cursor-pointer text-sm">
                           {model}
-                        </SelectItem>
-                      )) || <SelectItem value="none" disabled>No models available</SelectItem>}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Model: {selectedModel || 'Not selected'}
-                </p>
+                        </Label>
+                      </div>
+                    ))
+                  })()}
+                </RadioGroup>
               </div>
 
               <div className="space-y-2">
