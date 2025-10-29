@@ -83,18 +83,15 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         // Normalize models - handle both 'models' array and 'model' string
         const models = p.models || (p.model ? [p.model] : [])
         
-        // Try different possible property names for provider type
-        const providerType = p.provider_type || p.providerType || p.type || p.provider || p.name?.toLowerCase().replace(/\s+/g, '_')
+        // Use 'type' property (confirmed from logs: ['id', 'name', 'type', 'models', ...])
+        const providerType = p.type || p.provider_type || p.providerType || p.provider || 'unknown'
         
         console.log(`[EXTRACTION] Provider ${p.name}:`, {
-          provider_type: p.provider_type,
-          providerType: p.providerType,
           type: p.type,
-          provider: p.provider,
-          determined: providerType,
-          hasModels: !!p.models,
-          hasModel: !!p.model,
-          modelsArray: models
+          models: p.models,
+          modelsLength: p.models?.length || 0,
+          modelsContent: p.models,
+          hasModels: !!p.models && p.models.length > 0
         })
         
         return {
@@ -108,19 +105,17 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       
       setAiProviders(activeProviders)
       
-      // Set default to first active provider
-      if (activeProviders.length > 0) {
-        const firstProvider = activeProviders[0]
-        console.log('[EXTRACTION] Setting default provider:', firstProvider.provider_type, 'with models:', firstProvider.models)
+      // Set default to first active provider WITH MODELS
+      const providerWithModels = activeProviders.find(p => p.models && p.models.length > 0)
+      if (providerWithModels) {
+        console.log('[EXTRACTION] Setting default provider:', providerWithModels.provider_type, 'with models:', providerWithModels.models)
         
-        setSelectedProvider(firstProvider.provider_type)
+        setSelectedProvider(providerWithModels.provider_type)
+        setSelectedModel(providerWithModels.models[0])
         
-        if (firstProvider.models.length > 0) {
-          console.log('[EXTRACTION] Setting default model:', firstProvider.models[0])
-          setSelectedModel(firstProvider.models[0])
-        } else {
-          console.warn('[EXTRACTION] No models available for default provider')
-        }
+        console.log('[EXTRACTION] Defaults set - Provider:', providerWithModels.provider_type, 'Model:', providerWithModels.models[0])
+      } else {
+        console.warn('[EXTRACTION] No providers with models available')
       }
     } catch (error) {
       console.error('[EXTRACTION] Failed to fetch AI providers:', error)
@@ -134,7 +129,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setExtractionProgress(0)
       setExtractionStatus("Starting extraction...")
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/project-data-extraction/extract`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/extract`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -169,7 +164,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/project-data-extraction/status/${jobId}`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/status/${jobId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
