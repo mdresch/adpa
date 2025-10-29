@@ -10,28 +10,9 @@ import { authenticateToken } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
-import Bull from 'bull'
-import { redis } from '../utils/redis'
+import { extractionQueue } from '../services/queueService'
 
 const router = express.Router()
-
-// Job queue for extraction (long-running tasks)
-const extractionQueue = new Bull('project-data-extraction', {
-  redis: {
-    host: process.env.REDIS_HOST || 'localhost',
-    port: parseInt(process.env.REDIS_PORT || '6379')
-  },
-  defaultJobOptions: {
-    removeOnComplete: 100,
-    removeOnFail: 50,
-    attempts: 2,
-    backoff: {
-      type: 'exponential',
-      delay: 5000
-    },
-    timeout: 300000 // 5 minutes
-  }
-})
 
 /**
  * POST /api/project-data-extraction/extract
@@ -164,47 +145,62 @@ router.get(
     try {
       const { projectId } = req.params
 
-      // Fetch counts from all tables
-      const counts = await pool!.query(
-        `SELECT 
-          (SELECT COUNT(*) FROM stakeholders WHERE project_id = $1) as stakeholders,
-          (SELECT COUNT(*) FROM requirements WHERE project_id = $1) as requirements,
-          (SELECT COUNT(*) FROM risks WHERE project_id = $1) as risks,
-          (SELECT COUNT(*) FROM milestones WHERE project_id = $1) as milestones,
-          (SELECT COUNT(*) FROM constraints WHERE project_id = $1) as constraints,
-          (SELECT COUNT(*) FROM success_criteria WHERE project_id = $1) as success_criteria,
-          (SELECT COUNT(*) FROM best_practices WHERE project_id = $1) as best_practices,
-          (SELECT COUNT(*) FROM phases WHERE project_id = $1) as phases,
-          (SELECT COUNT(*) FROM resources WHERE project_id = $1) as resources,
-          (SELECT COUNT(*) FROM quality_standards WHERE project_id = $1) as quality_standards,
-          (SELECT COUNT(*) FROM deliverables WHERE project_id = $1) as deliverables,
-          (SELECT COUNT(*) FROM scope_items WHERE project_id = $1) as scope_items,
-          (SELECT COUNT(*) FROM activities WHERE project_id = $1) as activities`,
-        [projectId]
-      )
+      // Initialize counts object
+      const entityCounts: Record<string, number> = {
+        stakeholders: 0,
+        requirements: 0,
+        risks: 0,
+        milestones: 0,
+        constraints: 0,
+        successCriteria: 0,
+        bestPractices: 0,
+        phases: 0,
+        resources: 0,
+        qualityStandards: 0,
+        deliverables: 0,
+        scopeItems: 0,
+        activities: 0
+      }
 
-      const result = counts.rows[0]
+      // Query each table individually to handle missing tables gracefully
+      const tables = [
+        { name: 'stakeholders', key: 'stakeholders' },
+        { name: 'requirements', key: 'requirements' },
+        { name: 'risks', key: 'risks' },
+        { name: 'milestones', key: 'milestones' },
+        { name: 'constraints', key: 'constraints' },
+        { name: 'success_criteria', key: 'successCriteria' },
+        { name: 'best_practices', key: 'bestPractices' },
+        { name: 'phases', key: 'phases' },
+        { name: 'resources', key: 'resources' },
+        { name: 'quality_standards', key: 'qualityStandards' },
+        { name: 'deliverables', key: 'deliverables' },
+        { name: 'scope_items', key: 'scopeItems' },
+        { name: 'activities', key: 'activities' }
+      ]
 
-      const totalEntities = Object.values(result).reduce((sum: number, count: any) => sum + parseInt(count), 0)
+      for (const table of tables) {
+        try {
+          const result = await pool!.query(
+            `SELECT COUNT(*) as count FROM ${table.name} WHERE project_id = $1`,
+            [projectId]
+          )
+          entityCounts[table.key] = parseInt(result.rows[0]?.count || '0')
+        } catch (error: unknown) {
+          // Table might not exist yet or have different schema
+          logger.warn(`[EXTRACTION-API] Could not query table ${table.name}`, {
+            error: error instanceof Error ? error.message : String(error)
+          })
+          entityCounts[table.key] = 0
+        }
+      }
+
+      const totalEntities = Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
 
       res.json({
         success: true,
         projectId,
-        entityCounts: {
-          stakeholders: parseInt(result.stakeholders),
-          requirements: parseInt(result.requirements),
-          risks: parseInt(result.risks),
-          milestones: parseInt(result.milestones),
-          constraints: parseInt(result.constraints),
-          successCriteria: parseInt(result.success_criteria),
-          bestPractices: parseInt(result.best_practices),
-          phases: parseInt(result.phases),
-          resources: parseInt(result.resources),
-          qualityStandards: parseInt(result.quality_standards),
-          deliverables: parseInt(result.deliverables),
-          scopeItems: parseInt(result.scope_items),
-          activities: parseInt(result.activities)
-        },
+        entityCounts,
         totalEntities
       })
     } catch (error: unknown) {
