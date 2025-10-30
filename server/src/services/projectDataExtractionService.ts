@@ -1448,8 +1448,9 @@ Requirements:
       sections.push(`Template: ${doc.template_name || 'Unknown'}`)
       sections.push('')
       // Truncate very long documents to fit in token budget
-      const content = doc.content.length > 15000 
-        ? doc.content.substring(0, 15000) + '\n\n[Document truncated for length]'
+      // Increased limit: 30K chars per doc (supports ~5,000 word documents)
+      const content = doc.content.length > 30000 
+        ? doc.content.substring(0, 30000) + '\n\n[Document truncated for length]'
         : doc.content
       sections.push(content)
       sections.push('')
