@@ -1337,9 +1337,9 @@ Requirements:
     const placeholders: string[] = []
 
     requirements.forEach((r, index) => {
-      const offset = index * 8
+      const offset = index * 9
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
       
       // Convert acceptance_criteria string to array if it exists
@@ -1353,7 +1353,8 @@ Requirements:
       
       values.push(
         projectId,
-        r.title,
+        r.title,        // For title column
+        r.title,        // For name column (NOT NULL requirement)
         r.description,
         r.type,
         r.priority,
@@ -1365,11 +1366,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO requirements (
-        project_id, title, description, type, priority, status, 
+        project_id, title, name, description, type, priority, status, 
         acceptance_criteria, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, title) DO UPDATE SET
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        title = EXCLUDED.title,
         description = EXCLUDED.description,
         type = EXCLUDED.type,
         priority = EXCLUDED.priority,
@@ -1399,13 +1401,14 @@ Requirements:
     const placeholders: string[] = []
 
     risks.forEach((r, index) => {
-      const offset = index * 9
+      const offset = index * 10
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
       values.push(
         projectId,
-        r.title,
+        r.title,        // For title column
+        r.title,        // For name column (populate both with same value)
         r.description,
         r.category,
         r.probability,
@@ -1418,11 +1421,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO risks (
-        project_id, title, description, category, probability, impact,
+        project_id, title, name, description, category, probability, impact,
         mitigation_strategy, contingency_plan, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, title) DO UPDATE SET
+        name = EXCLUDED.name,
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         probability = EXCLUDED.probability,
@@ -1500,13 +1504,14 @@ Requirements:
     const placeholders: string[] = []
 
     constraints.forEach((c, index) => {
-      const offset = index * 6
+      const offset = index * 7
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
       values.push(
         projectId,
-        c.title,
+        c.title,        // For title column
+        c.title,        // For name column (NOT NULL)
         c.description,
         c.type,
         c.severity,
@@ -1516,10 +1521,11 @@ Requirements:
 
     await client.query(`
       INSERT INTO constraints (
-        project_id, title, description, type, severity, created_by
+        project_id, title, name, description, type, severity, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, title) DO UPDATE SET
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        title = EXCLUDED.title,
         description = EXCLUDED.description,
         type = EXCLUDED.type,
         severity = EXCLUDED.severity,
@@ -1547,13 +1553,14 @@ Requirements:
     const placeholders: string[] = []
 
     successCriteria.forEach((sc, index) => {
-      const offset = index * 7
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
       values.push(
         projectId,
-        sc.title,
+        sc.title,        // For title column
+        sc.title,        // For name column (NOT NULL)
         sc.description,
         sc.metric,
         sc.target_value,
@@ -1564,10 +1571,11 @@ Requirements:
 
     await client.query(`
       INSERT INTO success_criteria (
-        project_id, title, description, metric, target_value, measurement_method, created_by
+        project_id, title, name, description, metric, target_value, measurement_method, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, title) DO UPDATE SET
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        title = EXCLUDED.title,
         description = EXCLUDED.description,
         metric = EXCLUDED.metric,
         target_value = EXCLUDED.target_value,
@@ -1739,13 +1747,14 @@ Requirements:
     const placeholders: string[] = []
 
     qualityStandards.forEach((qs, index) => {
-      const offset = index * 8
+      const offset = index * 9
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
       values.push(
         projectId,
-        qs.title,
+        qs.title,        // For title column
+        qs.title,        // For standard_name column (NOT NULL)
         qs.description,
         qs.category,
         qs.standard_type,
@@ -1757,11 +1766,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO quality_standards (
-        project_id, title, description, category, standard_type, 
+        project_id, title, standard_name, description, category, standard_type, 
         requirements, measurement_criteria, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, title) DO UPDATE SET
+      ON CONFLICT (project_id, standard_name) DO UPDATE SET
+        title = EXCLUDED.title,
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         standard_type = EXCLUDED.standard_type,
@@ -1843,13 +1853,14 @@ Requirements:
     const placeholders: string[] = []
 
     scopeItems.forEach((si, index) => {
-      const offset = index * 7
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
       values.push(
         projectId,
-        si.title,
+        si.title,        // For title column
+        si.title,        // For item_name column (NOT NULL)
         si.description,
         si.is_in_scope,
         si.category || null,
@@ -1860,11 +1871,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO scope_items (
-        project_id, title, description, is_in_scope, category, 
+        project_id, title, item_name, description, is_in_scope, category, 
         priority, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, title) DO UPDATE SET
+      ON CONFLICT (project_id, item_name) DO UPDATE SET
+        title = EXCLUDED.title,
         description = EXCLUDED.description,
         is_in_scope = EXCLUDED.is_in_scope,
         category = EXCLUDED.category,
@@ -1893,13 +1905,14 @@ Requirements:
     const placeholders: string[] = []
 
     activities.forEach((a, index) => {
-      const offset = index * 12
+      const offset = index * 13
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
       )
       values.push(
         projectId,
-        a.name,
+        a.name,          // For name column
+        a.name,          // For activity_name column (NOT NULL)
         a.description,
         a.category || null,
         a.phase || null,
@@ -1915,11 +1928,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO activities (
-        project_id, name, description, category, phase, start_date, 
+        project_id, name, activity_name, description, category, phase, start_date, 
         end_date, duration, status, assigned_to, effort_estimate, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, name) DO UPDATE SET
+      ON CONFLICT (project_id, activity_name) DO UPDATE SET
+        name = EXCLUDED.name,
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         phase = EXCLUDED.phase,
