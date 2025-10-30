@@ -1777,7 +1777,23 @@ Requirements:
       }
       
       const startDate = isValidDate(p.start_date) ? p.start_date : null
-      const endDate = isValidDate(p.end_date) ? p.end_date : null
+      let endDate = isValidDate(p.end_date) ? p.end_date : null
+      
+      // end_date is NOT NULL in database - provide default if missing
+      if (!endDate) {
+        if (startDate) {
+          // Default: 30 days after start_date
+          const start = new Date(startDate)
+          start.setDate(start.getDate() + 30)
+          endDate = start.toISOString().split('T')[0]
+        } else {
+          // No valid dates at all - use current date + 30 days
+          const now = new Date()
+          now.setDate(now.getDate() + 30)
+          endDate = now.toISOString().split('T')[0]
+        }
+        logger.warn(`[EXTRACTION] Phase "${p.name}" missing end_date, defaulting to ${endDate}`)
+      }
       
       values.push(
         projectId,
