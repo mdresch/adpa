@@ -1691,10 +1691,19 @@ Requirements:
       return
     }
 
+    // Deduplicate by name (ON CONFLICT requires unique names)
+    const uniqueConstraints = Array.from(
+      new Map(constraints.map(c => [(c.name || c.title || '').toLowerCase().trim(), c])).values()
+    )
+    
+    if (uniqueConstraints.length < constraints.length) {
+      logger.warn(`[EXTRACTION] Deduplicated constraints: ${constraints.length} → ${uniqueConstraints.length}`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    constraints.forEach((c, index) => {
+    uniqueConstraints.forEach((c, index) => {
       const offset = index * 6  // Changed from 7 to 6 (removed severity)
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
@@ -1740,7 +1749,7 @@ Requirements:
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${constraints.length} constraints`)
+    logger.info(`[EXTRACTION] Saved ${uniqueConstraints.length} constraints`)
   }
 
   /**
@@ -1759,7 +1768,7 @@ Requirements:
 
     // Deduplicate by name (ON CONFLICT requires unique names)
     const uniqueCriteria = Array.from(
-      new Map(successCriteria.map(sc => [sc.name.toLowerCase().trim(), sc])).values()
+      new Map(successCriteria.map(sc => [(sc.name || sc.title || '').toLowerCase().trim(), sc])).values()
     )
     
     if (uniqueCriteria.length < successCriteria.length) {
@@ -2211,9 +2220,9 @@ Requirements:
     const placeholders: string[] = []
 
     activities.forEach((a, index) => {
-      const offset = index * 11  // Changed from 12 to 11 (removed phase and duration)
+      const offset = index * 10  // Changed from 11 to 10 (removed phase, duration, effort_estimate)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
       values.push(
         projectId,
@@ -2225,7 +2234,6 @@ Requirements:
         a.end_date || null,
         a.status,
         a.assigned_to || null,
-        a.effort_estimate || null,
         userId
       )
     })
@@ -2233,7 +2241,7 @@ Requirements:
     await client.query(`
       INSERT INTO activities (
         project_id, name, activity_name, description, category, start_date, 
-        end_date, status, assigned_to, effort_estimate, created_by
+        end_date, status, assigned_to, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, activity_name) DO UPDATE SET
@@ -2244,7 +2252,6 @@ Requirements:
         end_date = EXCLUDED.end_date,
         status = EXCLUDED.status,
         assigned_to = EXCLUDED.assigned_to,
-        effort_estimate = EXCLUDED.effort_estimate,
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
