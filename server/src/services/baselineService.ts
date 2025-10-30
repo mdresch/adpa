@@ -949,14 +949,19 @@ function identifyCriticalPath(activities: any[], milestones: any[]): string[] {
 
 /**
  * Calculate total budget from resources
+ * For budget-type resources, the currency amount is in the 'name' field (e.g., "$850,000")
+ * For other resources, check 'allocation' field
  */
 function calculateTotalBudget(resources: any[]): string {
-  const budgetResources = resources.filter(r => r.allocation)
+  const budgetResources = resources.filter(r => r.type === 'budget' || r.allocation)
 
   if (budgetResources.length === 0) return 'Not specified'
 
   const total = budgetResources.reduce((sum, r) => {
-    const amount = parseCurrencyToNumber(r.allocation)
+    // For budget-type resources, parse the name field (contains the dollar amount)
+    // For other resources, parse the allocation field
+    const valueToparse = r.type === 'budget' ? r.name : r.allocation
+    const amount = parseCurrencyToNumber(valueToparse)
     return sum + (isNaN(amount) ? 0 : amount)
   }, 0)
 
@@ -978,16 +983,24 @@ function calculateResourceCosts(resources: any[]): any[] {
 
 /**
  * Categorize costs by resource type
+ * For budget-type resources, parse the 'name' field (e.g., "$850,000")
+ * For other resources, parse the 'allocation' field
  */
 function categorizeCosts(resources: any[]): Record<string, string> {
   const categories: Record<string, number> = {}
   
   resources.forEach(r => {
-    if (r.allocation && r.type) {
-      const amount = parseCurrencyToNumber(r.allocation)
+    if (r.type) {
+      // For budget-type resources, parse from name field
+      // For other resources, parse from allocation field
+      const valueToParse = r.type === 'budget' ? r.name : r.allocation
       
-      if (!isNaN(amount)) {
-        categories[r.type] = (categories[r.type] || 0) + amount
+      if (valueToParse) {
+        const amount = parseCurrencyToNumber(valueToParse)
+        
+        if (!isNaN(amount) && amount > 0) {
+          categories[r.type] = (categories[r.type] || 0) + amount
+        }
       }
     }
   })
@@ -1003,7 +1016,7 @@ function categorizeCosts(resources: any[]): Record<string, string> {
 
 /**
  * Robustly parse currency strings with EU/US formats into a Number
- * Examples: "€850 000", "€850,000", "€1.736.142,30", "1,234.56", "1234"
+ * Examples: "€850 000", "€850,000", "$1,735,000", "€1.736.142,30", "1,234.56", "1234"
  */
 function parseCurrencyToNumber(value: unknown): number {
   if (typeof value === 'number') return value
@@ -1026,8 +1039,17 @@ function parseCurrencyToNumber(value: unknown): number {
       s = s.replace(/,/g, '')
     }
   } else if (lastComma !== -1) {
-    // Only comma present -> treat as decimal separator
-    s = s.replace(/\./g, '').replace(',', '.')
+    // Only comma present - check if it's thousands separator or decimal
+    // If 3 digits after comma, it's likely thousands separator (e.g., "850,000")
+    // If 2 or fewer digits, it's likely decimal (e.g., "850,50")
+    const afterComma = s.substring(lastComma + 1)
+    if (afterComma.length === 3) {
+      // Thousands separator (US format like $850,000)
+      s = s.replace(/,/g, '')
+    } else {
+      // Decimal separator (EU format like €850,50)
+      s = s.replace(',', '.')
+    }
   } else {
     // Only dot or plain digits -> remove grouping commas just in case
     s = s.replace(/,/g, '')
