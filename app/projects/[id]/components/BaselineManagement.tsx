@@ -106,6 +106,9 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
   const [formalDocument, setFormalDocument] = useState<string>('')
   const [missingDocuments, setMissingDocuments] = useState<MissingDocument[]>([])
   const [showFormalDocDialog, setShowFormalDocDialog] = useState(false)
+  const [creationMethod, setCreationMethod] = useState<'entities' | 'documents'>('entities')
+  const [entityCount, setEntityCount] = useState<number>(0)
+  const [loadingEntityCount, setLoadingEntityCount] = useState(false)
 
   // Fetch active baseline
   const fetchBaseline = async () => {
@@ -171,35 +174,100 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseline])
 
-  const handleExtractBaseline = async () => {
-    if (documents.length === 0) {
-      toast.error('No documents available to create baseline')
-      return
+  // Check for extracted entities when dialog opens
+  const checkForEntities = async () => {
+    setLoadingEntityCount(true)
+    try {
+      const response = await apiClient.request<{ entities: any[], total: number }>(
+        `/project-data-extraction/entities/${projectId}`
+      )
+      setEntityCount(response.total || 0)
+      
+      // Default to entities method if they exist, otherwise documents
+      if (response.total > 0) {
+        setCreationMethod('entities')
+      } else {
+        setCreationMethod('documents')
+      }
+    } catch (error) {
+      console.error('Error checking for entities:', error)
+      setEntityCount(0)
+      setCreationMethod('documents')
+    } finally {
+      setLoadingEntityCount(false)
     }
+  }
 
+  // Check for entities when dialog opens
+  useEffect(() => {
+    if (showExtractDialog) {
+      checkForEntities()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showExtractDialog])
+
+  const handleExtractBaseline = async () => {
     setExtracting(true)
     try {
-      const response = await apiClient.request('/baselines/extract', {
-        method: 'POST',
-        body: JSON.stringify({
-          project_id: projectId,
-          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
-          // Backend will look up project_name from database
-        })
-      })
+      if (creationMethod === 'entities') {
+        // Create baseline from extracted entities (Phase 2 enhancement)
+        if (entityCount === 0) {
+          toast.error('No extracted entities found. Run AI extraction first.')
+          return
+        }
 
-      // Close dialog immediately - user can continue working!
-      toast.success('Baseline extraction started! You will be notified when complete.')
-      setShowExtractDialog(false)
-      setSelectedDocuments([])
-      
-      // Show job ID for reference
-      if (response.jobId) {
-        toast.info(`Job ID: ${response.jobId}`, { duration: 3000 })
+        const response = await apiClient.request<{
+          success: boolean
+          baseline: any
+          message: string
+          stats: {
+            duration_ms: number
+            entity_count: number
+            completeness_score: number
+          }
+        }>('/baselines/create-from-entities', {
+          method: 'POST',
+          body: JSON.stringify({
+            project_id: projectId
+          })
+        })
+
+        toast.success(response.message || `Baseline created from ${response.stats.entity_count} entities in ${Math.round(response.stats.duration_ms / 1000)}s!`)
+        setShowExtractDialog(false)
+        setSelectedDocuments([])
+        
+        // Refresh baseline data
+        await fetchBaseline()
+        await fetchBaselines()
+      } else {
+        // Traditional: Extract from documents using AI
+        if (documents.length === 0) {
+          toast.error('No documents available to create baseline')
+          return
+        }
+
+        const response = await apiClient.request('/baselines/extract', {
+          method: 'POST',
+          body: JSON.stringify({
+            project_id: projectId,
+            document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+            // Backend will look up project_name from database
+          })
+        })
+
+        // Close dialog immediately - user can continue working!
+        toast.success('Baseline extraction started! You will be notified when complete.')
+        setShowExtractDialog(false)
+        setSelectedDocuments([])
+        
+        // Show job ID for reference
+        if (response.jobId) {
+          toast.info(`Job ID: ${response.jobId}`, { duration: 3000 })
+        }
       }
     } catch (error: any) {
-      console.error('Error queueing baseline extraction:', error)
-      toast.error(error?.message || 'Failed to start baseline extraction')
+      console.error('Error creating baseline:', error)
+      toast.error(error?.message || 'Failed to create baseline')
     } finally {
       setExtracting(false)
     }
@@ -490,55 +558,156 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
       <Dialog open={showExtractDialog} onOpenChange={setShowExtractDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{baseline ? 'Update' : 'Extract'} Project Baseline</DialogTitle>
+            <DialogTitle>{baseline ? 'Update' : 'Create'} Project Baseline</DialogTitle>
             <DialogDescription>
-              AI will analyze your project documents to extract scope, technical, timeline, cost, and success criteria baselines.
+              Choose how to create your baseline: from extracted entities (instant) or by analyzing documents with AI.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Select Documents (optional)</Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Leave empty to use all {documents.length} documents, or select specific documents:
-              </p>
-              <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
-                {documents.map(doc => (
-                  <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedDocuments.includes(doc.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedDocuments([...selectedDocuments, doc.id])
-                        } else {
-                          setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{doc.name}</span>
-                    {doc.template_name && (
-                      <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
+            {/* Creation Method Selection */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Baseline Creation Method</Label>
+              
+              {/* Option 1: From Entities (Recommended) */}
+              <label 
+                className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  creationMethod === 'entities' 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                } ${entityCount === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+                onClick={() => entityCount > 0 && setCreationMethod('entities')}
+              >
+                <input
+                  type="radio"
+                  name="creationMethod"
+                  value="entities"
+                  checked={creationMethod === 'entities'}
+                  onChange={(e) => e.target.checked && setCreationMethod('entities')}
+                  disabled={entityCount === 0}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="h-5 w-5 text-blue-600" />
+                    <span className="font-semibold">Use Extracted Entities</span>
+                    {entityCount > 0 && (
+                      <Badge variant="default" className="bg-green-500">Recommended</Badge>
                     )}
-                  </label>
-                ))}
-              </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Create baseline from {entityCount} AI-extracted entities already in the database
+                  </p>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-green-600 font-medium">✓ 5-10 seconds</span>
+                    <span className="text-green-600 font-medium">✓ Free (no AI calls)</span>
+                    <span className="text-green-600 font-medium">✓ Instant results</span>
+                  </div>
+                  {entityCount === 0 && (
+                    <p className="text-xs text-orange-600 mt-2">
+                      ⚠️ No entities found. Run AI Extraction first from the project page.
+                    </p>
+                  )}
+                  {loadingEntityCount && (
+                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Checking for entities...
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              {/* Option 2: From Documents (Traditional) */}
+              <label 
+                className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  creationMethod === 'documents' 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+                onClick={() => setCreationMethod('documents')}
+              >
+                <input
+                  type="radio"
+                  name="creationMethod"
+                  value="documents"
+                  checked={creationMethod === 'documents'}
+                  onChange={(e) => e.target.checked && setCreationMethod('documents')}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FileText className="h-5 w-5 text-gray-600" />
+                    <span className="font-semibold">Extract from Documents</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Traditional AI extraction from {documents.length} project documents
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>⏱️ 30-60 seconds</span>
+                    <span>💰 Uses AI credits</span>
+                    <span>🔄 Queued job</span>
+                  </div>
+                </div>
+              </label>
             </div>
+
+            {/* Document Selection (only for documents method) */}
+            {creationMethod === 'documents' && (
+              <div>
+                <Label>Select Documents (optional)</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Leave empty to use all {documents.length} documents, or select specific documents:
+                </p>
+                <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {documents.map(doc => (
+                    <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocuments.includes(doc.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDocuments([...selectedDocuments, doc.id])
+                          } else {
+                            setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-sm">{doc.name}</span>
+                      {doc.template_name && (
+                        <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowExtractDialog(false)} disabled={extracting}>
               Cancel
             </Button>
-            <Button onClick={handleExtractBaseline} disabled={extracting}>
+            <Button 
+              onClick={handleExtractBaseline} 
+              disabled={extracting || (creationMethod === 'entities' && entityCount === 0)}
+            >
               {extracting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Extracting...
+                  {creationMethod === 'entities' ? 'Creating...' : 'Extracting...'}
                 </>
               ) : (
                 <>
-                  <Zap className="h-4 w-4 mr-2" />
-                  {baseline ? 'Update' : 'Extract'} Baseline
+                  {creationMethod === 'entities' ? (
+                    <>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Create from {entityCount} Entities
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Extract from Documents
+                    </>
+                  )}
                 </>
               )}
             </Button>
