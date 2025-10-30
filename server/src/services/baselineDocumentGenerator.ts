@@ -31,12 +31,14 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     const scope = baseline.scope_baseline
     
     // Key Deliverables
-    if (scope.key_deliverables && scope.key_deliverables.length > 0) {
+    if (scope.deliverables && scope.deliverables.length > 0) {
       document += `### 1.1 Key Deliverables (Product & Project Scope)\n\n`
       document += `| ID | Deliverable Name | Description |\n`
       document += `|:---|:-----------------|:------------|\n`
-      scope.key_deliverables.forEach((deliverable: string, idx: number) => {
-        document += `| D${idx + 1} | ${deliverable} | (Extracted from documents) |\n`
+      scope.deliverables.forEach((deliverable: any, idx: number) => {
+        const name = typeof deliverable === 'string' ? deliverable : (deliverable.name || `Deliverable ${idx + 1}`)
+        const desc = typeof deliverable === 'object' ? (deliverable.description || 'Extracted from documents') : 'Extracted from documents'
+        document += `| D${idx + 1} | ${name} | ${desc} |\n`
       })
       document += `\n`
     } else {
@@ -88,8 +90,10 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     // Constraints
     if (scope.constraints && scope.constraints.length > 0) {
       document += `### 1.5 Project Constraints\n\n`
-      scope.constraints.forEach((constraint: string) => {
-        document += `- ${constraint}\n`
+      scope.constraints.forEach((constraint: any) => {
+        const text = typeof constraint === 'string' ? constraint : 
+                    (constraint.description || constraint.name || constraint.title || 'Constraint')
+        document += `- ${text}\n`
       })
       document += `\n`
     }
@@ -133,8 +137,10 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     
     if (tech.technical_requirements && tech.technical_requirements.length > 0) {
       document += `### 2.3 Technical Requirements\n\n`
-      tech.technical_requirements.forEach((req: string, idx: number) => {
-        document += `${idx + 1}. ${req}\n`
+      tech.technical_requirements.forEach((req: any, idx: number) => {
+        const reqText = typeof req === 'string' ? req : 
+                       (req.name || req.description || req.title || `Requirement ${idx + 1}`)
+        document += `${idx + 1}. ${reqText}\n`
       })
       document += `\n`
     }
@@ -252,8 +258,26 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     
     if (resource.team_composition && resource.team_composition.length > 0) {
       document += `### 5.1 Team Composition\n\n`
-      resource.team_composition.forEach((member: string) => {
-        document += `- ${member}\n`
+      resource.team_composition.forEach((member: any) => {
+        const memberText = typeof member === 'string' ? member : 
+                          (member.name || member.role || 'Team Member')
+        document += `- ${memberText}\n`
+      })
+      document += `\n`
+    }
+    
+    // Stakeholders
+    if (resource.stakeholders && resource.stakeholders.length > 0) {
+      document += `### 5.1.1 Key Stakeholders\n\n`
+      document += `| Name | Role | Interest/Influence |\n`
+      document += `|:-----|:-----|:-------------------|\n`
+      resource.stakeholders.slice(0, 15).forEach((stakeholder: any) => {
+        const name = typeof stakeholder === 'string' ? stakeholder : (stakeholder.name || 'Stakeholder')
+        const role = typeof stakeholder === 'object' ? (stakeholder.role || 'N/A') : 'N/A'
+        const influence = typeof stakeholder === 'object' ? 
+                         `${stakeholder.interest_level || 'N/A'}/${stakeholder.influence_level || 'N/A'}` : 
+                         'N/A'
+        document += `| ${name} | ${role} | ${influence} |\n`
       })
       document += `\n`
     }
@@ -296,8 +320,11 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
       document += `### 6.1 Key Performance Indicators (KPIs)\n\n`
       document += `| KPI | Target Baseline |\n`
       document += `|:----|:----------------|\n`
-      success.kpis.forEach((kpi: string) => {
-        document += `| ${kpi} | As stated |\n`
+      success.kpis.forEach((kpi: any) => {
+        const kpiName = typeof kpi === 'string' ? kpi : 
+                       (kpi.metric || kpi.name || kpi.description || 'KPI')
+        const target = typeof kpi === 'object' ? (kpi.target_value || 'As stated') : 'As stated'
+        document += `| ${kpiName} | ${target} |\n`
       })
       document += `\n`
     }
@@ -312,8 +339,10 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     
     if (success.quality_metrics && success.quality_metrics.length > 0) {
       document += `### 6.3 Quality Metrics\n\n`
-      success.quality_metrics.forEach((metric: string) => {
-        document += `- ${metric}\n`
+      success.quality_metrics.forEach((metric: any) => {
+        const metricText = typeof metric === 'string' ? metric : 
+                          (metric.name || metric.metric || metric.description || 'Quality Metric')
+        document += `- ${metricText}\n`
       })
       document += `\n`
     }

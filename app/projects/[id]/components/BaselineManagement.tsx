@@ -1023,13 +1023,23 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.scope_baseline.key_deliverables && Array.isArray(viewingBaseline.scope_baseline.key_deliverables) && (
+                    {viewingBaseline.scope_baseline.deliverables && Array.isArray(viewingBaseline.scope_baseline.deliverables) && viewingBaseline.scope_baseline.deliverables.length > 0 && (
                       <div>
-                        <p className="font-medium mb-1">Key Deliverables:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.scope_baseline.key_deliverables.map((d: string, i: number) => (
-                            <li key={i}>{d}</li>
+                        <p className="font-medium mb-1">Key Deliverables ({viewingBaseline.scope_baseline.deliverables.length}):</p>
+                        <ul className="list-disc list-inside space-y-2">
+                          {viewingBaseline.scope_baseline.deliverables.slice(0, 10).map((d: any, i: number) => (
+                            <li key={i} className="text-muted-foreground">
+                              <span className="font-medium text-foreground">{typeof d === 'string' ? d : (d.name || `Deliverable ${i + 1}`)}</span>
+                              {d.description && typeof d === 'object' && (
+                                <span className="text-xs block ml-5 mt-0.5">{d.description}</span>
+                              )}
+                            </li>
                           ))}
+                          {viewingBaseline.scope_baseline.deliverables.length > 10 && (
+                            <li className="text-xs text-muted-foreground italic">
+                              ... and {viewingBaseline.scope_baseline.deliverables.length - 10} more deliverables
+                            </li>
+                          )}
                         </ul>
                       </div>
                     )}
