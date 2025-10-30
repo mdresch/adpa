@@ -723,9 +723,9 @@ export async function createBaselineFromEntities(
             priority: r.priority
           })),
         quality_standards: qualityStandards.map(q => ({
-          name: q.name,
+          name: q.title || q.name,
           description: q.description,
-          measurement_method: q.measurement_method,
+          measurement_method: q.measurement_method || q.measurement_criteria,
           target_value: q.target_value
         })),
         best_practices: bestPractices.map(bp => ({
@@ -828,9 +828,10 @@ export async function createBaselineFromEntities(
           measurement_frequency: sc.measurement_frequency
         })),
         quality_metrics: qualityStandards.map(q => ({
-          name: q.name,
+          name: q.title || q.name,
           target: q.target_value,
-          measurement_method: q.measurement_method
+          measurement_method: q.measurement_method,
+          description: q.description
         })),
         acceptance_criteria: deliverables
           .filter(d => d.acceptance_criteria)
