@@ -737,7 +737,7 @@ export async function createBaselineFromEntities(
         technical_constraints: constraints
           .filter(c => c.type === 'technical')
           .map(c => c.description),
-        architecture: 'See technical requirements and technology stack for details'
+        architecture: generateArchitectureOverview(resources, requirements, qualityStandards)
       },
       timeline_baseline: {
         project_duration: calculateProjectDuration(phases),
@@ -1007,6 +1007,97 @@ function calculateCompletenessFromEntities(totalEntities: number): number {
   if (totalEntities >= 100) return 0.80
   if (totalEntities >= 50) return 0.70
   return 0.60 // Minimal coverage
+}
+
+/**
+ * Generate architecture overview from technology stack and requirements
+ */
+function generateArchitectureOverview(resources: any[], requirements: any[], qualityStandards: any[]): string {
+  const techStack = resources.filter(r => r.type === 'technology' || r.type === 'tool')
+  
+  if (techStack.length === 0) {
+    return 'Architecture details not specified. See technical requirements and technology stack for available information.'
+  }
+  
+  // Categorize technologies
+  const frontend = techStack.filter(t => 
+    t.name.toLowerCase().includes('react') || 
+    t.name.toLowerCase().includes('vue') || 
+    t.name.toLowerCase().includes('angular') ||
+    t.name.toLowerCase().includes('next') ||
+    t.name.toLowerCase().includes('ui') ||
+    t.name.toLowerCase().includes('tailwind')
+  )
+  
+  const backend = techStack.filter(t => 
+    t.name.toLowerCase().includes('node') || 
+    t.name.toLowerCase().includes('express') || 
+    t.name.toLowerCase().includes('api') ||
+    t.name.toLowerCase().includes('python') ||
+    t.name.toLowerCase().includes('django') ||
+    t.name.toLowerCase().includes('spring')
+  )
+  
+  const database = techStack.filter(t => 
+    t.name.toLowerCase().includes('postgres') || 
+    t.name.toLowerCase().includes('mysql') || 
+    t.name.toLowerCase().includes('mongo') ||
+    t.name.toLowerCase().includes('redis') ||
+    t.name.toLowerCase().includes('database')
+  )
+  
+  const cloud = techStack.filter(t => 
+    t.name.toLowerCase().includes('aws') || 
+    t.name.toLowerCase().includes('azure') || 
+    t.name.toLowerCase().includes('gcp') ||
+    t.name.toLowerCase().includes('cloud') ||
+    t.name.toLowerCase().includes('docker') ||
+    t.name.toLowerCase().includes('kubernetes')
+  )
+  
+  // Build architecture description
+  let arch = 'Multi-tier application architecture comprising:\n\n'
+  
+  if (frontend.length > 0) {
+    arch += `**Frontend Layer**: ${frontend.map(t => t.name).join(', ')} providing user interface and client-side logic.\n\n`
+  }
+  
+  if (backend.length > 0) {
+    arch += `**Backend Layer**: ${backend.map(t => t.name).join(', ')} handling business logic, API endpoints, and server-side processing.\n\n`
+  }
+  
+  if (database.length > 0) {
+    arch += `**Data Layer**: ${database.map(t => t.name).join(', ')} for data persistence and caching.\n\n`
+  }
+  
+  if (cloud.length > 0) {
+    arch += `**Infrastructure**: ${cloud.map(t => t.name).join(', ')} for deployment, scaling, and cloud services.\n\n`
+  }
+  
+  // Add quality aspects if available
+  if (qualityStandards.length > 0) {
+    const securityStandards = qualityStandards.filter(q => 
+      q.name.toLowerCase().includes('security') || 
+      q.name.toLowerCase().includes('iso') ||
+      q.name.toLowerCase().includes('gdpr')
+    )
+    if (securityStandards.length > 0) {
+      arch += `**Security & Compliance**: Architecture adheres to ${securityStandards.map(s => s.name).join(', ')} standards.\n\n`
+    }
+  }
+  
+  // Add technical requirements summary
+  const performanceReqs = requirements.filter(r => 
+    r.description?.toLowerCase().includes('performance') || 
+    r.description?.toLowerCase().includes('scalability') ||
+    r.description?.toLowerCase().includes('response time')
+  )
+  
+  if (performanceReqs.length > 0) {
+    arch += `**Performance Requirements**: System designed to meet ${performanceReqs.length} performance and scalability requirements including response time, throughput, and concurrent user support.`
+  }
+  
+  return arch.trim() || 'See technical requirements and technology stack for details'
 }
 
 export const baselineService = {

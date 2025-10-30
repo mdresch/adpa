@@ -1206,9 +1206,16 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                       <div>
                         <p className="font-medium mb-1">KPIs:</p>
                         <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.success_criteria.kpis.map((kpi: string, i: number) => (
-                            <li key={i}>{kpi}</li>
-                          ))}
+                          {viewingBaseline.success_criteria.kpis.map((kpi: any, i: number) => {
+                            const label = typeof kpi === 'string' ? kpi : (kpi.metric || kpi.name || kpi.description || `KPI ${i + 1}`)
+                            const target = typeof kpi === 'object' ? kpi.target_value : undefined
+                            return (
+                              <li key={i} className="text-muted-foreground">
+                                <span className="font-medium text-foreground">{label}</span>
+                                {target && <span className="text-xs ml-2">- {target}</span>}
+                              </li>
+                            )
+                          })}
                         </ul>
                       </div>
                     )}
