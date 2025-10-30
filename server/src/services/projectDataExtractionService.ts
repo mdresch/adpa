@@ -2188,10 +2188,41 @@ Requirements:
       return
     }
 
+    // DEDUPLICATE activities by name before database insert
+    // AI sometimes extracts the same activity multiple times
+    const deduplicatedMap = new Map<string, Activity>()
+    
+    activities.forEach(activity => {
+      const normalizedName = activity.name.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        // First occurrence - add to map
+        deduplicatedMap.set(normalizedName, activity)
+      } else {
+        // Duplicate found - merge details
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: Activity = {
+          ...existing,
+          description: activity.description || existing.description,
+          category: activity.category || existing.category,
+          start_date: activity.start_date || existing.start_date,
+          end_date: activity.end_date || existing.end_date,
+          duration: activity.duration || existing.duration,
+          assigned_to: activity.assigned_to || existing.assigned_to,
+          dependencies: activity.dependencies?.length ? activity.dependencies : existing.dependencies
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.info(`[EXTRACTION] Merged duplicate activity: "${activity.name}"`)
+      }
+    })
+
+    const uniqueActivities = Array.from(deduplicatedMap.values())
+    logger.info(`[EXTRACTION] Deduplicated ${activities.length} activities to ${uniqueActivities.length} unique activities`)
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    activities.forEach((a, index) => {
+    uniqueActivities.forEach((a, index) => {
       const offset = index * 10  // Changed from 11 to 10 (removed phase, duration, effort_estimate)
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
@@ -2259,7 +2290,7 @@ Requirements:
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${activities.length} activities`)
+    logger.info(`[EXTRACTION] Saved ${uniqueActivities.length} activities (deduplicated from ${activities.length})`)
   }
 
   /**
