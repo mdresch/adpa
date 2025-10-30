@@ -371,6 +371,12 @@ export class ProjectDataExtractionService {
     documentIds?: string[]
   ): Promise<Array<{ id: string; title: string; content: string; template_name?: string }>> {
     try {
+      // Ensure pool is connected before querying
+      if (!pool) {
+        const { connectDatabase } = await import('@/database/connection')
+        await connectDatabase()
+      }
+      
       let query = `
         SELECT 
           d.id,
@@ -1991,6 +1997,12 @@ Requirements:
     entityType: string,
     entities: any[]
   ): Promise<void> {
+    // Ensure pool is connected before saving
+    if (!pool) {
+      const { connectDatabase } = await import('@/database/connection')
+      await connectDatabase()
+    }
+    
     const client = await pool!.connect()
     
     try {
