@@ -176,21 +176,34 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
   // Check for extracted entities when dialog opens
   const checkForEntities = async () => {
+    if (!projectId) {
+      console.warn('No projectId available for entity check')
+      return
+    }
+    
     setLoadingEntityCount(true)
+    console.log('[BaselineManagement] Checking for entities...', { projectId })
+    
     try {
-      const response = await apiClient.request<{ entities: any[], total: number }>(
-        `/project-data-extraction/entities/${projectId}`
+      const response = await apiClient.request<{ totalEntities: number, entityCounts: Record<string, number> }>(
+        `/project-data-extraction/results/${projectId}`
       )
-      setEntityCount(response.total || 0)
+      
+      console.log('[BaselineManagement] Entity check response:', response)
+      
+      const total = response.totalEntities || 0
+      setEntityCount(total)
       
       // Default to entities method if they exist, otherwise documents
-      if (response.total > 0) {
+      if (total > 0) {
         setCreationMethod('entities')
+        console.log(`[BaselineManagement] Found ${total} entities, defaulting to entities method`)
       } else {
         setCreationMethod('documents')
+        console.log('[BaselineManagement] No entities found, defaulting to documents method')
       }
     } catch (error) {
-      console.error('Error checking for entities:', error)
+      console.error('[BaselineManagement] Error checking for entities:', error)
       setEntityCount(0)
       setCreationMethod('documents')
     } finally {
@@ -200,11 +213,11 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
   // Check for entities when dialog opens
   useEffect(() => {
-    if (showExtractDialog) {
+    if (showExtractDialog && projectId) {
       checkForEntities()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showExtractDialog])
+  }, [showExtractDialog, projectId])
 
   const handleExtractBaseline = async () => {
     setExtracting(true)
