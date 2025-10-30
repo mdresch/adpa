@@ -258,6 +258,76 @@ router.post(
  * POST /api/baselines/:id/decline
  * Decline and archive a baseline
  */
+/**
+ * POST /api/baselines/:baselineId/revalidate-document/:documentId
+ * Manually trigger drift re-validation for a document without editing
+ */
+router.post(
+  '/:baselineId/revalidate-document/:documentId',
+  authenticateToken,
+  requirePermission('documents.read'),
+  async (req, res) => {
+    try {
+      const { baselineId, documentId } = req.params
+      
+      // Get document
+      const docResult = await pool.query(
+        'SELECT * FROM documents WHERE id = $1',
+        [documentId]
+      )
+      
+      if (docResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Document not found' })
+      }
+      
+      const doc = docResult.rows[0]
+      
+      logger.info(`[Manual Revalidation] Re-validating document ${documentId} against baseline ${baselineId}`)
+      
+      // Re-validate against baseline
+      const drifts = await baselineService.validateDocumentAgainstBaseline(
+        doc.project_id,
+        documentId,
+        doc.content,
+        doc.name
+      )
+      
+      if (drifts.length === 0) {
+        logger.info(`[Manual Revalidation] ✅ No drift detected`)
+        
+        // Mark old drifts as resolved
+        await pool.query(
+          `UPDATE baseline_drift_detection 
+           SET status = 'resolved',
+               resolution_notes = 'Drift resolved via manual re-validation',
+               resolved_by = $1,
+               resolved_at = CURRENT_TIMESTAMP
+           WHERE source_document_id = $2 
+           AND status = 'active'`,
+          [req.user?.id, documentId]
+        )
+      } else {
+        logger.warn(`[Manual Revalidation] Detected ${drifts.length} drift(s)`)
+      }
+      
+      res.json({
+        success: true,
+        message: 'Drift re-validation completed',
+        driftCount: drifts.length,
+        drifts: drifts.map(d => ({
+          type: d.detection_type,
+          severity: d.drift_severity,
+          description: d.drift_description
+        }))
+      })
+      
+    } catch (error: any) {
+      logger.error('Manual drift re-validation failed:', error)
+      res.status(500).json({ error: error.message || 'Failed to re-validate drift' })
+    }
+  }
+)
+
 router.post(
   '/:id/decline',
   authenticateToken,
