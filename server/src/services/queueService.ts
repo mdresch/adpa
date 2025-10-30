@@ -1120,41 +1120,44 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
 
 /**
  * Child Job: Extract and save a single entity type
+ * Register handlers for each entity type explicitly
  */
-extractionQueue.process(/^extract-entity-.*/, 5, async (job) => {
-  const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds, entityType, entityIndex, totalEntities } = job.data
-  
-  try {
-    logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId}`)
+ENTITY_TYPES.forEach((entityType) => {
+  extractionQueue.process(`extract-entity-${entityType}`, 5, async (job) => {
+    const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
     
-    const { projectDataExtractionService } = await import('./projectDataExtractionService')
-    
-    // Extract this specific entity type
-    const entities = await projectDataExtractionService.extractSingleEntityType(
-      projectId,
-      userId,
-      entityType,
-      { aiProvider, aiModel, documentIds }
-    )
-    
-    logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType}`)
-    
-    // Save immediately after extraction (resilient)
-    await projectDataExtractionService.saveSingleEntityType(
-      projectId,
-      userId,
-      entityType,
-      entities
-    )
-    
-    logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType}`)
-    
-    return { entityType, count: entities.length }
-    
-  } catch (error: any) {
-    logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, { parentJobId })
-    throw error // Bull will retry automatically
-  }
+    try {
+      logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId}`)
+      
+      const { projectDataExtractionService } = await import('./projectDataExtractionService')
+      
+      // Extract this specific entity type
+      const entities = await projectDataExtractionService.extractSingleEntityType(
+        projectId,
+        userId,
+        entityType,
+        { aiProvider, aiModel, documentIds }
+      )
+      
+      logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType}`)
+      
+      // Save immediately after extraction (resilient)
+      await projectDataExtractionService.saveSingleEntityType(
+        projectId,
+        userId,
+        entityType,
+        entities
+      )
+      
+      logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType}`)
+      
+      return { entityType, count: entities.length }
+      
+    } catch (error: any) {
+      logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, { parentJobId })
+      throw error // Bull will retry automatically
+    }
+  })
 })
 
 /**
