@@ -399,7 +399,7 @@ router.put("/:id",
     content: Joi.object().optional(),
     variables: Joi.array().optional(),
     is_public: Joi.boolean().optional(),
-    system_prompt: Joi.string().max(10000).optional(),
+    system_prompt: Joi.string().max(50000).optional(), // Increased for comprehensive prompts
     quality_threshold: Joi.number().min(0).max(1).optional(),
     prompt_version: Joi.number().integer().min(1).optional(),
     template_paragraphs: Joi.array().items(Joi.object({
