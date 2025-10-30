@@ -1463,13 +1463,26 @@ Requirements:
       }
       const mappedStatus = statusMap[r.status] || 'draft'
       
+      // Map AI priority values to database CHECK constraint values
+      // DB allows: high, medium, low
+      // AI returns: critical, high, medium, low
+      const priorityMap: Record<string, string> = {
+        'critical': 'high',
+        'very_high': 'high',
+        'high': 'high',
+        'medium': 'medium',
+        'low': 'low',
+        'very_low': 'low'
+      }
+      const mappedPriority = priorityMap[r.priority?.toLowerCase()] || 'medium'
+      
       values.push(
         projectId,
         r.title,        // For title column
         r.title,        // For name column (NOT NULL requirement)
         r.description,
         r.type,
-        r.priority,
+        mappedPriority, // Use mapped priority value
         mappedStatus,   // Use mapped status value
         acceptanceCriteria,
         userId
@@ -1517,6 +1530,20 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
+      
+      // Map AI impact values to database CHECK constraint values
+      // DB allows: high, medium, low
+      // AI returns: critical, very_high, high, medium, low
+      const impactMap: Record<string, string> = {
+        'critical': 'high',
+        'very_high': 'high',
+        'high': 'high',
+        'medium': 'medium',
+        'low': 'low',
+        'very_low': 'low'
+      }
+      const mappedImpact = impactMap[r.impact?.toLowerCase()] || 'medium'
+      
       values.push(
         projectId,
         r.title,        // For title column
@@ -1524,7 +1551,7 @@ Requirements:
         r.description,
         r.category,
         r.probability,
-        r.impact,
+        mappedImpact,   // Use mapped impact value
         r.mitigation_strategy || null,
         r.contingency_plan || null,
         userId
@@ -1573,11 +1600,37 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
       )
+      
+      // Convert quarter dates like '2025-Q4' to actual dates
+      const convertQuarterDate = (dateStr: string | undefined): string | null => {
+        if (!dateStr) return null
+        const quarterMatch = dateStr.match(/^(\d{4})-Q([1-4])$/)
+        if (quarterMatch) {
+          const year = quarterMatch[1]
+          const quarter = quarterMatch[2]
+          const quarterEndDates: Record<string, string> = {
+            '1': '03-31',
+            '2': '06-30',
+            '3': '09-30',
+            '4': '12-31'
+          }
+          return `${year}-${quarterEndDates[quarter]}`
+        }
+        // Validate it's a proper date format
+        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+          return dateStr
+        }
+        logger.warn(`[EXTRACTION] Invalid milestone date format: ${dateStr}, setting to null`)
+        return null
+      }
+      
+      const dueDate = convertQuarterDate(m.due_date)
+      
       values.push(
         projectId,
         m.name,
         m.description,
-        m.due_date,
+        dueDate,
         m.status,
         userId
       )
@@ -1616,9 +1669,9 @@ Requirements:
     const placeholders: string[] = []
 
     constraints.forEach((c, index) => {
-      const offset = index * 7
+      const offset = index * 6  // Changed from 7 to 6 (removed severity)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
       )
       values.push(
         projectId,
@@ -1626,21 +1679,19 @@ Requirements:
         c.title,        // For name column (NOT NULL)
         c.description,
         c.type,
-        c.severity,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO constraints (
-        project_id, title, name, description, type, severity, created_by
+        project_id, title, name, description, type, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
         title = EXCLUDED.title,
         description = EXCLUDED.description,
         type = EXCLUDED.type,
-        severity = EXCLUDED.severity,
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -1669,13 +1720,28 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
+      
+      // Extract numeric value from strings like "90% within 6 months" or "95"
+      const extractNumeric = (value: any): number | null => {
+        if (typeof value === 'number') return value
+        if (!value) return null
+        const numericMatch = String(value).match(/^(\d+(?:\.\d+)?)/)
+        if (numericMatch) {
+          return parseFloat(numericMatch[1])
+        }
+        logger.warn(`[EXTRACTION] Could not extract numeric from: ${value}, setting to null`)
+        return null
+      }
+      
+      const targetValue = extractNumeric(sc.target_value)
+      
       values.push(
         projectId,
         sc.title,        // For title column
         sc.title,        // For name column (NOT NULL)
         sc.description,
         sc.metric,
-        sc.target_value,
+        targetValue,     // Use extracted numeric value
         sc.measurement_method,
         userId
       )
@@ -1844,10 +1910,31 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
+      
+      // Map AI resource types to database CHECK constraint values
+      // DB allows: human, equipment, material, software, facility, budget
+      // AI returns: financial, human, equipment, material, software, facility
+      const typeMap: Record<string, string> = {
+        'financial': 'budget',
+        'budget': 'budget',
+        'money': 'budget',
+        'funding': 'budget',
+        'human': 'human',
+        'people': 'human',
+        'staff': 'human',
+        'equipment': 'equipment',
+        'hardware': 'equipment',
+        'material': 'material',
+        'software': 'software',
+        'facility': 'facility',
+        'facilities': 'facility'
+      }
+      const mappedType = typeMap[r.type?.toLowerCase()] || 'material'
+      
       values.push(
         projectId,
         r.name,
-        r.type,
+        mappedType,  // Use mapped type value
         r.role || null,
         r.allocation || null,
         r.availability || null,
@@ -1889,9 +1976,9 @@ Requirements:
     const placeholders: string[] = []
 
     qualityStandards.forEach((qs, index) => {
-      const offset = index * 9
+      const offset = index * 8  // Changed from 9 to 8 (removed standard_type)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
       values.push(
         projectId,
@@ -1899,7 +1986,6 @@ Requirements:
         qs.title,        // For standard_name column (NOT NULL)
         qs.description,
         qs.category,
-        qs.standard_type,
         qs.requirements || null,
         qs.measurement_criteria || null,
         userId
@@ -1908,7 +1994,7 @@ Requirements:
 
     await client.query(`
       INSERT INTO quality_standards (
-        project_id, title, standard_name, description, category, standard_type, 
+        project_id, title, standard_name, description, category, 
         requirements, measurement_criteria, created_by
       )
       VALUES ${placeholders.join(', ')}
@@ -1947,13 +2033,31 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
+      
+      // Map AI status values to database CHECK constraint values
+      // DB allows: not_started, in_progress, review, completed, delivered
+      // AI returns: planned, in_progress, review, completed, delivered
+      const statusMap: Record<string, string> = {
+        'planned': 'not_started',
+        'not_started': 'not_started',
+        'pending': 'not_started',
+        'in_progress': 'in_progress',
+        'active': 'in_progress',
+        'review': 'review',
+        'reviewing': 'review',
+        'completed': 'completed',
+        'done': 'completed',
+        'delivered': 'delivered'
+      }
+      const mappedStatus = statusMap[d.status?.toLowerCase()] || 'not_started'
+      
       values.push(
         projectId,
         d.name,
         d.description,
         d.type,
         d.due_date || null,
-        d.status,
+        mappedStatus,  // Use mapped status value
         d.owner || null,
         userId
       )
@@ -1995,9 +2099,9 @@ Requirements:
     const placeholders: string[] = []
 
     scopeItems.forEach((si, index) => {
-      const offset = index * 8
+      const offset = index * 7  // Changed from 8 to 7 (removed priority)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
       // Map is_in_scope boolean to inclusion_status text
       const inclusionStatus = si.is_in_scope ? 'in_scope' : 'out_of_scope'
@@ -2009,15 +2113,13 @@ Requirements:
         si.description,
         inclusionStatus, // Map to inclusion_status column
         si.category || null,
-        si.priority || null,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO scope_items (
-        project_id, title, item_name, description, inclusion_status, category, 
-        priority, created_by
+        project_id, title, item_name, description, inclusion_status, category, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, item_name) DO UPDATE SET
@@ -2050,9 +2152,9 @@ Requirements:
     const placeholders: string[] = []
 
     activities.forEach((a, index) => {
-      const offset = index * 13
+      const offset = index * 12  // Changed from 13 to 12 (removed phase)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
       )
       values.push(
         projectId,
@@ -2060,7 +2162,6 @@ Requirements:
         a.name,          // For activity_name column (NOT NULL)
         a.description,
         a.category || null,
-        a.phase || null,
         a.start_date || null,
         a.end_date || null,
         a.duration || null,
@@ -2073,7 +2174,7 @@ Requirements:
 
     await client.query(`
       INSERT INTO activities (
-        project_id, name, activity_name, description, category, phase, start_date, 
+        project_id, name, activity_name, description, category, start_date, 
         end_date, duration, status, assigned_to, effort_estimate, created_by
       )
       VALUES ${placeholders.join(', ')}
@@ -2081,7 +2182,6 @@ Requirements:
         name = EXCLUDED.name,
         description = EXCLUDED.description,
         category = EXCLUDED.category,
-        phase = EXCLUDED.phase,
         start_date = EXCLUDED.start_date,
         end_date = EXCLUDED.end_date,
         duration = EXCLUDED.duration,
