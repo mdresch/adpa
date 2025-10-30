@@ -1351,6 +1351,18 @@ Requirements:
           : [r.acceptance_criteria]
       }
       
+      // Map AI status values to database CHECK constraint values
+      // DB allows: draft, approved, implemented, verified
+      // AI returns: proposed, approved, in_progress, completed, deferred
+      const statusMap: Record<string, string> = {
+        'proposed': 'draft',
+        'approved': 'approved',
+        'in_progress': 'draft',
+        'completed': 'implemented',
+        'deferred': 'draft'
+      }
+      const mappedStatus = statusMap[r.status] || 'draft'
+      
       values.push(
         projectId,
         r.title,        // For title column
@@ -1358,7 +1370,7 @@ Requirements:
         r.description,
         r.type,
         r.priority,
-        r.status,
+        mappedStatus,   // Use mapped status value
         acceptanceCriteria,
         userId
       )
@@ -1653,12 +1665,26 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
+      
+      // Validate and sanitize dates (AI sometimes returns text instead of dates)
+      const isValidDate = (dateStr: string | undefined) => {
+        if (!dateStr) return false
+        // Check if it's a valid date format (YYYY-MM-DD or similar)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
+        if (!dateRegex.test(dateStr)) return false
+        const date = new Date(dateStr)
+        return !isNaN(date.getTime())
+      }
+      
+      const startDate = isValidDate(p.start_date) ? p.start_date : null
+      const endDate = isValidDate(p.end_date) ? p.end_date : null
+      
       values.push(
         projectId,
         p.name,
         p.description,
-        p.start_date || null,
-        p.end_date || null,
+        startDate,
+        endDate,
         p.status,
         userId
       )
@@ -1857,12 +1883,15 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
+      // Map is_in_scope boolean to inclusion_status text
+      const inclusionStatus = si.is_in_scope ? 'in_scope' : 'out_of_scope'
+      
       values.push(
         projectId,
         si.title,        // For title column
         si.title,        // For item_name column (NOT NULL)
         si.description,
-        si.is_in_scope,
+        inclusionStatus, // Map to inclusion_status column
         si.category || null,
         si.priority || null,
         userId
@@ -1871,14 +1900,14 @@ Requirements:
 
     await client.query(`
       INSERT INTO scope_items (
-        project_id, title, item_name, description, is_in_scope, category, 
+        project_id, title, item_name, description, inclusion_status, category, 
         priority, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, item_name) DO UPDATE SET
         title = EXCLUDED.title,
         description = EXCLUDED.description,
-        is_in_scope = EXCLUDED.is_in_scope,
+        inclusion_status = EXCLUDED.inclusion_status,
         category = EXCLUDED.category,
         priority = EXCLUDED.priority,
         updated_at = CURRENT_TIMESTAMP
