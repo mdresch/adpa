@@ -2238,6 +2238,24 @@ Requirements:
         logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid assigned_to UUID: ${a.assigned_to}, setting to null`)
       }
       
+      // Map AI status values to database CHECK constraint values
+      // DB allows: not_started, in_progress, completed, blocked, cancelled
+      // AI returns: planned, not_started, in_progress, completed, blocked, cancelled
+      const statusMap: Record<string, string> = {
+        'planned': 'not_started',
+        'pending': 'not_started',
+        'not_started': 'not_started',
+        'in_progress': 'in_progress',
+        'active': 'in_progress',
+        'completed': 'completed',
+        'done': 'completed',
+        'blocked': 'blocked',
+        'on_hold': 'blocked',
+        'cancelled': 'cancelled',
+        'canceled': 'cancelled'
+      }
+      const mappedStatus = statusMap[a.status?.toLowerCase()] || 'not_started'
+      
       values.push(
         projectId,
         a.name,          // For name column
@@ -2246,7 +2264,7 @@ Requirements:
         a.category || null,
         a.start_date || null,
         a.end_date || null,
-        a.status,
+        mappedStatus,    // Use mapped status value
         assignedTo,      // Use validated UUID or null
         userId
       )
