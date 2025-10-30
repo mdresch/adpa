@@ -102,6 +102,7 @@ export interface ContextData {
   document_history_context: DocumentHistoryContextData
   external_context: ExternalContextData
   template_context: TemplateContextData
+  baseline_context?: BaselineContextData // NEW: Approved project baseline for drift-aware generation
   integrated_context: IntegratedContextData
   optimized_context: OptimizedContextData
   metadata: ContextMetadata
@@ -226,6 +227,58 @@ export interface TemplateContextData {
   template_collaboration_data: TemplateCollaborationData
   template_version_history: TemplateVersionHistoryData[]
   template_approval_history: TemplateApprovalHistoryData[]
+  metadata: Record<string, any>
+}
+
+export interface BaselineContextData {
+  baseline_id: string
+  project_id: string
+  baseline_version: number
+  approval_status: 'draft' | 'approved' | 'rejected' | 'superseded'
+  scope_baseline: {
+    in_scope_items: string[]
+    out_of_scope_items: string[]
+    assumptions: string[]
+    constraints: string[]
+    deliverables: string[]
+  }
+  technical_baseline: {
+    architecture_approach: string
+    key_technologies: string[]
+    integration_points: string[]
+    technical_constraints: string[]
+    quality_standards: string[]
+  }
+  timeline_baseline: {
+    key_milestones: Array<{ name: string; date: string; description: string }>
+    critical_path: string[]
+    dependencies: string[]
+    buffer_time: string
+  }
+  cost_baseline: {
+    budget_total: number
+    cost_breakdown: Record<string, number>
+    contingency_reserves: number
+    management_reserves: number
+  }
+  resource_baseline: {
+    team_structure: string[]
+    key_roles: string[]
+    resource_requirements: string[]
+    skill_requirements: string[]
+  }
+  success_criteria: {
+    kpis: Array<{ metric: string; target: string; measurement: string }>
+    acceptance_criteria: string[]
+    quality_gates: string[]
+  }
+  extraction_confidence: number
+  completeness_score: number
+  consistency_score: number
+  clarity_score: number
+  approved_by?: string
+  approved_at?: Date
+  baseline_snapshot_hash?: string
   metadata: Record<string, any>
 }
 

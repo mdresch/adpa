@@ -665,4 +665,44 @@ export class ProjectContextAnalyzer {
       metadata: {}
     }
   }
+
+  /**
+   * Gather semantic project context using RAG
+   * CR-2025-001: RAG Integration - Semantic search for project-wide context
+   */
+  async gatherSemanticProjectContext(projectId: string, query?: string): Promise<any[]> {
+    if (!this.retrieval) {
+      logger.warn('[RAG] ContextRetrievalService not available for semantic project context')
+      return []
+    }
+
+    try {
+      const semanticQuery = query || 'project objectives goals deliverables stakeholders requirements timeline milestones budget resources'
+      
+      logger.info('[RAG-PROJECT] Performing semantic search for project context')
+      
+      const chunks = await this.retrieval.searchChunks({
+        projectId,
+        query: semanticQuery,
+        topK: 20
+      })
+
+      logger.info(`[RAG-PROJECT] Retrieved ${chunks.length} semantically relevant project chunks`)
+
+      return chunks.map(chunk => ({
+        chunk_id: chunk.id,
+        document_id: chunk.document_id,
+        document_title: chunk.title,
+        content: chunk.content,
+        relevance_score: chunk.score,
+        retrieval_method: 'semantic_search'
+      }))
+
+    } catch (error: unknown) {
+      logger.error('[RAG-PROJECT] Semantic search failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
 }

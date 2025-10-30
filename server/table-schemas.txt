@@ -1,0 +1,378 @@
+[dotenv@17.2.3] injecting env (20) from .env -- tip: ≡ƒöä add secrets lifecycle management: https://dotenvx.com/ops
+≡ƒöì DATABASE_URL check: Found (postgresql://postgres:QueIQ4AD...)
+≡ƒöì NODE_ENV: undefined
+≡ƒöî Trying database connection via DATABASE_URL
+≡ƒöº Resolving db.blxzjbxczpmmgiwbtmdo.supabase.co to IPv4 address (A records only)...
+≡ƒöº Using parsed connection with SSL and IPv4 forcing (rejectUnauthorized: false) to: db.blxzjbxczpmmgiwbtmdo.supabase.co
+ΓÜá∩╕Å  Could not resolve hostname to IPv4, parsing connectionString with SSL config and IPv4 forcing: queryA ENODATA db.blxzjbxczpmmgiwbtmdo.supabase.co
+[32minfo[39m: Γ£à Database connected successfully via DATABASE_URL {"service":"adpa-backend","timestamp":"2025-10-30T10:12:12.019Z"}
+≡ƒöì Checking extraction table schemas...
+
+
+≡ƒôè Table: stakeholders
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NULL
+  - role: character varying NOT NULL
+  - department: character varying NULL
+  - email: character varying NULL
+  - phone: character varying NULL
+  - interest_level: character varying NULL
+  - influence_level: character varying NULL
+  - engagement_approach: character varying NULL
+  - communication_frequency: character varying NULL
+  - stakeholder_type: character varying NULL
+  - stakeholder_category: character varying NULL
+  - expectations: text NULL
+  - potential_impact: text NULL
+  - created_by: uuid NULL
+  - updated_by: uuid NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - concerns: text NULL
+
+Constraints:
+  - stakeholders_communication_frequency_check (CHECK): CHECK (((communication_frequency)::text = ANY (ARRAY[('daily'::character varying)::text, ('weekly'::character varying)::text, ('bi_weekly'::character varying)::text, ('monthly'::character varying)::text, ('as_needed'::character varying)::text])))
+  - stakeholders_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id)
+  - stakeholders_engagement_approach_check (CHECK): CHECK (((engagement_approach)::text = ANY (ARRAY[('manage_closely'::character varying)::text, ('keep_satisfied'::character varying)::text, ('keep_informed'::character varying)::text, ('monitor'::character varying)::text])))
+  - stakeholders_influence_level_check (CHECK): CHECK (((influence_level)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - stakeholders_interest_level_check (CHECK): CHECK (((interest_level)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - stakeholders_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - stakeholders_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - stakeholders_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - stakeholders_stakeholder_category_check (CHECK): CHECK (((stakeholder_category)::text = ANY (ARRAY[('primary'::character varying)::text, ('secondary'::character varying)::text])))
+  - stakeholders_stakeholder_type_check (CHECK): CHECK (((stakeholder_type)::text = ANY (ARRAY[('internal'::character varying)::text, ('external'::character varying)::text])))
+  - stakeholders_updated_by_fkey (FOREIGN KEY): FOREIGN KEY (updated_by) REFERENCES users(id)
+
+≡ƒôè Table: requirements
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NOT NULL
+  - type: character varying NULL
+  - priority: character varying NULL
+  - status: character varying NULL
+  - source: character varying NULL
+  - acceptance_criteria: ARRAY NULL
+  - dependencies: ARRAY NULL
+  - risks: ARRAY NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp with time zone NULL
+  - updated_at: timestamp with time zone NULL
+  - deleted_at: timestamp with time zone NULL
+  - title: character varying NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - requirements_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - requirements_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - requirements_priority_check (CHECK): CHECK (((priority)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - requirements_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - requirements_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - requirements_status_check (CHECK): CHECK (((status)::text = ANY (ARRAY[('draft'::character varying)::text, ('approved'::character varying)::text, ('implemented'::character varying)::text, ('verified'::character varying)::text])))
+  - requirements_type_check (CHECK): CHECK (((type)::text = ANY (ARRAY[('functional'::character varying)::text, ('non_functional'::character varying)::text, ('business'::character varying)::text, ('technical'::character varying)::text])))
+
+≡ƒôè Table: risks
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NOT NULL
+  - category: character varying NULL
+  - probability: character varying NULL
+  - impact: character varying NULL
+  - risk_level: character varying NULL
+  - mitigation_strategy: text NULL
+  - contingency_plan: text NULL
+  - owner: character varying NULL
+  - status: character varying NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp with time zone NULL
+  - updated_at: timestamp with time zone NULL
+  - deleted_at: timestamp with time zone NULL
+  - title: character varying NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - risks_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - risks_impact_check (CHECK): CHECK (((impact)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - risks_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - risks_probability_check (CHECK): CHECK (((probability)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - risks_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - risks_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - risks_risk_level_check (CHECK): CHECK (((risk_level)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - risks_status_check (CHECK): CHECK (((status)::text = ANY (ARRAY[('identified'::character varying)::text, ('mitigated'::character varying)::text, ('accepted'::character varying)::text, ('transferred'::character varying)::text])))
+
+≡ƒôè Table: milestones
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NULL
+  - date: date NOT NULL
+  - status: character varying NULL
+  - dependencies: ARRAY NULL
+  - deliverables: ARRAY NULL
+  - success_criteria: ARRAY NULL
+  - created_at: timestamp with time zone NULL
+  - updated_at: timestamp with time zone NULL
+  - deleted_at: timestamp with time zone NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - milestones_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - milestones_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - milestones_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - milestones_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - milestones_status_check (CHECK): CHECK (((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('in_progress'::character varying)::text, ('completed'::character varying)::text, ('delayed'::character varying)::text])))
+
+≡ƒôè Table: constraints
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NOT NULL
+  - type: character varying NULL
+  - impact: character varying NULL
+  - mitigation_strategy: text NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp with time zone NULL
+  - updated_at: timestamp with time zone NULL
+  - deleted_at: timestamp with time zone NULL
+  - title: character varying NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - constraints_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - constraints_impact_check (CHECK): CHECK (((impact)::text = ANY (ARRAY[('high'::character varying)::text, ('medium'::character varying)::text, ('low'::character varying)::text])))
+  - constraints_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - constraints_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - constraints_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - constraints_type_check (CHECK): CHECK (((type)::text = ANY (ARRAY[('budget'::character varying)::text, ('time'::character varying)::text, ('resource'::character varying)::text, ('technical'::character varying)::text, ('regulatory'::character varying)::text, ('business'::character varying)::text])))
+
+≡ƒôè Table: success_criteria
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NOT NULL
+  - type: character varying NULL
+  - measurement_method: text NULL
+  - target_value: numeric NULL
+  - current_value: numeric NULL
+  - status: character varying NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp with time zone NULL
+  - updated_at: timestamp with time zone NULL
+  - deleted_at: timestamp with time zone NULL
+  - title: character varying NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - success_criteria_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - success_criteria_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - success_criteria_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - success_criteria_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - success_criteria_status_check (CHECK): CHECK (((status)::text = ANY (ARRAY[('not_met'::character varying)::text, ('partially_met'::character varying)::text, ('met'::character varying)::text, ('exceeded'::character varying)::text])))
+  - success_criteria_type_check (CHECK): CHECK (((type)::text = ANY (ARRAY[('quantitative'::character varying)::text, ('qualitative'::character varying)::text])))
+
+≡ƒôè Table: best_practices
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - title: character varying NOT NULL
+  - description: text NULL
+  - category: character varying NULL
+  - source: character varying NULL
+  - applicability: text NULL
+  - implementation_notes: text NULL
+  - extracted_from_document_id: uuid NULL
+  - confidence_score: numeric NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - best_practices_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - best_practices_extracted_from_document_id_fkey (FOREIGN KEY): FOREIGN KEY (extracted_from_document_id) REFERENCES documents(id) ON DELETE SET NULL
+  - best_practices_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - best_practices_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - best_practices_project_title_unique (UNIQUE): UNIQUE (project_id, title)
+
+≡ƒôè Table: phases
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NULL
+  - start_date: date NOT NULL
+  - end_date: date NOT NULL
+  - status: character varying NULL
+  - deliverables: ARRAY NULL
+  - team_members: ARRAY NULL
+  - created_at: timestamp with time zone NULL
+  - updated_at: timestamp with time zone NULL
+  - deleted_at: timestamp with time zone NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - phases_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - phases_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - phases_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - phases_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - phases_status_check (CHECK): CHECK (((status)::text = ANY (ARRAY[('planned'::character varying)::text, ('in_progress'::character varying)::text, ('completed'::character varying)::text])))
+
+≡ƒôè Table: resources
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - type: character varying NULL
+  - role: character varying NULL
+  - allocation_percentage: integer NULL
+  - cost_per_unit: numeric NULL
+  - quantity: integer NULL
+  - availability: text NULL
+  - skills: ARRAY NULL
+  - extracted_from_document_id: uuid NULL
+  - confidence_score: numeric NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - resources_allocation_percentage_check (CHECK): CHECK (((allocation_percentage >= 0) AND (allocation_percentage <= 100)))
+  - resources_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - resources_extracted_from_document_id_fkey (FOREIGN KEY): FOREIGN KEY (extracted_from_document_id) REFERENCES documents(id) ON DELETE SET NULL
+  - resources_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - resources_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - resources_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - resources_type_check (CHECK): CHECK (((type)::text = ANY ((ARRAY['human'::character varying, 'equipment'::character varying, 'material'::character varying, 'software'::character varying, 'facility'::character varying, 'budget'::character varying])::text[])))
+
+≡ƒôè Table: quality_standards
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - standard_name: character varying NOT NULL
+  - description: text NULL
+  - category: character varying NULL
+  - measurement_criteria: text NULL
+  - target_threshold: character varying NULL
+  - compliance_requirement: text NULL
+  - verification_method: character varying NULL
+  - extracted_from_document_id: uuid NULL
+  - confidence_score: numeric NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - created_by: uuid NULL
+  - title: character varying NULL
+
+Constraints:
+  - quality_standards_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - quality_standards_extracted_from_document_id_fkey (FOREIGN KEY): FOREIGN KEY (extracted_from_document_id) REFERENCES documents(id) ON DELETE SET NULL
+  - quality_standards_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - quality_standards_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - quality_standards_project_id_standard_name_key (UNIQUE): UNIQUE (project_id, standard_name)
+  - quality_standards_project_name_unique (UNIQUE): UNIQUE (project_id, standard_name)
+
+≡ƒôè Table: deliverables
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - name: character varying NOT NULL
+  - description: text NULL
+  - type: character varying NULL
+  - due_date: date NULL
+  - status: character varying NULL
+  - acceptance_criteria: text NULL
+  - responsible_party: character varying NULL
+  - dependencies: ARRAY NULL
+  - extracted_from_document_id: uuid NULL
+  - confidence_score: numeric NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - created_by: uuid NULL
+
+Constraints:
+  - deliverables_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - deliverables_extracted_from_document_id_fkey (FOREIGN KEY): FOREIGN KEY (extracted_from_document_id) REFERENCES documents(id) ON DELETE SET NULL
+  - deliverables_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - deliverables_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - deliverables_project_name_unique (UNIQUE): UNIQUE (project_id, name)
+  - deliverables_status_check (CHECK): CHECK (((status)::text = ANY ((ARRAY['not_started'::character varying, 'in_progress'::character varying, 'review'::character varying, 'completed'::character varying, 'delivered'::character varying])::text[])))
+
+≡ƒôè Table: scope_items
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - item_name: character varying NOT NULL
+  - description: text NULL
+  - inclusion_status: character varying NULL
+  - category: character varying NULL
+  - justification: text NULL
+  - impact_if_excluded: text NULL
+  - extracted_from_document_id: uuid NULL
+  - confidence_score: numeric NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - created_by: uuid NULL
+  - title: character varying NULL
+
+Constraints:
+  - scope_items_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - scope_items_extracted_from_document_id_fkey (FOREIGN KEY): FOREIGN KEY (extracted_from_document_id) REFERENCES documents(id) ON DELETE SET NULL
+  - scope_items_inclusion_status_check (CHECK): CHECK (((inclusion_status)::text = ANY ((ARRAY['in_scope'::character varying, 'out_of_scope'::character varying, 'deferred'::character varying, 'under_review'::character varying])::text[])))
+  - scope_items_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - scope_items_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - scope_items_project_name_unique (UNIQUE): UNIQUE (project_id, item_name)
+
+≡ƒôè Table: activities
+ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+Columns:
+  - id: uuid NOT NULL
+  - project_id: uuid NOT NULL
+  - activity_name: character varying NOT NULL
+  - description: text NULL
+  - duration_days: integer NULL
+  - start_date: date NULL
+  - end_date: date NULL
+  - status: character varying NULL
+  - assigned_to: uuid NULL
+  - dependencies: ARRAY NULL
+  - deliverable_id: uuid NULL
+  - extracted_from_document_id: uuid NULL
+  - confidence_score: numeric NULL
+  - metadata: jsonb NULL
+  - created_at: timestamp without time zone NULL
+  - updated_at: timestamp without time zone NULL
+  - created_by: uuid NULL
+  - name: character varying NULL
+
+Constraints:
+  - activities_assigned_to_fkey (FOREIGN KEY): FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
+  - activities_created_by_fkey (FOREIGN KEY): FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+  - activities_deliverable_id_fkey (FOREIGN KEY): FOREIGN KEY (deliverable_id) REFERENCES deliverables(id) ON DELETE SET NULL
+  - activities_extracted_from_document_id_fkey (FOREIGN KEY): FOREIGN KEY (extracted_from_document_id) REFERENCES documents(id) ON DELETE SET NULL
+  - activities_pkey (PRIMARY KEY): PRIMARY KEY (id)
+  - activities_project_id_fkey (FOREIGN KEY): FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+  - activities_project_name_unique (UNIQUE): UNIQUE (project_id, activity_name)
+  - activities_status_check (CHECK): CHECK (((status)::text = ANY ((ARRAY['not_started'::character varying, 'in_progress'::character varying, 'completed'::character varying, 'blocked'::character varying, 'cancelled'::character varying])::text[])))

@@ -753,4 +753,46 @@ export class TemplateContextAnalyzer {
     if (avgGenerationTime <= 600) return 'stable' // 10 minutes
     return 'declining'
   }
+
+  /**
+   * Gather semantic template examples using RAG
+   * CR-2025-001: RAG Integration - Find similar high-quality template usage examples
+   */
+  async gatherSemanticTemplateExamples(templateId: string, projectId: string): Promise<any[]> {
+    if (!this.retrieval) {
+      logger.warn('[RAG] ContextRetrievalService not available for semantic template examples')
+      return []
+    }
+
+    try {
+      const semanticQuery = 'template examples best practices high quality successful generation patterns'
+      
+      logger.info('[RAG-TEMPLATE] Performing semantic search for template examples')
+      
+      const chunks = await this.retrieval.searchChunks({
+        projectId,
+        query: semanticQuery,
+        topK: 15,
+        templateId
+      })
+
+      logger.info(`[RAG-TEMPLATE] Retrieved ${chunks.length} semantically relevant template example chunks`)
+
+      return chunks.map(chunk => ({
+        chunk_id: chunk.id,
+        document_id: chunk.document_id,
+        document_title: chunk.title,
+        content: chunk.content,
+        relevance_score: chunk.score,
+        retrieval_method: 'semantic_search',
+        example_type: 'template_usage'
+      }))
+
+    } catch (error: unknown) {
+      logger.error('[RAG-TEMPLATE] Semantic search failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
 }

@@ -14,6 +14,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { BaselineGanttChart } from "@/components/BaselineGanttChart"
 import { BaselineManagement } from "./components/BaselineManagement"
+import { ProjectDataExtraction } from "./components/ProjectDataExtraction"
 import { StakeholdersTab } from "./components/StakeholdersTab"
 import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
@@ -2564,6 +2565,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
               <TabsList>
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="extraction">
+                  <Database className="h-4 w-4 mr-2" />
+                  AI Extraction
+                </TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="baseline">Baseline</TabsTrigger>
                 <TabsTrigger value="variables">Variables</TabsTrigger>
@@ -2597,6 +2602,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                   documentStats={documentStats} 
                   stakeholders={stakeholders} 
                 />
+              </TabsContent>
+
+              <TabsContent value="extraction" className="space-y-4">
+                {/* AI Project Data Extraction - NEW RAG Integration */}
+                <ProjectDataExtraction projectId={projectId} documents={documents} />
               </TabsContent>
 
               <TabsContent value="stakeholders" className="space-y-4">

@@ -616,4 +616,45 @@ export class UserProfileAnalyzer {
       metadata: {}
     }
   }
+
+  /**
+   * Gather semantic user history using RAG
+   * CR-2025-001: RAG Integration - Find user's relevant document history and patterns
+   */
+  async gatherSemanticUserHistory(userId: string, projectId?: string): Promise<any[]> {
+    if (!this.retrieval) {
+      logger.warn('[RAG] ContextRetrievalService not available for semantic user history')
+      return []
+    }
+
+    try {
+      const semanticQuery = 'user generated documents writing style preferences successful patterns collaboration history'
+      
+      logger.info('[RAG-USER] Performing semantic search for user history')
+      
+      const chunks = await this.retrieval.searchChunks({
+        projectId: projectId || '', // Use empty string if no project specified
+        query: semanticQuery,
+        topK: 10 // Smaller set for user-specific context
+      })
+
+      logger.info(`[RAG-USER] Retrieved ${chunks.length} semantically relevant user history chunks`)
+
+      return chunks.map(chunk => ({
+        chunk_id: chunk.id,
+        document_id: chunk.document_id,
+        document_title: chunk.title,
+        content: chunk.content,
+        relevance_score: chunk.score,
+        retrieval_method: 'semantic_search',
+        context_type: 'user_history'
+      }))
+
+    } catch (error: unknown) {
+      logger.error('[RAG-USER] Semantic search failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
 }

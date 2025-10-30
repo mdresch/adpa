@@ -159,6 +159,23 @@ const regenerationQueueOptions = {
 
 export const regenerationQueue = new Bull("document-regeneration", regenerationQueueOptions)
 
+// Project Data Extraction Queue Options
+const extractionQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 50,
+    removeOnFail: 25,
+    attempts: 2,
+    backoff: {
+      type: "exponential",
+      delay: 5000,
+    },
+    timeout: 600000, // 10 minutes timeout for AI extraction (13 parallel calls)
+  },
+}
+
+export const extractionQueue = new Bull("project-data-extraction", extractionQueueOptions)
+
 // Job processors
 aiQueue.process("ai-generate", async (job) => {
   const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data
@@ -1001,6 +1018,258 @@ regenerationQueue.on("completed", (job, result) => {
 
 regenerationQueue.on("failed", (job, err) => {
   logger.error(`Regeneration job failed: ${job.id}`, err)
+})
+
+// Project Data Extraction job processor
+// Define entity types for granular extraction
+const ENTITY_TYPES = [
+  'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
+  'success_criteria', 'best_practices', 'phases', 'resources',
+  'quality_standards', 'deliverables', 'scope_items', 'activities'
+] as const
+
+type EntityType = typeof ENTITY_TYPES[number]
+
+/**
+ * Parent Job: Orchestrate extraction by creating child jobs for each entity type
+ */
+extractionQueue.process("extract-project-data", 1, async (job) => {
+  const { jobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+
+  try {
+    logger.info(`[EXTRACTION-PARENT] Starting orchestration: ${jobId}`, { projectId })
+    
+    await updateJobStatus(jobId, "processing", 5, WORKER_ID)
+    
+    // Create child jobs for each entity type (resilient, independent extraction)
+    const childJobPromises = ENTITY_TYPES.map((entityType, index) => {
+      return extractionQueue.add(`extract-entity-${entityType}`, {
+        parentJobId: jobId,
+        projectId,
+        userId,
+        aiProvider,
+        aiModel,
+        documentIds,
+        entityType,
+        entityIndex: index,
+        totalEntities: ENTITY_TYPES.length
+      }, {
+        attempts: 3, // Retry each entity extraction up to 3 times
+        backoff: {
+          type: 'exponential',
+          delay: 5000 // Start with 5s delay
+        }
+      })
+    })
+    
+    // Wait for all child jobs to be created
+    const childJobs = await Promise.all(childJobPromises)
+    
+    logger.info(`[EXTRACTION-PARENT] Created ${childJobs.length} child extraction jobs`, { jobId })
+    
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID)
+    
+    // Store child job IDs in parent job data
+    await pool.query(
+      `UPDATE jobs SET data = data || $1 WHERE id = $2`,
+      [JSON.stringify({ childJobIds: childJobs.map(j => j.id) }), jobId]
+    )
+    
+    // Monitor child job completion with execution guard to prevent race conditions
+    let completedCount = 0
+    let isChecking = false // Execution guard to prevent overlapping checks
+    const checkInterval = setInterval(async () => {
+      // Skip if previous check is still running
+      if (isChecking) return
+      
+      isChecking = true
+      try {
+        const states = await Promise.all(
+          childJobs.map(j => j.getState())
+        )
+        
+        const completed = states.filter(s => s === 'completed').length
+        const failed = states.filter(s => s === 'failed').length
+        
+        if (completed + failed === childJobs.length) {
+          clearInterval(checkInterval)
+          
+          if (failed > 0) {
+            throw new Error(`${failed} entity extraction(s) failed`)
+          }
+          
+          // All succeeded - finalize parent job
+          await finalizeExtractionJob(jobId, projectId)
+        } else {
+          // Update progress based on completed child jobs
+          const progress = 10 + Math.floor((completed / childJobs.length) * 85)
+          await updateJobStatus(jobId, "processing", progress, WORKER_ID)
+          completedCount = completed
+        }
+      } catch (error) {
+        clearInterval(checkInterval)
+        throw error
+      } finally {
+        isChecking = false // Release guard
+      }
+    }, 3000) // Check every 3 seconds
+    
+  } catch (error: any) {
+    logger.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
+    await updateJobStatus(jobId, "failed", undefined, WORKER_ID)
+    await pool.query(
+      `UPDATE jobs SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+      [error.message, jobId]
+    )
+    throw error
+  }
+})
+
+/**
+ * Child Job: Extract and save a single entity type
+ * Register handlers for each entity type explicitly
+ */
+ENTITY_TYPES.forEach((entityType) => {
+  extractionQueue.process(`extract-entity-${entityType}`, 5, async (job) => {
+    const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+    
+    try {
+      logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId}`)
+      
+      const { projectDataExtractionService } = await import('./projectDataExtractionService')
+      
+      // Extract this specific entity type
+      const entities = await projectDataExtractionService.extractSingleEntityType(
+        projectId,
+        userId,
+        entityType,
+        { aiProvider, aiModel, documentIds }
+      )
+      
+      logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType}`)
+      
+      // Save immediately after extraction (resilient)
+      await projectDataExtractionService.saveSingleEntityType(
+        projectId,
+        userId,
+        entityType,
+        entities
+      )
+      
+      logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType}`)
+      
+      return { entityType, count: entities.length }
+      
+    } catch (error: any) {
+      logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, { parentJobId })
+      throw error // Bull will retry automatically
+    }
+  })
+})
+
+/**
+ * Finalize parent job after all child jobs complete
+ */
+async function finalizeExtractionJob(jobId: string, projectId: string) {
+  try {
+    logger.info(`[EXTRACTION-PARENT] Finalizing job ${jobId}`)
+    
+    await updateJobStatus(jobId, "processing", 95, WORKER_ID)
+    
+    // Query actual counts from database (child jobs already saved)
+    const countQueries = await Promise.all([
+      pool.query(`SELECT COUNT(*) as count FROM stakeholders WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM requirements WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM risks WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM milestones WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM constraints WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM success_criteria WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM best_practices WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM phases WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM resources WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM quality_standards WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM deliverables WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM scope_items WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM activities WHERE project_id = $1`, [projectId])
+    ])
+    
+    const counts = {
+      stakeholders: parseInt(countQueries[0].rows[0].count),
+      requirements: parseInt(countQueries[1].rows[0].count),
+      risks: parseInt(countQueries[2].rows[0].count),
+      milestones: parseInt(countQueries[3].rows[0].count),
+      constraints: parseInt(countQueries[4].rows[0].count),
+      successCriteria: parseInt(countQueries[5].rows[0].count),
+      bestPractices: parseInt(countQueries[6].rows[0].count),
+      phases: parseInt(countQueries[7].rows[0].count),
+      resources: parseInt(countQueries[8].rows[0].count),
+      qualityStandards: parseInt(countQueries[9].rows[0].count),
+      deliverables: parseInt(countQueries[10].rows[0].count),
+      scopeItems: parseInt(countQueries[11].rows[0].count),
+      activities: parseInt(countQueries[12].rows[0].count)
+    }
+    
+    const totalEntities = Object.values(counts).reduce((sum, count) => sum + count, 0)
+    
+    logger.info(`[EXTRACTION-PARENT] Total entities extracted: ${totalEntities}`)
+    
+    // Get userId from job
+    const jobData = await pool.query(`SELECT created_by FROM jobs WHERE id = $1`, [jobId])
+    const userId = jobData.rows[0]?.created_by
+    
+    // Update job to completed
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [JSON.stringify({ totalEntities, entityCounts: counts }), jobId]
+    )
+    
+    // Emit success notification
+    if (userId) {
+      io.emit("job:completed", {
+        jobId,
+        userId,
+        status: "completed",
+        message: `Successfully extracted ${totalEntities} entities from project documents`,
+        projectId,
+        totalEntities
+      })
+    }
+    
+    // Emit project:entities-extracted event
+    io.to(`project:${projectId}`).emit("project:entities-extracted", {
+      projectId,
+      totalEntities,
+      entityCounts: counts
+    })
+    
+    logger.info(`[EXTRACTION-PARENT] Extraction completed: ${jobId}`, { 
+      projectId, 
+      totalEntities 
+    })
+    
+  } catch (error: any) {
+    logger.error(`[EXTRACTION-PARENT] Failed to finalize: ${jobId} ${error.message}`)
+    
+    // Update job with error
+    await pool.query(
+      `UPDATE jobs 
+       SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [error.message || "Unknown error", jobId]
+    )
+    throw error
+  }
+}
+
+// Extraction queue event listeners
+extractionQueue.on("completed", (job, result) => {
+  logger.info(`[EXTRACTION-JOB] Completed: ${job.id}`, { totalEntities: result.totalEntities })
+})
+
+extractionQueue.on("failed", (job, err) => {
+  logger.error(`[EXTRACTION-JOB] Failed: ${job.id}`, err)
 })
 
 // Job management functions
