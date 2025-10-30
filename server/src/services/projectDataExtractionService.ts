@@ -1325,6 +1325,16 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
+      
+      // Convert acceptance_criteria string to array if it exists
+      let acceptanceCriteria = null
+      if (r.acceptance_criteria) {
+        // If it's already an array, use it; otherwise split by newlines or commas
+        acceptanceCriteria = Array.isArray(r.acceptance_criteria) 
+          ? r.acceptance_criteria 
+          : [r.acceptance_criteria]
+      }
+      
       values.push(
         projectId,
         r.title,
@@ -1332,7 +1342,7 @@ Requirements:
         r.type,
         r.priority,
         r.status,
-        r.acceptance_criteria || null,
+        acceptanceCriteria,
         userId
       )
     })
@@ -1852,6 +1862,132 @@ Requirements:
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${activities.length} activities`)
+  }
+
+  /**
+   * Extract a single entity type (for resilient child job processing)
+   */
+  async extractSingleEntityType(
+    projectId: string,
+    userId: string,
+    entityType: string,
+    options: {
+      aiProvider?: string
+      aiModel?: string
+      documentIds?: string[]
+    } = {}
+  ): Promise<any[]> {
+    const documents = await this.getProjectDocuments(projectId, options.documentIds)
+    
+    if (documents.length === 0) {
+      logger.warn(`[EXTRACTION] No documents found for ${entityType}`)
+      return []
+    }
+
+    const combinedContent = documents.map(d => d.content).join('\n\n---\n\n')
+
+    // Map entity type to extraction method
+    switch (entityType) {
+      case 'stakeholders':
+        return await this.extractStakeholders(combinedContent, options.aiProvider, options.aiModel)
+      case 'requirements':
+        return await this.extractRequirements(combinedContent, options.aiProvider, options.aiModel)
+      case 'risks':
+        return await this.extractRisks(combinedContent, options.aiProvider, options.aiModel)
+      case 'milestones':
+        return await this.extractMilestones(combinedContent, options.aiProvider, options.aiModel)
+      case 'constraints':
+        return await this.extractConstraints(combinedContent, options.aiProvider, options.aiModel)
+      case 'success_criteria':
+        return await this.extractSuccessCriteria(combinedContent, options.aiProvider, options.aiModel)
+      case 'best_practices':
+        return await this.extractBestPractices(combinedContent, options.aiProvider, options.aiModel)
+      case 'phases':
+        return await this.extractPhases(combinedContent, options.aiProvider, options.aiModel)
+      case 'resources':
+        return await this.extractResources(combinedContent, options.aiProvider, options.aiModel)
+      case 'quality_standards':
+        return await this.extractQualityStandards(combinedContent, options.aiProvider, options.aiModel)
+      case 'deliverables':
+        return await this.extractDeliverables(combinedContent, options.aiProvider, options.aiModel)
+      case 'scope_items':
+        return await this.extractScopeItems(combinedContent, options.aiProvider, options.aiModel)
+      case 'activities':
+        return await this.extractActivities(combinedContent, options.aiProvider, options.aiModel)
+      default:
+        throw new Error(`Unknown entity type: ${entityType}`)
+    }
+  }
+
+  /**
+   * Save a single entity type to database (for resilient child job processing)
+   */
+  async saveSingleEntityType(
+    projectId: string,
+    userId: string,
+    entityType: string,
+    entities: any[]
+  ): Promise<void> {
+    const client = await pool!.connect()
+    
+    try {
+      await client.query('BEGIN')
+
+      // Map entity type to save method
+      switch (entityType) {
+        case 'stakeholders':
+          await this.saveStakeholders(client, projectId, userId, entities)
+          break
+        case 'requirements':
+          await this.saveRequirements(client, projectId, userId, entities)
+          break
+        case 'risks':
+          await this.saveRisks(client, projectId, userId, entities)
+          break
+        case 'milestones':
+          await this.saveMilestones(client, projectId, userId, entities)
+          break
+        case 'constraints':
+          await this.saveConstraints(client, projectId, userId, entities)
+          break
+        case 'success_criteria':
+          await this.saveSuccessCriteria(client, projectId, userId, entities)
+          break
+        case 'best_practices':
+          await this.saveBestPractices(client, projectId, userId, entities)
+          break
+        case 'phases':
+          await this.savePhases(client, projectId, userId, entities)
+          break
+        case 'resources':
+          await this.saveResources(client, projectId, userId, entities)
+          break
+        case 'quality_standards':
+          await this.saveQualityStandards(client, projectId, userId, entities)
+          break
+        case 'deliverables':
+          await this.saveDeliverables(client, projectId, userId, entities)
+          break
+        case 'scope_items':
+          await this.saveScopeItems(client, projectId, userId, entities)
+          break
+        case 'activities':
+          await this.saveActivities(client, projectId, userId, entities)
+          break
+        default:
+          throw new Error(`Unknown entity type: ${entityType}`)
+      }
+
+      await client.query('COMMIT')
+      logger.info(`[EXTRACTION] Successfully saved ${entities.length} ${entityType}`)
+      
+    } catch (error: any) {
+      await client.query('ROLLBACK')
+      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${error.message}`)
+      throw error
+    } finally {
+      client.release()
+    }
   }
 }
 
