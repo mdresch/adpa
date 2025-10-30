@@ -1532,7 +1532,7 @@ Requirements:
     userId: string,
     successCriteria: SuccessCriterion[]
   ): Promise<void> {
-    if (success_criteria.length === 0) {
+    if (successCriteria.length === 0) {
       logger.info('[EXTRACTION] No success_criteria to save, skipping')
       return
     }
@@ -1581,7 +1581,7 @@ Requirements:
     userId: string,
     bestPractices: BestPractice[]
   ): Promise<void> {
-    if (best_practices.length === 0) {
+    if (bestPractices.length === 0) {
       logger.info('[EXTRACTION] No best_practices to save, skipping')
       return
     }
@@ -1724,7 +1724,7 @@ Requirements:
     userId: string,
     qualityStandards: QualityStandard[]
   ): Promise<void> {
-    if (quality_standards.length === 0) {
+    if (qualityStandards.length === 0) {
       logger.info('[EXTRACTION] No quality_standards to save, skipping')
       return
     }
@@ -1828,7 +1828,7 @@ Requirements:
     userId: string,
     scopeItems: ScopeItem[]
   ): Promise<void> {
-    if (scope_items.length === 0) {
+    if (scopeItems.length === 0) {
       logger.info('[EXTRACTION] No scope_items to save, skipping')
       return
     }
