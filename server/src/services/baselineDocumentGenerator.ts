@@ -491,8 +491,12 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
     })
   }
   
-  // Check for Activity List
-  if (!baseline.timeline_baseline?.activity_list) {
+  // Check for Activity List - only recommend if no activities extracted
+  const hasActivities = baseline.timeline_baseline?.activities && 
+                        Array.isArray(baseline.timeline_baseline.activities) && 
+                        baseline.timeline_baseline.activities.length > 0
+  
+  if (!hasActivities && !baseline.timeline_baseline?.activity_list) {
     missing.push({
       documentType: 'Activity List with Dependencies',
       purpose: 'Detailed schedule with task dependencies and critical path',
@@ -502,8 +506,12 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
     })
   }
   
-  // Check for Resource Estimates
-  if (!baseline.resource_baseline?.resource_estimates) {
+  // Check for Resource Estimates - only recommend if limited resource data
+  const hasResourceData = baseline.resource_baseline?.team_members && 
+                          Array.isArray(baseline.resource_baseline.team_members) && 
+                          baseline.resource_baseline.team_members.length > 5
+  
+  if (!hasResourceData && !baseline.resource_baseline?.resource_estimates) {
     missing.push({
       documentType: 'Resource Estimates by Activity',
       purpose: 'Detailed resource allocation and capacity planning',
@@ -513,8 +521,11 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
     })
   }
   
-  // Check for Cost Estimates
-  if (!baseline.cost_baseline?.detailed_estimates) {
+  // Check for Cost Estimates - only recommend if basic budget exists but no breakdown
+  const hasCostBreakdown = baseline.cost_baseline?.cost_breakdown && 
+                           Object.keys(baseline.cost_baseline.cost_breakdown).length > 2
+  
+  if (!hasCostBreakdown && !baseline.cost_baseline?.detailed_estimates) {
     missing.push({
       documentType: 'Activity-Based Cost Estimates',
       purpose: 'Detailed cost breakdown with contingency and management reserves',
@@ -524,8 +535,12 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
     })
   }
   
-  // Check for Risk Register
-  if (!baseline.scope_baseline?.risk_register) {
+  // Check for Risk Register - only recommend if no risks extracted
+  const hasRisks = baseline.success_criteria?.risks && 
+                   Array.isArray(baseline.success_criteria.risks) && 
+                   baseline.success_criteria.risks.length > 0
+  
+  if (!hasRisks && !baseline.scope_baseline?.risk_register) {
     missing.push({
       documentType: 'Risk Register',
       purpose: 'Identified risks with probability, impact, and mitigation strategies',
