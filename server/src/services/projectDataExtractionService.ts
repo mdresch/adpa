@@ -448,6 +448,9 @@ Extract stakeholders in JSON format with the following structure:
 Requirements:
 - Include ALL stakeholders mentioned (sponsors, team members, users, vendors, etc.)
 - If specific names aren't mentioned, use role names (e.g., "Project Sponsor")
+- AVOID DUPLICATES: If the same person is mentioned multiple times, include them only once
+- Use the most specific name available (prefer "John Smith" over "Project Manager")
+- For roles without names, use the role title (e.g., "CISO", not "IT Security (CISO)")
 - Infer interest and influence levels from context
 - Extract expectations and concerns if mentioned
 - Return ONLY valid JSON, no markdown or explanation`
@@ -461,7 +464,14 @@ Requirements:
       })
 
       const parsed = this.parseAIResponse(response.content)
-      const stakeholders = parsed.stakeholders || []
+      const rawStakeholders = parsed.stakeholders || []
+
+      // Deduplicate stakeholders by normalized name
+      const stakeholders = this.deduplicateStakeholders(rawStakeholders)
+      
+      if (rawStakeholders.length !== stakeholders.length) {
+        logger.info(`[EXTRACTION-STAKEHOLDERS] Removed ${rawStakeholders.length - stakeholders.length} duplicates`)
+      }
 
       logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${stakeholders.length} stakeholders`)
 
@@ -1216,6 +1226,52 @@ Requirements:
       })
       return []
     }
+  }
+
+  /**
+   * Deduplicate stakeholders by normalized name
+   * Handles variations like "John Smith", "John Smith (PM)", "john smith"
+   */
+  private deduplicateStakeholders(stakeholders: Stakeholder[]): Stakeholder[] {
+    const seen = new Map<string, Stakeholder>()
+    
+    stakeholders.forEach(stakeholder => {
+      // Normalize name: lowercase, trim, remove parenthetical suffixes
+      const normalized = stakeholder.name
+        .toLowerCase()
+        .trim()
+        .replace(/\s*\([^)]*\)\s*$/, '') // Remove trailing (role) suffix
+        .replace(/\s+/g, ' ') // Normalize whitespace
+      
+      if (!seen.has(normalized)) {
+        // First occurrence - keep it
+        seen.set(normalized, stakeholder)
+      } else {
+        // Duplicate found - merge information
+        const existing = seen.get(normalized)!
+        
+        // Keep the more detailed name (longer = more info)
+        if (stakeholder.name.length > existing.name.length) {
+          existing.name = stakeholder.name
+        }
+        
+        // Merge expectations and concerns
+        if (stakeholder.expectations && !existing.expectations) {
+          existing.expectations = stakeholder.expectations
+        }
+        if (stakeholder.concerns && !existing.concerns) {
+          existing.concerns = stakeholder.concerns
+        }
+        
+        // Use higher interest/influence levels
+        if (stakeholder.interest_level === 'high') existing.interest_level = 'high'
+        if (stakeholder.influence_level === 'high') existing.influence_level = 'high'
+        
+        logger.debug(`[DEDUP] Merged "${stakeholder.name}" into "${existing.name}"`)
+      }
+    })
+    
+    return Array.from(seen.values())
   }
 
   /**
