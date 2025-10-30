@@ -615,7 +615,7 @@ export async function createBaselineFromEntities(
   try {
     logger.info(`Creating baseline from extracted entities for project ${projectId}`)
     
-    // Query all 13 entity types in parallel
+    // Query all 14 entity types in parallel
     const [
       scopeItemsResult,
       deliverablesResult,
@@ -624,6 +624,7 @@ export async function createBaselineFromEntities(
       phasesResult,
       activitiesResult,
       resourcesResult,
+      technologiesResult,
       stakeholdersResult,
       constraintsResult,
       risksResult,
@@ -638,6 +639,7 @@ export async function createBaselineFromEntities(
       pool.query('SELECT * FROM phases WHERE project_id = $1 ORDER BY start_date', [projectId]),
       pool.query('SELECT * FROM activities WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM resources WHERE project_id = $1 ORDER BY created_at', [projectId]),
+      pool.query('SELECT * FROM technologies WHERE project_id = $1 ORDER BY category, name', [projectId]),
       pool.query('SELECT * FROM stakeholders WHERE project_id = $1 ORDER BY influence_level DESC, interest_level DESC', [projectId]),
       pool.query('SELECT * FROM constraints WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM risks WHERE project_id = $1 ORDER BY probability DESC, impact DESC', [projectId]),
@@ -653,6 +655,7 @@ export async function createBaselineFromEntities(
     const phases = phasesResult.rows
     const activities = activitiesResult.rows
     const resources = resourcesResult.rows
+    const technologies = technologiesResult.rows
     const stakeholders = stakeholdersResult.rows
     const constraints = constraintsResult.rows
     const risks = risksResult.rows
@@ -662,8 +665,8 @@ export async function createBaselineFromEntities(
 
     const totalEntities = scopeItems.length + deliverables.length + requirements.length +
       milestones.length + phases.length + activities.length + resources.length +
-      stakeholders.length + constraints.length + risks.length + successCriteria.length +
-      qualityStandards.length + bestPractices.length
+      technologies.length + stakeholders.length + constraints.length + risks.length + 
+      successCriteria.length + qualityStandards.length + bestPractices.length
 
     if (totalEntities === 0) {
       throw new Error('No extracted entities found for this project. Please run AI extraction first.')
@@ -712,9 +715,12 @@ export async function createBaselineFromEntities(
         total_requirements: requirements.length
       },
       technical_baseline: {
-        technology_stack: resources
-          .filter(r => r.type === 'technology' || r.type === 'tool')
-          .map(r => r.name),
+        technology_stack: technologies.map(t => ({
+          name: t.name,
+          category: t.category,
+          version: t.version,
+          purpose: t.purpose
+        })),
         technical_requirements: requirements
           .filter(r => r.type === 'technical' || r.type === 'non_functional')
           .map(r => ({
@@ -737,7 +743,7 @@ export async function createBaselineFromEntities(
         technical_constraints: constraints
           .filter(c => c.type === 'technical')
           .map(c => c.description),
-        architecture: generateArchitectureOverview(resources, requirements, qualityStandards)
+        architecture: generateArchitectureOverview(technologies, requirements, qualityStandards)
       },
       timeline_baseline: {
         project_duration: calculateProjectDuration(phases),
@@ -873,6 +879,7 @@ export async function createBaselineFromEntities(
           phases: phases.length,
           activities: activities.length,
           resources: resources.length,
+          technologies: technologies.length,
           stakeholders: stakeholders.length,
           constraints: constraints.length,
           risks: risks.length,
@@ -1044,68 +1051,58 @@ function calculateCompletenessFromEntities(totalEntities: number): number {
 }
 
 /**
- * Generate architecture overview from technology stack and requirements
+ * Generate architecture overview from extracted technologies
  */
-function generateArchitectureOverview(resources: any[], requirements: any[], qualityStandards: any[]): string {
-  const techStack = resources.filter(r => r.type === 'technology' || r.type === 'tool')
-  
-  if (techStack.length === 0) {
+function generateArchitectureOverview(technologies: any[], requirements: any[], qualityStandards: any[]): string {
+  if (technologies.length === 0) {
     return 'Architecture details not specified. See technical requirements and technology stack for available information.'
   }
   
-  // Categorize technologies
-  const frontend = techStack.filter(t => 
-    t.name.toLowerCase().includes('react') || 
-    t.name.toLowerCase().includes('vue') || 
-    t.name.toLowerCase().includes('angular') ||
-    t.name.toLowerCase().includes('next') ||
-    t.name.toLowerCase().includes('ui') ||
-    t.name.toLowerCase().includes('tailwind')
-  )
-  
-  const backend = techStack.filter(t => 
-    t.name.toLowerCase().includes('node') || 
-    t.name.toLowerCase().includes('express') || 
-    t.name.toLowerCase().includes('api') ||
-    t.name.toLowerCase().includes('python') ||
-    t.name.toLowerCase().includes('django') ||
-    t.name.toLowerCase().includes('spring')
-  )
-  
-  const database = techStack.filter(t => 
-    t.name.toLowerCase().includes('postgres') || 
-    t.name.toLowerCase().includes('mysql') || 
-    t.name.toLowerCase().includes('mongo') ||
-    t.name.toLowerCase().includes('redis') ||
-    t.name.toLowerCase().includes('database')
-  )
-  
-  const cloud = techStack.filter(t => 
-    t.name.toLowerCase().includes('aws') || 
-    t.name.toLowerCase().includes('azure') || 
-    t.name.toLowerCase().includes('gcp') ||
-    t.name.toLowerCase().includes('cloud') ||
-    t.name.toLowerCase().includes('docker') ||
-    t.name.toLowerCase().includes('kubernetes')
-  )
+  // Group technologies by category
+  const frontend = technologies.filter(t => t.category === 'frontend')
+  const backend = technologies.filter(t => t.category === 'backend')
+  const database = technologies.filter(t => t.category === 'database')
+  const infrastructure = technologies.filter(t => t.category === 'infrastructure')
+  const devops = technologies.filter(t => t.category === 'devops')
+  const testing = technologies.filter(t => t.category === 'testing')
+  const monitoring = technologies.filter(t => t.category === 'monitoring')
   
   // Build architecture description
   let arch = 'Multi-tier application architecture comprising:\n\n'
   
   if (frontend.length > 0) {
-    arch += `**Frontend Layer**: ${frontend.map(t => t.name).join(', ')} providing user interface and client-side logic.\n\n`
+    const techList = frontend.map(t => t.version ? `${t.name} ${t.version}` : t.name).join(', ')
+    arch += `**Frontend Layer**: ${techList} providing user interface and client-side logic.\n\n`
   }
   
   if (backend.length > 0) {
-    arch += `**Backend Layer**: ${backend.map(t => t.name).join(', ')} handling business logic, API endpoints, and server-side processing.\n\n`
+    const techList = backend.map(t => t.version ? `${t.name} ${t.version}` : t.name).join(', ')
+    arch += `**Backend Layer**: ${techList} handling business logic, API endpoints, and server-side processing.\n\n`
   }
   
   if (database.length > 0) {
-    arch += `**Data Layer**: ${database.map(t => t.name).join(', ')} for data persistence and caching.\n\n`
+    const techList = database.map(t => t.version ? `${t.name} ${t.version}` : t.name).join(', ')
+    arch += `**Data Layer**: ${techList} for data persistence and caching.\n\n`
   }
   
-  if (cloud.length > 0) {
-    arch += `**Infrastructure**: ${cloud.map(t => t.name).join(', ')} for deployment, scaling, and cloud services.\n\n`
+  if (infrastructure.length > 0) {
+    const techList = infrastructure.map(t => t.name).join(', ')
+    arch += `**Infrastructure**: ${techList} for deployment, scaling, and cloud services.\n\n`
+  }
+  
+  if (devops.length > 0) {
+    const techList = devops.map(t => t.name).join(', ')
+    arch += `**DevOps & CI/CD**: ${techList} for automated build, test, and deployment pipelines.\n\n`
+  }
+  
+  if (testing.length > 0) {
+    const techList = testing.map(t => t.name).join(', ')
+    arch += `**Testing & Quality**: ${techList} for automated testing and quality assurance.\n\n`
+  }
+  
+  if (monitoring.length > 0) {
+    const techList = monitoring.map(t => t.name).join(', ')
+    arch += `**Monitoring & Observability**: ${techList} for system monitoring and performance tracking.\n\n`
   }
   
   // Add quality aspects if available

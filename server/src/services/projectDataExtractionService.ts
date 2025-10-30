@@ -24,6 +24,7 @@ interface ExtractionResult {
   best_practices: BestPractice[]
   phases: Phase[]
   resources: Resource[]
+  technologies: Technology[]
   quality_standards: QualityStandard[]
   deliverables: Deliverable[]
   scope_items: ScopeItem[]
@@ -108,11 +109,12 @@ interface Phase {
 
 interface Resource {
   name: string
-  type: 'human' | 'equipment' | 'material' | 'financial'
+  type: 'human' | 'equipment' | 'material' | 'financial' | 'software' | 'facility' | 'budget'
   role?: string
   allocation?: string
   availability?: string
   cost?: number
+  skills?: string[]
 }
 
 interface QualityStandard {
@@ -123,6 +125,17 @@ interface QualityStandard {
   requirements?: string
   measurement_criteria?: string
   compliance_level?: 'mandatory' | 'recommended' | 'optional'
+}
+
+interface Technology {
+  name: string
+  category: 'frontend' | 'backend' | 'database' | 'infrastructure' | 'devops' | 'testing' | 'monitoring' | 'other'
+  description?: string
+  version?: string
+  purpose?: string
+  license?: string
+  vendor?: string
+  deployment_environment?: string
 }
 
 interface Deliverable {
@@ -205,6 +218,7 @@ export class ProjectDataExtractionService {
         bestPractices,
         phases,
         resources,
+        technologies,
         qualityStandards,
         deliverables,
         scopeItems,
@@ -219,6 +233,7 @@ export class ProjectDataExtractionService {
         this.extractBestPractices(documents, projectId, options),
         this.extractPhases(documents, projectId, options),
         this.extractResources(documents, projectId, options),
+        this.extractTechnologies(documents, projectId, options),
         this.extractQualityStandards(documents, projectId, options),
         this.extractDeliverables(documents, projectId, options),
         this.extractScopeItems(documents, projectId, options),
@@ -240,6 +255,7 @@ export class ProjectDataExtractionService {
           bestPractices: bestPractices.length,
           phases: phases.length,
           resources: resources.length,
+          technologies: technologies.length,
           qualityStandards: qualityStandards.length,
           deliverables: deliverables.length,
           scopeItems: scopeItems.length,
@@ -257,6 +273,7 @@ export class ProjectDataExtractionService {
         best_practices: bestPractices,
         phases,
         resources,
+        technologies,
         quality_standards: qualityStandards,
         deliverables,
         scope_items: scopeItems,
@@ -332,6 +349,11 @@ export class ProjectDataExtractionService {
       // Save resources
       if (entities.resources.length > 0) {
         await this.saveResources(client, projectId, userId, entities.resources)
+      }
+
+      // Save technologies
+      if (entities.technologies.length > 0) {
+        await this.saveTechnologies(client, projectId, userId, entities.technologies)
       }
 
       // Save quality standards
@@ -969,6 +991,71 @@ Requirements:
       logger.error('[EXTRACTION-RESOURCES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
       })
+      return []
+    }
+  }
+
+  /**
+   * Extract technologies using AI
+   */
+  private async extractTechnologies(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<Technology[]> {
+    try {
+      logger.info('[EXTRACTION-TECHNOLOGIES] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+      
+      const prompt = `Analyze the following project documents and extract ALL technologies, tools, platforms, and software mentioned in the tech stack.
+
+${documentContext}
+
+Extract technologies in JSON format with the following structure:
+{
+  "technologies": [
+    {
+      "name": "Technology Name",
+      "category": "frontend|backend|database|infrastructure|devops|testing|monitoring|other",
+      "description": "What this technology is used for",
+      "version": "Version number if mentioned",
+      "purpose": "Why this technology was chosen",
+      "license": "License type (MIT, Apache, Proprietary, etc.)",
+      "vendor": "Provider (AWS, Microsoft, Google, Open Source, etc.)",
+      "deployment_environment": "production|staging|development|all"
+    }
+  ]
+}
+
+Requirements:
+- Include ALL frontend technologies (React, Vue, Angular, Next.js, Tailwind, etc.)
+- Include ALL backend technologies (Node.js, Express, Python, Django, Spring, etc.)
+- Include ALL databases (PostgreSQL, MySQL, MongoDB, Redis, etc.)
+- Include ALL infrastructure (AWS, Azure, GCP, Docker, Kubernetes, etc.)
+- Include ALL DevOps tools (Jenkins, GitHub Actions, GitLab CI, etc.)
+- Include ALL testing tools (Jest, Pytest, Selenium, Cypress, etc.)
+- Include ALL monitoring tools (Datadog, New Relic, Grafana, etc.)
+- Classify each technology appropriately by category
+- Extract version numbers when mentioned
+- Return ONLY valid JSON, no markdown or explanation`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider || 'openai',
+        model: options.aiModel || 'gpt-4-turbo-preview',
+        temperature: 0.3,
+        max_tokens: 2000
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const technologies = parsed.technologies || []
+
+      logger.info(`[EXTRACTION-TECHNOLOGIES] Extracted ${technologies.length} technologies`)
+      
+      return technologies
+    } catch (error) {
+      logger.error('[EXTRACTION-TECHNOLOGIES] Extraction failed', { error })
       return []
     }
   }
@@ -2003,6 +2090,69 @@ Requirements:
   }
 
   /**
+   * Save technologies to database
+   */
+  private async saveTechnologies(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    technologies: Technology[]
+  ): Promise<void> {
+    if (technologies.length === 0) {
+      logger.info('[EXTRACTION] No technologies to save, skipping')
+      return
+    }
+
+    // Deduplicate by name (ON CONFLICT requires unique names)
+    const uniqueTechnologies = Array.from(
+      new Map(technologies.map(t => [t.name.toLowerCase().trim(), t])).values()
+    )
+    
+    if (uniqueTechnologies.length < technologies.length) {
+      logger.warn(`[EXTRACTION] Deduplicated technologies: ${technologies.length} → ${uniqueTechnologies.length}`)
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    uniqueTechnologies.forEach((t, index) => {
+      const offset = index * 9
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+      )
+      
+      values.push(
+        projectId,
+        t.name,
+        t.category || 'other',
+        t.description || null,
+        t.version || null,
+        t.purpose || null,
+        t.license || null,
+        t.vendor || null,
+        userId
+      )
+    })
+
+    await client.query(`
+      INSERT INTO technologies (
+        project_id, name, category, description, version, purpose, license, vendor, created_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        category = EXCLUDED.category,
+        description = EXCLUDED.description,
+        version = EXCLUDED.version,
+        purpose = EXCLUDED.purpose,
+        license = EXCLUDED.license,
+        vendor = EXCLUDED.vendor,
+        updated_at = CURRENT_TIMESTAMP
+    `, values)
+
+    logger.info(`[EXTRACTION] Saved ${uniqueTechnologies.length} technologies`)
+  }
+
+  /**
    * Save quality standards to database
    */
   private async saveQualityStandards(
@@ -2363,6 +2513,9 @@ Requirements:
       case 'resources':
         entities = await this.extractResources(documents, projectId, options)
         break
+      case 'technologies':
+        entities = await this.extractTechnologies(documents, projectId, options)
+        break
       case 'quality_standards':
         entities = await this.extractQualityStandards(documents, projectId, options)
         break
@@ -2446,6 +2599,9 @@ Requirements:
           break
         case 'resources':
           await this.saveResources(client, projectId, userId, entities)
+          break
+        case 'technologies':
+          await this.saveTechnologies(client, projectId, userId, entities)
           break
         case 'quality_standards':
           await this.saveQualityStandards(client, projectId, userId, entities)
