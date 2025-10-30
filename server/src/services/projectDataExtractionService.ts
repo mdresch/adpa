@@ -1676,9 +1676,9 @@ Requirements:
       return
     }
 
-    // Deduplicate by name (ON CONFLICT requires unique names)
+    // Deduplicate by title (ON CONFLICT requires unique titles)
     const uniqueConstraints = Array.from(
-      new Map(constraints.map(c => [(c.name || c.title || '').toLowerCase().trim(), c])).values()
+      new Map(constraints.map(c => [(c.title || '').toLowerCase().trim(), c])).values()
     )
     
     if (uniqueConstraints.length < constraints.length) {
@@ -1751,9 +1751,9 @@ Requirements:
       return
     }
 
-    // Deduplicate by name (ON CONFLICT requires unique names)
+    // Deduplicate by title (ON CONFLICT requires unique titles)
     const uniqueCriteria = Array.from(
-      new Map(successCriteria.map(sc => [(sc.name || sc.title || '').toLowerCase().trim(), sc])).values()
+      new Map(successCriteria.map(sc => [(sc.title || '').toLowerCase().trim(), sc])).values()
     )
     
     if (uniqueCriteria.length < successCriteria.length) {
