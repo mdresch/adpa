@@ -650,16 +650,21 @@ Requirements:
 
       const documentContext = this.buildDocumentContext(documents)
       
-      const prompt = `Analyze the following project documents and extract ALL milestones and key dates mentioned.
+      const prompt = `Analyze the following project documents and extract ONLY major project milestones.
 
 ${documentContext}
+
+**IMPORTANT: Milestones vs Activities:**
+- **MILESTONE** = Zero-duration checkpoint marking completion of a major deliverable or phase (e.g., "MVP Launch", "CSRD Deadline", "Project Kickoff", "Go-Live")
+- **ACTIVITY** = Work effort with duration (e.g., "Develop frontend module", "Conduct UAT testing") - DO NOT include activities as milestones
+- Limit to 10-20 milestones per project (major checkpoints only)
 
 Extract milestones in JSON format with the following structure:
 {
   "milestones": [
     {
       "name": "Milestone Name",
-      "description": "What this milestone represents",
+      "description": "What this milestone represents (major checkpoint or deliverable completion)",
       "due_date": "YYYY-MM-DD or Quarter/Year if specific date not mentioned",
       "status": "pending|in_progress|completed|delayed",
       "deliverables": ["Deliverable 1", "Deliverable 2"]
@@ -668,7 +673,10 @@ Extract milestones in JSON format with the following structure:
 }
 
 Requirements:
-- Include ALL milestones, deadlines, and key dates mentioned
+- Extract ONLY major project milestones (completion of phases, major deliverables, key decisions, go-live dates)
+- Examples: "Project Kickoff", "Requirements Approval", "MVP Launch", "UAT Completion", "Go-Live", "Project Closure"
+- DO NOT extract regular activities, tasks, or work packages
+- Typical projects have 10-20 milestones maximum
 - Extract deliverables associated with each milestone
 - If exact dates aren't mentioned, use relative dates like "2025-Q1" or "Month 3"
 - Infer status from context (future = pending, past = completed)
