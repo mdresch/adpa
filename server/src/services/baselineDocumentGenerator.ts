@@ -374,6 +374,12 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
   // Gap Analysis
   document += `### 7.2 Missing Baseline Details (Opportunities for Improvement)\n\n`
   document += `The following baseline details were not found in the analyzed documents. Consider creating these documents to enhance baseline completeness:\n\n`
+  document += `**⚠️ Document Creation Sequence (PMBOK Best Practice):**\n`
+  document += `1. **WBS Template** - Create first (defines work packages)\n`
+  document += `2. **Activity List** - Requires WBS (decomposes work packages into activities)\n`
+  document += `3. **Estimated Duration per Activity** - Requires Activity List (PERT estimates)\n`
+  document += `4. **Resource Estimates** - Requires Activity List (assign resources to activities)\n`
+  document += `5. **Cost Estimates** - Requires Activity List + Resources (calculate costs)\n\n`
   
   const gaps = []
   
@@ -692,14 +698,14 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
 }> {
   const missing = []
   
-  // Check for WBS
+  // Check for WBS (must be created first - prerequisite for Activity List)
   if (!baseline.scope_baseline?.wbs_hierarchy) {
     missing.push({
       documentType: 'Work Breakdown Structure (WBS)',
-      purpose: 'Hierarchical decomposition of project work into manageable work packages',
+      purpose: 'Hierarchical decomposition of project work into manageable work packages. **PREREQUISITE:** Must be completed before Activity List and Duration Estimates.',
       template: 'WBS Template (PMBOK)',
       priority: 'High' as const,
-      whatItProvides: 'Work package IDs, responsibility assignments (RACI), deliverable breakdown, WBS dictionary'
+      whatItProvides: 'Work package IDs, responsibility assignments (RACI), deliverable breakdown, WBS dictionary. Forms the foundation for Activity List definition.'
     })
   }
   
@@ -711,10 +717,21 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
   if (!hasActivities && !baseline.timeline_baseline?.activity_list) {
     missing.push({
       documentType: 'Activity List with Dependencies',
-      purpose: 'Detailed schedule with task dependencies and critical path',
+      purpose: 'Detailed schedule with task dependencies and critical path. **REQUIRES:** WBS must be completed first. **NEXT STEP:** Duration estimation for each activity.',
       template: 'Project Schedule Template',
       priority: 'High' as const,
-      whatItProvides: 'Activity IDs, durations, dependencies, critical path, resource assignments, float/slack analysis'
+      whatItProvides: 'Activity IDs (derived from WBS work packages), dependencies (FS, SS, FF, SF), critical path, resource assignments, float/slack analysis. Enables Duration Estimation.'
+    })
+  }
+  
+  // Check for Duration Estimates (requires Activity List)
+  if (!hasActivities && !baseline.timeline_baseline?.activity_list) {
+    missing.push({
+      documentType: 'Estimated Duration per Activity',
+      purpose: 'Three-point duration estimates (optimistic, most likely, pessimistic) for each activity. **REQUIRES:** Activity List must be completed first.',
+      template: 'Duration Estimation Worksheet',
+      priority: 'High' as const,
+      whatItProvides: 'PERT estimates (Optimistic, Most Likely, Pessimistic), Expected Duration calculations, Standard Deviation, Confidence Intervals, Historical data references'
     })
   }
   
