@@ -2224,6 +2224,20 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
+      
+      // assigned_to must be UUID, not a name string
+      // Validate it's a UUID format, otherwise set to null
+      const isValidUuid = (str: string | undefined): boolean => {
+        if (!str) return false
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+        return uuidRegex.test(str)
+      }
+      
+      const assignedTo = isValidUuid(a.assigned_to) ? a.assigned_to : null
+      if (a.assigned_to && !assignedTo) {
+        logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid assigned_to UUID: ${a.assigned_to}, setting to null`)
+      }
+      
       values.push(
         projectId,
         a.name,          // For name column
@@ -2233,7 +2247,7 @@ Requirements:
         a.start_date || null,
         a.end_date || null,
         a.status,
-        a.assigned_to || null,
+        assignedTo,      // Use validated UUID or null
         userId
       )
     })
