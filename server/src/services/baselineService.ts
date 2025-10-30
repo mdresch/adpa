@@ -945,17 +945,15 @@ function identifyCriticalPath(activities: any[], milestones: any[]): string[] {
  */
 function calculateTotalBudget(resources: any[]): string {
   const budgetResources = resources.filter(r => r.allocation)
-  
+
   if (budgetResources.length === 0) return 'Not specified'
-  
+
   const total = budgetResources.reduce((sum, r) => {
-    // Try to parse allocation as number (handle formats like "€1,000" or "$1000")
-    const allocation = r.allocation.toString().replace(/[^\d.]/g, '')
-    const amount = parseFloat(allocation)
+    const amount = parseCurrencyToNumber(r.allocation)
     return sum + (isNaN(amount) ? 0 : amount)
   }, 0)
-  
-  return total > 0 ? `€${total.toLocaleString()}` : 'Not specified'
+
+  return total > 0 ? `€${Math.round(total).toLocaleString('en-US')}` : 'Not specified'
 }
 
 /**
@@ -979,8 +977,7 @@ function categorizeCosts(resources: any[]): Record<string, string> {
   
   resources.forEach(r => {
     if (r.allocation && r.type) {
-      const allocation = r.allocation.toString().replace(/[^\d.]/g, '')
-      const amount = parseFloat(allocation)
+      const amount = parseCurrencyToNumber(r.allocation)
       
       if (!isNaN(amount)) {
         categories[r.type] = (categories[r.type] || 0) + amount
@@ -991,10 +988,46 @@ function categorizeCosts(resources: any[]): Record<string, string> {
   // Convert to formatted strings
   const result: Record<string, string> = {}
   Object.keys(categories).forEach(type => {
-    result[type] = `€${categories[type].toLocaleString()}`
+    result[type] = `€${Math.round(categories[type]).toLocaleString('en-US')}`
   })
   
   return result
+}
+
+/**
+ * Robustly parse currency strings with EU/US formats into a Number
+ * Examples: "€850 000", "€850,000", "€1.736.142,30", "1,234.56", "1234"
+ */
+function parseCurrencyToNumber(value: unknown): number {
+  if (typeof value === 'number') return value
+  if (!value) return NaN
+  let s = value.toString().trim()
+
+  // Remove currency symbols and spaces (including non-breaking)
+  s = s.replace(/[€$£\s\u00A0]/g, '')
+
+  // If both comma and dot exist, decide decimal separator by the last occurrence
+  const lastComma = s.lastIndexOf(',')
+  const lastDot = s.lastIndexOf('.')
+
+  if (lastComma !== -1 && lastDot !== -1) {
+    // If comma appears after dot, comma is decimal => remove dots, replace comma with dot
+    if (lastComma > lastDot) {
+      s = s.replace(/\./g, '').replace(',', '.')
+    } else {
+      // Dot after comma => dot is decimal => remove commas
+      s = s.replace(/,/g, '')
+    }
+  } else if (lastComma !== -1) {
+    // Only comma present -> treat as decimal separator
+    s = s.replace(/\./g, '').replace(',', '.')
+  } else {
+    // Only dot or plain digits -> remove grouping commas just in case
+    s = s.replace(/,/g, '')
+  }
+
+  const n = parseFloat(s)
+  return isNaN(n) ? NaN : n
 }
 
 /**
