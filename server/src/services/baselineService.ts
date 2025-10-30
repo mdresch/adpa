@@ -634,7 +634,16 @@ export async function createBaselineFromEntities(
       pool.query('SELECT * FROM scope_items WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM deliverables WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM requirements WHERE project_id = $1 ORDER BY priority DESC, created_at', [projectId]),
-      pool.query('SELECT * FROM milestones WHERE project_id = $1 ORDER BY date', [projectId]),
+      // Support both schemas: some DBs use "due_date" instead of "date"
+      pool.query(
+        `SELECT id, name, description,
+                COALESCE(date, due_date) AS date,
+                status, dependencies
+         FROM milestones
+         WHERE project_id = $1
+         ORDER BY COALESCE(date, due_date)`,
+        [projectId]
+      ),
       pool.query('SELECT * FROM phases WHERE project_id = $1 ORDER BY start_date', [projectId]),
       pool.query('SELECT * FROM activities WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM resources WHERE project_id = $1 ORDER BY created_at', [projectId]),
