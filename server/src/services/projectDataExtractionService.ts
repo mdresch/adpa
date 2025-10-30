@@ -1268,6 +1268,11 @@ Requirements:
     userId: string,
     stakeholders: Stakeholder[]
   ): Promise<void> {
+    if (stakeholders.length === 0) {
+      logger.info('[EXTRACTION] No stakeholders to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1317,6 +1322,11 @@ Requirements:
     userId: string,
     requirements: Requirement[]
   ): Promise<void> {
+    if (requirements.length === 0) {
+      logger.info('[EXTRACTION] No requirements to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1374,6 +1384,11 @@ Requirements:
     userId: string,
     risks: Risk[]
   ): Promise<void> {
+    if (risks.length === 0) {
+      logger.info('[EXTRACTION] No risks to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1423,6 +1438,11 @@ Requirements:
     userId: string,
     milestones: Milestone[]
   ): Promise<void> {
+    if (milestones.length === 0) {
+      logger.info('[EXTRACTION] No milestones to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1465,6 +1485,11 @@ Requirements:
     userId: string,
     constraints: Constraint[]
   ): Promise<void> {
+    if (constraints.length === 0) {
+      logger.info('[EXTRACTION] No constraints to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1507,6 +1532,11 @@ Requirements:
     userId: string,
     successCriteria: SuccessCriterion[]
   ): Promise<void> {
+    if (success_criteria.length === 0) {
+      logger.info('[EXTRACTION] No success_criteria to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1551,6 +1581,11 @@ Requirements:
     userId: string,
     bestPractices: BestPractice[]
   ): Promise<void> {
+    if (best_practices.length === 0) {
+      logger.info('[EXTRACTION] No best_practices to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1591,6 +1626,11 @@ Requirements:
     userId: string,
     phases: Phase[]
   ): Promise<void> {
+    if (phases.length === 0) {
+      logger.info('[EXTRACTION] No phases to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1635,6 +1675,11 @@ Requirements:
     userId: string,
     resources: Resource[]
   ): Promise<void> {
+    if (resources.length === 0) {
+      logger.info('[EXTRACTION] No resources to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1679,6 +1724,11 @@ Requirements:
     userId: string,
     qualityStandards: QualityStandard[]
   ): Promise<void> {
+    if (quality_standards.length === 0) {
+      logger.info('[EXTRACTION] No quality_standards to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1726,6 +1776,11 @@ Requirements:
     userId: string,
     deliverables: Deliverable[]
   ): Promise<void> {
+    if (deliverables.length === 0) {
+      logger.info('[EXTRACTION] No deliverables to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1773,6 +1828,11 @@ Requirements:
     userId: string,
     scopeItems: ScopeItem[]
   ): Promise<void> {
+    if (scope_items.length === 0) {
+      logger.info('[EXTRACTION] No scope_items to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1818,6 +1878,11 @@ Requirements:
     userId: string,
     activities: Activity[]
   ): Promise<void> {
+    if (activities.length === 0) {
+      logger.info('[EXTRACTION] No activities to save, skipping')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -1884,36 +1949,34 @@ Requirements:
       return []
     }
 
-    const combinedContent = documents.map(d => d.content).join('\n\n---\n\n')
-
-    // Map entity type to extraction method
+    // Map entity type to extraction method - pass documents array and options
     switch (entityType) {
       case 'stakeholders':
-        return await this.extractStakeholders(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractStakeholders(documents, projectId, options)
       case 'requirements':
-        return await this.extractRequirements(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractRequirements(documents, projectId, options)
       case 'risks':
-        return await this.extractRisks(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractRisks(documents, projectId, options)
       case 'milestones':
-        return await this.extractMilestones(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractMilestones(documents, projectId, options)
       case 'constraints':
-        return await this.extractConstraints(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractConstraints(documents, projectId, options)
       case 'success_criteria':
-        return await this.extractSuccessCriteria(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractSuccessCriteria(documents, projectId, options)
       case 'best_practices':
-        return await this.extractBestPractices(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractBestPractices(documents, projectId, options)
       case 'phases':
-        return await this.extractPhases(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractPhases(documents, projectId, options)
       case 'resources':
-        return await this.extractResources(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractResources(documents, projectId, options)
       case 'quality_standards':
-        return await this.extractQualityStandards(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractQualityStandards(documents, projectId, options)
       case 'deliverables':
-        return await this.extractDeliverables(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractDeliverables(documents, projectId, options)
       case 'scope_items':
-        return await this.extractScopeItems(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractScopeItems(documents, projectId, options)
       case 'activities':
-        return await this.extractActivities(combinedContent, options.aiProvider, options.aiModel)
+        return await this.extractActivities(documents, projectId, options)
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
     }
