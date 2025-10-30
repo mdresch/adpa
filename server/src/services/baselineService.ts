@@ -634,7 +634,7 @@ export async function createBaselineFromEntities(
       pool.query('SELECT * FROM scope_items WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM deliverables WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM requirements WHERE project_id = $1 ORDER BY priority DESC, created_at', [projectId]),
-      pool.query('SELECT * FROM milestones WHERE project_id = $1 ORDER BY date NULLS LAST', [projectId]),
+      pool.query('SELECT * FROM milestones WHERE project_id = $1 ORDER BY due_date NULLS LAST', [projectId]),
       pool.query('SELECT * FROM phases WHERE project_id = $1 ORDER BY start_date', [projectId]),
       pool.query('SELECT * FROM activities WHERE project_id = $1 ORDER BY created_at', [projectId]),
       pool.query('SELECT * FROM resources WHERE project_id = $1 ORDER BY created_at', [projectId]),
@@ -744,7 +744,7 @@ export async function createBaselineFromEntities(
         key_milestones: milestones.map(m => ({
           name: m.name,
           description: m.description,
-          target_date: m.date,
+          target_date: m.due_date,
           status: m.status,
           dependencies: m.dependencies
         })),

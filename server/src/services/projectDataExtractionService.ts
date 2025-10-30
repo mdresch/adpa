@@ -1649,12 +1649,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO milestones (
-        project_id, name, description, date, status, created_by
+        project_id, name, description, due_date, status, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
         description = EXCLUDED.description,
-        date = EXCLUDED.date,
+        due_date = EXCLUDED.due_date,
         status = EXCLUDED.status,
         updated_at = CURRENT_TIMESTAMP
     `, values)
