@@ -1694,10 +1694,42 @@ Requirements:
       return
     }
 
+    // Deduplicate risks by title (AI sometimes extracts same risk multiple times)
+    const deduplicatedMap = new Map<string, Risk>()
+    
+    risks.forEach(risk => {
+      const normalizedTitle = risk.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        // First occurrence - add to map
+        deduplicatedMap.set(normalizedTitle, risk)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: Risk = {
+          ...existing,
+          description: risk.description || existing.description,
+          category: risk.category || existing.category,
+          probability: risk.probability || existing.probability,
+          impact: risk.impact || existing.impact,
+          mitigation_strategy: risk.mitigation_strategy || existing.mitigation_strategy,
+          contingency_plan: risk.contingency_plan || existing.contingency_plan
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${risk.title}"`)
+      }
+    })
+    
+    const uniqueRisks = Array.from(deduplicatedMap.values())
+    
+    if (uniqueRisks.length < risks.length) {
+      logger.info(`[EXTRACTION-RISKS] Deduplicated ${risks.length} → ${uniqueRisks.length} risks`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    risks.forEach((r, index) => {
+    uniqueRisks.forEach((r, index) => {
       const offset = index * 10
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
@@ -1980,10 +2012,38 @@ Requirements:
       return
     }
 
+    // Deduplicate best practices by title (AI sometimes extracts same practice multiple times)
+    const deduplicatedMap = new Map<string, BestPractice>()
+    
+    bestPractices.forEach(bp => {
+      const normalizedTitle = bp.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        // First occurrence - add to map
+        deduplicatedMap.set(normalizedTitle, bp)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: BestPractice = {
+          ...existing,
+          description: bp.description || existing.description,
+          category: bp.category || existing.category
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-BEST_PRACTICES] Merged duplicate: "${bp.title}"`)
+      }
+    })
+    
+    const uniqueBestPractices = Array.from(deduplicatedMap.values())
+    
+    if (uniqueBestPractices.length < bestPractices.length) {
+      logger.info(`[EXTRACTION-BEST_PRACTICES] Deduplicated ${bestPractices.length} → ${uniqueBestPractices.length} best practices`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    bestPractices.forEach((bp, index) => {
+    uniqueBestPractices.forEach((bp, index) => {
       const offset = index * 5
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`
