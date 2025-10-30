@@ -10,6 +10,8 @@ import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
 import { aiService } from './aiService'
 import type { AIGenerateRequest } from './aiService'
+import { aiCacheService } from './aiCacheService'
+import { createHash } from 'crypto'
 
 interface ExtractionResult {
   stakeholders: Stakeholder[]
@@ -1240,6 +1242,48 @@ Requirements:
   }
 
   /**
+   * Cached AI extraction wrapper
+   * Checks cache before calling AI, stores result after
+   */
+  private async extractWithCache<T>(
+    projectId: string,
+    documentContext: string,
+    entityType: string,
+    options: { aiProvider?: string; aiModel?: string },
+    extractFn: () => Promise<T[]>
+  ): Promise<T[]> {
+    // Check cache first
+    const cached = await aiCacheService.get(
+      projectId,
+      documentContext,
+      entityType,
+      options.aiProvider,
+      options.aiModel
+    )
+    
+    if (cached) {
+      return cached as T[]
+    }
+    
+    // Cache miss - perform AI extraction
+    const result = await extractFn()
+    
+    // Cache the result (only if extraction succeeded with data)
+    if (result.length > 0) {
+      await aiCacheService.set(
+        projectId,
+        documentContext,
+        entityType,
+        result,
+        options.aiProvider,
+        options.aiModel
+      )
+    }
+    
+    return result
+  }
+
+  /**
    * Parse AI response (handles both JSON and markdown-wrapped JSON)
    */
   private parseAIResponse(content: string): any {
@@ -1998,37 +2042,86 @@ Requirements:
       return []
     }
 
+    // Build document context and check cache
+    const documentContext = this.buildDocumentContext(documents)
+    
+    const cached = await aiCacheService.get(
+      projectId,
+      documentContext,
+      entityType,
+      options.aiProvider,
+      options.aiModel
+    )
+    
+    if (cached) {
+      logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Using cached result (${cached.length} entities)`)
+      return cached
+    }
+
+    // Cache miss - perform AI extraction
+    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ❌ Cache miss, calling AI...`)
+    
+    let entities: any[]
+    
     // Map entity type to extraction method - pass documents array and options
     switch (entityType) {
       case 'stakeholders':
-        return await this.extractStakeholders(documents, projectId, options)
+        entities = await this.extractStakeholders(documents, projectId, options)
+        break
       case 'requirements':
-        return await this.extractRequirements(documents, projectId, options)
+        entities = await this.extractRequirements(documents, projectId, options)
+        break
       case 'risks':
-        return await this.extractRisks(documents, projectId, options)
+        entities = await this.extractRisks(documents, projectId, options)
+        break
       case 'milestones':
-        return await this.extractMilestones(documents, projectId, options)
+        entities = await this.extractMilestones(documents, projectId, options)
+        break
       case 'constraints':
-        return await this.extractConstraints(documents, projectId, options)
+        entities = await this.extractConstraints(documents, projectId, options)
+        break
       case 'success_criteria':
-        return await this.extractSuccessCriteria(documents, projectId, options)
+        entities = await this.extractSuccessCriteria(documents, projectId, options)
+        break
       case 'best_practices':
-        return await this.extractBestPractices(documents, projectId, options)
+        entities = await this.extractBestPractices(documents, projectId, options)
+        break
       case 'phases':
-        return await this.extractPhases(documents, projectId, options)
+        entities = await this.extractPhases(documents, projectId, options)
+        break
       case 'resources':
-        return await this.extractResources(documents, projectId, options)
+        entities = await this.extractResources(documents, projectId, options)
+        break
       case 'quality_standards':
-        return await this.extractQualityStandards(documents, projectId, options)
+        entities = await this.extractQualityStandards(documents, projectId, options)
+        break
       case 'deliverables':
-        return await this.extractDeliverables(documents, projectId, options)
+        entities = await this.extractDeliverables(documents, projectId, options)
+        break
       case 'scope_items':
-        return await this.extractScopeItems(documents, projectId, options)
+        entities = await this.extractScopeItems(documents, projectId, options)
+        break
       case 'activities':
-        return await this.extractActivities(documents, projectId, options)
+        entities = await this.extractActivities(documents, projectId, options)
+        break
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
     }
+    
+    // Cache the result for future extractions (only if successful)
+    if (entities.length > 0) {
+      await aiCacheService.set(
+        projectId,
+        documentContext,
+        entityType,
+        entities,
+        options.aiProvider,
+        options.aiModel
+      )
+      logger.info(`[EXTRACTION-${entityType.toUpperCase()}] 💾 Cached ${entities.length} entities for future use`)
+    }
+    
+    return entities
   }
 
   /**
