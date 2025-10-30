@@ -1008,37 +1008,96 @@ Requirements:
 
       const documentContext = this.buildDocumentContext(documents)
       
-      const prompt = `Analyze the following project documents and extract ALL technologies, tools, platforms, and software mentioned in the tech stack.
+      const prompt = `You are a **Technology Architect** tasked with extracting and structuring technology recommendations from project documentation to populate a **Technical Architecture Baseline** (PMBOK 7 - Technical Performance Domain).
+
+CONTEXT:
+This extraction will populate the **Technical Baseline → Architecture** component of the project baseline, categorizing the technology stack by architectural layer.
 
 ${documentContext}
 
-Extract technologies in JSON format with the following structure:
+EXTRACTION INSTRUCTIONS:
+
+Extract ALL technologies mentioned across these layers:
+
+1. **Frontend Layer (Presentation Tier)**:
+   - UI Frameworks: React, Vue, Angular, Next.js, Svelte
+   - Component Libraries: Tailwind CSS, Material-UI, Chakra UI, Radix UI
+   - State Management: Redux, Zustand, MobX, Recoil
+   - Build Tools: Webpack, Vite, Turbopack
+
+2. **Backend Layer (Business Logic Tier)**:
+   - Runtimes: Node.js, Python, Java, Go, .NET
+   - Frameworks: Express, NestJS, Django, Spring Boot, FastAPI
+   - API Standards: REST, GraphQL, gRPC, WebSocket
+
+3. **Data Layer (Persistence Tier)**:
+   - Databases: PostgreSQL, MySQL, MongoDB, Cassandra, DynamoDB
+   - Caching: Redis, Memcached, Elasticache
+   - Search: Elasticsearch, Algolia, Typesense
+   - Message Queues: RabbitMQ, Kafka, AWS SQS, Bull/Redis
+
+4. **Infrastructure Layer (Platform & Hosting)**:
+   - Cloud Providers: AWS, Azure, GCP, DigitalOcean
+   - Containerization: Docker, Podman
+   - Orchestration: Kubernetes, Docker Swarm, ECS, AKS
+   - Load Balancers: Nginx, HAProxy, AWS ALB, Cloudflare
+
+5. **DevOps & CI/CD Layer**:
+   - Version Control: Git, GitHub, GitLab, Bitbucket
+   - CI/CD: GitHub Actions, GitLab CI, Jenkins, CircleCI
+   - IaC: Terraform, Pulumi, CloudFormation, Ansible
+   - Artifact Repos: Docker Hub, NPM, PyPI, Nexus
+
+6. **Testing & Quality Layer**:
+   - Unit Testing: Jest, Pytest, JUnit, Mocha
+   - Integration Testing: Supertest, Postman, RestAssured
+   - E2E Testing: Cypress, Playwright, Selenium, Puppeteer
+   - Code Quality: SonarQube, ESLint, Prettier, CodeClimate
+
+7. **Monitoring & Observability Layer**:
+   - APM: Datadog, New Relic, Dynatrace, AppDynamics
+   - Logging: ELK Stack, Splunk, Loki, CloudWatch
+   - Metrics: Prometheus, Grafana, InfluxDB
+   - Error Tracking: Sentry, Rollbar, Bugsnag
+
+OUTPUT FORMAT:
 {
   "technologies": [
     {
-      "name": "Technology Name",
+      "name": "Technology name (e.g., React, PostgreSQL, AWS)",
       "category": "frontend|backend|database|infrastructure|devops|testing|monitoring|other",
-      "description": "What this technology is used for",
-      "version": "Version number if mentioned",
-      "purpose": "Why this technology was chosen",
-      "license": "License type (MIT, Apache, Proprietary, etc.)",
-      "vendor": "Provider (AWS, Microsoft, Google, Open Source, etc.)",
-      "deployment_environment": "production|staging|development|all"
+      "description": "What this technology does in the project",
+      "version": "Version number or range (e.g., 18.3, 15.x, latest)",
+      "purpose": "Why this technology was chosen for the project",
+      "license": "License type (MIT, Apache 2.0, BSD, Proprietary, Commercial, Open Source)",
+      "vendor": "Provider (AWS, Microsoft, Google, HashiCorp, Open Source Community, etc.)",
+      "deployment_environment": "Where deployed (production, staging, development, all, cloud, on-premises)"
     }
   ]
 }
 
-Requirements:
-- Include ALL frontend technologies (React, Vue, Angular, Next.js, Tailwind, etc.)
-- Include ALL backend technologies (Node.js, Express, Python, Django, Spring, etc.)
-- Include ALL databases (PostgreSQL, MySQL, MongoDB, Redis, etc.)
-- Include ALL infrastructure (AWS, Azure, GCP, Docker, Kubernetes, etc.)
-- Include ALL DevOps tools (Jenkins, GitHub Actions, GitLab CI, etc.)
-- Include ALL testing tools (Jest, Pytest, Selenium, Cypress, etc.)
-- Include ALL monitoring tools (Datadog, New Relic, Grafana, etc.)
-- Classify each technology appropriately by category
-- Extract version numbers when mentioned
-- Return ONLY valid JSON, no markdown or explanation`
+CRITICAL RULES:
+- Extract ALL technologies mentioned in documents (aim for 20-40 technologies)
+- Classify each technology into the correct category
+- Extract version numbers when explicitly mentioned (use "latest" or version range if unclear)
+- Infer purpose from context if not explicitly stated
+- For open-source: use "Open Source" as vendor
+- For cloud services: use cloud provider as vendor (AWS, Azure, GCP)
+- Return ONLY valid JSON, no markdown formatting, no explanations, no comments
+- If a technology serves multiple purposes, include it in the most relevant category
+- Extract both primary and supporting technologies (databases, caches, queues, monitoring, etc.)
+
+QUALITY CHECKLIST:
+✓ At least 3-5 frontend technologies
+✓ At least 3-5 backend technologies
+✓ At least 2-3 databases/data stores
+✓ At least 2-3 infrastructure technologies
+✓ DevOps, testing, and monitoring tools included
+✓ Version numbers extracted when available
+✓ License information included when mentioned
+✓ Deployment environment specified
+
+Return pure JSON only.`
 
       const response = await aiService.generate({
         prompt,
