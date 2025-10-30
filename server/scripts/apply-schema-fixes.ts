@@ -1,5 +1,4 @@
 import { pool, connectDatabase } from '../src/database/connection'
-import { logger } from '../src/utils/logger'
 
 ;(async () => {
   try {

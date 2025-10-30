@@ -5,7 +5,6 @@
 
 import express, { Request, Response, NextFunction } from 'express'
 import Joi from 'joi'
-import { projectDataExtractionService } from '../services/projectDataExtractionService'
 import { authenticateToken } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'

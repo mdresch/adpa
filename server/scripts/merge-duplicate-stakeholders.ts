@@ -54,7 +54,6 @@ const projectId = 'b9a459aa-fe43-4107-a905-204ef435c645'
       })
       
       // Keep the first ID, delete the rest
-      const keepId = group.ids[0]
       const deleteIds = group.ids.slice(1)
       
       if (deleteIds.length > 0) {

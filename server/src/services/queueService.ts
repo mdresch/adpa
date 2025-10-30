@@ -1075,9 +1075,14 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
       [JSON.stringify({ childJobIds: childJobs.map(j => j.id) }), jobId]
     )
     
-    // Monitor child job completion
+    // Monitor child job completion with execution guard to prevent race conditions
     let completedCount = 0
+    let isChecking = false // Execution guard to prevent overlapping checks
     const checkInterval = setInterval(async () => {
+      // Skip if previous check is still running
+      if (isChecking) return
+      
+      isChecking = true
       try {
         const states = await Promise.all(
           childJobs.map(j => j.getState())
@@ -1104,6 +1109,8 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
       } catch (error) {
         clearInterval(checkInterval)
         throw error
+      } finally {
+        isChecking = false // Release guard
       }
     }, 3000) // Check every 3 seconds
     

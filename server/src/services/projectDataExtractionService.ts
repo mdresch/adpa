@@ -8,10 +8,11 @@
 
 import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
+import { convertQuarterDate, isValidDate, addDays, getCurrentDate } from '@/utils/dateUtils'
 import { aiService } from './aiService'
 import type { AIGenerateRequest } from './aiService'
 import { aiCacheService } from './aiCacheService'
-import { createHash } from 'crypto'
+import type { PoolClient } from 'pg'
 
 interface ExtractionResult {
   stakeholders: Stakeholder[]
@@ -278,7 +279,10 @@ export class ProjectDataExtractionService {
     userId: string,
     entities: ExtractionResult
   ): Promise<void> {
-    const client = await pool!.connect()
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+    const client = await pool.connect()
     
     try {
       await client.query('BEGIN')
@@ -403,7 +407,10 @@ export class ProjectDataExtractionService {
 
       query += ` ORDER BY d.created_at ASC`
 
-      const result = await pool!.query(query, params)
+      if (!pool) {
+        throw new Error('Database pool not initialized after connection attempt')
+      }
+      const result = await pool.query(query, params)
       return result.rows
     } catch (error: unknown) {
       logger.error('[EXTRACTION] Failed to fetch project documents', {
@@ -1369,7 +1376,7 @@ Requirements:
    * Save stakeholders to database
    */
   private async saveStakeholders(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     stakeholders: Stakeholder[]
@@ -1423,7 +1430,7 @@ Requirements:
    * Save requirements to database
    */
   private async saveRequirements(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     requirements: Requirement[]
@@ -1474,7 +1481,7 @@ Requirements:
         'low': 'low',
         'very_low': 'low'
       }
-      const mappedPriority = priorityMap[r.priority?.toLowerCase()] || 'medium'
+      const mappedPriority = priorityMap[(r.priority || 'medium').toLowerCase()] || 'medium'
       
       // Map AI type values (hyphen to underscore)
       // DB allows: functional, non_functional, business, technical
@@ -1485,7 +1492,7 @@ Requirements:
         'business': 'business',
         'technical': 'technical'
       }
-      const mappedType = typeMap[r.type?.toLowerCase()] || 'functional'
+      const mappedType = typeMap[(r.type || 'functional').toLowerCase()] || 'functional'
       
       values.push(
         projectId,
@@ -1523,7 +1530,7 @@ Requirements:
    * Save risks to database
    */
   private async saveRisks(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     risks: Risk[]
@@ -1553,7 +1560,7 @@ Requirements:
         'low': 'low',
         'very_low': 'low'
       }
-      const mappedImpact = impactMap[r.impact?.toLowerCase()] || 'medium'
+      const mappedImpact = impactMap[(r.impact || 'medium').toLowerCase()] || 'medium'
       
       values.push(
         projectId,
@@ -1575,8 +1582,8 @@ Requirements:
         mitigation_strategy, contingency_plan, created_by
       )
       VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, title) DO UPDATE SET
-        name = EXCLUDED.name,
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        title = EXCLUDED.title,
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         probability = EXCLUDED.probability,
@@ -1593,7 +1600,7 @@ Requirements:
    * Save milestones to database
    */
   private async saveMilestones(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     milestones: Milestone[]
@@ -1612,29 +1619,7 @@ Requirements:
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
       )
       
-      // Convert quarter dates like '2025-Q4' to actual dates
-      const convertQuarterDate = (dateStr: string | undefined): string | null => {
-        if (!dateStr) return null
-        const quarterMatch = dateStr.match(/^(\d{4})-Q([1-4])$/)
-        if (quarterMatch) {
-          const year = quarterMatch[1]
-          const quarter = quarterMatch[2]
-          const quarterEndDates: Record<string, string> = {
-            '1': '03-31',
-            '2': '06-30',
-            '3': '09-30',
-            '4': '12-31'
-          }
-          return `${year}-${quarterEndDates[quarter]}`
-        }
-        // Validate it's a proper date format
-        if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          return dateStr
-        }
-        logger.warn(`[EXTRACTION] Invalid milestone date format: ${dateStr}, setting to null`)
-        return null
-      }
-      
+      // Convert quarter dates like '2025-Q4' to actual dates using utility function
       const dueDate = convertQuarterDate(m.due_date)
       
       // Map AI status values to database CHECK constraint values
@@ -1650,7 +1635,7 @@ Requirements:
         'delayed': 'delayed',
         'overdue': 'delayed'
       }
-      const mappedStatus = statusMap[m.status?.toLowerCase()] || 'planned'
+      const mappedStatus = statusMap[(m.status || 'planned').toLowerCase()] || 'planned'
       
       values.push(
         projectId,
@@ -1664,12 +1649,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO milestones (
-        project_id, name, description, due_date, status, created_by
+        project_id, name, description, date, status, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
         description = EXCLUDED.description,
-        due_date = EXCLUDED.due_date,
+        date = EXCLUDED.date,
         status = EXCLUDED.status,
         updated_at = CURRENT_TIMESTAMP
     `, values)
@@ -1681,7 +1666,7 @@ Requirements:
    * Save constraints to database
    */
   private async saveConstraints(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     constraints: Constraint[]
@@ -1725,7 +1710,7 @@ Requirements:
         'compliance': 'regulatory',
         'business': 'business'
       }
-      const mappedType = typeMap[c.type?.toLowerCase()] || 'business'
+      const mappedType = typeMap[(c.type || 'business').toLowerCase()] || 'business'
       
       values.push(
         projectId,
@@ -1756,7 +1741,7 @@ Requirements:
    * Save success criteria to database
    */
   private async saveSuccessCriteria(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     successCriteria: SuccessCriterion[]
@@ -1785,7 +1770,7 @@ Requirements:
       )
       
       // Extract numeric value from strings like "90% within 6 months" or "95"
-      const extractNumeric = (value: any): number | null => {
+      const extractNumeric = (value: string | number | null | undefined): number | null => {
         if (typeof value === 'number') return value
         if (!value) return null
         const numericMatch = String(value).match(/^(\d+(?:\.\d+)?)/)
@@ -1831,7 +1816,7 @@ Requirements:
    * Save best practices to database
    */
   private async saveBestPractices(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     bestPractices: BestPractice[]
@@ -1876,7 +1861,7 @@ Requirements:
    * Save phases to database
    */
   private async savePhases(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     phases: Phase[]
@@ -1895,16 +1880,7 @@ Requirements:
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
       
-      // Validate and sanitize dates (AI sometimes returns text instead of dates)
-      const isValidDate = (dateStr: string | undefined) => {
-        if (!dateStr) return false
-        // Check if it's a valid date format (YYYY-MM-DD or similar)
-        const dateRegex = /^\d{4}-\d{2}-\d{2}$/
-        if (!dateRegex.test(dateStr)) return false
-        const date = new Date(dateStr)
-        return !isNaN(date.getTime())
-      }
-      
+      // Validate and sanitize dates using utility functions
       const startDate = isValidDate(p.start_date) ? p.start_date : null
       let endDate = isValidDate(p.end_date) ? p.end_date : null
       
@@ -1912,14 +1888,10 @@ Requirements:
       if (!endDate) {
         if (startDate) {
           // Default: 30 days after start_date
-          const start = new Date(startDate)
-          start.setDate(start.getDate() + 30)
-          endDate = start.toISOString().split('T')[0]
+          endDate = addDays(startDate, 30)
         } else {
           // No valid dates at all - use current date + 30 days
-          const now = new Date()
-          now.setDate(now.getDate() + 30)
-          endDate = now.toISOString().split('T')[0]
+          endDate = addDays(getCurrentDate(), 30)
         }
         logger.warn(`[EXTRACTION] Phase "${p.name}" missing end_date, defaulting to ${endDate}`)
       }
@@ -1955,7 +1927,7 @@ Requirements:
    * Save resources to database
    */
   private async saveResources(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     resources: Resource[]
@@ -2001,7 +1973,7 @@ Requirements:
         'facility': 'facility',
         'facilities': 'facility'
       }
-      const mappedType = typeMap[r.type?.toLowerCase()] || 'material'
+      const mappedType = typeMap[(r.type || 'material').toLowerCase()] || 'material'
       
       values.push(
         projectId,
@@ -2034,7 +2006,7 @@ Requirements:
    * Save quality standards to database
    */
   private async saveQualityStandards(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     qualityStandards: QualityStandard[]
@@ -2084,7 +2056,7 @@ Requirements:
    * Save deliverables to database
    */
   private async saveDeliverables(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     deliverables: Deliverable[]
@@ -2118,7 +2090,7 @@ Requirements:
         'done': 'completed',
         'delivered': 'delivered'
       }
-      const mappedStatus = statusMap[d.status?.toLowerCase()] || 'not_started'
+      const mappedStatus = statusMap[(d.status || 'not_started').toLowerCase()] || 'not_started'
       
       values.push(
         projectId,
@@ -2154,7 +2126,7 @@ Requirements:
    * Save scope items to database
    */
   private async saveScopeItems(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     scopeItems: ScopeItem[]
@@ -2206,7 +2178,7 @@ Requirements:
    * Save activities to database
    */
   private async saveActivities(
-    client: any,
+    client: PoolClient,
     projectId: string,
     userId: string,
     activities: Activity[]
@@ -2254,7 +2226,7 @@ Requirements:
         'cancelled': 'cancelled',
         'canceled': 'cancelled'
       }
-      const mappedStatus = statusMap[a.status?.toLowerCase()] || 'not_started'
+      const mappedStatus = statusMap[(a.status || 'not_started').toLowerCase()] || 'not_started'
       
       values.push(
         projectId,
@@ -2407,7 +2379,10 @@ Requirements:
       await connectDatabase()
     }
     
-    const client = await pool!.connect()
+    if (!pool) {
+      throw new Error('Database pool not initialized after connection attempt')
+    }
+    const client = await pool.connect()
     
     try {
       await client.query('BEGIN')
@@ -2460,9 +2435,10 @@ Requirements:
       await client.query('COMMIT')
       logger.info(`[EXTRACTION] Successfully saved ${entities.length} ${entityType}`)
       
-    } catch (error: any) {
+    } catch (error) {
       await client.query('ROLLBACK')
-      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${error.message}`)
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${errorMessage}`)
       throw error
     } finally {
       client.release()
