@@ -255,6 +255,77 @@ router.post(
 )
 
 /**
+ * POST /api/baselines/:id/decline
+ * Decline and archive a baseline
+ */
+router.post(
+  '/:id/decline',
+  authenticateToken,
+  requirePermission('baselines.approve'),
+  validate(
+    Joi.object({
+      reason: Joi.string().required().min(10).max(500)
+    })
+  ),
+  async (req, res) => {
+    try {
+      const { id } = req.params
+      const { reason } = req.body
+      const { pool } = await import('../database/connection')
+
+      // Update baseline status to 'declined' (archive)
+      const result = await pool.query(
+        `UPDATE project_baselines
+         SET status = 'declined',
+             metadata = jsonb_set(
+               COALESCE(metadata, '{}'::jsonb),
+               '{decline_reason}',
+               to_jsonb($2::text)
+             ),
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1
+         RETURNING *`,
+        [id, reason]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Baseline not found' })
+      }
+
+      // Log the decline action
+      await pool.query(
+        `INSERT INTO baseline_versions (
+          baseline_id,
+          version_number,
+          change_type,
+          change_description,
+          changed_by
+        ) VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (baseline_id, version_number) DO NOTHING`,
+        [
+          id,
+          result.rows[0].version,
+          'declined',
+          `Baseline declined: ${reason}`,
+          (req as any).user.id
+        ]
+      )
+
+      logger.info(`Baseline ${id} declined by user ${(req as any).user.id}`)
+
+      res.json({
+        success: true,
+        baseline: result.rows[0],
+        message: 'Baseline declined and archived'
+      })
+    } catch (error: any) {
+      logger.error('Error declining baseline:', error)
+      res.status(500).json({ error: error.message || 'Failed to decline baseline' })
+    }
+  }
+)
+
+/**
  * GET /api/baselines/:id/drift
  * Get drift detections for a baseline
  */
