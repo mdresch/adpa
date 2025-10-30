@@ -1033,7 +1033,7 @@ type EntityType = typeof ENTITY_TYPES[number]
 /**
  * Parent Job: Orchestrate extraction by creating child jobs for each entity type
  */
-extractionQueue.process("extract-project-data", async (job) => {
+extractionQueue.process("extract-project-data", 1, async (job) => {
   const { jobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
 
   try {
@@ -1121,7 +1121,7 @@ extractionQueue.process("extract-project-data", async (job) => {
 /**
  * Child Job: Extract and save a single entity type
  */
-extractionQueue.process(/^extract-entity-.*/, async (job) => {
+extractionQueue.process(/^extract-entity-.*/, 5, async (job) => {
   const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds, entityType, entityIndex, totalEntities } = job.data
   
   try {
