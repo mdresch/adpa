@@ -195,16 +195,26 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
       })
     }
     
-    // Gap Analysis for Schedule Details
+    // Activity List
     document += `### 3.4 Detailed Schedule (Activity List)\n\n`
-    document += `⚠️ **Missing Data:** Detailed activity list, dependencies, and resource estimates not extracted.\n\n`
-    document += `**Recommendation:** Create a **Project Schedule** document with:\n`
-    document += `- Activity list with IDs\n`
-    document += `- Duration estimates (pessimistic, most likely, optimistic)\n`
-    document += `- Resource assignments\n`
-    document += `- Dependencies (FS, SS, FF, SF)\n`
-    document += `- Critical path analysis\n\n`
-    document += `**Template Available:** Use "Project Schedule Template" to generate this document.\n\n`
+    if (timeline.activities && timeline.activities.length > 0) {
+      document += `**${timeline.activities.length} activities extracted** (see Appendix H for complete list)\n\n`
+      document += `⚠️ **Note:** Activity dependencies, duration estimates (PERT), and detailed resource assignments require a **Project Schedule** document.\n\n`
+      document += `**Recommendation:** Create a **Project Schedule** document with:\n`
+      document += `- Activity dependencies (FS, SS, FF, SF)\n`
+      document += `- Duration estimates (pessimistic, most likely, optimistic)\n`
+      document += `- Detailed resource assignments\n`
+      document += `- Critical path analysis\n\n`
+    } else {
+      document += `⚠️ **Missing Data:** Detailed activity list, dependencies, and resource estimates not extracted.\n\n`
+      document += `**Recommendation:** Create a **Project Schedule** document with:\n`
+      document += `- Activity list with IDs\n`
+      document += `- Duration estimates (pessimistic, most likely, optimistic)\n`
+      document += `- Resource assignments\n`
+      document += `- Dependencies (FS, SS, FF, SF)\n`
+      document += `- Critical path analysis\n\n`
+      document += `**Template Available:** Use "Project Schedule Template" to generate this document.\n\n`
+    }
     
   } else {
     document += `⚠️ **Missing Data:** Timeline baseline not extracted.\n\n`

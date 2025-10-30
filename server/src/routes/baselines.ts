@@ -273,19 +273,19 @@ router.post(
       const { reason } = req.body
       const { pool } = await import('../database/connection')
 
-      // Update baseline status to 'declined' (archive)
+      // Update baseline status to 'superseded' (declined baselines are treated as superseded)
       const result = await pool.query(
         `UPDATE project_baselines
-         SET status = 'declined',
-             metadata = jsonb_set(
-               COALESCE(metadata, '{}'::jsonb),
-               '{decline_reason}',
-               to_jsonb($2::text)
-             ),
-             updated_at = CURRENT_TIMESTAMP
+         SET status = 'superseded',
+             review_comments = COALESCE(review_comments, '[]'::jsonb) || jsonb_build_object(
+               'type', 'decline',
+               'reason', $2::text,
+               'declined_at', NOW(),
+               'declined_by', $3::uuid
+             )::jsonb
          WHERE id = $1
          RETURNING *`,
-        [id, reason]
+        [id, reason, (req as any).user.id]
       )
 
       if (result.rows.length === 0) {
@@ -305,7 +305,7 @@ router.post(
         [
           id,
           result.rows[0].version,
-          'declined',
+          'updated',  // Use 'updated' instead of 'declined' (DB constraint)
           `Baseline declined: ${reason}`,
           (req as any).user.id
         ]
