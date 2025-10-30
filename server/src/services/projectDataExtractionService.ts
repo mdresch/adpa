@@ -1476,12 +1476,23 @@ Requirements:
       }
       const mappedPriority = priorityMap[r.priority?.toLowerCase()] || 'medium'
       
+      // Map AI type values (hyphen to underscore)
+      // DB allows: functional, non_functional, business, technical
+      const typeMap: Record<string, string> = {
+        'functional': 'functional',
+        'non-functional': 'non_functional',
+        'non_functional': 'non_functional',
+        'business': 'business',
+        'technical': 'technical'
+      }
+      const mappedType = typeMap[r.type?.toLowerCase()] || 'functional'
+      
       values.push(
         projectId,
         r.title,        // For title column
         r.title,        // For name column (NOT NULL requirement)
         r.description,
-        r.type,
+        mappedType,     // Use mapped type value
         mappedPriority, // Use mapped priority value
         mappedStatus,   // Use mapped status value
         acceptanceCriteria,
@@ -1626,12 +1637,27 @@ Requirements:
       
       const dueDate = convertQuarterDate(m.due_date)
       
+      // Map AI status values to database CHECK constraint values
+      // DB allows: planned, in_progress, completed, delayed
+      const statusMap: Record<string, string> = {
+        'pending': 'planned',
+        'planned': 'planned',
+        'not_started': 'planned',
+        'in_progress': 'in_progress',
+        'active': 'in_progress',
+        'completed': 'completed',
+        'done': 'completed',
+        'delayed': 'delayed',
+        'overdue': 'delayed'
+      }
+      const mappedStatus = statusMap[m.status?.toLowerCase()] || 'planned'
+      
       values.push(
         projectId,
         m.name,
         m.description,
         dueDate,
-        m.status,
+        mappedStatus,  // Use mapped status value
         userId
       )
     })
@@ -1673,12 +1699,31 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
       )
+      
+      // Map AI type values to database CHECK constraint values
+      // DB allows: budget, time, resource, technical, regulatory, business
+      const typeMap: Record<string, string> = {
+        'cost': 'budget',
+        'financial': 'budget',
+        'budget': 'budget',
+        'time': 'time',
+        'schedule': 'time',
+        'resource': 'resource',
+        'resources': 'resource',
+        'technical': 'technical',
+        'technology': 'technical',
+        'regulatory': 'regulatory',
+        'compliance': 'regulatory',
+        'business': 'business'
+      }
+      const mappedType = typeMap[c.type?.toLowerCase()] || 'business'
+      
       values.push(
         projectId,
         c.title,        // For title column
         c.title,        // For name column (NOT NULL)
         c.description,
-        c.type,
+        mappedType,     // Use mapped type value
         userId
       )
     })
@@ -1712,10 +1757,19 @@ Requirements:
       return
     }
 
+    // Deduplicate by name (ON CONFLICT requires unique names)
+    const uniqueCriteria = Array.from(
+      new Map(successCriteria.map(sc => [sc.name.toLowerCase().trim(), sc])).values()
+    )
+    
+    if (uniqueCriteria.length < successCriteria.length) {
+      logger.warn(`[EXTRACTION] Deduplicated success_criteria: ${successCriteria.length} → ${uniqueCriteria.length}`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    successCriteria.forEach((sc, index) => {
+    uniqueCriteria.forEach((sc, index) => {
       const offset = index * 8
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
@@ -1761,7 +1815,7 @@ Requirements:
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${successCriteria.length} success criteria`)
+    logger.info(`[EXTRACTION] Saved ${uniqueCriteria.length} success criteria`)
   }
 
   /**
@@ -1902,10 +1956,19 @@ Requirements:
       return
     }
 
+    // Deduplicate by name (ON CONFLICT requires unique names)
+    const uniqueResources = Array.from(
+      new Map(resources.map(r => [r.name.toLowerCase().trim(), r])).values()
+    )
+    
+    if (uniqueResources.length < resources.length) {
+      logger.warn(`[EXTRACTION] Deduplicated resources: ${resources.length} → ${uniqueResources.length}`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    resources.forEach((r, index) => {
+    uniqueResources.forEach((r, index) => {
       const offset = index * 7
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
@@ -1955,7 +2018,7 @@ Requirements:
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${resources.length} resources`)
+    logger.info(`[EXTRACTION] Saved ${uniqueResources.length} resources`)
   }
 
   /**
@@ -1976,9 +2039,9 @@ Requirements:
     const placeholders: string[] = []
 
     qualityStandards.forEach((qs, index) => {
-      const offset = index * 8  // Changed from 9 to 8 (removed standard_type)
+      const offset = index * 7  // Changed from 8 to 7 (removed standard_type and requirements)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
       values.push(
         projectId,
@@ -1986,7 +2049,6 @@ Requirements:
         qs.title,        // For standard_name column (NOT NULL)
         qs.description,
         qs.category,
-        qs.requirements || null,
         qs.measurement_criteria || null,
         userId
       )
@@ -1995,15 +2057,13 @@ Requirements:
     await client.query(`
       INSERT INTO quality_standards (
         project_id, title, standard_name, description, category, 
-        requirements, measurement_criteria, created_by
+        measurement_criteria, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, standard_name) DO UPDATE SET
         title = EXCLUDED.title,
         description = EXCLUDED.description,
         category = EXCLUDED.category,
-        standard_type = EXCLUDED.standard_type,
-        requirements = EXCLUDED.requirements,
         measurement_criteria = EXCLUDED.measurement_criteria,
         updated_at = CURRENT_TIMESTAMP
     `, values)
@@ -2127,7 +2187,6 @@ Requirements:
         description = EXCLUDED.description,
         inclusion_status = EXCLUDED.inclusion_status,
         category = EXCLUDED.category,
-        priority = EXCLUDED.priority,
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -2152,9 +2211,9 @@ Requirements:
     const placeholders: string[] = []
 
     activities.forEach((a, index) => {
-      const offset = index * 12  // Changed from 13 to 12 (removed phase)
+      const offset = index * 11  // Changed from 12 to 11 (removed phase and duration)
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
       values.push(
         projectId,
@@ -2164,7 +2223,6 @@ Requirements:
         a.category || null,
         a.start_date || null,
         a.end_date || null,
-        a.duration || null,
         a.status,
         a.assigned_to || null,
         a.effort_estimate || null,
@@ -2175,7 +2233,7 @@ Requirements:
     await client.query(`
       INSERT INTO activities (
         project_id, name, activity_name, description, category, start_date, 
-        end_date, duration, status, assigned_to, effort_estimate, created_by
+        end_date, status, assigned_to, effort_estimate, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, activity_name) DO UPDATE SET
@@ -2184,7 +2242,6 @@ Requirements:
         category = EXCLUDED.category,
         start_date = EXCLUDED.start_date,
         end_date = EXCLUDED.end_date,
-        duration = EXCLUDED.duration,
         status = EXCLUDED.status,
         assigned_to = EXCLUDED.assigned_to,
         effort_estimate = EXCLUDED.effort_estimate,
