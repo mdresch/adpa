@@ -842,6 +842,50 @@ class ApiClient {
     return response
   }
 
+  // Document Generation with Smart Versioning (conflict detection)
+  async generateDocument(data: {
+    projectId: string
+    name: string
+    description?: string
+    templateId?: string
+    userPrompt: string
+    provider: string
+    model?: string
+    temperature?: number
+    includeStakeholders?: boolean
+    includeDocuments?: boolean
+    customContext?: string
+  }): Promise<{ document: Document; generation: any }> {
+    const response = await this.request<{ document: Document; generation: any }>("/document-generation/generate", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response
+  }
+
+  // Generate as new version of existing document (conflict resolution)
+  async generateDocumentNewVersion(data: {
+    existingDocumentId: string
+    projectId: string
+    templateId: string
+    userPrompt: string
+    provider: string
+    model?: string
+    temperature?: number
+  }): Promise<{ document: Document; previousVersion: string; newVersion: string; driftDetected: boolean; generation: any }> {
+    const response = await this.request<{
+      document: Document
+      previousVersion: string
+      newVersion: string
+      driftDetected: boolean
+      generation: any
+    }>("/document-generation/generate-new-version", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    return response
+  }
+
   // GitHub Integration API
   async getGitHubRepository(integrationId: string): Promise<any> {
     return this.request<any>(`/integrations/github/${integrationId}/repository`)

@@ -8,6 +8,7 @@ import { documentGenerationService } from "../services/documentGenerationService
 import { DocumentRegenerationService } from "../services/documentRegenerationService"
 import { pool } from "../database/connection"
 import { queueService } from "../services/queueService"
+import { semanticVersionService } from "../services/semanticVersionService"
 
 const router = express.Router()
 
@@ -60,6 +61,58 @@ router.post("/generate",
 
       if (projectCheck.rows.length === 0) {
         return res.status(403).json({ error: "Access denied to project" })
+      }
+
+      // Check if document from this template already exists
+      if (templateId) {
+        const existingCheck = await pool.query(
+          `SELECT 
+            d.id,
+            d.name,
+            d.version,
+            d.semantic_version,
+            d.updated_at,
+            b.id as baseline_id,
+            b.version as baseline_version,
+            b.approved_at as baseline_date
+           FROM documents d
+           LEFT JOIN project_baselines b ON b.project_id = d.project_id 
+             AND b.status = 'approved'
+             AND b.baseline_content->>'document_id' = d.id::text
+           WHERE d.project_id = $1 
+             AND d.template_id = $2 
+             AND d.deleted_at IS NULL
+             AND d.parent_document_id IS NULL
+           ORDER BY d.updated_at DESC
+           LIMIT 1`,
+          [projectId, templateId]
+        )
+
+        if (existingCheck.rows.length > 0) {
+          // Document from this template already exists - return conflict
+          const existing = existingCheck.rows[0]
+          log.info(`Template conflict detected: existing document ${existing.id}`)
+          
+          return res.status(409).json({
+            code: 'TEMPLATE_ALREADY_USED',
+            message: 'A document from this template already exists in this project',
+            existing: {
+              id: existing.id,
+              name: existing.name,
+              version: existing.version,
+              semantic_version: existing.semantic_version,
+              updated_at: existing.updated_at,
+              baseline_id: existing.baseline_id,
+              baseline_version: existing.baseline_version,
+              baseline_date: existing.baseline_date
+            },
+            options: {
+              createNewVersion: true,    // Update existing (recommended)
+              createSeparate: true,       // Create new document
+              viewExisting: true          // Open existing
+            }
+          })
+        }
       }
 
       // Generate document using service
@@ -126,6 +179,191 @@ router.post("/generate",
       log.error("Document generation error:", error)
       res.status(500).json({ 
         error: "Document generation failed",
+        details: error instanceof Error ? error.message : "Unknown error"
+      })
+    }
+  }
+)
+
+// Validation schema for generating as new version (conflict resolution)
+const generateAsNewVersionSchema = Joi.object({
+  existingDocumentId: Joi.string().uuid().required(),
+  projectId: Joi.string().uuid().required(),
+  templateId: Joi.string().uuid().required(),
+  userPrompt: Joi.string().min(1).required(),
+  provider: Joi.string().required(),
+  model: Joi.string().optional(),
+  temperature: Joi.number().min(0).max(2).default(0.7),
+})
+
+// Generate document as new version of existing document
+router.post("/generate-new-version",
+  authenticateToken,
+  requirePermission("documents.create"),
+  validate(generateAsNewVersionSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      const {
+        existingDocumentId,
+        projectId,
+        templateId,
+        userPrompt,
+        provider,
+        model,
+        temperature,
+      } = req.body
+
+      log.info(`Generating new version for document ${existingDocumentId}`)
+
+      // Get existing document
+      const documentCheck = await pool.query(
+        `SELECT d.id, d.name, d.semantic_version, d.version, d.project_id,
+                p.owner_id, p.team_members
+         FROM documents d
+         JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1 AND d.project_id = $2`,
+        [existingDocumentId, projectId]
+      )
+
+      if (documentCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Document not found" })
+      }
+
+      const document = documentCheck.rows[0]
+      const hasAccess = 
+        document.owner_id === req.user?.id ||
+        (document.team_members && document.team_members.includes(req.user?.id))
+
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied" })
+      }
+
+      // Generate new content
+      const result = await documentGenerationService.generateDocument({
+        projectId,
+        templateId,
+        userPrompt,
+        provider,
+        model,
+        temperature,
+        userId: req.user?.id || '',
+      })
+
+      // Calculate metrics
+      const wordCount = result.content.trim().split(/\s+/).filter(Boolean).length
+      const characterCount = result.content.length
+
+      // Increment version (AI regeneration = minor version)
+      const currentVersion = document.semantic_version || '1.0.0'
+      const newVersion = semanticVersionService.getNextAIVersion(currentVersion)
+      const newVersionNumber = document.version + 1
+
+      // Save current version to history
+      await pool.query(
+        `INSERT INTO document_versions 
+         (id, document_id, version, semantic_version, content, created_by, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+        [
+          uuidv4(),
+          existingDocumentId,
+          document.version,
+          currentVersion,
+          document.content,
+          req.user?.id
+        ]
+      )
+
+      // Update document with new version
+      const updateResult = await pool.query(
+        `UPDATE documents
+         SET 
+           content = $1,
+           version = $2,
+           semantic_version = $3,
+           updated_by = $4,
+           updated_at = NOW(),
+           word_count = $5,
+           character_count = $6,
+           metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{regeneration}',
+             jsonb_build_object(
+               'regenerated_at', NOW(),
+               'previous_version', $7,
+               'reason', 'template_regeneration',
+               'ai_provider', $8
+             )
+           )
+         WHERE id = $9
+         RETURNING *`,
+        [
+          result.content,
+          newVersionNumber,
+          newVersion,
+          req.user?.id,
+          wordCount,
+          characterCount,
+          currentVersion,
+          provider,
+          existingDocumentId
+        ]
+      )
+
+      // Check if document is baselined and trigger drift detection
+      const baselineCheck = await pool.query(
+        `SELECT id, version FROM project_baselines
+         WHERE project_id = $1 
+           AND status = 'approved'
+           AND baseline_content->>'document_id' = $2::text
+         ORDER BY approved_at DESC
+         LIMIT 1`,
+        [projectId, existingDocumentId]
+      )
+
+      let driftDetected = false
+      if (baselineCheck.rows.length > 0) {
+        driftDetected = true
+        log.info(`Document is baselined - drift detection will be triggered`)
+        // Drift detection would be triggered here by the baseline system
+      }
+
+      // Log activity
+      await pool.query(
+        `INSERT INTO audit_logs 
+         (id, user_id, action, resource_type, resource_id, details)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          uuidv4(),
+          req.user?.id,
+          'document_version_created',
+          'document',
+          existingDocumentId,
+          JSON.stringify({
+            previous_version: currentVersion,
+            new_version: newVersion,
+            generated_by: 'ai',
+            template_id: templateId,
+            drift_detected: driftDetected
+          })
+        ]
+      )
+
+      log.info(`Document updated to version ${newVersion}`)
+
+      res.status(200).json({
+        message: "Document updated to new version",
+        document: updateResult.rows[0],
+        previousVersion: currentVersion,
+        newVersion,
+        driftDetected,
+        generation: result.metadata,
+      })
+    } catch (error) {
+      log.error("Generate new version error:", error)
+      res.status(500).json({ 
+        error: "Failed to generate new version",
         details: error instanceof Error ? error.message : "Unknown error"
       })
     }
