@@ -217,7 +217,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
   // Check for entities when dialog opens
   useEffect(() => {
     if (showExtractDialog && projectId) {
-      checkForEntities()
+      void checkForEntities()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showExtractDialog, projectId])
@@ -234,7 +234,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
 
         const response = await apiClient.request<{
           success: boolean
-          baseline: any
+          baseline: Record<string, unknown>
           message: string
           stats: {
             duration_ms: number

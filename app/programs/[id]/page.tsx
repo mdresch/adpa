@@ -196,7 +196,7 @@ export default function ProgramDetailPage() {
     };
 
     if (programId) {
-      fetchProgramData();
+      void fetchProgramData();
     }
   }, [programId]);
 

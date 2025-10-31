@@ -137,7 +137,7 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
 /**
  * Get all projects assigned to a program
  */
-export async function getProgramProjects(programId: string): Promise<any[]> {
+export async function getProgramProjects(programId: string): Promise<Record<string, unknown>[]> {
   try {
     const result = await pool.query(`
       SELECT 

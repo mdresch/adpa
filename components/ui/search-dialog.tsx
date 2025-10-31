@@ -31,8 +31,8 @@ export interface SearchableItem {
   description?: string
   type?: string
   status?: string
-  metadata?: Record<string, any>
-  [key: string]: any
+  metadata?: Record<string, unknown>
+  [key: string]: unknown
 }
 
 export type ItemType = "program" | "project" | "template" | "document"
@@ -377,9 +377,9 @@ export function ProgramSearchDialog({
       loading={loading}
       renderItemMeta={(program) => (
         <>
-          {(program as any).project_count !== undefined && (
+          {('project_count' in program) && typeof program.project_count === 'number' && (
             <span className="text-xs text-muted-foreground">
-              {(program as any).project_count} projects
+              {program.project_count} projects
             </span>
           )}
         </>
@@ -491,14 +491,14 @@ export function DocumentSearchDialog({
       loading={loading}
       renderItemMeta={(doc) => (
         <>
-          {(doc as any).version && (
+          {('version' in doc) && typeof doc.version === 'number' && (
             <span className="text-xs text-muted-foreground">
-              v{(doc as any).version}
+              v{doc.version}
             </span>
           )}
-          {(doc as any).updated_at && (
+          {('updated_at' in doc) && typeof doc.updated_at === 'string' && (
             <span className="text-xs text-muted-foreground">
-              {new Date((doc as any).updated_at).toLocaleDateString()}
+              {new Date(doc.updated_at).toLocaleDateString()}
             </span>
           )}
         </>

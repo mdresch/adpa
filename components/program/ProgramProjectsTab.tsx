@@ -59,8 +59,8 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
   const [removing, setRemoving] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchProgramProjects()
-    fetchAllProjects()
+    void fetchProgramProjects()
+    void fetchAllProjects()
   }, [programId])
 
   const fetchProgramProjects = async () => {
@@ -364,17 +364,17 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                     <div className="text-muted-foreground">
                       {selectedProject.description || 'No description'}
                     </div>
-                    {(selectedProject as any).budget && (
+                    {('budget' in selectedProject) && typeof selectedProject.budget === 'number' && (
                       <div className="flex items-center gap-2">
                         <DollarSign className="h-4 w-4" />
-                        <span>Budget: ${(selectedProject as any).budget.toLocaleString()}</span>
+                        <span>Budget: ${selectedProject.budget.toLocaleString()}</span>
                       </div>
                     )}
-                    {(selectedProject as any).start_date && (selectedProject as any).end_date && (
+                    {('start_date' in selectedProject) && ('end_date' in selectedProject) && (
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4" />
                         <span>
-                          {new Date((selectedProject as any).start_date).toLocaleDateString()} - {new Date((selectedProject as any).end_date).toLocaleDateString()}
+                          {new Date(selectedProject.start_date as string).toLocaleDateString()} - {new Date(selectedProject.end_date as string).toLocaleDateString()}
                         </span>
                       </div>
                     )}
@@ -394,7 +394,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
               description: p.description,
               status: p.status,
               type: p.status,
-              document_count: (p as any).document_count,
+              document_count: p.document_count,
               budget: p.budget,
               start_date: p.start_date,
               end_date: p.end_date
