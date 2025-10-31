@@ -117,7 +117,7 @@ export default function ProgramSettingsPage() {
         description: formData.description.trim() || null,
         status: formData.status,
         budget: formData.budget ? parseFloat(formData.budget) : null,
-        currency_code: formData.currency_code,
+        currency: formData.currency_code, // Backend expects 'currency', not 'currency_code'
         start_date: formData.start_date || null,
         end_date: formData.end_date || null,
       }
