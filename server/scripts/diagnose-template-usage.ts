@@ -7,8 +7,18 @@
  *   npx tsx server/scripts/diagnose-template-usage.ts <template-id>
  */
 
-import { pool } from '../src/database/connection'
-import { logger } from '../src/utils/logger'
+import { Pool } from 'pg'
+import dotenv from 'dotenv'
+import path from 'path'
+
+// Load environment variables
+dotenv.config({ path: path.join(__dirname, '../.env'), debug: true })
+
+// Create database connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+})
 
 async function diagnoseTemplate(templateId: string) {
   try {
