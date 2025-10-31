@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
-import { ArrowUpRight, Search, Plus, FileText, Target } from "lucide-react"
+import { ArrowUpRight, Search, Plus, FileText } from "lucide-react"
 import { toast } from "sonner"
 import {
   PieChart,

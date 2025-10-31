@@ -332,7 +332,7 @@ export default function ProgramSettingsPage() {
                   </div>
 
                   {/* Display Budget */}
-                  {formData.budget && (
+                  {formData.budget && !isNaN(parseFloat(formData.budget)) && (
                     <div className="p-4 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">Budget Preview</p>
                       <p className="text-2xl font-bold text-foreground">

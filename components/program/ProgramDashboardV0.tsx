@@ -42,7 +42,6 @@ export default function ProgramDashboardV0({ programId }: ProgramDashboardV0Prop
   const router = useRouter()
   const [program, setProgram] = useState<ProgramData | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
 
@@ -460,7 +459,7 @@ export default function ProgramDashboardV0({ programId }: ProgramDashboardV0Prop
                     ${(financial.allocated / 1000000).toFixed(1)}M
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {Math.round((financial.allocated / financial.totalBudget) * 100)}%
+                    {financial.totalBudget > 0 ? Math.round((financial.allocated / financial.totalBudget) * 100) : 0}%
                   </p>
                 </CardContent>
               </Card>
@@ -474,7 +473,7 @@ export default function ProgramDashboardV0({ programId }: ProgramDashboardV0Prop
                     ${(financial.remaining / 1000000).toFixed(1)}M
                   </div>
                   <p className="text-sm text-muted-foreground mt-1">
-                    {Math.round((financial.remaining / financial.totalBudget) * 100)}%
+                    {financial.totalBudget > 0 ? Math.round((financial.remaining / financial.totalBudget) * 100) : 0}%
                   </p>
                 </CardContent>
               </Card>
@@ -482,7 +481,7 @@ export default function ProgramDashboardV0({ programId }: ProgramDashboardV0Prop
 
             <Card>
               <CardContent className="pt-6">
-                <Progress value={(financial.allocated / financial.totalBudget) * 100} className="h-3" />
+                <Progress value={financial.totalBudget > 0 ? (financial.allocated / financial.totalBudget) * 100 : 0} className="h-3" />
               </CardContent>
             </Card>
 
@@ -544,7 +543,7 @@ export default function ProgramDashboardV0({ programId }: ProgramDashboardV0Prop
                             ${(spent / 1000000).toFixed(1)}M / ${(total / 1000000).toFixed(1)}M
                           </span>
                         </div>
-                        <Progress value={(spent / total) * 100} className="h-2" />
+                        <Progress value={total > 0 ? (spent / total) * 100 : 0} className="h-2" />
                       </div>
                     )
                   })}

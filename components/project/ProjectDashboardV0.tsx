@@ -75,7 +75,6 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [project, setProject] = useState<ProjectData | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
   const [baselines, setBaselines] = useState<Baseline[]>([])
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
 
