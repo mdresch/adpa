@@ -269,12 +269,40 @@ async function main() {
   console.log(`   ${connectionString.substring(0, 30)}...`)
   console.log('')
 
-  const pool = new Pool({
-    connectionString,
-    ssl: (connectionString.includes('supabase.co') || connectionString.includes('neon.tech') || connectionString.includes('azure') || process.env.DB_SSL === 'true')
-      ? { rejectUnauthorized: false }
-      : undefined
-  })
+  // Parse URL to check for SSL requirement
+  const dbUrl = new URL(connectionString)
+  const hostname = dbUrl.hostname.toLowerCase()
+  
+  console.log(`   Host: ${hostname}`)
+  
+  // Check if SSL is required (most cloud databases require it)
+  const needsSSL = hostname.includes('supabase.co') || 
+                   hostname.includes('neon.tech') ||
+                   hostname.includes('azure') ||
+                   hostname.includes('amazonaws.com') ||
+                   hostname.includes('render.com') ||
+                   process.env.DB_SSL === 'true' ||
+                   connectionString.includes('sslmode=require')
+  
+  console.log(`   SSL: ${needsSSL ? 'Required' : 'Not required'}`)
+  
+  // Build pool configuration
+  const poolConfig: any = {
+    host: dbUrl.hostname,
+    port: parseInt(dbUrl.port) || 5432,
+    database: dbUrl.pathname.slice(1).split('?')[0],
+    user: dbUrl.username,
+    password: dbUrl.password,
+    max: 20,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 30000
+  }
+
+  if (needsSSL) {
+    poolConfig.ssl = { rejectUnauthorized: false }
+  }
+
+  const pool = new Pool(poolConfig)
 
   try {
     // Test connection
