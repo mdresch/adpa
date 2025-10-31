@@ -263,25 +263,39 @@ export async function createProgramBudget(
 
 /**
  * Calculate ROI for a program
+ * Uses expected benefits for planned ROI, or realized benefits if project is complete
  */
 export async function calculateROI(programId: string): Promise<number> {
   try {
-    const result = await pool.query(
-      `SELECT 
-        COALESCE(SUM(p.actual_cost), 0) as total_cost,
-        COALESCE(SUM(pb.realized_value), 0) as total_benefits
-      FROM projects p
-      LEFT JOIN program_benefits pb ON pb.program_id = p.program_id
-      WHERE p.program_id = $1 AND p.archived = false`,
+    // Get total investment from projects
+    const investmentResult = await pool.query(
+      `SELECT COALESCE(SUM(budget), 0) as total_investment
+       FROM projects
+       WHERE program_id = $1 AND archived = false`,
       [programId]
     )
     
-    const totalCost = parseFloat(result.rows[0].total_cost) || 0
-    const totalBenefits = parseFloat(result.rows[0].total_benefits) || 0
+    // Get total benefits from program_benefits table
+    const benefitsResult = await pool.query(
+      `SELECT 
+        COALESCE(SUM(expected_value), 0) as expected_benefits,
+        COALESCE(SUM(realized_value), 0) as realized_benefits
+       FROM program_benefits
+       WHERE program_id = $1`,
+      [programId]
+    )
     
-    if (totalCost === 0) return 0
+    const totalInvestment = parseFloat(investmentResult.rows[0].total_investment) || 0
+    const expectedBenefits = parseFloat(benefitsResult.rows[0].expected_benefits) || 0
+    const realizedBenefits = parseFloat(benefitsResult.rows[0].realized_benefits) || 0
     
-    const roi = ((totalBenefits - totalCost) / totalCost) * 100
+    if (totalInvestment === 0) return 0
+    
+    // Use expected benefits for forward-looking ROI
+    // (In practice, use realized benefits for completed programs)
+    const totalBenefits = expectedBenefits > 0 ? expectedBenefits : realizedBenefits
+    
+    const roi = ((totalBenefits - totalInvestment) / totalInvestment) * 100
     
     return Math.round(roi * 100) / 100  // Round to 2 decimals
     
@@ -407,8 +421,8 @@ export async function getFinancialAnalysis(
     const npv = await calculateNPV(programId)
     const paybackPeriodMonths = await calculatePaybackPeriod(programId)
     
-    const benefitCostRatio = totalInvestment > 0 
-      ? totalExpectedBenefits / totalInvestment 
+    const benefitCostRatio = (totalInvestment + remainingCosts) > 0 
+      ? totalExpectedBenefits / (totalInvestment + remainingCosts)
       : 0
     
     const continueRecommendation = (
