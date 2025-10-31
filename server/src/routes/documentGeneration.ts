@@ -44,7 +44,7 @@ router.post("/check-template",
          FROM documents d
          LEFT JOIN project_baselines b ON b.project_id = d.project_id 
            AND b.status = 'approved'
-           AND b.baseline_content->>'document_id' = d.id::text
+           AND b.document_corpus @> jsonb_build_array(d.id::text)
          WHERE d.project_id = $1 
            AND d.template_id = $2 
            AND d.deleted_at IS NULL
@@ -163,7 +163,7 @@ router.post("/generate",
            FROM documents d
            LEFT JOIN project_baselines b ON b.project_id = d.project_id 
              AND b.status = 'approved'
-             AND b.baseline_content->>'document_id' = d.id::text
+             AND b.document_corpus @> jsonb_build_array(d.id::text)
            WHERE d.project_id = $1 
              AND d.template_id = $2 
              AND d.deleted_at IS NULL
