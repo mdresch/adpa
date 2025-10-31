@@ -12,6 +12,8 @@
     "lint": "eslint src --ext .ts",
     "migrate": "node -r dotenv/config scripts/run-migrations.js",
     "migrate:financial": "tsx scripts/run-financial-migrations.ts",
+    "migrate:300": "tsx scripts/run-migration-300.ts",
+    "migrate:300:rollback": "tsx scripts/rollback-migration-300.ts",
     "seed:financial": "tsx scripts/seed-financial-test-data.ts",
     "create-admin": "tsx scripts/create-admin-user.ts",
     "fix-encryption": "tsx scripts/fix-encryption-migration.ts",

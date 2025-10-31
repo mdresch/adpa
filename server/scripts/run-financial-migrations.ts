@@ -32,6 +32,11 @@ const migrations = [
     number: '205',
     name: 'program_financial_analysis',
     description: 'ROI, NPV, IRR, and benefits tracking'
+  },
+  {
+    number: '206',
+    name: 'cost_management_system',
+    description: 'Dynamic cost categories, roles, rates, and time tracking'
   }
 ]
 

@@ -1288,8 +1288,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           
           console.log('✅ [CONFLICT-RESOLUTION] New version created:', result.newVersion)
           
-          // Navigate to updated document
-          router.push(`/documents/${conflictData.existingDocument.id}/view`)
+          // Navigate to updated document in standard document editor
+          router.push(`/projects/${projectId}/documents/${conflictData.existingDocument.id}/view`)
           break
           
         case 'separate':
@@ -1317,8 +1317,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           
         case 'view-existing':
           console.log('👁️ [CONFLICT-RESOLUTION] Navigating to existing document...')
-          // Navigate to existing document
-          router.push(`/documents/${conflictData.existingDocument.id}/view`)
+          // Navigate to existing document in standard document editor
+          router.push(`/projects/${projectId}/documents/${conflictData.existingDocument.id}/view`)
           break
       }
       
