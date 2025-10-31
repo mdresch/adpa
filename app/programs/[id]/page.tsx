@@ -1,7 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/sidebar';
 import { Header } from '@/components/header';
 import { PageTransition } from '@/components/page-transition';
@@ -140,6 +140,7 @@ interface Program {
 
 export default function ProgramDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const programId = params?.id as string;
   
   const [program, setProgram] = useState<Program | null>(null);
