@@ -222,7 +222,8 @@ router.delete('/:id/remove-project/:projectId',
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { programId, projectId } = req.params
+      const programId = req.params.id
+      const { projectId } = req.params
       
       await programService.removeProject(projectId)
       
