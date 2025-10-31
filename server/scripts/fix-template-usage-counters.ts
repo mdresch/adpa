@@ -15,10 +15,21 @@ import path from 'path'
 // Load environment variables
 dotenv.config({ path: path.join(__dirname, '../.env'), debug: true })
 
+// For Supabase/Neon and other cloud providers with self-signed certificates
+// Allow self-signed certificates
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
+
 // Create database connection
+const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
+
+console.log(`\n🔐 Database URL: ${databaseUrl ? databaseUrl.substring(0, 40) + '...' : 'Not found'}`)
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+  connectionString: databaseUrl,
+  // Enable SSL for cloud providers (Supabase, Neon, Azure, etc.)
+  ssl: databaseUrl && (databaseUrl.includes('supabase.co') || databaseUrl.includes('neon.tech') || databaseUrl.includes('azure') || process.env.DB_SSL === 'true')
+    ? { rejectUnauthorized: false }
+    : false
 })
 
 async function fixTemplateCounters(dryRun: boolean = true, specificTemplateId?: string) {
