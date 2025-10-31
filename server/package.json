@@ -11,6 +11,7 @@
     "test": "jest",
     "lint": "eslint src --ext .ts",
     "migrate": "node -r dotenv/config scripts/run-migrations.js",
+    "migrate:financial": "tsx scripts/run-financial-migrations.ts",
     "create-admin": "tsx scripts/create-admin-user.ts",
     "fix-encryption": "tsx scripts/fix-encryption-migration.ts",
     "seed:baselines": "tsx scripts/seed-baseline-data.ts",
