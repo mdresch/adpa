@@ -56,8 +56,10 @@ export default function ProgramsPage() {
   const fetchPrograms = async () => {
     try {
       setLoading(true)
-      const data = await apiClient.request<{ programs: Program[] }>('/programs')
-      setPrograms(data.programs || [])
+      const data = await apiClient.request<{ success: boolean; data: Program[] }>('/programs')
+      console.log('[PROGRAMS] API Response:', data)
+      // FIX: Backend returns { success: true, data: programs }, not { programs: [] }
+      setPrograms(data.data || [])
     } catch (error) {
       console.error("Failed to fetch programs:", error)
       toast.error("Failed to load programs")
@@ -306,6 +308,16 @@ export default function ProgramsPage() {
                         </CardHeader>
                         <CardContent>
                           <div className="space-y-3">
+                            {/* Project Count */}
+                            {typeof (program as any).project_count !== 'undefined' && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <FolderOpen className="h-4 w-4 text-muted-foreground" />
+                                <span className="text-muted-foreground">Projects:</span>
+                                <span className="font-semibold">
+                                  {(program as any).project_count}
+                                </span>
+                              </div>
+                            )}
                             {program.budget && (
                               <div className="flex items-center gap-2 text-sm">
                                 <DollarSign className="h-4 w-4 text-muted-foreground" />

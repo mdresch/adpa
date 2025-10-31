@@ -153,6 +153,173 @@ router.delete('/:id', authenticateToken, requirePermission('programs.manage'), a
   }
 })
 
+/**
+ * GET /api/programs/:id/projects
+ * Get all projects assigned to a program
+ */
+router.get('/:id/projects',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const projects = await programService.getProgramProjects(programId)
+      
+      res.json({ success: true, data: projects })
+    } catch (error) {
+      log.error('Failed to fetch program projects', error)
+      res.status(500).json({ error: 'Failed to fetch program projects' })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/add-project
+ * Assign a project to a program
+ */
+router.post('/:id/add-project',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(Joi.object({
+    projectId: Joi.string().uuid().required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      const { projectId } = req.body
+      
+      // Verify program exists
+      const program = await programService.getProgramById(programId)
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' })
+      }
+      
+      // Assign project to program
+      const project = await programService.assignProject(programId, projectId)
+      if (!project) {
+        return res.status(404).json({ error: 'Project not found' })
+      }
+      
+      log.info(`Assigned project ${projectId} to program ${programId}`)
+      
+      res.json({ success: true, data: project })
+    } catch (error) {
+      log.error('Failed to assign project to program', error)
+      res.status(500).json({ error: 'Failed to assign project to program' })
+    }
+  }
+)
+
+/**
+ * DELETE /api/programs/:id/remove-project/:projectId
+ * Remove a project from a program
+ */
+router.delete('/:id/remove-project/:projectId',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { programId, projectId } = req.params
+      
+      await programService.removeProject(projectId)
+      
+      log.info(`Removed project ${projectId} from program ${programId}`)
+      
+      res.json({ success: true })
+    } catch (error) {
+      log.error('Failed to remove project from program', error)
+      res.status(500).json({ error: 'Failed to remove project from program' })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/can-archive
+ * Check if program can be archived (all projects must be archived)
+ */
+router.get('/:id/can-archive',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const result = await programService.canArchiveProgram(programId)
+      
+      res.json({ success: true, data: result })
+    } catch (error) {
+      log.error('Failed to check archive status', error)
+      res.status(500).json({ error: 'Failed to check archive status' })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/archive
+ * Archive a program (only if all projects are archived)
+ */
+router.post('/:id/archive',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      const userId = (req as any).user.id
+      
+      const program = await programService.archiveProgram(programId, userId)
+      
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' })
+      }
+      
+      log.info(`Program ${programId} archived by user ${userId}`)
+      
+      res.json({ success: true, data: program })
+    } catch (error) {
+      log.error('Failed to archive program', error)
+      
+      // If error message contains "Cannot archive", send 400 instead of 500
+      if (error instanceof Error && error.message.includes('Cannot archive')) {
+        return res.status(400).json({ error: error.message })
+      }
+      
+      res.status(500).json({ error: 'Failed to archive program' })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/unarchive
+ * Unarchive a program
+ */
+router.post('/:id/unarchive',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const program = await programService.unarchiveProgram(programId)
+      
+      if (!program) {
+        return res.status(404).json({ error: 'Program not found' })
+      }
+      
+      log.info(`Program ${programId} unarchived`)
+      
+      res.json({ success: true, data: program })
+    } catch (error) {
+      log.error('Failed to unarchive program', error)
+      res.status(500).json({ error: 'Failed to unarchive program' })
+    }
+  }
+)
+
 export default router
 
 // Export factory for testing (allows injecting auth stubs)
