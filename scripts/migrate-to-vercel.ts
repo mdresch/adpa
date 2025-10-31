@@ -51,10 +51,18 @@ async function seedVercelDatabase() {
   try {
     console.log('🌱 Seeding Vercel Postgres database...');
     
-    // Create admin user if it doesn't exist
-    const adminId = "3a82e0e8-c54d-4f99-b1d7-e651ce101341";
-    const adminEmail = "admin@adpa.com";
-    const adminPasswordHash = "$2a$10$JNVCnY3FYKwrYXwGODtZDuZCzgTQYQUGJJf1bKqJ8JLhNB1OVLsXy"; // hashed 'admin123'
+    // Get admin credentials from environment variables
+    const adminId = process.env.ADMIN_USER_ID || "3a82e0e8-c54d-4f99-b1d7-e651ce101341";
+    const adminEmail = process.env.ADMIN_EMAIL || "admin@adpa.com";
+    const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
+    
+    // Validate that password hash is provided
+    if (!adminPasswordHash) {
+      console.warn('⚠️  ADMIN_PASSWORD_HASH environment variable not set. Skipping admin user creation.');
+      console.warn('⚠️  Please set ADMIN_PASSWORD_HASH with a bcrypt-hashed password.');
+      console.warn('⚠️  Example: Generate hash with: bcrypt.hash("yourpassword", 10)');
+      return;
+    }
     
     await sql`
       INSERT INTO users (id, email, password_hash, name, role, permissions)
