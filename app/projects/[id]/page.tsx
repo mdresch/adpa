@@ -20,6 +20,7 @@ import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
 import { OverviewTab } from "./components/OverviewTab"
 import { DocumentsTab } from "./components/DocumentsTab"
+import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
@@ -2789,6 +2790,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                 </TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="baseline">Baseline</TabsTrigger>
+                <TabsTrigger value="financials">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Financials
+                </TabsTrigger>
                 <TabsTrigger value="variables">Variables</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
               </TabsList>
@@ -2840,6 +2845,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsContent value="baseline" className="space-y-4">
                 {/* Baseline Tab - CR-2026-001 */}
                 <BaselineManagement projectId={projectId} documents={documents} />
+              </TabsContent>
+
+              <TabsContent value="financials" className="space-y-4">
+                {/* Financials Tab - Cost tracking and budgeting */}
+                <ProjectFinancialsTab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="variables" className="space-y-4">
