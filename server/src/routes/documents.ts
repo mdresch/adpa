@@ -760,6 +760,7 @@ router.post("/project/:projectId",
       // Track template usage
       if (template_id && result.rows[0]) {
         try {
+          // Insert into template_usage table
           await pool.query(`
             INSERT INTO template_usage (
               template_id, document_id, user_id, project_id, 
@@ -768,7 +769,40 @@ router.post("/project/:projectId",
             VALUES ($1, $2, $3, $4, NOW(), $5, true)
           `, [template_id, id, req.user?.id, projectId, wordCount])
           
-          log.info('Template usage tracked')
+          log.info('Template usage tracked in template_usage table')
+          
+          // 🔧 FIX: Also increment template's validation_count and success_count
+          // This was previously only done for AI-generated documents, causing counters to get stuck
+          try {
+            // Default quality score of 0.85 (85%) for manually created documents
+            // This marks them as successful since default quality_threshold is 0.70 (70%)
+            const qualityScore = 0.85
+            
+            await pool.query(
+              'SELECT update_template_validation($1, $2, $3)',
+              [template_id, qualityScore, req.user?.id]
+            )
+            
+            log.info('✅ Template validation counters incremented', {
+              template_id,
+              quality_score: qualityScore
+            })
+            
+            // Clear template cache so UI shows updated metrics immediately
+            try {
+              const { cache } = require('../utils/redis')
+              await cache.del(`template:${template_id}`)
+              log.info('🔄 Template cache cleared for fresh metrics display')
+            } catch (cacheError) {
+              log.warn('Failed to clear template cache:', cacheError)
+            }
+          } catch (validationError) {
+            log.error('⚠️ Failed to increment template validation counters:', {
+              template_id,
+              error: validationError.message
+            })
+            // Don't fail the document creation if counter update fails
+          }
         } catch (error) {
           log.warn('Failed to track template usage:', error)
         }
