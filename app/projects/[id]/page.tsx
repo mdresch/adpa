@@ -860,6 +860,57 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       console.log('  ⚙️ Custom variables:', (hasSettings ? 'settings' : '') + (hasMetadata ? ' metadata' : '') || 'none')
       console.log('  📏 Estimated tokens:', Math.round(aiPrompt.length / 4))
 
+      // 🆕 SMART VERSIONING: Check for template conflict BEFORE generation
+      if (selectedTemplate) {
+        console.log('🔍 [CONFLICT-CHECK] Checking if template already used...')
+        try {
+          const { getApiUrl } = await import('@/lib/api-url')
+          const checkUrl = getApiUrl(`/document-generation/check-template`)
+          const checkResp = await fetch(checkUrl, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            },
+            body: JSON.stringify({
+              projectId,
+              templateId: selectedTemplate
+            })
+          })
+          
+          if (checkResp.status === 409) {
+            // Template conflict detected!
+            const conflictInfo = await checkResp.json()
+            console.log('⚠️ [CONFLICT] Template already used, showing dialog')
+            
+            const template = templates.find(t => t.id === selectedTemplate)
+            setConflictData({
+              existingDocument: conflictInfo.existing,
+              templateName: template?.name || 'Unknown Template',
+              generationData: {
+                projectId,
+                templateId: selectedTemplate,
+                documentName,
+                documentDescription,
+                provider: selectedProvider,
+                model: selectedModel,
+                temperature: aiTemperature,
+                userPrompt: aiPrompt, // Store the built prompt
+              }
+            })
+            setConflictDialogOpen(true)
+            setCreatingDocument(false)
+            setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+            return // Stop generation, let user decide
+          }
+          
+          console.log('✅ [CONFLICT-CHECK] No conflict - proceeding with generation')
+        } catch (checkError) {
+          console.log('ℹ️ [CONFLICT-CHECK] Check failed or not available, proceeding with generation')
+          // Continue with generation if check fails (backwards compatibility)
+        }
+      }
+
       // Enqueue AI generation job via jobs API
       let jobId: string | undefined
 

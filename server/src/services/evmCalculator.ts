@@ -69,6 +69,17 @@ export async function calculateEVMMetrics(
     // Aggregate EVM data from all active projects in the program
     const projectData = await getProjectEVMData(programId)
     
+    logger.info('Project data retrieved for EVM', {
+      programId,
+      projectCount: projectData.length,
+      projects: projectData.map(p => ({
+        name: p.projectName,
+        PV: p.plannedValue,
+        EV: p.earnedValue,
+        AC: p.actualCost
+      }))
+    })
+    
     // Sum up the metrics
     const PV = projectData.reduce((sum, p) => sum + p.plannedValue, 0)
     const EV = projectData.reduce((sum, p) => sum + p.earnedValue, 0)
@@ -138,11 +149,11 @@ async function getProjectEVMData(programId: string): Promise<ProjectEVMData[]> {
     `SELECT 
       id as "projectId",
       name as "projectName",
-      COALESCE(planned_value, 0) as "plannedValue",
-      COALESCE(earned_value, 0) as "earnedValue",
-      COALESCE(actual_cost, 0) as "actualCost",
-      COALESCE(budget, 0) as budget,
-      COALESCE(percent_complete, 0) as "percentComplete"
+      COALESCE(planned_value, 0)::numeric as "plannedValue",
+      COALESCE(earned_value, 0)::numeric as "earnedValue",
+      COALESCE(actual_cost, 0)::numeric as "actualCost",
+      COALESCE(budget, 0)::numeric as budget,
+      COALESCE(percent_complete, 0)::numeric as "percentComplete"
     FROM projects
     WHERE program_id = $1 
       AND archived = false
@@ -150,7 +161,16 @@ async function getProjectEVMData(programId: string): Promise<ProjectEVMData[]> {
     [programId]
   )
   
-  return result.rows
+  // Convert string numbers to actual numbers
+  return result.rows.map(row => ({
+    projectId: row.projectId,
+    projectName: row.projectName,
+    plannedValue: parseFloat(row.plannedValue) || 0,
+    earnedValue: parseFloat(row.earnedValue) || 0,
+    actualCost: parseFloat(row.actualCost) || 0,
+    budget: parseFloat(row.budget) || 0,
+    percentComplete: parseFloat(row.percentComplete) || 0
+  }))
 }
 
 /**

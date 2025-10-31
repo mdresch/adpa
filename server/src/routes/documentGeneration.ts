@@ -12,6 +12,91 @@ import { semanticVersionService } from "../services/semanticVersionService"
 
 const router = express.Router()
 
+// Validation schema for template conflict check
+const checkTemplateSchema = Joi.object({
+  projectId: Joi.string().uuid().required(),
+  templateId: Joi.string().uuid().required(),
+})
+
+// Check if template is already used in project (pre-flight check)
+router.post("/check-template",
+  authenticateToken,
+  validate(checkTemplateSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      const { projectId, templateId } = req.body
+      
+      log.info(`Checking template conflict for project ${projectId}, template ${templateId}`)
+      
+      // Check if document from this template already exists
+      const existingCheck = await pool.query(
+        `SELECT 
+          d.id,
+          d.name,
+          d.version,
+          d.semantic_version,
+          d.updated_at,
+          b.id as baseline_id,
+          b.version as baseline_version,
+          b.approved_at as baseline_date
+         FROM documents d
+         LEFT JOIN project_baselines b ON b.project_id = d.project_id 
+           AND b.status = 'approved'
+           AND b.baseline_content->>'document_id' = d.id::text
+         WHERE d.project_id = $1 
+           AND d.template_id = $2 
+           AND d.deleted_at IS NULL
+           AND d.parent_document_id IS NULL
+         ORDER BY d.updated_at DESC
+         LIMIT 1`,
+        [projectId, templateId]
+      )
+
+      if (existingCheck.rows.length > 0) {
+        // Document from this template already exists - return conflict
+        const existing = existingCheck.rows[0]
+        log.info(`Template conflict detected: existing document ${existing.id}`)
+        
+        return res.status(409).json({
+          code: 'TEMPLATE_ALREADY_USED',
+          message: 'A document from this template already exists in this project',
+          existing: {
+            id: existing.id,
+            name: existing.name,
+            version: existing.version,
+            semantic_version: existing.semantic_version,
+            updated_at: existing.updated_at,
+            baseline_id: existing.baseline_id,
+            baseline_version: existing.baseline_version,
+            baseline_date: existing.baseline_date
+          },
+          options: {
+            createNewVersion: true,
+            createSeparate: true,
+            viewExisting: true
+          }
+        })
+      }
+      
+      // No conflict
+      log.info(`No template conflict - safe to proceed`)
+      return res.status(200).json({
+        conflict: false,
+        message: 'Template is available for use'
+      })
+      
+    } catch (error) {
+      log.error("Template check error:", error)
+      res.status(500).json({ 
+        error: "Failed to check template",
+        details: error instanceof Error ? error.message : "Unknown error"
+      })
+    }
+  }
+)
+
 // Validation schema for document generation
 const generateDocumentSchema = Joi.object({
   projectId: Joi.string().uuid().required(),
