@@ -272,6 +272,35 @@ This directory contains detailed specifications for planned features and enhance
 
 ---
 
+### 🔴 **P0 - HIGH PRIORITY** (Week 2)
+
+#### Smart Document Versioning & Template Re-generation
+**Status**: 📋 **PLANNED**  
+**Effort**: 3-4 days  
+**File**: [`SMART_DOCUMENT_VERSIONING.md`](./SMART_DOCUMENT_VERSIONING.md)
+
+**Problem**: Regenerating a document from an already-used template creates duplicates ("Project Charter (1)"), causing library clutter and baseline confusion.
+
+**Solution**: Intelligent conflict detection with user dialog:
+- ✅ **Create New Version** (v1.1.0) - Updates existing, triggers drift
+- ✅ **Create Separate Document** - New independent doc for alternatives
+- ✅ **View Existing Document** - Review current version first
+
+**Key Features**:
+- Automatic conflict detection (409 response)
+- Semantic versioning (AI regeneration = minor version)
+- Baseline drift integration
+- Complete version history preservation
+- Enterprise-grade audit trail
+
+**Benefits**:
+- No duplicate documents (clean library)
+- Clear version history (change tracking)
+- Professional version control
+- Competitive differentiator vs Microsoft PPM, ServiceNow
+
+---
+
 ### 🟢 **P2 - Medium Priority** (Operations & Polish)
 
 #### 9. Job Monitor Enhancement - Worker & Queue Visibility
