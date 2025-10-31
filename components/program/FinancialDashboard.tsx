@@ -190,9 +190,12 @@ export default function FinancialDashboard({
   const fetchFinancialData = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/programs/${programId}/financial-dashboard`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000'
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      const response = await fetch(`${apiUrl}/api/programs/${programId}/financial-dashboard`, {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         }
       })
       
