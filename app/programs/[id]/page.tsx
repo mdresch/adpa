@@ -8,10 +8,23 @@ import { PageTransition } from '@/components/page-transition';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MetricsDashboard } from '@/components/program/MetricsDashboard';
+import { ProgramProjectsTab } from '@/components/program/ProgramProjectsTab';
 import { ProgramMetrics } from '@/components/program/types';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 // Mock data for demonstration purposes
 // In production, this would come from the API
@@ -114,38 +127,174 @@ const mockProgramMetrics: ProgramMetrics = {
   ]
 };
 
+interface Program {
+  id: string
+  name: string
+  description: string
+  status: string
+  budget?: number
+  start_date: string
+  end_date: string
+  owner_name?: string
+}
+
 export default function ProgramDetailPage() {
   const params = useParams();
   const programId = params?.id as string;
   
+  const [program, setProgram] = useState<Program | null>(null);
   const [metrics, setMetrics] = useState<ProgramMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [archiving, setArchiving] = useState(false);
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [archiveCheck, setArchiveCheck] = useState<{ canArchive: boolean; reason?: string; unarchivedCount?: number } | null>(null);
 
   useEffect(() => {
-    const fetchProgramMetrics = async () => {
+    const fetchProgramData = async () => {
       try {
         setLoading(true);
-        // TODO: Replace with actual API call when backend is ready
-        // const data = await apiClient.getProgramMetrics(programId);
         
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // Fetch program details
+        const programResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        });
         
-        // Use mock data for now
-        setMetrics(mockProgramMetrics);
+        if (programResponse.ok) {
+          const programData = await programResponse.json();
+          setProgram(programData.data);
+        }
+        
+        // Fetch program metrics (use existing endpoint)
+        try {
+          const metricsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/metrics`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          });
+          
+          if (metricsResponse.ok) {
+            const metricsData = await metricsResponse.json();
+            setMetrics(metricsData.data);
+          } else {
+            // Fallback to mock data if metrics endpoint not ready
+            setMetrics(mockProgramMetrics);
+          }
+        } catch (error) {
+          // Use mock data if metrics endpoint fails
+          setMetrics(mockProgramMetrics);
+        }
+        
       } catch (error) {
-        console.error('Failed to fetch program metrics:', error);
-        toast.error('Failed to load program metrics');
+        console.error('Failed to fetch program data:', error);
+        toast.error('Failed to load program');
       } finally {
         setLoading(false);
       }
     };
 
     if (programId) {
-      fetchProgramMetrics();
+      void fetchProgramData();
     }
   }, [programId]);
+
+  const checkArchiveStatus = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/can-archive`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setArchiveCheck(data.data);
+      }
+    } catch (error) {
+      console.error('Failed to check archive status:', error);
+    }
+  };
+
+  const handleArchiveClick = async () => {
+    await checkArchiveStatus();
+    setShowArchiveDialog(true);
+  };
+
+  const handleArchiveConfirm = async () => {
+    try {
+      setArchiving(true);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/archive`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to archive program');
+      }
+      
+      toast.success('Program archived successfully');
+      setShowArchiveDialog(false);
+      
+      // Refresh program data
+      const programResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      
+      if (programResponse.ok) {
+        const programData = await programResponse.json();
+        setProgram(programData.data);
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to archive program:', error);
+      toast.error(error.message || 'Failed to archive program');
+    } finally {
+      setArchiving(false);
+    }
+  };
+
+  const handleUnarchive = async () => {
+    try {
+      setArchiving(true);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/unarchive`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to unarchive program');
+      }
+      
+      toast.success('Program unarchived successfully');
+      
+      // Refresh program data
+      const programResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      
+      if (programResponse.ok) {
+        const programData = await programResponse.json();
+        setProgram(programData.data);
+      }
+      
+    } catch (error) {
+      console.error('Failed to unarchive program:', error);
+      toast.error('Failed to unarchive program');
+    } finally {
+      setArchiving(false);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20">
@@ -157,13 +306,137 @@ export default function ProgramDetailPage() {
             <PageTransition>
               {/* Header */}
               <div className="mb-8">
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
-                  Program Overview
-                </h1>
-                <p className="text-muted-foreground mt-2">
-                  Monitor program health, budget, risks, and milestones
-                </p>
+                {loading && !program ? (
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                      Loading Program...
+                    </h1>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                          Program Overview - {program?.name || 'Unknown Program'}
+                        </h1>
+                        <p className="text-muted-foreground mt-2">
+                          {program?.description || 'Monitor program health, budget, risks, and milestones'}
+                        </p>
+                      </div>
+                      
+                      {/* Archive/Unarchive Button */}
+                      {program && (
+                        <div className="ml-4">
+                          {(program as any).archived ? (
+                            <Button
+                              onClick={handleUnarchive}
+                              disabled={archiving}
+                              variant="outline"
+                              className="gap-2"
+                            >
+                              {archiving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <ArchiveRestore className="h-4 w-4" />
+                              )}
+                              Unarchive Program
+                            </Button>
+                          ) : (
+                            <Button
+                              onClick={handleArchiveClick}
+                              disabled={archiving}
+                              variant="outline"
+                              className="gap-2"
+                            >
+                              {archiving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Archive className="h-4 w-4" />
+                              )}
+                              Archive Program
+                            </Button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {program?.status && (
+                      <div className="mt-3 flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium">Status:</span>
+                        <Badge className={
+                          program.status === 'green' ? 'bg-green-100 text-green-800 border-green-300' :
+                          program.status === 'amber' ? 'bg-yellow-100 text-yellow-800 border-yellow-300' :
+                          'bg-red-100 text-red-800 border-red-300'
+                        }>
+                          {program.status === 'green' && '🟢'}
+                          {program.status === 'amber' && '🟡'}
+                          {program.status === 'red' && '🔴'}
+                          {' '}{program.status.toUpperCase()}
+                        </Badge>
+                        {program.owner_name && (
+                          <>
+                            <span className="text-sm text-muted-foreground ml-4">Owner: {program.owner_name}</span>
+                          </>
+                        )}
+                        {(program as any).archived && (
+                          <Badge className="bg-gray-100 text-gray-800 border-gray-300 ml-4">
+                            📦 ARCHIVED
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
+
+              {/* Archive Confirmation Dialog */}
+              <AlertDialog open={showArchiveDialog} onOpenChange={setShowArchiveDialog}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>
+                      {archiveCheck?.canArchive ? 'Archive Program?' : 'Cannot Archive Program'}
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      {archiveCheck?.canArchive ? (
+                        <>
+                          Are you sure you want to archive this program? This will hide it from the active programs list, but it can be unarchived later.
+                        </>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                            <div className="text-sm text-yellow-800">
+                              {archiveCheck?.reason || 'This program has unarchived projects.'}
+                            </div>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            To archive this program, you must first archive all {archiveCheck?.unarchivedCount || 'its'} underlying project{archiveCheck?.unarchivedCount !== 1 ? 's' : ''}.
+                          </p>
+                        </div>
+                      )}
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    {archiveCheck?.canArchive && (
+                      <AlertDialogAction onClick={handleArchiveConfirm} disabled={archiving}>
+                        {archiving ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Archiving...
+                          </>
+                        ) : (
+                          <>
+                            <Archive className="h-4 w-4 mr-2" />
+                            Archive Program
+                          </>
+                        )}
+                      </AlertDialogAction>
+                    )}
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -192,18 +465,9 @@ export default function ProgramDetailPage() {
                   )}
                 </TabsContent>
 
-                {/* Projects Tab - Placeholder */}
+                {/* Projects Tab - Full Implementation */}
                 <TabsContent value="projects" className="mt-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Program Projects</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground">
-                        Project list will be displayed here
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <ProgramProjectsTab programId={programId} />
                 </TabsContent>
 
                 {/* Risks Tab - Placeholder */}

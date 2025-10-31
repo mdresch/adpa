@@ -87,17 +87,17 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
     let idx = 1
 
     if (opts.ownerId) {
-      clauses.push(`owner_id = $${idx++}`)
+      clauses.push(`p.owner_id = $${idx++}`)
       params.push(opts.ownerId)
     }
 
     if (opts.status) {
-      clauses.push(`status = $${idx++}`)
+      clauses.push(`p.status = $${idx++}`)
       params.push(opts.status)
     }
 
     if (opts.search) {
-      clauses.push(`to_tsvector('english', coalesce(name, '') || ' ' || coalesce(description, '')) @@ plainto_tsquery('english', $${idx++})`)
+      clauses.push(`to_tsvector('english', coalesce(p.name, '') || ' ' || coalesce(p.description, '')) @@ plainto_tsquery('english', $${idx++})`)
       params.push(opts.search)
     }
 
@@ -106,13 +106,200 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
     const limit = opts.limit || 25
     const offset = opts.offset || 0
 
-    const query = `SELECT * FROM programs ${where} ORDER BY created_at DESC LIMIT $${idx++} OFFSET $${idx++}`
+    // Enhanced query: Include owner name and project count
+    const query = `
+      SELECT 
+        p.*,
+        u.name as owner_name,
+        (SELECT COUNT(*) FROM projects WHERE program_id = p.id) as project_count
+      FROM programs p
+      LEFT JOIN users u ON p.owner_id = u.id
+      ${where} 
+      ORDER BY p.created_at DESC 
+      LIMIT $${idx++} OFFSET $${idx++}
+    `
     params.push(limit, offset)
 
     const result = await pool.query(query, params)
+    
+    logger.info('[PROGRAMS] List query returned', { 
+      rowCount: result.rows.length,
+      query: where
+    })
+    
     return result.rows
   } catch (error) {
     logger.error('listPrograms error', { error })
+    throw error
+  }
+}
+
+/**
+ * Get all projects assigned to a program
+ */
+export async function getProgramProjects(programId: string): Promise<Record<string, unknown>[]> {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.*,
+        u.email as owner_email,
+        u.name as owner_name,
+        (SELECT COUNT(*) FROM documents WHERE project_id = p.id) as document_count
+      FROM projects p
+      LEFT JOIN users u ON p.owner_id = u.id
+      WHERE p.program_id = $1
+      ORDER BY p.created_at DESC
+    `, [programId])
+    
+    logger.info('[PROGRAM] Projects fetched', { programId, count: result.rows.length })
+    return result.rows
+  } catch (error) {
+    logger.error('getProgramProjects error', { error })
+    throw error
+  }
+}
+
+/**
+ * Assign a project to a program
+ */
+export async function assignProject(programId: string, projectId: string): Promise<any> {
+  try {
+    const result = await pool.query(`
+      UPDATE projects 
+      SET program_id = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING *
+    `, [programId, projectId])
+    
+    if (result.rows.length === 0) {
+      return null
+    }
+    
+    logger.info('[PROGRAM] Project assigned', { programId, projectId })
+    return result.rows[0]
+  } catch (error) {
+    logger.error('assignProject error', { error })
+    throw error
+  }
+}
+
+/**
+ * Remove a project from a program
+ */
+export async function removeProject(projectId: string): Promise<boolean> {
+  try {
+    await pool.query(`
+      UPDATE projects 
+      SET program_id = NULL, updated_at = NOW()
+      WHERE id = $1
+    `, [projectId])
+    
+    logger.info('[PROGRAM] Project removed', { projectId })
+    return true
+  } catch (error) {
+    logger.error('removeProject error', { error })
+    throw error
+  }
+}
+
+/**
+ * Check if a program can be archived
+ * Returns true only if ALL projects in the program are archived
+ */
+export async function canArchiveProgram(programId: string): Promise<{ canArchive: boolean; reason?: string; unarchivedCount?: number }> {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        COUNT(*) as total_projects,
+        COUNT(*) FILTER (WHERE archived = true) as archived_projects,
+        COUNT(*) FILTER (WHERE archived = false OR archived IS NULL) as unarchived_projects
+      FROM projects
+      WHERE program_id = $1
+    `, [programId])
+    
+    const { total_projects, archived_projects, unarchived_projects } = result.rows[0]
+    
+    if (parseInt(total_projects) === 0) {
+      return { 
+        canArchive: true 
+      }
+    }
+    
+    if (parseInt(unarchived_projects) > 0) {
+      return {
+        canArchive: false,
+        reason: `Cannot archive program: ${unarchived_projects} project(s) are not archived yet`,
+        unarchivedCount: parseInt(unarchived_projects)
+      }
+    }
+    
+    return { canArchive: true }
+  } catch (error) {
+    logger.error('canArchiveProgram error', { error })
+    throw error
+  }
+}
+
+/**
+ * Archive a program
+ * Only succeeds if all underlying projects are archived
+ */
+export async function archiveProgram(programId: string, userId: string): Promise<any> {
+  try {
+    // Check if program can be archived
+    const archiveCheck = await canArchiveProgram(programId)
+    
+    if (!archiveCheck.canArchive) {
+      throw new Error(archiveCheck.reason || 'Cannot archive program')
+    }
+    
+    const result = await pool.query(`
+      UPDATE programs 
+      SET 
+        archived = true,
+        archived_at = NOW(),
+        archived_by = $2,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `, [programId, userId])
+    
+    if (result.rows.length === 0) {
+      return null
+    }
+    
+    logger.info('[PROGRAM] Program archived', { programId, userId })
+    return result.rows[0]
+  } catch (error) {
+    logger.error('archiveProgram error', { error })
+    throw error
+  }
+}
+
+/**
+ * Unarchive a program
+ */
+export async function unarchiveProgram(programId: string): Promise<any> {
+  try {
+    const result = await pool.query(`
+      UPDATE programs 
+      SET 
+        archived = false,
+        archived_at = NULL,
+        archived_by = NULL,
+        updated_at = NOW()
+      WHERE id = $1
+      RETURNING *
+    `, [programId])
+    
+    if (result.rows.length === 0) {
+      return null
+    }
+    
+    logger.info('[PROGRAM] Program unarchived', { programId })
+    return result.rows[0]
+  } catch (error) {
+    logger.error('unarchiveProgram error', { error })
     throw error
   }
 }
@@ -123,6 +310,12 @@ export const programService = {
   updateProgram,
   deleteProgram,
   listPrograms,
+  getProgramProjects,
+  assignProject,
+  removeProject,
+  canArchiveProgram,
+  archiveProgram,
+  unarchiveProgram,
 }
 
 export default programService

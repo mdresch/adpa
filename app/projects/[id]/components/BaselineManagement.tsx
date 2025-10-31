@@ -26,7 +26,10 @@ import {
   Lightbulb,
   Database,
   BarChart3,
-  DollarSign
+  DollarSign,
+  Shield,
+  AlertTriangle,
+  Users
 } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
@@ -106,6 +109,9 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
   const [formalDocument, setFormalDocument] = useState<string>('')
   const [missingDocuments, setMissingDocuments] = useState<MissingDocument[]>([])
   const [showFormalDocDialog, setShowFormalDocDialog] = useState(false)
+  const [creationMethod, setCreationMethod] = useState<'entities' | 'documents'>('entities')
+  const [entityCount, setEntityCount] = useState<number>(0)
+  const [loadingEntityCount, setLoadingEntityCount] = useState(false)
 
   // Fetch active baseline
   const fetchBaseline = async () => {
@@ -171,35 +177,113 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseline])
 
-  const handleExtractBaseline = async () => {
-    if (documents.length === 0) {
-      toast.error('No documents available to create baseline')
+  // Check for extracted entities when dialog opens
+  const checkForEntities = async () => {
+    if (!projectId) {
+      console.warn('No projectId available for entity check')
       return
     }
+    
+    setLoadingEntityCount(true)
+    console.log('[BaselineManagement] Checking for entities...', { projectId })
+    
+    try {
+      const response = await apiClient.request<{ totalEntities: number, entityCounts: Record<string, number> }>(
+        `/project-data-extraction/results/${projectId}`
+      )
+      
+      console.log('[BaselineManagement] Entity check response:', response)
+      
+      const total = response.totalEntities || 0
+      setEntityCount(total)
+      
+      // Default to entities method if they exist, otherwise documents
+      if (total > 0) {
+        setCreationMethod('entities')
+        console.log(`[BaselineManagement] Found ${total} entities, defaulting to entities method`)
+      } else {
+        setCreationMethod('documents')
+        console.log('[BaselineManagement] No entities found, defaulting to documents method')
+      }
+    } catch (error) {
+      console.error('[BaselineManagement] Error checking for entities:', error)
+      setEntityCount(0)
+      setCreationMethod('documents')
+    } finally {
+      setLoadingEntityCount(false)
+    }
+  }
 
+  // Check for entities when dialog opens
+  useEffect(() => {
+    if (showExtractDialog && projectId) {
+      void checkForEntities()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showExtractDialog, projectId])
+
+  const handleExtractBaseline = async () => {
     setExtracting(true)
     try {
-      const response = await apiClient.request('/baselines/extract', {
-        method: 'POST',
-        body: JSON.stringify({
-          project_id: projectId,
-          document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
-          // Backend will look up project_name from database
-        })
-      })
+      if (creationMethod === 'entities') {
+        // Create baseline from extracted entities (Phase 2 enhancement)
+        if (entityCount === 0) {
+          toast.error('No extracted entities found. Run AI extraction first.')
+          return
+        }
 
-      // Close dialog immediately - user can continue working!
-      toast.success('Baseline extraction started! You will be notified when complete.')
-      setShowExtractDialog(false)
-      setSelectedDocuments([])
-      
-      // Show job ID for reference
-      if (response.jobId) {
-        toast.info(`Job ID: ${response.jobId}`, { duration: 3000 })
+        const response = await apiClient.request<{
+          success: boolean
+          baseline: Record<string, unknown>
+          message: string
+          stats: {
+            duration_ms: number
+            entity_count: number
+            completeness_score: number
+          }
+        }>('/baselines/create-from-entities', {
+          method: 'POST',
+          body: JSON.stringify({
+            project_id: projectId
+          })
+        })
+
+        toast.success(response.message || `Baseline created from ${response.stats.entity_count} entities in ${Math.round(response.stats.duration_ms / 1000)}s!`)
+        setShowExtractDialog(false)
+        setSelectedDocuments([])
+        
+        // Refresh baseline data
+        await fetchBaseline()
+        await fetchBaselines()
+      } else {
+        // Traditional: Extract from documents using AI
+        if (documents.length === 0) {
+          toast.error('No documents available to create baseline')
+          return
+        }
+
+        const response = await apiClient.request('/baselines/extract', {
+          method: 'POST',
+          body: JSON.stringify({
+            project_id: projectId,
+            document_ids: selectedDocuments.length > 0 ? selectedDocuments : undefined
+            // Backend will look up project_name from database
+          })
+        })
+
+        // Close dialog immediately - user can continue working!
+        toast.success('Baseline extraction started! You will be notified when complete.')
+        setShowExtractDialog(false)
+        setSelectedDocuments([])
+        
+        // Show job ID for reference
+        if (response.jobId) {
+          toast.info(`Job ID: ${response.jobId}`, { duration: 3000 })
+        }
       }
     } catch (error: any) {
-      console.error('Error queueing baseline extraction:', error)
-      toast.error(error?.message || 'Failed to start baseline extraction')
+      console.error('Error creating baseline:', error)
+      toast.error(error?.message || 'Failed to create baseline')
     } finally {
       setExtracting(false)
     }
@@ -490,55 +574,156 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
       <Dialog open={showExtractDialog} onOpenChange={setShowExtractDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>{baseline ? 'Update' : 'Extract'} Project Baseline</DialogTitle>
+            <DialogTitle>{baseline ? 'Update' : 'Create'} Project Baseline</DialogTitle>
             <DialogDescription>
-              AI will analyze your project documents to extract scope, technical, timeline, cost, and success criteria baselines.
+              Choose how to create your baseline: from extracted entities (instant) or by analyzing documents with AI.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label>Select Documents (optional)</Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Leave empty to use all {documents.length} documents, or select specific documents:
-              </p>
-              <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
-                {documents.map(doc => (
-                  <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={selectedDocuments.includes(doc.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedDocuments([...selectedDocuments, doc.id])
-                        } else {
-                          setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
-                        }
-                      }}
-                      className="rounded"
-                    />
-                    <span className="text-sm">{doc.name}</span>
-                    {doc.template_name && (
-                      <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
+            {/* Creation Method Selection */}
+            <div className="space-y-3">
+              <Label className="text-base font-semibold">Baseline Creation Method</Label>
+              
+              {/* Option 1: From Entities (Recommended) */}
+              <label 
+                className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  creationMethod === 'entities' 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                } ${entityCount === 0 ? 'opacity-60 cursor-not-allowed' : ''}`}
+                onClick={() => entityCount > 0 && setCreationMethod('entities')}
+              >
+                <input
+                  type="radio"
+                  name="creationMethod"
+                  value="entities"
+                  checked={creationMethod === 'entities'}
+                  onChange={(e) => e.target.checked && setCreationMethod('entities')}
+                  disabled={entityCount === 0}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Zap className="h-5 w-5 text-blue-600" />
+                    <span className="font-semibold">Use Extracted Entities</span>
+                    {entityCount > 0 && (
+                      <Badge variant="default" className="bg-green-500">Recommended</Badge>
                     )}
-                  </label>
-                ))}
-              </div>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Create baseline from {entityCount} AI-extracted entities already in the database
+                  </p>
+                  <div className="flex items-center gap-4 text-xs">
+                    <span className="text-green-600 font-medium">✓ 5-10 seconds</span>
+                    <span className="text-green-600 font-medium">✓ Free (no AI calls)</span>
+                    <span className="text-green-600 font-medium">✓ Instant results</span>
+                  </div>
+                  {entityCount === 0 && (
+                    <p className="text-xs text-orange-600 mt-2">
+                      ⚠️ No entities found. Run AI Extraction first from the project page.
+                    </p>
+                  )}
+                  {loadingEntityCount && (
+                    <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Checking for entities...
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              {/* Option 2: From Documents (Traditional) */}
+              <label 
+                className={`flex items-start space-x-3 p-4 border-2 rounded-lg cursor-pointer transition-all ${
+                  creationMethod === 'documents' 
+                    ? 'border-blue-500 bg-blue-50' 
+                    : 'border-gray-200 hover:border-gray-300'
+                }`}
+                onClick={() => setCreationMethod('documents')}
+              >
+                <input
+                  type="radio"
+                  name="creationMethod"
+                  value="documents"
+                  checked={creationMethod === 'documents'}
+                  onChange={(e) => e.target.checked && setCreationMethod('documents')}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FileText className="h-5 w-5 text-gray-600" />
+                    <span className="font-semibold">Extract from Documents</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Traditional AI extraction from {documents.length} project documents
+                  </p>
+                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                    <span>⏱️ 30-60 seconds</span>
+                    <span>💰 Uses AI credits</span>
+                    <span>🔄 Queued job</span>
+                  </div>
+                </div>
+              </label>
             </div>
+
+            {/* Document Selection (only for documents method) */}
+            {creationMethod === 'documents' && (
+              <div>
+                <Label>Select Documents (optional)</Label>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Leave empty to use all {documents.length} documents, or select specific documents:
+                </p>
+                <div className="max-h-64 overflow-y-auto border rounded-md p-2 space-y-1">
+                  {documents.map(doc => (
+                    <label key={doc.id} className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedDocuments.includes(doc.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDocuments([...selectedDocuments, doc.id])
+                          } else {
+                            setSelectedDocuments(selectedDocuments.filter(id => id !== doc.id))
+                          }
+                        }}
+                        className="rounded"
+                      />
+                      <span className="text-sm">{doc.name}</span>
+                      {doc.template_name && (
+                        <Badge variant="secondary" className="text-xs">{doc.template_name}</Badge>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowExtractDialog(false)} disabled={extracting}>
               Cancel
             </Button>
-            <Button onClick={handleExtractBaseline} disabled={extracting}>
+            <Button 
+              onClick={handleExtractBaseline} 
+              disabled={extracting || (creationMethod === 'entities' && entityCount === 0)}
+            >
               {extracting ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Extracting...
+                  {creationMethod === 'entities' ? 'Creating...' : 'Extracting...'}
                 </>
               ) : (
                 <>
-                  <Zap className="h-4 w-4 mr-2" />
-                  {baseline ? 'Update' : 'Extract'} Baseline
+                  {creationMethod === 'entities' ? (
+                    <>
+                      <Zap className="h-4 w-4 mr-2" />
+                      Create from {entityCount} Entities
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Extract from Documents
+                    </>
+                  )}
                 </>
               )}
             </Button>
@@ -831,198 +1016,224 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                 </div>
               </div>
 
-              {/* Scope Baseline */}
-              {viewingBaseline.scope_baseline && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Target className="h-4 w-4" />
-                      Scope Baseline
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.scope_baseline.key_deliverables && Array.isArray(viewingBaseline.scope_baseline.key_deliverables) && (
-                      <div>
-                        <p className="font-medium mb-1">Key Deliverables:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.scope_baseline.key_deliverables.map((d: string, i: number) => (
-                            <li key={i}>{d}</li>
-                          ))}
-                        </ul>
+              {/* Entity Summary Metrics - Comprehensive Cards */}
+              <div>
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <BarChart3 className="h-4 w-4" />
+                  Extracted Entity Summary
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* Scope Entities */}
+                  <Card className="border-blue-200 bg-blue-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Target className="h-5 w-5 text-blue-600" />
+                        <span className="text-2xl font-bold text-blue-900">
+                          {(viewingBaseline.scope_baseline?.deliverables?.length || 0) + 
+                           (viewingBaseline.scope_baseline?.constraints?.length || 0) + 
+                           (viewingBaseline.scope_baseline?.requirements?.length || 0)}
+                        </span>
                       </div>
-                    )}
-                    {viewingBaseline.scope_baseline.scope_boundaries && Array.isArray(viewingBaseline.scope_baseline.scope_boundaries) && (
-                      <div>
-                        <p className="font-medium mb-1">Scope Boundaries:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.scope_baseline.scope_boundaries.map((b: string, i: number) => (
-                            <li key={i}>{b}</li>
-                          ))}
-                        </ul>
+                      <p className="text-xs font-medium text-blue-900 mb-1">Scope Items</p>
+                      <div className="text-xs text-blue-700 space-y-0.5">
+                        <p>{viewingBaseline.scope_baseline?.deliverables?.length || 0} Deliverables</p>
+                        <p>{viewingBaseline.scope_baseline?.constraints?.length || 0} Constraints</p>
+                        <p>{viewingBaseline.scope_baseline?.requirements?.length || 0} Requirements</p>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+                    </CardContent>
+                  </Card>
 
-              {/* Technical Baseline */}
-              {viewingBaseline.technical_baseline && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      Technical Baseline
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.technical_baseline.technology_stack && Array.isArray(viewingBaseline.technical_baseline.technology_stack) && (
-                      <div>
-                        <p className="font-medium mb-1">Technology Stack:</p>
-                        <div className="flex flex-wrap gap-1">
-                          {viewingBaseline.technical_baseline.technology_stack.map((tech: string, i: number) => (
-                            <Badge key={i} variant="secondary">{tech}</Badge>
-                          ))}
-                        </div>
+                  {/* Timeline Entities */}
+                  <Card className="border-purple-200 bg-purple-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Clock className="h-5 w-5 text-purple-600" />
+                        <span className="text-2xl font-bold text-purple-900">
+                          {(viewingBaseline.timeline_baseline?.phases?.length || 0) + 
+                           (viewingBaseline.timeline_baseline?.key_milestones?.length || 0) + 
+                           (viewingBaseline.timeline_baseline?.activities?.length || 0)}
+                        </span>
                       </div>
-                    )}
-                    {viewingBaseline.technical_baseline.architecture && (
-                      <div>
-                        <p className="font-medium mb-1">Architecture:</p>
-                        <p className="text-muted-foreground">{viewingBaseline.technical_baseline.architecture}</p>
+                      <p className="text-xs font-medium text-purple-900 mb-1">Timeline Items</p>
+                      <div className="text-xs text-purple-700 space-y-0.5">
+                        <p>{viewingBaseline.timeline_baseline?.phases?.length || 0} Phases</p>
+                        <p>{viewingBaseline.timeline_baseline?.key_milestones?.length || 0} Milestones</p>
+                        <p>{viewingBaseline.timeline_baseline?.activities?.length || 0} Activities</p>
+                        <p className="text-[10px] mt-1 font-medium">{viewingBaseline.timeline_baseline?.project_duration || 'Duration TBD'}</p>
                       </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+                    </CardContent>
+                  </Card>
 
-              {/* Timeline Baseline */}
+                  {/* Resource Entities */}
+                  <Card className="border-green-200 bg-green-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Users className="h-5 w-5 text-green-600" />
+                        <span className="text-2xl font-bold text-green-900">
+                          {(viewingBaseline.resource_baseline?.stakeholders?.length || 0) + 
+                           (viewingBaseline.resource_baseline?.team_members?.length || 0)}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-green-900 mb-1">Resources</p>
+                      <div className="text-xs text-green-700 space-y-0.5">
+                        <p>{viewingBaseline.resource_baseline?.stakeholders?.length || 0} Stakeholders</p>
+                        <p>{viewingBaseline.resource_baseline?.team_members?.length || 0} Team Members</p>
+                        <p>{viewingBaseline.resource_baseline?.equipment?.length || 0} Equipment</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Cost Summary */}
+                  <Card className="border-emerald-200 bg-emerald-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <DollarSign className="h-5 w-5 text-emerald-600" />
+                        <span className="text-lg font-bold text-emerald-900">
+                          {viewingBaseline.cost_baseline?.total_budget || 'N/A'}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-emerald-900 mb-1">Total Budget</p>
+                      <div className="text-xs text-emerald-700 space-y-0.5">
+                        <p>{viewingBaseline.cost_baseline?.budget_resources?.length || 0} Budget Items</p>
+                        <p>{Object.keys(viewingBaseline.cost_baseline?.cost_breakdown || {}).length} Categories</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Success Criteria Entities */}
+                  <Card className="border-orange-200 bg-orange-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <CheckCircle className="h-5 w-5 text-orange-600" />
+                        <span className="text-2xl font-bold text-orange-900">
+                          {(viewingBaseline.success_criteria?.kpis?.length || 0)}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-orange-900 mb-1">Success KPIs</p>
+                      <div className="text-xs text-orange-700 space-y-0.5">
+                        <p>{viewingBaseline.success_criteria?.kpis?.length || 0} KPIs</p>
+                        <p>{viewingBaseline.success_criteria?.quality_metrics?.length || 0} Quality Metrics</p>
+                        <p>{viewingBaseline.success_criteria?.acceptance_criteria?.length || 0} Acceptance Criteria</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Quality & Compliance */}
+                  <Card className="border-indigo-200 bg-indigo-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Shield className="h-5 w-5 text-indigo-600" />
+                        <span className="text-2xl font-bold text-indigo-900">
+                          {(viewingBaseline.technical_baseline?.quality_standards?.length || 0) + 
+                           (viewingBaseline.technical_baseline?.best_practices?.length || 0)}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-indigo-900 mb-1">Quality & Standards</p>
+                      <div className="text-xs text-indigo-700 space-y-0.5">
+                        <p>{viewingBaseline.technical_baseline?.quality_standards?.length || 0} Quality Standards</p>
+                        <p>{viewingBaseline.technical_baseline?.best_practices?.length || 0} Best Practices</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Risk Management */}
+                  <Card className="border-red-200 bg-red-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <AlertTriangle className="h-5 w-5 text-red-600" />
+                        <span className="text-2xl font-bold text-red-900">
+                          {viewingBaseline.success_criteria?.risks?.length || 0}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-red-900 mb-1">Risks Identified</p>
+                      <div className="text-xs text-red-700 space-y-0.5">
+                        <p>With mitigation strategies</p>
+                        <p>Probability × Impact scored</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Technology Stack */}
+                  <Card className="border-cyan-200 bg-cyan-50">
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <Database className="h-5 w-5 text-cyan-600" />
+                        <span className="text-2xl font-bold text-cyan-900">
+                          {viewingBaseline.technical_baseline?.technology_stack?.length || 0}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-cyan-900 mb-1">Technologies</p>
+                      <div className="text-xs text-cyan-700 space-y-0.5">
+                        <p>Full stack defined</p>
+                        <p>Architecture documented</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Gantt Chart - Keep this for visual timeline */}
               {viewingBaseline.timeline_baseline && (
                 <Card>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-sm flex items-center gap-2">
                       <Clock className="h-4 w-4" />
-                      Timeline Baseline
+                      Visual Timeline
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="text-sm space-y-4">
-                    {viewingBaseline.timeline_baseline.project_duration && (
-                      <div>
-                        <p className="font-medium">Duration:</p>
-                        <p className="text-muted-foreground">{viewingBaseline.timeline_baseline.project_duration}</p>
+                  <CardContent>
+                    <BaselineGanttChart baseline={viewingBaseline} viewMode="Month" />
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Total Entity Count */}
+              {viewingBaseline.ai_processing_metadata?.entity_count && (
+                <Card className="border-2 border-blue-300 bg-gradient-to-br from-blue-50 to-indigo-50">
+                  <CardContent className="pt-4">
+                    <div className="text-center">
+                      <p className="text-4xl font-bold text-blue-900 mb-2">
+                        {viewingBaseline.ai_processing_metadata.entity_count}
+                      </p>
+                      <p className="text-sm font-semibold text-blue-800 mb-3">Total Extracted Entities</p>
+                      <p className="text-xs text-muted-foreground mb-3">
+                        Created from database entities in {Math.round((viewingBaseline.ai_processing_metadata.processing_time_ms || 0) / 1000)} seconds
+                      </p>
+                      <div className="text-xs text-left bg-white/50 p-3 rounded-lg space-y-1">
+                        {viewingBaseline.ai_processing_metadata.entity_breakdown && Object.entries(viewingBaseline.ai_processing_metadata.entity_breakdown).map(([key, value]: [string, any]) => (
+                          <div key={key} className="flex justify-between">
+                            <span className="text-gray-600">{key.replace(/_/g, ' ')}:</span>
+                            <span className="font-semibold text-gray-900">{value}</span>
+                          </div>
+                        ))}
                       </div>
-                    )}
-                    
-                    {/* Gantt Chart Visualization */}
-                    <div className="pt-4 border-t">
-                      <p className="font-medium mb-3">Visual Timeline:</p>
-                      <BaselineGanttChart baseline={viewingBaseline} viewMode="Month" />
                     </div>
-                    
-                    {viewingBaseline.timeline_baseline.key_milestones && Array.isArray(viewingBaseline.timeline_baseline.key_milestones) && (
-                      <div className="pt-4 border-t">
-                        <p className="font-medium mb-1">Key Milestones:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.timeline_baseline.key_milestones.map((m: any, i: number) => (
-                            <li key={i} className="text-muted-foreground">
-                              {typeof m === 'string' ? m : (m.name || `Milestone ${i + 1}`)}
-                              {m.target_date && ` - ${m.target_date}`}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
                   </CardContent>
                 </Card>
               )}
 
-              {/* Cost Baseline */}
-              {viewingBaseline.cost_baseline && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <DollarSign className="h-4 w-4" />
-                      Cost Baseline
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.cost_baseline.total_budget && (
-                      <div>
-                        <p className="font-medium mb-1">Total Budget:</p>
-                        <p className="text-2xl font-bold text-green-600">
-                          {typeof viewingBaseline.cost_baseline.total_budget === 'number' 
-                            ? `$${viewingBaseline.cost_baseline.total_budget.toLocaleString()}`
-                            : viewingBaseline.cost_baseline.total_budget}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {viewingBaseline.cost_baseline.budget_by_phase && (
-                      <div>
-                        <p className="font-medium mb-1">Budget by Phase:</p>
-                        <div className="space-y-1">
-                          {Object.entries(viewingBaseline.cost_baseline.budget_by_phase).map(([phase, amount]: [string, any], i: number) => (
-                            <div key={i} className="flex justify-between items-center text-sm">
-                              <span className="text-muted-foreground">{phase}:</span>
-                              <span className="font-semibold">
-                                {typeof amount === 'number' ? `$${amount.toLocaleString()}` : amount}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    
-                    {viewingBaseline.cost_baseline.contingency_reserve && (
-                      <div className="pt-2 border-t">
-                        <p className="font-medium mb-1">Contingency Reserve:</p>
-                        <p className="text-lg font-semibold text-orange-600">
-                          {typeof viewingBaseline.cost_baseline.contingency_reserve === 'number'
-                            ? `$${viewingBaseline.cost_baseline.contingency_reserve.toLocaleString()}`
-                            : viewingBaseline.cost_baseline.contingency_reserve}
-                        </p>
-                      </div>
-                    )}
-                    
-                    {viewingBaseline.cost_baseline.cost_categories && Array.isArray(viewingBaseline.cost_baseline.cost_categories) && (
-                      <div className="pt-2 border-t">
-                        <p className="font-medium mb-1">Cost Categories:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.cost_baseline.cost_categories.map((category: any, i: number) => (
-                            <li key={i} className="text-muted-foreground">
-                              {typeof category === 'string' ? category : (category.name || category.category)}
-                              {category.amount && ` - $${typeof category.amount === 'number' ? category.amount.toLocaleString() : category.amount}`}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Success Criteria */}
-              {viewingBaseline.success_criteria && (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      <CheckCircle className="h-4 w-4" />
-                      Success Criteria
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-sm space-y-2">
-                    {viewingBaseline.success_criteria.kpis && Array.isArray(viewingBaseline.success_criteria.kpis) && (
-                      <div>
-                        <p className="font-medium mb-1">KPIs:</p>
-                        <ul className="list-disc list-inside space-y-1">
-                          {viewingBaseline.success_criteria.kpis.map((kpi: string, i: number) => (
-                            <li key={i}>{kpi}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+              {/* Action Message */}
+              <Card className="border-yellow-200 bg-yellow-50">
+                <CardContent className="pt-4">
+                  <div className="flex items-start gap-3">
+                    <FileText className="h-5 w-5 text-yellow-700 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-semibold text-yellow-900 mb-1">
+                        📋 View Complete Baseline with All {viewingBaseline.ai_processing_metadata?.entity_count || 'Extracted'} Entities
+                      </p>
+                      <p className="text-xs text-yellow-800 mb-2">
+                        This dialog shows high-level summaries. Click <strong>"Generate Formal Document"</strong> below to view:
+                      </p>
+                      <ul className="text-xs text-yellow-700 space-y-1 ml-4 list-disc">
+                        <li>Complete PMBOK-compliant baseline document</li>
+                        <li>ALL {viewingBaseline.ai_processing_metadata?.entity_count || 'extracted'} entities with full details</li>
+                        <li>10 comprehensive appendices (Stakeholders, Risks, Deliverables, etc.)</li>
+                        <li>Export-ready format for stakeholder review</li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
 
@@ -1050,6 +1261,16 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
                 Close
+              </Button>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  setShowDetailsDialog(false)
+                  handleGenerateFormalDocument(viewingBaseline?.id || '')
+                }}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                View Complete Document
               </Button>
               {viewingBaseline?.status === 'draft' && (
                 <Button onClick={() => handleApproveBaseline(viewingBaseline.id)}>

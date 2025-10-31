@@ -31,12 +31,14 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     const scope = baseline.scope_baseline
     
     // Key Deliverables
-    if (scope.key_deliverables && scope.key_deliverables.length > 0) {
+    if (scope.deliverables && scope.deliverables.length > 0) {
       document += `### 1.1 Key Deliverables (Product & Project Scope)\n\n`
       document += `| ID | Deliverable Name | Description |\n`
       document += `|:---|:-----------------|:------------|\n`
-      scope.key_deliverables.forEach((deliverable: string, idx: number) => {
-        document += `| D${idx + 1} | ${deliverable} | (Extracted from documents) |\n`
+      scope.deliverables.forEach((deliverable: any, idx: number) => {
+        const name = typeof deliverable === 'string' ? deliverable : (deliverable.name || `Deliverable ${idx + 1}`)
+        const desc = typeof deliverable === 'object' ? (deliverable.description || 'Extracted from documents') : 'Extracted from documents'
+        document += `| D${idx + 1} | ${name} | ${desc} |\n`
       })
       document += `\n`
     } else {
@@ -88,8 +90,10 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     // Constraints
     if (scope.constraints && scope.constraints.length > 0) {
       document += `### 1.5 Project Constraints\n\n`
-      scope.constraints.forEach((constraint: string) => {
-        document += `- ${constraint}\n`
+      scope.constraints.forEach((constraint: any) => {
+        const text = typeof constraint === 'string' ? constraint : 
+                    (constraint.description || constraint.name || constraint.title || 'Constraint')
+        document += `- ${text}\n`
       })
       document += `\n`
     }
@@ -133,8 +137,10 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     
     if (tech.technical_requirements && tech.technical_requirements.length > 0) {
       document += `### 2.3 Technical Requirements\n\n`
-      tech.technical_requirements.forEach((req: string, idx: number) => {
-        document += `${idx + 1}. ${req}\n`
+      tech.technical_requirements.forEach((req: any, idx: number) => {
+        const reqText = typeof req === 'string' ? req : 
+                       (req.name || req.description || req.title || `Requirement ${idx + 1}`)
+        document += `${idx + 1}. ${reqText}\n`
       })
       document += `\n`
     }
@@ -189,16 +195,26 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
       })
     }
     
-    // Gap Analysis for Schedule Details
+    // Activity List
     document += `### 3.4 Detailed Schedule (Activity List)\n\n`
-    document += `⚠️ **Missing Data:** Detailed activity list, dependencies, and resource estimates not extracted.\n\n`
-    document += `**Recommendation:** Create a **Project Schedule** document with:\n`
-    document += `- Activity list with IDs\n`
-    document += `- Duration estimates (pessimistic, most likely, optimistic)\n`
-    document += `- Resource assignments\n`
-    document += `- Dependencies (FS, SS, FF, SF)\n`
-    document += `- Critical path analysis\n\n`
-    document += `**Template Available:** Use "Project Schedule Template" to generate this document.\n\n`
+    if (timeline.activities && timeline.activities.length > 0) {
+      document += `**${timeline.activities.length} activities extracted** (see Appendix H for complete list)\n\n`
+      document += `⚠️ **Note:** Activity dependencies, duration estimates (PERT), and detailed resource assignments require a **Project Schedule** document.\n\n`
+      document += `**Recommendation:** Create a **Project Schedule** document with:\n`
+      document += `- Activity dependencies (FS, SS, FF, SF)\n`
+      document += `- Duration estimates (pessimistic, most likely, optimistic)\n`
+      document += `- Detailed resource assignments\n`
+      document += `- Critical path analysis\n\n`
+    } else {
+      document += `⚠️ **Missing Data:** Detailed activity list, dependencies, and resource estimates not extracted.\n\n`
+      document += `**Recommendation:** Create a **Project Schedule** document with:\n`
+      document += `- Activity list with IDs\n`
+      document += `- Duration estimates (pessimistic, most likely, optimistic)\n`
+      document += `- Resource assignments\n`
+      document += `- Dependencies (FS, SS, FF, SF)\n`
+      document += `- Critical path analysis\n\n`
+      document += `**Template Available:** Use "Project Schedule Template" to generate this document.\n\n`
+    }
     
   } else {
     document += `⚠️ **Missing Data:** Timeline baseline not extracted.\n\n`
@@ -252,8 +268,26 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     
     if (resource.team_composition && resource.team_composition.length > 0) {
       document += `### 5.1 Team Composition\n\n`
-      resource.team_composition.forEach((member: string) => {
-        document += `- ${member}\n`
+      resource.team_composition.forEach((member: any) => {
+        const memberText = typeof member === 'string' ? member : 
+                          (member.name || member.role || 'Team Member')
+        document += `- ${memberText}\n`
+      })
+      document += `\n`
+    }
+    
+    // Stakeholders
+    if (resource.stakeholders && resource.stakeholders.length > 0) {
+      document += `### 5.1.1 Key Stakeholders\n\n`
+      document += `| Name | Role | Interest/Influence |\n`
+      document += `|:-----|:-----|:-------------------|\n`
+      resource.stakeholders.slice(0, 15).forEach((stakeholder: any) => {
+        const name = typeof stakeholder === 'string' ? stakeholder : (stakeholder.name || 'Stakeholder')
+        const role = typeof stakeholder === 'object' ? (stakeholder.role || 'N/A') : 'N/A'
+        const influence = typeof stakeholder === 'object' ? 
+                         `${stakeholder.interest_level || 'N/A'}/${stakeholder.influence_level || 'N/A'}` : 
+                         'N/A'
+        document += `| ${name} | ${role} | ${influence} |\n`
       })
       document += `\n`
     }
@@ -296,8 +330,11 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
       document += `### 6.1 Key Performance Indicators (KPIs)\n\n`
       document += `| KPI | Target Baseline |\n`
       document += `|:----|:----------------|\n`
-      success.kpis.forEach((kpi: string) => {
-        document += `| ${kpi} | As stated |\n`
+      success.kpis.forEach((kpi: any) => {
+        const kpiName = typeof kpi === 'string' ? kpi : 
+                       (kpi.metric || kpi.name || kpi.description || 'KPI')
+        const target = typeof kpi === 'object' ? (kpi.target_value || 'As stated') : 'As stated'
+        document += `| ${kpiName} | ${target} |\n`
       })
       document += `\n`
     }
@@ -312,8 +349,10 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
     
     if (success.quality_metrics && success.quality_metrics.length > 0) {
       document += `### 6.3 Quality Metrics\n\n`
-      success.quality_metrics.forEach((metric: string) => {
-        document += `- ${metric}\n`
+      success.quality_metrics.forEach((metric: any) => {
+        const metricText = typeof metric === 'string' ? metric : 
+                          (metric.name || metric.metric || metric.description || 'Quality Metric')
+        document += `- ${metricText}\n`
       })
       document += `\n`
     }
@@ -345,6 +384,12 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
   // Gap Analysis
   document += `### 7.2 Missing Baseline Details (Opportunities for Improvement)\n\n`
   document += `The following baseline details were not found in the analyzed documents. Consider creating these documents to enhance baseline completeness:\n\n`
+  document += `**⚠️ Document Creation Sequence (PMBOK Best Practice):**\n`
+  document += `1. **WBS Template** - Create first (defines work packages)\n`
+  document += `2. **Activity List** - Requires WBS (decomposes work packages into activities)\n`
+  document += `3. **Estimated Duration per Activity** - Requires Activity List (PERT estimates)\n`
+  document += `4. **Resource Estimates** - Requires Activity List (assign resources to activities)\n`
+  document += `5. **Cost Estimates** - Requires Activity List + Resources (calculate costs)\n\n`
   
   const gaps = []
   
@@ -435,11 +480,223 @@ The Scope Baseline is the approved version of the project scope statement, WBS, 
   }
   
   document += `\n---\n\n`
+  
+  // Add comprehensive appendices with all extracted entity details
+  document += generateDetailedAppendices(baseline)
+  
+  document += `\n---\n\n`
   document += `**Document Generated:** ${date}  \n`
   document += `**Generated By:** ADPA Baseline Drift Detection System  \n`
   document += `**CR Reference:** CR-2026-001\n`
   
   return document
+}
+
+/**
+ * Generate detailed appendices with all extracted entity data
+ */
+function generateDetailedAppendices(baseline: any): string {
+  let appendix = `## 10. Detailed Baseline Data (Appendices)\n\n`
+  appendix += `This section contains comprehensive details of all extracted project entities.\n\n`
+  
+  // Appendix A: Stakeholder Register
+  if (baseline.resource_baseline?.stakeholders && baseline.resource_baseline.stakeholders.length > 0) {
+    appendix += `### Appendix A: Stakeholder Register\n\n`
+    appendix += `**Total Stakeholders:** ${baseline.resource_baseline.stakeholders.length}\n\n`
+    appendix += `| # | Name | Role | Interest | Influence | Expectations | Concerns |\n`
+    appendix += `|:--|:-----|:-----|:---------|:----------|:-------------|:---------|\n`
+    baseline.resource_baseline.stakeholders.forEach((s: any, idx: number) => {
+      const name = s.name || 'N/A'
+      const role = s.role || 'N/A'
+      const interest = s.interest_level || 'N/A'
+      const influence = s.influence_level || 'N/A'
+      const expectations = s.expectations || 'N/A'
+      const concerns = s.concerns || 'N/A'
+      appendix += `| ${idx + 1} | ${name} | ${role} | ${interest} | ${influence} | ${expectations} | ${concerns} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  // Appendix B: Risk Register
+  if (baseline.success_criteria?.risks && baseline.success_criteria.risks.length > 0) {
+    appendix += `### Appendix B: Risk Register\n\n`
+    appendix += `**Total Risks:** ${baseline.success_criteria.risks.length}\n\n`
+    appendix += `| # | Risk | Type | Probability | Impact | Severity | Mitigation Strategy | Owner |\n`
+    appendix += `|:--|:-----|:-----|:------------|:-------|:---------|:--------------------|:------|\n`
+    baseline.success_criteria.risks.forEach((r: any, idx: number) => {
+      const name = r.name || r.description || 'Risk'
+      const type = r.risk_type || r.type || 'N/A'
+      const probability = r.probability || 'N/A'
+      const impact = r.impact || 'N/A'
+      const severity = r.severity || 'N/A'
+      const mitigation = r.mitigation_strategy || r.mitigation || 'N/A'
+      const owner = r.owner || 'TBD'
+      appendix += `| R${idx + 1} | ${name} | ${type} | ${probability} | ${impact} | ${severity} | ${mitigation} | ${owner} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  // Appendix C: Deliverables Register
+  if (baseline.scope_baseline?.deliverables && baseline.scope_baseline.deliverables.length > 0) {
+    appendix += `### Appendix C: Deliverables Register\n\n`
+    appendix += `**Total Deliverables:** ${baseline.scope_baseline.deliverables.length}\n\n`
+    appendix += `| # | Deliverable | Type | Description | Owner | Acceptance Criteria |\n`
+    appendix += `|:--|:------------|:-----|:------------|:------|:--------------------|\n`
+    baseline.scope_baseline.deliverables.forEach((d: any, idx: number) => {
+      const name = d.name || 'Deliverable'
+      const type = d.type || 'N/A'
+      const desc = d.description || 'N/A'
+      const owner = d.owner || 'TBD'
+      const criteria = d.acceptance_criteria || 'N/A'
+      appendix += `| D${idx + 1} | ${name} | ${type} | ${desc} | ${owner} | ${criteria} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  // Appendix D: Constraints Register
+  if (baseline.scope_baseline?.constraints && baseline.scope_baseline.constraints.length > 0) {
+    appendix += `### Appendix D: Constraints Register\n\n`
+    appendix += `**Total Constraints:** ${baseline.scope_baseline.constraints.length}\n\n`
+    
+    // Group by type
+    const constraintsByType: Record<string, any[]> = {}
+    baseline.scope_baseline.constraints.forEach((c: any) => {
+      const type = c.type || 'other'
+      if (!constraintsByType[type]) constraintsByType[type] = []
+      constraintsByType[type].push(c)
+    })
+    
+    Object.keys(constraintsByType).forEach(type => {
+      appendix += `#### ${type.charAt(0).toUpperCase() + type.slice(1)} Constraints (${constraintsByType[type].length})\n\n`
+      constraintsByType[type].forEach((c: any, idx: number) => {
+        const desc = c.description || c.name || c.title || 'Constraint'
+        const impact = c.impact ? ` - **Impact:** ${c.impact}` : ''
+        appendix += `${idx + 1}. ${desc}${impact}\n`
+      })
+      appendix += `\n`
+    })
+  }
+  
+  // Appendix E: Requirements Catalog
+  if (baseline.scope_baseline?.requirements && baseline.scope_baseline.requirements.length > 0) {
+    appendix += `### Appendix E: Requirements Catalog\n\n`
+    appendix += `**Total Requirements:** ${baseline.scope_baseline.requirements.length}\n\n`
+    appendix += `| # | ID | Requirement | Type | Priority | Status | Acceptance Criteria |\n`
+    appendix += `|:--|:---|:------------|:-----|:---------|:-------|:--------------------|\n`
+    baseline.scope_baseline.requirements.forEach((r: any, idx: number) => {
+      const id = r.name || `REQ-${idx + 1}`
+      const title = r.title || r.description || 'Requirement'
+      const type = r.type || 'N/A'
+      const priority = r.priority || 'N/A'
+      const status = r.status || 'N/A'
+      const criteria = r.acceptance_criteria || 'N/A'
+      appendix += `| ${idx + 1} | ${id} | ${title} | ${type} | ${priority} | ${status} | ${criteria} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  // Appendix F: Quality Standards Matrix
+  if (baseline.technical_baseline?.quality_standards && baseline.technical_baseline.quality_standards.length > 0) {
+    appendix += `### Appendix F: Quality Standards Matrix\n\n`
+    appendix += `**Total Standards:** ${baseline.technical_baseline.quality_standards.length}\n\n`
+    appendix += `| # | Standard | Description | Measurement Method | Target Value |\n`
+    appendix += `|:--|:---------|:------------|:-------------------|:-------------|\n`
+    baseline.technical_baseline.quality_standards.forEach((q: any, idx: number) => {
+      const name = q.name || 'Standard'
+      const desc = q.description || 'N/A'
+      const method = q.measurement_method || 'N/A'
+      const target = q.target_value || 'N/A'
+      appendix += `| ${idx + 1} | ${name} | ${desc} | ${method} | ${target} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  // Appendix G: Best Practices Guide
+  if (baseline.technical_baseline?.best_practices && baseline.technical_baseline.best_practices.length > 0) {
+    appendix += `### Appendix G: Best Practices Guide\n\n`
+    appendix += `**Total Best Practices:** ${baseline.technical_baseline.best_practices.length}\n\n`
+    baseline.technical_baseline.best_practices.forEach((bp: any, idx: number) => {
+      const title = bp.title || 'Best Practice'
+      const category = bp.category || 'General'
+      const desc = bp.description || 'N/A'
+      const guidance = bp.implementation_guidance || 'See documentation'
+      appendix += `#### ${idx + 1}. ${title} (${category})\n\n`
+      appendix += `**Description:** ${desc}\n\n`
+      appendix += `**Implementation Guidance:** ${guidance}\n\n`
+    })
+  }
+  
+  // Appendix H: Project Schedule (Phases & Activities)
+  if (baseline.timeline_baseline?.phases && baseline.timeline_baseline.phases.length > 0) {
+    appendix += `### Appendix H: Project Schedule\n\n`
+    appendix += `#### Phases (${baseline.timeline_baseline.phases.length})\n\n`
+    appendix += `| # | Phase | Start Date | End Date | Duration | Status | Key Deliverables |\n`
+    appendix += `|:--|:------|:-----------|:---------|:---------|:-------|:-----------------|\n`
+    baseline.timeline_baseline.phases.forEach((p: any, idx: number) => {
+      const name = p.name || 'Phase'
+      const start = p.start_date || 'TBD'
+      const end = p.end_date || 'TBD'
+      const duration = p.duration || 'TBD'
+      const status = p.status || 'planned'
+      const deliverables = Array.isArray(p.deliverables) ? p.deliverables.join(', ') : 'N/A'
+      appendix += `| ${idx + 1} | ${name} | ${start} | ${end} | ${duration} | ${status} | ${deliverables} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  if (baseline.timeline_baseline?.activities && baseline.timeline_baseline.activities.length > 0) {
+    appendix += `#### Activities (${baseline.timeline_baseline.activities.length})\n\n`
+    appendix += `| # | Activity | Duration | Dependencies | Assigned To |\n`
+    appendix += `|:--|:---------|:---------|:-------------|:------------|\n`
+    baseline.timeline_baseline.activities.slice(0, 50).forEach((a: any, idx: number) => {
+      const name = a.name || 'Activity'
+      const duration = a.duration || 'TBD'
+      const deps = Array.isArray(a.dependencies) ? a.dependencies.join(', ') : 'None'
+      const assigned = a.assigned_to || 'TBD'
+      appendix += `| ${idx + 1} | ${name} | ${duration} | ${deps} | ${assigned} |\n`
+    })
+    if (baseline.timeline_baseline.activities.length > 50) {
+      appendix += `\n*... and ${baseline.timeline_baseline.activities.length - 50} more activities*\n`
+    }
+    appendix += `\n`
+  }
+  
+  // Appendix I: Resource Allocation
+  if (baseline.resource_baseline?.team_members && baseline.resource_baseline.team_members.length > 0) {
+    appendix += `### Appendix I: Resource Allocation\n\n`
+    appendix += `**Total Resources:** ${baseline.cost_baseline?.budget_resources?.length || baseline.resource_baseline.team_members.length}\n\n`
+    appendix += `| # | Resource | Type | Allocation | Skills/Role |\n`
+    appendix += `|:--|:---------|:-----|:-----------|:------------|\n`
+    
+    if (baseline.cost_baseline?.budget_resources) {
+      baseline.cost_baseline.budget_resources.forEach((r: any, idx: number) => {
+        const name = r.name || 'Resource'
+        const type = r.type || 'N/A'
+        const allocation = r.allocation || r.cost_estimate || 'N/A'
+        const role = r.skills || r.role || 'N/A'
+        appendix += `| ${idx + 1} | ${name} | ${type} | ${allocation} | ${role} |\n`
+      })
+    }
+    appendix += `\n`
+  }
+  
+  // Appendix J: Success Criteria & KPIs
+  if (baseline.success_criteria?.kpis && baseline.success_criteria.kpis.length > 0) {
+    appendix += `### Appendix J: Success Criteria & KPIs\n\n`
+    appendix += `**Total KPIs:** ${baseline.success_criteria.kpis.length}\n\n`
+    appendix += `| # | KPI | Target | Measurement Method | Frequency |\n`
+    appendix += `|:--|:----|:-------|:-------------------|:----------|\n`
+    baseline.success_criteria.kpis.forEach((kpi: any, idx: number) => {
+      const metric = typeof kpi === 'string' ? kpi : (kpi.metric || kpi.name || kpi.description || 'KPI')
+      const target = typeof kpi === 'object' ? (kpi.target_value || 'As stated') : 'As stated'
+      const method = typeof kpi === 'object' ? (kpi.measurement_method || 'N/A') : 'N/A'
+      const frequency = typeof kpi === 'object' ? (kpi.measurement_frequency || 'N/A') : 'N/A'
+      appendix += `| ${idx + 1} | ${metric} | ${target} | ${method} | ${frequency} |\n`
+    })
+    appendix += `\n`
+  }
+  
+  return appendix
 }
 
 export function identifyMissingBaselineDocuments(baseline: any): Array<{
@@ -451,30 +708,49 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
 }> {
   const missing = []
   
-  // Check for WBS
+  // Check for WBS (must be created first - prerequisite for Activity List)
   if (!baseline.scope_baseline?.wbs_hierarchy) {
     missing.push({
       documentType: 'Work Breakdown Structure (WBS)',
-      purpose: 'Hierarchical decomposition of project work into manageable work packages',
+      purpose: 'Hierarchical decomposition of project work into manageable work packages. **PREREQUISITE:** Must be completed before Activity List and Duration Estimates.',
       template: 'WBS Template (PMBOK)',
       priority: 'High' as const,
-      whatItProvides: 'Work package IDs, responsibility assignments (RACI), deliverable breakdown, WBS dictionary'
+      whatItProvides: 'Work package IDs, responsibility assignments (RACI), deliverable breakdown, WBS dictionary. Forms the foundation for Activity List definition.'
     })
   }
   
-  // Check for Activity List
-  if (!baseline.timeline_baseline?.activity_list) {
+  // Check for Activity List - only recommend if no activities extracted
+  const hasActivities = baseline.timeline_baseline?.activities && 
+                        Array.isArray(baseline.timeline_baseline.activities) && 
+                        baseline.timeline_baseline.activities.length > 0
+  
+  if (!hasActivities && !baseline.timeline_baseline?.activity_list) {
     missing.push({
       documentType: 'Activity List with Dependencies',
-      purpose: 'Detailed schedule with task dependencies and critical path',
+      purpose: 'Detailed schedule with task dependencies and critical path. **REQUIRES:** WBS must be completed first. **NEXT STEP:** Duration estimation for each activity.',
       template: 'Project Schedule Template',
       priority: 'High' as const,
-      whatItProvides: 'Activity IDs, durations, dependencies, critical path, resource assignments, float/slack analysis'
+      whatItProvides: 'Activity IDs (derived from WBS work packages), dependencies (FS, SS, FF, SF), critical path, resource assignments, float/slack analysis. Enables Duration Estimation.'
     })
   }
   
-  // Check for Resource Estimates
-  if (!baseline.resource_baseline?.resource_estimates) {
+  // Check for Duration Estimates (requires Activity List)
+  if (!hasActivities && !baseline.timeline_baseline?.activity_list) {
+    missing.push({
+      documentType: 'Estimated Duration per Activity',
+      purpose: 'Three-point duration estimates (optimistic, most likely, pessimistic) for each activity. **REQUIRES:** Activity List must be completed first.',
+      template: 'Duration Estimation Worksheet',
+      priority: 'High' as const,
+      whatItProvides: 'PERT estimates (Optimistic, Most Likely, Pessimistic), Expected Duration calculations, Standard Deviation, Confidence Intervals, Historical data references'
+    })
+  }
+  
+  // Check for Resource Estimates - only recommend if limited resource data
+  const hasResourceData = baseline.resource_baseline?.team_members && 
+                          Array.isArray(baseline.resource_baseline.team_members) && 
+                          baseline.resource_baseline.team_members.length > 5
+  
+  if (!hasResourceData && !baseline.resource_baseline?.resource_estimates) {
     missing.push({
       documentType: 'Resource Estimates by Activity',
       purpose: 'Detailed resource allocation and capacity planning',
@@ -484,8 +760,11 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
     })
   }
   
-  // Check for Cost Estimates
-  if (!baseline.cost_baseline?.detailed_estimates) {
+  // Check for Cost Estimates - only recommend if basic budget exists but no breakdown
+  const hasCostBreakdown = baseline.cost_baseline?.cost_breakdown && 
+                           Object.keys(baseline.cost_baseline.cost_breakdown).length > 2
+  
+  if (!hasCostBreakdown && !baseline.cost_baseline?.detailed_estimates) {
     missing.push({
       documentType: 'Activity-Based Cost Estimates',
       purpose: 'Detailed cost breakdown with contingency and management reserves',
@@ -495,8 +774,12 @@ export function identifyMissingBaselineDocuments(baseline: any): Array<{
     })
   }
   
-  // Check for Risk Register
-  if (!baseline.scope_baseline?.risk_register) {
+  // Check for Risk Register - only recommend if no risks extracted
+  const hasRisks = baseline.success_criteria?.risks && 
+                   Array.isArray(baseline.success_criteria.risks) && 
+                   baseline.success_criteria.risks.length > 0
+  
+  if (!hasRisks && !baseline.scope_baseline?.risk_register) {
     missing.push({
       documentType: 'Risk Register',
       purpose: 'Identified risks with probability, impact, and mitigation strategies',

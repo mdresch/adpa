@@ -896,8 +896,42 @@ router.put("/:id",
         return res.status(403).json({ error: "Access denied" })
       }
 
-      // Increment version if content changed
-      const versionIncrement = content ? ", version = version + 1" : ""
+      // Semantic versioning: MAJOR.MINOR.PATCH
+      // - Template change: Major (1.0 → 2.0)
+      // - AI re-generation: Minor (1.0 → 1.1)
+      // - Manual edit: Patch (1.0.0 → 1.0.1)
+      let versionIncrement = ""
+      let newVersion = doc.version || 1
+      
+      if (content) {
+        // Parse current version (handles both "1" and "1.0" and "1.0.0" formats)
+        const versionStr = String(doc.version || "1")
+        const versionParts = versionStr.split('.')
+        let major = parseInt(versionParts[0]) || 1
+        let minor = parseInt(versionParts[1]) || 0
+        let patch = parseInt(versionParts[2]) || 0
+        
+        // Determine version increment type
+        const templateChanged = template_id && template_id !== doc.template_id
+        const isRegeneration = metadata?.regenerated === true
+        
+        if (templateChanged) {
+          // Major version change: 1.0.0 → 2.0.0
+          major += 1
+          minor = 0
+          patch = 0
+        } else if (isRegeneration) {
+          // Minor version change: 1.0.0 → 1.1.0
+          minor += 1
+          patch = 0
+        } else {
+          // Patch version change (manual edit): 1.0.0 → 1.0.1
+          patch += 1
+        }
+        
+        newVersion = `${major}.${minor}.${patch}`
+        versionIncrement = `, version = $${999}` // Placeholder, we'll add it to params later
+      }
 
       // Prepare metadata update
       let metadataUpdate = doc.metadata || {}
@@ -937,6 +971,12 @@ router.put("/:id",
         params.push(wordCount, characterCount)
       }
       
+      // Add version to params if content changed
+      if (content) {
+        versionIncrement = `, version = $${params.length + 1}`
+        params.push(newVersion)
+      }
+      
       params.push(id)
 
       const result = await pool.query(
@@ -961,7 +1001,15 @@ router.put("/:id",
       // Clear cache
       await cache.del(`document:${id}`)
 
-  log.info(`Document updated: ${id} by ${req.user?.email}`)
+      log.info(`Document updated: ${id} by ${req.user?.email}`, {
+        oldVersion: doc.version,
+        newVersion: content ? newVersion : doc.version,
+        versionType: template_id !== doc.template_id ? 'major' : 
+                     metadata?.regenerated ? 'minor' : 'patch',
+        hasContent: !!content,
+        hasContentString: !!contentString,
+        hasProjectId: !!result.rows[0]?.project_id
+      })
 
       // Track document edit
       if (req.user?.id && result.rows[0]) {
@@ -983,9 +1031,78 @@ router.put("/:id",
         ctx: { userId: req.user?.id, ip: req.ip, userAgent: req.headers['user-agent'] as string, requestId: (req as any).requestId }
       })
 
+      // 🔥 NEW: Re-validate against baseline after manual edit
+      let driftRevalidation = null
+      
+      // Always run drift validation if document has project_id and content
+      if (result.rows[0]?.project_id && result.rows[0]?.content) {
+        try {
+          const { baselineService } = await import('../services/baselineService')
+          
+          log.info(`[Manual Edit] Re-validating document ${id} against baseline`, {
+            projectId: result.rows[0].project_id,
+            documentName: result.rows[0].name,
+            contentLength: result.rows[0].content.length
+          })
+          
+          const drifts = await baselineService.validateDocumentAgainstBaseline(
+            result.rows[0].project_id,
+            id,
+            result.rows[0].content,  // Use content from database (just updated)
+            result.rows[0].name
+          )
+          
+          driftRevalidation = {
+            driftCount: drifts.length,
+            drifts: drifts.map(d => ({
+              type: d.detection_type,
+              severity: d.drift_severity,
+              description: d.drift_description
+            }))
+          }
+          
+          if (drifts.length > 0) {
+            log.warn(`[Manual Edit] Detected ${drifts.length} drift(s) after edit`)
+            
+            // Emit drift alert to project room (if io is available)
+            try {
+              const { io } = await import('../server')
+              io.to(`project:${result.rows[0].project_id}`).emit("baseline:drift", {
+                documentId: id,
+                documentName: result.rows[0].name,
+                driftCount: drifts.length,
+                drifts: driftRevalidation.drifts,
+                source: 'manual_edit'
+              })
+            } catch (ioError) {
+              log.debug('[Manual Edit] Socket.io not available for drift notification')
+            }
+          } else {
+            log.info(`[Manual Edit] ✅ No drift detected - document aligns with baseline`)
+            
+            // Clear old drifts for this document
+            await pool.query(
+              `UPDATE baseline_drift_detection 
+               SET status = 'resolved',
+                   resolution_notes = 'Drift resolved via manual edit',
+                   resolved_by = $1,
+                   resolved_at = CURRENT_TIMESTAMP
+               WHERE source_document_id = $2 
+               AND status = 'active'`,
+              [req.user?.id, id]
+            )
+          }
+          
+        } catch (baselineErr: any) {
+          log.error('[Manual Edit] Drift validation failed:', baselineErr)
+          // Don't fail the update if drift validation fails
+        }
+      }
+
       return res.json({
         message: "Document updated successfully",
         document: result.rows[0],
+        driftRevalidation
       })
     } catch (error) {
       log.error("Update document error:", error)

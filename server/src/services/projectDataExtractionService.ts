@@ -24,6 +24,7 @@ interface ExtractionResult {
   best_practices: BestPractice[]
   phases: Phase[]
   resources: Resource[]
+  technologies: Technology[]
   quality_standards: QualityStandard[]
   deliverables: Deliverable[]
   scope_items: ScopeItem[]
@@ -108,11 +109,12 @@ interface Phase {
 
 interface Resource {
   name: string
-  type: 'human' | 'equipment' | 'material' | 'financial'
+  type: 'human' | 'equipment' | 'material' | 'financial' | 'software' | 'facility' | 'budget'
   role?: string
   allocation?: string
   availability?: string
   cost?: number
+  skills?: string[]
 }
 
 interface QualityStandard {
@@ -123,6 +125,17 @@ interface QualityStandard {
   requirements?: string
   measurement_criteria?: string
   compliance_level?: 'mandatory' | 'recommended' | 'optional'
+}
+
+interface Technology {
+  name: string
+  category: 'frontend' | 'backend' | 'database' | 'infrastructure' | 'devops' | 'testing' | 'monitoring' | 'other'
+  description?: string
+  version?: string
+  purpose?: string
+  license?: string
+  vendor?: string
+  deployment_environment?: string
 }
 
 interface Deliverable {
@@ -205,6 +218,7 @@ export class ProjectDataExtractionService {
         bestPractices,
         phases,
         resources,
+        technologies,
         qualityStandards,
         deliverables,
         scopeItems,
@@ -219,6 +233,7 @@ export class ProjectDataExtractionService {
         this.extractBestPractices(documents, projectId, options),
         this.extractPhases(documents, projectId, options),
         this.extractResources(documents, projectId, options),
+        this.extractTechnologies(documents, projectId, options),
         this.extractQualityStandards(documents, projectId, options),
         this.extractDeliverables(documents, projectId, options),
         this.extractScopeItems(documents, projectId, options),
@@ -240,6 +255,7 @@ export class ProjectDataExtractionService {
           bestPractices: bestPractices.length,
           phases: phases.length,
           resources: resources.length,
+          technologies: technologies.length,
           qualityStandards: qualityStandards.length,
           deliverables: deliverables.length,
           scopeItems: scopeItems.length,
@@ -257,6 +273,7 @@ export class ProjectDataExtractionService {
         best_practices: bestPractices,
         phases,
         resources,
+        technologies,
         quality_standards: qualityStandards,
         deliverables,
         scope_items: scopeItems,
@@ -332,6 +349,11 @@ export class ProjectDataExtractionService {
       // Save resources
       if (entities.resources.length > 0) {
         await this.saveResources(client, projectId, userId, entities.resources)
+      }
+
+      // Save technologies
+      if (entities.technologies.length > 0) {
+        await this.saveTechnologies(client, projectId, userId, entities.technologies)
       }
 
       // Save quality standards
@@ -628,16 +650,21 @@ Requirements:
 
       const documentContext = this.buildDocumentContext(documents)
       
-      const prompt = `Analyze the following project documents and extract ALL milestones and key dates mentioned.
+      const prompt = `Analyze the following project documents and extract ONLY major project milestones.
 
 ${documentContext}
+
+**IMPORTANT: Milestones vs Activities:**
+- **MILESTONE** = Zero-duration checkpoint marking completion of a major deliverable or phase (e.g., "MVP Launch", "CSRD Deadline", "Project Kickoff", "Go-Live")
+- **ACTIVITY** = Work effort with duration (e.g., "Develop frontend module", "Conduct UAT testing") - DO NOT include activities as milestones
+- Limit to 10-20 milestones per project (major checkpoints only)
 
 Extract milestones in JSON format with the following structure:
 {
   "milestones": [
     {
       "name": "Milestone Name",
-      "description": "What this milestone represents",
+      "description": "What this milestone represents (major checkpoint or deliverable completion)",
       "due_date": "YYYY-MM-DD or Quarter/Year if specific date not mentioned",
       "status": "pending|in_progress|completed|delayed",
       "deliverables": ["Deliverable 1", "Deliverable 2"]
@@ -646,7 +673,10 @@ Extract milestones in JSON format with the following structure:
 }
 
 Requirements:
-- Include ALL milestones, deadlines, and key dates mentioned
+- Extract ONLY major project milestones (completion of phases, major deliverables, key decisions, go-live dates)
+- Examples: "Project Kickoff", "Requirements Approval", "MVP Launch", "UAT Completion", "Go-Live", "Project Closure"
+- DO NOT extract regular activities, tasks, or work packages
+- Typical projects have 10-20 milestones maximum
 - Extract deliverables associated with each milestone
 - If exact dates aren't mentioned, use relative dates like "2025-Q1" or "Month 3"
 - Infer status from context (future = pending, past = completed)
@@ -974,6 +1004,130 @@ Requirements:
   }
 
   /**
+   * Extract technologies using AI
+   */
+  private async extractTechnologies(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<Technology[]> {
+    try {
+      logger.info('[EXTRACTION-TECHNOLOGIES] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+      
+      const prompt = `You are a **Technology Architect** tasked with extracting and structuring technology recommendations from project documentation to populate a **Technical Architecture Baseline** (PMBOK 7 - Technical Performance Domain).
+
+CONTEXT:
+This extraction will populate the **Technical Baseline → Architecture** component of the project baseline, categorizing the technology stack by architectural layer.
+
+${documentContext}
+
+EXTRACTION INSTRUCTIONS:
+
+Extract ALL technologies mentioned across these layers:
+
+1. **Frontend Layer (Presentation Tier)**:
+   - UI Frameworks: React, Vue, Angular, Next.js, Svelte
+   - Component Libraries: Tailwind CSS, Material-UI, Chakra UI, Radix UI
+   - State Management: Redux, Zustand, MobX, Recoil
+   - Build Tools: Webpack, Vite, Turbopack
+
+2. **Backend Layer (Business Logic Tier)**:
+   - Runtimes: Node.js, Python, Java, Go, .NET
+   - Frameworks: Express, NestJS, Django, Spring Boot, FastAPI
+   - API Standards: REST, GraphQL, gRPC, WebSocket
+
+3. **Data Layer (Persistence Tier)**:
+   - Databases: PostgreSQL, MySQL, MongoDB, Cassandra, DynamoDB
+   - Caching: Redis, Memcached, Elasticache
+   - Search: Elasticsearch, Algolia, Typesense
+   - Message Queues: RabbitMQ, Kafka, AWS SQS, Bull/Redis
+
+4. **Infrastructure Layer (Platform & Hosting)**:
+   - Cloud Providers: AWS, Azure, GCP, DigitalOcean
+   - Containerization: Docker, Podman
+   - Orchestration: Kubernetes, Docker Swarm, ECS, AKS
+   - Load Balancers: Nginx, HAProxy, AWS ALB, Cloudflare
+
+5. **DevOps & CI/CD Layer**:
+   - Version Control: Git, GitHub, GitLab, Bitbucket
+   - CI/CD: GitHub Actions, GitLab CI, Jenkins, CircleCI
+   - IaC: Terraform, Pulumi, CloudFormation, Ansible
+   - Artifact Repos: Docker Hub, NPM, PyPI, Nexus
+
+6. **Testing & Quality Layer**:
+   - Unit Testing: Jest, Pytest, JUnit, Mocha
+   - Integration Testing: Supertest, Postman, RestAssured
+   - E2E Testing: Cypress, Playwright, Selenium, Puppeteer
+   - Code Quality: SonarQube, ESLint, Prettier, CodeClimate
+
+7. **Monitoring & Observability Layer**:
+   - APM: Datadog, New Relic, Dynatrace, AppDynamics
+   - Logging: ELK Stack, Splunk, Loki, CloudWatch
+   - Metrics: Prometheus, Grafana, InfluxDB
+   - Error Tracking: Sentry, Rollbar, Bugsnag
+
+OUTPUT FORMAT:
+{
+  "technologies": [
+    {
+      "name": "Technology name (e.g., React, PostgreSQL, AWS)",
+      "category": "frontend|backend|database|infrastructure|devops|testing|monitoring|other",
+      "description": "What this technology does in the project",
+      "version": "Version number or range (e.g., 18.3, 15.x, latest)",
+      "purpose": "Why this technology was chosen for the project",
+      "license": "License type (MIT, Apache 2.0, BSD, Proprietary, Commercial, Open Source)",
+      "vendor": "Provider (AWS, Microsoft, Google, HashiCorp, Open Source Community, etc.)",
+      "deployment_environment": "Where deployed (production, staging, development, all, cloud, on-premises)"
+    }
+  ]
+}
+
+CRITICAL RULES:
+- Extract ALL technologies mentioned in documents (aim for 20-40 technologies)
+- Classify each technology into the correct category
+- Extract version numbers when explicitly mentioned (use "latest" or version range if unclear)
+- Infer purpose from context if not explicitly stated
+- For open-source: use "Open Source" as vendor
+- For cloud services: use cloud provider as vendor (AWS, Azure, GCP)
+- Return ONLY valid JSON, no markdown formatting, no explanations, no comments
+- If a technology serves multiple purposes, include it in the most relevant category
+- Extract both primary and supporting technologies (databases, caches, queues, monitoring, etc.)
+
+QUALITY CHECKLIST:
+✓ At least 3-5 frontend technologies
+✓ At least 3-5 backend technologies
+✓ At least 2-3 databases/data stores
+✓ At least 2-3 infrastructure technologies
+✓ DevOps, testing, and monitoring tools included
+✓ Version numbers extracted when available
+✓ License information included when mentioned
+✓ Deployment environment specified
+
+Return pure JSON only.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider || 'openai',
+        model: options.aiModel || 'gpt-4-turbo-preview',
+        temperature: 0.3,
+        max_tokens: 2000
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const technologies = parsed.technologies || []
+
+      logger.info(`[EXTRACTION-TECHNOLOGIES] Extracted ${technologies.length} technologies`)
+      
+      return technologies
+    } catch (error) {
+      logger.error('[EXTRACTION-TECHNOLOGIES] Extraction failed', { error })
+      return []
+    }
+  }
+
+  /**
    * Extract quality standards using AI
    */
   private async extractQualityStandards(
@@ -1294,8 +1448,9 @@ Requirements:
       sections.push(`Template: ${doc.template_name || 'Unknown'}`)
       sections.push('')
       // Truncate very long documents to fit in token budget
-      const content = doc.content.length > 15000 
-        ? doc.content.substring(0, 15000) + '\n\n[Document truncated for length]'
+      // Increased limit: 50K chars per doc (supports ~6,000 word documents fully)
+      const content = doc.content.length > 50000 
+        ? doc.content.substring(0, 50000) + '\n\n[Document truncated for length]'
         : doc.content
       sections.push(content)
       sections.push('')
@@ -1540,10 +1695,42 @@ Requirements:
       return
     }
 
+    // Deduplicate risks by title (AI sometimes extracts same risk multiple times)
+    const deduplicatedMap = new Map<string, Risk>()
+    
+    risks.forEach(risk => {
+      const normalizedTitle = risk.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        // First occurrence - add to map
+        deduplicatedMap.set(normalizedTitle, risk)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: Risk = {
+          ...existing,
+          description: risk.description || existing.description,
+          category: risk.category || existing.category,
+          probability: risk.probability || existing.probability,
+          impact: risk.impact || existing.impact,
+          mitigation_strategy: risk.mitigation_strategy || existing.mitigation_strategy,
+          contingency_plan: risk.contingency_plan || existing.contingency_plan
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-RISKS] Merged duplicate risk: "${risk.title}"`)
+      }
+    })
+    
+    const uniqueRisks = Array.from(deduplicatedMap.values())
+    
+    if (uniqueRisks.length < risks.length) {
+      logger.info(`[EXTRACTION-RISKS] Deduplicated ${risks.length} → ${uniqueRisks.length} risks`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    risks.forEach((r, index) => {
+    uniqueRisks.forEach((r, index) => {
       const offset = index * 10
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
@@ -1649,12 +1836,12 @@ Requirements:
 
     await client.query(`
       INSERT INTO milestones (
-        project_id, name, description, date, status, created_by
+        project_id, name, description, due_date, status, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
         description = EXCLUDED.description,
-        date = EXCLUDED.date,
+        due_date = EXCLUDED.due_date,
         status = EXCLUDED.status,
         updated_at = CURRENT_TIMESTAMP
     `, values)
@@ -1676,9 +1863,9 @@ Requirements:
       return
     }
 
-    // Deduplicate by name (ON CONFLICT requires unique names)
+    // Deduplicate by title (ON CONFLICT requires unique titles)
     const uniqueConstraints = Array.from(
-      new Map(constraints.map(c => [(c.name || c.title || '').toLowerCase().trim(), c])).values()
+      new Map(constraints.map(c => [(c.title || '').toLowerCase().trim(), c])).values()
     )
     
     if (uniqueConstraints.length < constraints.length) {
@@ -1751,9 +1938,9 @@ Requirements:
       return
     }
 
-    // Deduplicate by name (ON CONFLICT requires unique names)
+    // Deduplicate by title (ON CONFLICT requires unique titles)
     const uniqueCriteria = Array.from(
-      new Map(successCriteria.map(sc => [(sc.name || sc.title || '').toLowerCase().trim(), sc])).values()
+      new Map(successCriteria.map(sc => [(sc.title || '').toLowerCase().trim(), sc])).values()
     )
     
     if (uniqueCriteria.length < successCriteria.length) {
@@ -1826,10 +2013,38 @@ Requirements:
       return
     }
 
+    // Deduplicate best practices by title (AI sometimes extracts same practice multiple times)
+    const deduplicatedMap = new Map<string, BestPractice>()
+    
+    bestPractices.forEach(bp => {
+      const normalizedTitle = bp.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        // First occurrence - add to map
+        deduplicatedMap.set(normalizedTitle, bp)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: BestPractice = {
+          ...existing,
+          description: bp.description || existing.description,
+          category: bp.category || existing.category
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-BEST_PRACTICES] Merged duplicate: "${bp.title}"`)
+      }
+    })
+    
+    const uniqueBestPractices = Array.from(deduplicatedMap.values())
+    
+    if (uniqueBestPractices.length < bestPractices.length) {
+      logger.info(`[EXTRACTION-BEST_PRACTICES] Deduplicated ${bestPractices.length} → ${uniqueBestPractices.length} best practices`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    bestPractices.forEach((bp, index) => {
+    uniqueBestPractices.forEach((bp, index) => {
       const offset = index * 5
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`
@@ -2000,6 +2215,69 @@ Requirements:
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueResources.length} resources`)
+  }
+
+  /**
+   * Save technologies to database
+   */
+  private async saveTechnologies(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    technologies: Technology[]
+  ): Promise<void> {
+    if (technologies.length === 0) {
+      logger.info('[EXTRACTION] No technologies to save, skipping')
+      return
+    }
+
+    // Deduplicate by name (ON CONFLICT requires unique names)
+    const uniqueTechnologies = Array.from(
+      new Map(technologies.map(t => [t.name.toLowerCase().trim(), t])).values()
+    )
+    
+    if (uniqueTechnologies.length < technologies.length) {
+      logger.warn(`[EXTRACTION] Deduplicated technologies: ${technologies.length} → ${uniqueTechnologies.length}`)
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    uniqueTechnologies.forEach((t, index) => {
+      const offset = index * 9
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+      )
+      
+      values.push(
+        projectId,
+        t.name,
+        t.category || 'other',
+        t.description || null,
+        t.version || null,
+        t.purpose || null,
+        t.license || null,
+        t.vendor || null,
+        userId
+      )
+    })
+
+    await client.query(`
+      INSERT INTO technologies (
+        project_id, name, category, description, version, purpose, license, vendor, created_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        category = EXCLUDED.category,
+        description = EXCLUDED.description,
+        version = EXCLUDED.version,
+        purpose = EXCLUDED.purpose,
+        license = EXCLUDED.license,
+        vendor = EXCLUDED.vendor,
+        updated_at = CURRENT_TIMESTAMP
+    `, values)
+
+    logger.info(`[EXTRACTION] Saved ${uniqueTechnologies.length} technologies`)
   }
 
   /**
@@ -2188,10 +2466,41 @@ Requirements:
       return
     }
 
+    // DEDUPLICATE activities by name before database insert
+    // AI sometimes extracts the same activity multiple times
+    const deduplicatedMap = new Map<string, Activity>()
+    
+    activities.forEach(activity => {
+      const normalizedName = activity.name.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        // First occurrence - add to map
+        deduplicatedMap.set(normalizedName, activity)
+      } else {
+        // Duplicate found - merge details
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: Activity = {
+          ...existing,
+          description: activity.description || existing.description,
+          category: activity.category || existing.category,
+          start_date: activity.start_date || existing.start_date,
+          end_date: activity.end_date || existing.end_date,
+          duration: activity.duration || existing.duration,
+          assigned_to: activity.assigned_to || existing.assigned_to,
+          dependencies: activity.dependencies?.length ? activity.dependencies : existing.dependencies
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.info(`[EXTRACTION] Merged duplicate activity: "${activity.name}"`)
+      }
+    })
+
+    const uniqueActivities = Array.from(deduplicatedMap.values())
+    logger.info(`[EXTRACTION] Deduplicated ${activities.length} activities to ${uniqueActivities.length} unique activities`)
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    activities.forEach((a, index) => {
+    uniqueActivities.forEach((a, index) => {
       const offset = index * 10  // Changed from 11 to 10 (removed phase, duration, effort_estimate)
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
@@ -2259,7 +2568,7 @@ Requirements:
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${activities.length} activities`)
+    logger.info(`[EXTRACTION] Saved ${uniqueActivities.length} activities (deduplicated from ${activities.length})`)
   }
 
   /**
@@ -2331,6 +2640,9 @@ Requirements:
         break
       case 'resources':
         entities = await this.extractResources(documents, projectId, options)
+        break
+      case 'technologies':
+        entities = await this.extractTechnologies(documents, projectId, options)
         break
       case 'quality_standards':
         entities = await this.extractQualityStandards(documents, projectId, options)
@@ -2415,6 +2727,9 @@ Requirements:
           break
         case 'resources':
           await this.saveResources(client, projectId, userId, entities)
+          break
+        case 'technologies':
+          await this.saveTechnologies(client, projectId, userId, entities)
           break
         case 'quality_standards':
           await this.saveQualityStandards(client, projectId, userId, entities)
