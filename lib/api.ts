@@ -978,6 +978,27 @@ class ApiClient {
     return response
   }
 
+  // Queue Stats API
+  async getQueueStats(): Promise<{ queues: any[] }> {
+    const response = await this.request<{ queues: any[] }>("/queue-stats/overview")
+    return response
+  }
+
+  async getWorkerStats(): Promise<{ workers: any[] }> {
+    const response = await this.request<{ workers: any[] }>("/queue-stats/workers")
+    return response
+  }
+
+  async getQueueMetrics(): Promise<any> {
+    const response = await this.request("/queue-stats/metrics")
+    return response
+  }
+
+  async getQueueHealth(): Promise<{ status: string; failedJobs: number; stalledJobs: number }> {
+    const response = await this.request<{ status: string; failedJobs: number; stalledJobs: number }>("/queue-stats/health")
+    return response
+  }
+
   // Analytics API
   async getDashboardAnalytics(): Promise<any> {
     const response = await this.request("/analytics/dashboard")

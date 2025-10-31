@@ -27,6 +27,8 @@ const AnimatedGridItemWithDelay: React.FC<AnimatedGridItemProps> = ({ animationD
 )
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
+import { QueueDashboard } from "./components/QueueDashboard"
+import { WorkerStatus } from "./components/WorkerStatus"
 import {
   Play,
   Pause,
@@ -1213,73 +1215,12 @@ export default function JobMonitorPage() {
                       </TabsContent>
 
                       <TabsContent value="queues" className="space-y-4">
-                        {loadingQueues && queues.length === 0 ? (
-                          <div className="text-center py-8">
-                            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                            <p className="text-muted-foreground mt-2">Loading queue statistics...</p>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                            {(queues.length > 0 ? queues : mockQueues).map((queue, index) => (
-                            <AnimatedGridItemWithDelay
-                              key={queue.name}
-                              className="animate-fade-in-up"
-                              animationDelay={index * 100}
-                            >
-                              <Card>
-                                <CardHeader>
-                                  <div className="flex items-center justify-between">
-                                    <CardTitle className="text-lg capitalize">{queue.name.replace("_", " ")}</CardTitle>
-                                    <Badge variant="outline">{queue.workers} workers</Badge>
-                                  </div>
-                                </CardHeader>
-                                <CardContent className="space-y-4">
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                                      <p className="text-2xl font-bold text-blue-600">{queue.active}</p>
-                                      <p className="text-sm text-muted-foreground">Active</p>
-                                    </div>
-                                    <div className="text-center p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
-                                      <p className="text-2xl font-bold text-yellow-600">{queue.waiting}</p>
-                                      <p className="text-sm text-muted-foreground">Waiting</p>
-                                    </div>
-                                  </div>
-                                  <div className="grid grid-cols-2 gap-4">
-                                    <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
-                                      <p className="text-2xl font-bold text-green-600">{queue.completed}</p>
-                                      <p className="text-sm text-muted-foreground">Completed</p>
-                                    </div>
-                                    <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                                      <p className="text-2xl font-bold text-red-600">{queue.failed}</p>
-                                      <p className="text-sm text-muted-foreground">Failed</p>
-                                    </div>
-                                  </div>
-                                  <div className="pt-2 border-t">
-                                    <p className="text-sm text-muted-foreground">Avg Processing Time</p>
-                                    <p className="font-semibold">{queue.avgProcessingTime}</p>
-                                  </div>
-                                </CardContent>
-                              </Card>
-                            </AnimatedGridItemWithDelay>
-                            ))}
-                          </div>
-                        )}
+                        <QueueDashboard />
                       </TabsContent>
 
                       <TabsContent value="workers" className="space-y-4">
-                        {loadingWorkers && workers.length === 0 ? (
-                          <div className="text-center py-8">
-                            <RefreshCw className="h-8 w-8 animate-spin mx-auto text-muted-foreground" />
-                            <p className="text-muted-foreground mt-2">Loading worker statistics...</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-4">
-                            {(workers.length > 0 ? workers : mockWorkers).map((worker, index) => (
-                            <AnimatedGridItemWithDelay
-                              key={worker.id}
-                              className="animate-fade-in-up"
-                              animationDelay={index * 100}
-                            >
+                        <WorkerStatus />
+                      </TabsContent>
                               <Card>
                                 <CardContent className="p-6">
                                   <div className="flex items-start justify-between">

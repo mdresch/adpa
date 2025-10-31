@@ -348,15 +348,17 @@ router.post("/generate-new-version",
       // Save current version to history
       await pool.query(
         `INSERT INTO document_versions 
-         (id, document_id, version, semantic_version, content, created_by, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())`,
+         (id, document_id, version, semantic_version, content, author_id, created_at, change_type, generation_metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)`,
         [
           uuidv4(),
           existingDocumentId,
-          document.version,
+          document.version.toString(),
           currentVersion,
-          document.content,
-          req.user?.id
+          typeof document.content === 'string' ? document.content : JSON.stringify(document.content),
+          req.user?.id,
+          'ai_regeneration',
+          JSON.stringify({ provider, model, temperature })
         ]
       )
 
