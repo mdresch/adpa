@@ -446,6 +446,65 @@ export default function ProjectDetail() {
     return { title: documentName || "Document", sections: ['Overview', 'Details'], framework: 'General' }
   }
 
+  // Handle template selection with conflict check
+  const handleTemplateSelect = async (templateId: string) => {
+    console.log('📋 [TEMPLATE-SELECT] Template selected:', templateId)
+    setSelectedTemplate(templateId)
+    
+    // If no template selected (user cleared selection), return
+    if (!templateId) {
+      return
+    }
+    
+    // Check for template conflict immediately
+    console.log('🔍 [TEMPLATE-SELECT] Checking for conflicts...')
+    try {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const checkUrl = getApiUrl(`/document-generation/check-template`)
+      const checkResp = await fetch(checkUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          projectId,
+          templateId
+        })
+      })
+      
+      if (checkResp.status === 409) {
+        // Template conflict detected!
+        const conflictInfo = await checkResp.json()
+        console.log('⚠️ [TEMPLATE-SELECT] Conflict detected - showing dialog')
+        
+        const template = templates.find(t => t.id === templateId)
+        
+        // We don't have the prompt yet, so we'll build it when needed
+        setConflictData({
+          existingDocument: conflictInfo.existing,
+          templateName: template?.name || 'Unknown Template',
+          generationData: {
+            projectId,
+            templateId,
+            documentName,
+            documentDescription,
+            provider: selectedProvider,
+            model: selectedModel,
+            temperature: aiTemperature,
+            // Note: userPrompt will be built when user selects action
+          }
+        })
+        setConflictDialogOpen(true)
+      } else {
+        console.log('✅ [TEMPLATE-SELECT] No conflict - template is available')
+      }
+    } catch (checkError) {
+      console.log('ℹ️ [TEMPLATE-SELECT] Conflict check failed, proceeding normally')
+      // Continue normally if check fails
+    }
+  }
+
   // Create new document
   const handleCreateDocument = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -860,57 +919,6 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       console.log('  ⚙️ Custom variables:', (hasSettings ? 'settings' : '') + (hasMetadata ? ' metadata' : '') || 'none')
       console.log('  📏 Estimated tokens:', Math.round(aiPrompt.length / 4))
 
-      // 🆕 SMART VERSIONING: Check for template conflict BEFORE generation
-      if (selectedTemplate) {
-        console.log('🔍 [CONFLICT-CHECK] Checking if template already used...')
-        try {
-          const { getApiUrl } = await import('@/lib/api-url')
-          const checkUrl = getApiUrl(`/document-generation/check-template`)
-          const checkResp = await fetch(checkUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-            },
-            body: JSON.stringify({
-              projectId,
-              templateId: selectedTemplate
-            })
-          })
-          
-          if (checkResp.status === 409) {
-            // Template conflict detected!
-            const conflictInfo = await checkResp.json()
-            console.log('⚠️ [CONFLICT] Template already used, showing dialog')
-            
-            const template = templates.find(t => t.id === selectedTemplate)
-            setConflictData({
-              existingDocument: conflictInfo.existing,
-              templateName: template?.name || 'Unknown Template',
-              generationData: {
-                projectId,
-                templateId: selectedTemplate,
-                documentName,
-                documentDescription,
-                provider: selectedProvider,
-                model: selectedModel,
-                temperature: aiTemperature,
-                userPrompt: aiPrompt, // Store the built prompt
-              }
-            })
-            setConflictDialogOpen(true)
-            setCreatingDocument(false)
-            setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
-            return // Stop generation, let user decide
-          }
-          
-          console.log('✅ [CONFLICT-CHECK] No conflict - proceeding with generation')
-        } catch (checkError) {
-          console.log('ℹ️ [CONFLICT-CHECK] Check failed or not available, proceeding with generation')
-          // Continue with generation if check fails (backwards compatibility)
-        }
-      }
-
       // Enqueue AI generation job via jobs API
       let jobId: string | undefined
 
@@ -1237,15 +1245,36 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           console.log('🔄 [CONFLICT-RESOLUTION] Creating new version...')
           setCreatingDocument(true)
           
+          // Build AI prompt if not already provided
+          let aiPrompt = conflictData.generationData.userPrompt
+          
+          if (!aiPrompt) {
+            console.log('🔨 [CONFLICT-RESOLUTION] Building AI prompt...')
+            // Build the prompt using existing logic
+            const templateContent = getTemplateContent(conflictData.generationData.templateId)
+            const sections = Array.isArray(templateContent.sections) ? templateContent.sections : []
+            const projectDesc = project?.description || 'No project description available.'
+            const projectName = project?.name || 'Unknown Project'
+            const framework = project?.framework || 'General'
+            
+            aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
+
+**Project Name**: ${projectName}
+**Framework**: ${framework}
+**Description**: ${projectDesc}
+
+Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a production-ready, stakeholder-presentable document with comprehensive coverage of all sections.`
+          }
+          
           // Generate as new version of existing document
           const result = await apiClient.generateDocumentNewVersion({
             existingDocumentId: conflictData.existingDocument.id,
             projectId: conflictData.generationData.projectId,
             templateId: conflictData.generationData.templateId,
-            userPrompt: conflictData.generationData.userPrompt,
-            provider: conflictData.generationData.provider,
-            model: conflictData.generationData.model,
-            temperature: conflictData.generationData.temperature,
+            userPrompt: aiPrompt,
+            provider: conflictData.generationData.provider || selectedProvider,
+            model: conflictData.generationData.model || selectedModel,
+            temperature: conflictData.generationData.temperature || aiTemperature,
           })
           
           toast.success(
@@ -2018,7 +2047,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             aria-label="Select Template"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             value={selectedTemplate}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTemplate(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleTemplateSelect(e.target.value)}
                             required
                           >
                             <option value="">Choose a template</option>
