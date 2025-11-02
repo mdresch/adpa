@@ -1,0 +1,525 @@
+/**
+ * Task Management Routes
+ * 
+ * API endpoints for:
+ * - WBS import from AI-extracted documents
+ * - Task CRUD operations
+ * - Resource scheduling and assignment
+ * - Task variance reporting
+ * 
+ * Migration: 208_tasks_scheduling_wbs_import.sql
+ */
+
+import express from 'express'
+import Joi from 'joi'
+import { authenticateToken, requirePermission } from '../middleware/auth'
+import { validate } from '../middleware/validation'
+import { childLogger } from '../utils/logger'
+import * as wbsImportService from '../services/wbsImportService'
+import * as taskManagementService from '../services/taskManagementService'
+import * as taskSchedulingService from '../services/taskSchedulingService'
+
+const router = express.Router()
+
+// ================================================================
+// WBS IMPORT FROM AI EXTRACTION
+// ================================================================
+
+/**
+ * POST /api/tasks/import-wbs
+ * Import WBS from AI-extracted document entities to project tasks
+ */
+router.post('/import-wbs',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  validate(Joi.object({
+    projectId: Joi.string().uuid().required(),
+    documentId: Joi.string().uuid().required(),
+    options: Joi.object({
+      createHierarchy: Joi.boolean().optional(),
+      importDependencies: Joi.boolean().optional(),
+      autoMatchRoles: Joi.boolean().optional(),
+      overwriteExisting: Joi.boolean().optional()
+    }).optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user?.id
+      const { projectId, documentId, options } = req.body
+      
+      const result = await wbsImportService.importWBSFromDocument(
+        projectId,
+        documentId,
+        userId,
+        options || {}
+      )
+      
+      res.status(201).json({
+        success: true,
+        data: result,
+        message: `Imported ${result.tasksCreated} tasks from WBS`
+      })
+    } catch (error: any) {
+      log.error('WBS import failed', error)
+      res.status(500).json({ 
+        error: error.message || 'Failed to import WBS'
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/wbs-import-history/:projectId
+ * Get WBS import history for a project
+ */
+router.get('/wbs-import-history/:projectId',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const history = await wbsImportService.getWBSImportHistory(req.params.projectId)
+      
+      res.json({ success: true, data: history })
+    } catch (error) {
+      log.error('Failed to get WBS import history', error)
+      res.status(500).json({ error: 'Failed to get import history' })
+    }
+  }
+)
+
+// ================================================================
+// TASK MANAGEMENT
+// ================================================================
+
+/**
+ * GET /api/tasks/project/:projectId
+ * Get all tasks for a project
+ */
+router.get('/project/:projectId',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const filters = {
+        status: req.query.status as string | undefined,
+        phase: req.query.phase as string | undefined,
+        assignedToUserId: req.query.assignedTo as string | undefined,
+        parentTaskId: req.query.parentId as string | undefined
+      }
+      
+      const tasks = await taskManagementService.getProjectTasks(req.params.projectId, filters)
+      
+      res.json({ success: true, data: tasks })
+    } catch (error) {
+      log.error('Failed to get project tasks', error)
+      res.status(500).json({ error: 'Failed to get tasks' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id
+ * Get task by ID
+ */
+router.get('/:id',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const task = await taskManagementService.getTaskById(req.params.id)
+      
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' })
+      }
+      
+      res.json({ success: true, data: task })
+    } catch (error) {
+      log.error('Failed to get task', error)
+      res.status(500).json({ error: 'Failed to get task' })
+    }
+  }
+)
+
+/**
+ * POST /api/tasks
+ * Create new task
+ */
+router.post('/',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  validate(Joi.object({
+    projectId: Joi.string().uuid().required(),
+    taskName: Joi.string().max(255).required(),
+    description: Joi.string().optional(),
+    estimatedHours: Joi.number().min(0).optional(),
+    requiredRoleId: Joi.string().uuid().optional(),
+    plannedStartDate: Joi.date().optional(),
+    plannedEndDate: Joi.date().optional(),
+    priority: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+    phase: Joi.string().optional(),
+    parentTaskId: Joi.string().uuid().optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user?.id
+      const task = await taskManagementService.createTask(req.body, userId)
+      
+      res.status(201).json({ success: true, data: task })
+    } catch (error) {
+      log.error('Failed to create task', error)
+      res.status(500).json({ error: 'Failed to create task' })
+    }
+  }
+)
+
+/**
+ * PUT /api/tasks/:id
+ * Update task
+ */
+router.put('/:id',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  validate(Joi.object({
+    taskName: Joi.string().max(255).optional(),
+    description: Joi.string().optional(),
+    estimatedHours: Joi.number().min(0).optional(),
+    requiredRoleId: Joi.string().uuid().optional(),
+    plannedStartDate: Joi.date().optional(),
+    plannedEndDate: Joi.date().optional(),
+    priority: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+    phase: Joi.string().optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const task = await taskManagementService.updateTask(req.params.id, req.body)
+      
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' })
+      }
+      
+      res.json({ success: true, data: task })
+    } catch (error) {
+      log.error('Failed to update task', error)
+      res.status(500).json({ error: 'Failed to update task' })
+    }
+  }
+)
+
+/**
+ * DELETE /api/tasks/:id
+ * Delete task
+ */
+router.delete('/:id',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      await taskManagementService.deleteTask(req.params.id)
+      
+      res.json({ success: true, message: 'Task deleted' })
+    } catch (error) {
+      log.error('Failed to delete task', error)
+      res.status(500).json({ error: 'Failed to delete task' })
+    }
+  }
+)
+
+/**
+ * PUT /api/tasks/:id/progress
+ * Update task progress
+ */
+router.put('/:id/progress',
+  authenticateToken,
+  validate(Joi.object({
+    percentComplete: Joi.number().min(0).max(100).required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      await taskManagementService.updateTaskProgress(
+        req.params.id,
+        req.body.percentComplete
+      )
+      
+      res.json({ success: true, message: 'Task progress updated' })
+    } catch (error) {
+      log.error('Failed to update task progress', error)
+      res.status(500).json({ error: 'Failed to update progress' })
+    }
+  }
+)
+
+// ================================================================
+// RESOURCE SCHEDULING & ASSIGNMENT
+// ================================================================
+
+/**
+ * POST /api/tasks/:id/assign
+ * Assign resource to task
+ */
+router.post('/:id/assign',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  validate(Joi.object({
+    resourceAssignmentId: Joi.string().uuid().required(),
+    plannedHours: Joi.number().min(0.1).required(),
+    scheduledStartDate: Joi.date().optional(),
+    scheduledEndDate: Joi.date().optional(),
+    allocationPercentage: Joi.number().min(0).max(100).optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user?.id
+      const assignment = await taskSchedulingService.assignResourceToTask(
+        req.params.id,
+        req.body.resourceAssignmentId,
+        req.body.plannedHours,
+        userId,
+        {
+          scheduledStartDate: req.body.scheduledStartDate,
+          scheduledEndDate: req.body.scheduledEndDate,
+          allocationPercentage: req.body.allocationPercentage
+        }
+      )
+      
+      res.status(201).json({ success: true, data: assignment })
+    } catch (error) {
+      log.error('Failed to assign resource', error)
+      res.status(500).json({ error: 'Failed to assign resource to task' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id/assignments
+ * Get resource assignments for a task
+ */
+router.get('/:id/assignments',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const assignments = await taskSchedulingService.getTaskAssignments(req.params.id)
+      
+      res.json({ success: true, data: assignments })
+    } catch (error) {
+      log.error('Failed to get task assignments', error)
+      res.status(500).json({ error: 'Failed to get assignments' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id/suggest-resources
+ * Get suggested resources for task assignment
+ */
+router.get('/:id/suggest-resources',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const limit = parseInt(req.query.limit as string) || 5
+      const suggestions = await taskSchedulingService.suggestResourcesForTask(
+        req.params.id,
+        limit
+      )
+      
+      res.json({ success: true, data: suggestions })
+    } catch (error) {
+      log.error('Failed to get resource suggestions', error)
+      res.status(500).json({ error: 'Failed to get suggestions' })
+    }
+  }
+)
+
+/**
+ * DELETE /api/tasks/assignments/:assignmentId
+ * Unassign resource from task
+ */
+router.delete('/assignments/:assignmentId',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      await taskSchedulingService.unassignResourceFromTask(req.params.assignmentId)
+      
+      res.json({ success: true, message: 'Resource unassigned from task' })
+    } catch (error: any) {
+      log.error('Failed to unassign resource', error)
+      res.status(error.message?.includes('approved time entries') ? 400 : 500)
+         .json({ error: error.message || 'Failed to unassign resource' })
+    }
+  }
+)
+
+// ================================================================
+// MY TASKS (Employee View)
+// ================================================================
+
+/**
+ * GET /api/tasks/my-tasks
+ * Get tasks assigned to current user
+ */
+router.get('/my-tasks',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user?.id
+      const filters = {
+        projectId: req.query.projectId as string | undefined,
+        status: req.query.status as string | undefined,
+        startDate: req.query.startDate ? new Date(req.query.startDate as string) : undefined,
+        endDate: req.query.endDate ? new Date(req.query.endDate as string) : undefined
+      }
+      
+      const tasks = await taskSchedulingService.getMyAssignedTasks(userId, filters)
+      
+      res.json({ success: true, data: tasks })
+    } catch (error) {
+      log.error('Failed to get my tasks', error)
+      res.status(500).json({ error: 'Failed to get tasks' })
+    }
+  }
+)
+
+// ================================================================
+// RESOURCE WORKLOAD & CAPACITY
+// ================================================================
+
+/**
+ * GET /api/tasks/resource-workload
+ * Get resource workload summary
+ */
+router.get('/resource-workload',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const projectId = req.query.projectId as string | undefined
+      const userId = req.query.userId as string | undefined
+      
+      const workload = await taskSchedulingService.getResourceWorkload(projectId, userId)
+      
+      res.json({ success: true, data: workload })
+    } catch (error) {
+      log.error('Failed to get resource workload', error)
+      res.status(500).json({ error: 'Failed to get workload' })
+    }
+  }
+)
+
+/**
+ * POST /api/tasks/check-availability
+ * Check if resource has availability for task
+ */
+router.post('/check-availability',
+  authenticateToken,
+  validate(Joi.object({
+    userId: Joi.string().uuid().required(),
+    projectId: Joi.string().uuid().required(),
+    requiredHours: Joi.number().min(0).required(),
+    startDate: Joi.date().optional(),
+    endDate: Joi.date().optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const availability = await taskSchedulingService.checkResourceAvailability(
+        req.body.userId,
+        req.body.projectId,
+        req.body.requiredHours,
+        req.body.startDate,
+        req.body.endDate
+      )
+      
+      res.json({ success: true, data: availability })
+    } catch (error) {
+      log.error('Failed to check availability', error)
+      res.status(500).json({ error: 'Failed to check availability' })
+    }
+  }
+)
+
+// ================================================================
+// TASK HIERARCHY & DEPENDENCIES
+// ================================================================
+
+/**
+ * GET /api/tasks/project/:projectId/hierarchy
+ * Get task hierarchy for WBS display
+ */
+router.get('/project/:projectId/hierarchy',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const hierarchy = await taskManagementService.getTaskHierarchy(req.params.projectId)
+      
+      res.json({ success: true, data: hierarchy })
+    } catch (error) {
+      log.error('Failed to get task hierarchy', error)
+      res.status(500).json({ error: 'Failed to get hierarchy' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id/dependencies
+ * Get task dependencies
+ */
+router.get('/:id/dependencies',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const dependencies = await taskManagementService.getTaskDependencies(req.params.id)
+      
+      res.json({ success: true, data: dependencies })
+    } catch (error) {
+      log.error('Failed to get dependencies', error)
+      res.status(500).json({ error: 'Failed to get dependencies' })
+    }
+  }
+)
+
+/**
+ * POST /api/tasks/:id/dependencies
+ * Create task dependency
+ */
+router.post('/:id/dependencies',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  validate(Joi.object({
+    dependsOnTaskId: Joi.string().uuid().required(),
+    dependencyType: Joi.string().valid(
+      'finish-to-start', 'start-to-start', 'finish-to-finish', 'start-to-finish'
+    ).optional(),
+    lagDays: Joi.number().integer().optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const dependency = await taskManagementService.createTaskDependency(
+        req.params.id,
+        req.body.dependsOnTaskId,
+        req.body.dependencyType,
+        req.body.lagDays
+      )
+      
+      res.status(201).json({ success: true, data: dependency })
+    } catch (error) {
+      log.error('Failed to create dependency', error)
+      res.status(500).json({ error: 'Failed to create dependency' })
+    }
+  }
+)
+
+export default router
+

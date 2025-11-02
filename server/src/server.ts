@@ -44,6 +44,7 @@ import adobePdfRoutes from "./routes/adobe-pdf"
 import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
 import costManagementRoutes from "./routes/costManagement"
+import tasksRoutes from "./routes/tasks"
 // import ecsAiRoutes from "./routes/ecs-ai"
 // import quantumStabilityRoutes from "./routes/quantum-stability"
 // import speedOfLightRoutes from "./routes/speed-of-light"
@@ -202,6 +203,7 @@ app.use("/api/integrations/ibabs", ibabsRoutes)
 app.use("/api/templates", templateRoutes)
 app.use("/api/template-analytics", templateAnalyticsRoutes)
 app.use("/api/cost-management", costManagementRoutes)
+app.use("/api/tasks", tasksRoutes)
 app.use("/api/template-stats", templateStatsRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
