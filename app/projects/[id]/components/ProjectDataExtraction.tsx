@@ -14,7 +14,7 @@ import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
   projectId: string
-  documents: Array<{ id: string; name: string }>
+  documents: Array<{ id: string; name: string; title?: string }>
 }
 
 interface EntityCounts {
@@ -51,11 +51,41 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   // WBS Import
   const [isImportingWBS, setIsImportingWBS] = useState(false)
   const [lastExtractedDocumentId, setLastExtractedDocumentId] = useState<string | null>(null)
+  
+  // All documents (not paginated) for extraction selection
+  const [allDocuments, setAllDocuments] = useState<Array<{ id: string; name: string; title?: string }>>([])
+  const [loadingAllDocuments, setLoadingAllDocuments] = useState(false)
+  const [documentSearchTerm, setDocumentSearchTerm] = useState("")
 
   useEffect(() => {
     void fetchEntityCounts()
     void fetchAIProviders()
   }, [projectId])
+  
+  const fetchAllDocuments = async () => {
+    try {
+      setLoadingAllDocuments(true)
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/documents?limit=1000`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        }
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        setAllDocuments(data.documents || data.data || [])
+      }
+    } catch (error) {
+      console.error('Failed to fetch all documents:', error)
+      // Fallback to provided documents if fetch fails
+      setAllDocuments(documents)
+    } finally {
+      setLoadingAllDocuments(false)
+    }
+  }
 
   const fetchEntityCounts = async () => {
     try {
@@ -293,6 +323,15 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     if (!entityCounts) return 0
     return Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
   }
+  
+  const getFilteredDocuments = () => {
+    if (!documentSearchTerm) return allDocuments
+    
+    const searchLower = documentSearchTerm.toLowerCase()
+    return allDocuments.filter(doc => 
+      (doc.title || doc.name).toLowerCase().includes(searchLower)
+    )
+  }
 
   const hasData = getTotalEntities() > 0
 
@@ -326,7 +365,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             </CardDescription>
           </div>
           <Button
-            onClick={() => setShowExtractionDialog(true)}
+            onClick={() => {
+              setShowExtractionDialog(true)
+              void fetchAllDocuments()
+            }}
             disabled={loading || documents.length === 0}
             size="sm"
             className="gap-2"
@@ -529,41 +571,101 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               </div>
 
               <div className="space-y-2">
-                <Label>Document Selection (Optional)</Label>
-                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                  <div className="flex items-center space-x-2 pb-2 border-b">
-                    <Checkbox
-                      id="select-all"
-                      checked={selectedDocuments.length === documents.length}
-                      onCheckedChange={(checked) => {
-                        setSelectedDocuments(checked ? documents.map(d => d.id) : [])
-                      }}
+                <div className="flex items-center justify-between">
+                  <Label>Document Selection (Optional)</Label>
+                  {!loadingAllDocuments && allDocuments.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {allDocuments.length} documents available
+                    </span>
+                  )}
+                </div>
+                
+                {/* Search Input */}
+                {allDocuments.length > 10 && (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search documents..."
+                      value={documentSearchTerm}
+                      onChange={(e) => setDocumentSearchTerm(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                      Select All ({documents.length} documents)
-                    </label>
+                    {documentSearchTerm && (
+                      <button
+                        onClick={() => setDocumentSearchTerm("")}
+                        className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={doc.id}
-                        checked={selectedDocuments.includes(doc.id)}
-                        onCheckedChange={(checked) => {
-                          setSelectedDocuments(
-                            checked
-                              ? [...selectedDocuments, doc.id]
-                              : selectedDocuments.filter((id) => id !== doc.id)
-                          )
-                        }}
-                      />
-                      <label htmlFor={doc.id} className="text-sm cursor-pointer">
-                        {doc.name}
-                      </label>
+                )}
+                
+                <div className="border rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
+                  {loadingAllDocuments ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
+                      <span className="text-sm text-muted-foreground">Loading all documents...</span>
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      <div className="flex items-center space-x-2 pb-2 border-b sticky top-0 bg-white dark:bg-gray-950">
+                        <Checkbox
+                          id="select-all"
+                          checked={getFilteredDocuments().length > 0 && 
+                                   getFilteredDocuments().every(d => selectedDocuments.includes(d.id))}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              // Add all filtered documents to selection
+                              const filteredIds = getFilteredDocuments().map(d => d.id)
+                              setSelectedDocuments([...new Set([...selectedDocuments, ...filteredIds])])
+                            } else {
+                              // Remove all filtered documents from selection
+                              const filteredIds = getFilteredDocuments().map(d => d.id)
+                              setSelectedDocuments(selectedDocuments.filter(id => !filteredIds.includes(id)))
+                            }
+                          }}
+                        />
+                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                          Select All 
+                          {documentSearchTerm 
+                            ? ` (${getFilteredDocuments().length} filtered)` 
+                            : ` (${allDocuments.length} documents)`
+                          }
+                        </label>
+                      </div>
+                      {getFilteredDocuments().length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          {documentSearchTerm 
+                            ? `No documents match "${documentSearchTerm}"`
+                            : 'No documents available'
+                          }
+                        </p>
+                      ) : (
+                        getFilteredDocuments().map((doc) => (
+                          <div key={doc.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={doc.id}
+                              checked={selectedDocuments.includes(doc.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedDocuments(
+                                  checked
+                                    ? [...selectedDocuments, doc.id]
+                                    : selectedDocuments.filter((id) => id !== doc.id)
+                                )
+                              }}
+                            />
+                            <label htmlFor={doc.id} className="text-sm cursor-pointer flex-1 truncate" title={doc.title || doc.name}>
+                              {doc.title || doc.name}
+                            </label>
+                          </div>
+                        ))
+                      )}
+                    </>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Leave empty to analyze all project documents
+                  Leave empty to analyze all {allDocuments.length || 0} project documents
                 </p>
               </div>
 
