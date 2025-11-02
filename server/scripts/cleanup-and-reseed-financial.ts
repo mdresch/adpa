@@ -20,11 +20,20 @@ if (!connectionString) {
   process.exit(1)
 }
 
+// Parse connection string to determine if SSL is needed
+const dbUrl = new URL(connectionString)
+const hostname = dbUrl.hostname.toLowerCase()
+const needsSSL = hostname.includes('supabase.co') || 
+                 hostname.includes('neon.tech') ||
+                 hostname.includes('azure') ||
+                 hostname.includes('amazonaws.com') ||
+                 hostname.includes('render.com') ||
+                 process.env.DB_SSL === 'true' ||
+                 connectionString.includes('sslmode=require')
+
 const pool = new Pool({
   connectionString,
-  ssl: connectionString.includes('supabase.co') || connectionString.includes('sslmode=require')
-    ? { rejectUnauthorized: false }
-    : false
+  ssl: needsSSL ? { rejectUnauthorized: false } : false
 })
 
 async function cleanup() {
