@@ -643,7 +643,8 @@ async function testApiConnection(provider: any, config: any, startTime: number) 
     let testUrl = cleanEndpoint
     
     // Build test URL based on provider type
-    if (providerType === 'mistral' || providerType === 'groq' || providerType === 'openai') {
+    if (providerType === 'mistral' || providerType === 'groq' || providerType === 'openai' || 
+        providerType === 'deepseek' || providerType === 'moonshot') {
       testUrl = `${cleanEndpoint}/models`
     }
     
@@ -660,7 +661,8 @@ async function testApiConnection(provider: any, config: any, startTime: number) 
     }
     
     // Add authentication header for OpenAI-compatible APIs
-    if ((providerType === 'groq' || providerType === 'mistral' || providerType === 'openai') && config.apiKey) {
+    if ((providerType === 'groq' || providerType === 'mistral' || providerType === 'openai' ||
+         providerType === 'deepseek' || providerType === 'moonshot') && config.apiKey) {
       headers['Authorization'] = `Bearer ${config.apiKey}`
     }
     
