@@ -633,6 +633,70 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
   }
 })
 
+// Get document version history
+router.get("/:id/versions", authenticateToken, validateParams(Joi.object({ id: schemas.uuid })), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+    
+    log.info(`Fetching version history for document ${id}`)
+
+    // Get all versions from document_versions table
+    const versionsResult = await pool.query(
+      `SELECT 
+        dv.id,
+        dv.document_id,
+        dv.version,
+        dv.semantic_version,
+        dv.content,
+        dv.change_description as changes,
+        dv.change_type,
+        dv.created_at,
+        dv.author_id,
+        u.name as author_name,
+        dv.generation_metadata
+       FROM document_versions dv
+       LEFT JOIN users u ON dv.author_id = u.id
+       WHERE dv.document_id = $1
+       ORDER BY dv.created_at DESC`,
+      [id]
+    )
+    
+    // Also get current document version
+    const currentDocResult = await pool.query(
+      `SELECT 
+        d.id,
+        d.id as document_id,
+        d.version,
+        d.semantic_version,
+        d.content,
+        'Current version' as changes,
+        'current' as change_type,
+        d.updated_at as created_at,
+        d.updated_by as author_id,
+        u.name as author_name,
+        d.generation_metadata
+       FROM documents d
+       LEFT JOIN users u ON d.updated_by = u.id
+       WHERE d.id = $1 AND d.deleted_at IS NULL`,
+      [id]
+    )
+    
+    // Combine versions: current version + historical versions
+    const allVersions = [
+      ...(currentDocResult.rows.length > 0 ? currentDocResult.rows : []),
+      ...versionsResult.rows
+    ]
+    
+    log.info(`Found ${versionsResult.rows.length} historical versions + ${currentDocResult.rows.length} current version`)
+
+    res.json(allVersions)
+  } catch (error) {
+    log.error("Failed to get document versions:", error)
+    res.status(500).json({ error: "Failed to retrieve document versions" })
+  }
+})
+
 // Create document
 router.post("/project/:projectId", 
   authenticateToken, 
