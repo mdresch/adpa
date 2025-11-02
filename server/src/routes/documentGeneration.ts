@@ -378,9 +378,9 @@ router.post("/generate-new-version",
              '{regeneration}',
              jsonb_build_object(
                'regenerated_at', NOW(),
-               'previous_version', $7,
+               'previous_version', $7::text,
                'reason', 'template_regeneration',
-               'ai_provider', $8
+               'ai_provider', $8::text
              )
            )
          WHERE id = $9
