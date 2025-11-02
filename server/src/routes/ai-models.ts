@@ -644,7 +644,7 @@ async function testApiConnection(provider: any, config: any, startTime: number) 
     
     // Build test URL based on provider type
     if (providerType === 'mistral' || providerType === 'groq' || providerType === 'openai' || 
-        providerType === 'deepseek' || providerType === 'moonshot') {
+        providerType === 'deepseek' || providerType === 'moonshot' || providerType === 'xai') {
       testUrl = `${cleanEndpoint}/models`
     }
     
@@ -662,7 +662,7 @@ async function testApiConnection(provider: any, config: any, startTime: number) 
     
     // Add authentication header for OpenAI-compatible APIs
     if ((providerType === 'groq' || providerType === 'mistral' || providerType === 'openai' ||
-         providerType === 'deepseek' || providerType === 'moonshot') && config.apiKey) {
+         providerType === 'deepseek' || providerType === 'moonshot' || providerType === 'xai') && config.apiKey) {
       headers['Authorization'] = `Bearer ${config.apiKey}`
     }
     
@@ -1146,6 +1146,12 @@ async function testModelAvailability(provider: any, config: any, model: any, sta
               'kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'
             ]
             break
+          case 'xai':
+            // xAI (X.AI) models - Grok series
+            availableModels = [
+              'grok-beta', 'grok-vision-beta'
+            ]
+            break
           default:
             availableModels = []
         }
@@ -1404,6 +1410,8 @@ function getDefaultEndpoint(providerType: string): string {
       return 'https://api.deepseek.com/v1'
     case 'moonshot':
       return 'https://api.moonshot.ai/v1'
+    case 'xai':
+      return 'https://api.x.ai/v1'
     case 'ollama':
       return 'http://localhost:11434'
     default:
@@ -1429,6 +1437,8 @@ function getAuthTestEndpoint(providerType: string, baseEndpoint: string): string
     case 'deepseek':
       return `${cleanEndpoint}/models`
     case 'moonshot':
+      return `${cleanEndpoint}/models`
+    case 'xai':
       return `${cleanEndpoint}/models`
     case 'ollama':
       return `${cleanEndpoint}/api/tags`

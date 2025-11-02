@@ -19,7 +19,7 @@ const router = express.Router()
  */
 const extractSchema = Joi.object({
   projectId: Joi.string().uuid().required(),
-  aiProvider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'mistral', 'groq', 'ollama').optional(),
+  aiProvider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'xai', 'mistral', 'groq', 'ollama').optional(),
   aiModel: Joi.string().optional(),
   documentIds: Joi.array().items(Joi.string().uuid()).optional()
 })

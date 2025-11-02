@@ -15,7 +15,7 @@ import AnalyticsTrackingService from "./analyticsTrackingService"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "ollama"
+  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "ollama"
   apiKey: string
   configuration?: any
 }
@@ -832,6 +832,7 @@ class AIService {
       'azure': 'gpt-4',
       'deepseek': 'deepseek-chat',
       'moonshot': 'kimi-k2-0905-preview',
+      'xai': 'grok-beta',
     }
 
     // Define provider-specific model families
@@ -844,6 +845,7 @@ class AIService {
       'azure': ['gpt-', 'text-'],
       'deepseek': ['deepseek-'],
       'moonshot': ['kimi-', 'moonshot-'],
+      'xai': ['grok-'],
     }
 
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
@@ -941,6 +943,8 @@ class AIService {
         return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
       case "moonshot":
         return ["kimi-k2-0905-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+      case "xai":
+        return ["grok-beta", "grok-vision-beta"]
       default:
         return []
     }
@@ -1041,6 +1045,7 @@ class AIService {
       'mistral': 0.70,      // Mistral Small
       'deepseek': 0.60,     // DeepSeek Chat (competitive pricing)
       'moonshot': 12.00,    // Kimi K2 128K context
+      'xai': 5.00,          // xAI Grok (estimated pricing)
       'groq': 0.00,         // Groq free tier
       'azure': 30.00,       // Similar to OpenAI
       'ollama': 0.00,       // Local deployment - FREE

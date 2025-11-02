@@ -1263,6 +1263,7 @@ router.get(
           case 'azure':
           case 'deepseek':
           case 'moonshot':
+          case 'xai':
             // For these providers, return the predefined models list
             // Model discovery API is either not available or requires special handling
             const predefinedModels: Record<string, any[]> = {
@@ -1291,6 +1292,10 @@ router.get(
                 { id: 'moonshot-v1-8k', name: 'Moonshot v1 8K', description: '8K context window', context_window: 8192 },
                 { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K', description: '32K context window', context_window: 32768 },
                 { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K', description: '128K context window', context_window: 131072 }
+              ],
+              'xai': [
+                { id: 'grok-beta', name: 'Grok Beta', description: 'Latest Grok model with enhanced reasoning', context_window: 128000 },
+                { id: 'grok-vision-beta', name: 'Grok Vision Beta', description: 'Grok with vision capabilities', context_window: 128000 }
               ]
             }
             
