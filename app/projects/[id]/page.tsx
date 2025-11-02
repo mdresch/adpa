@@ -154,6 +154,9 @@ export default function ProjectDetail() {
   const projectId = params?.id as string
   const router = useRouter()
   const { isAuthenticated } = useAuth()
+  
+  // Join project WebSocket room for real-time updates
+  useProjectUpdates(projectId)
 
   const [project, setProject] = useState<ExtendedProject | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])

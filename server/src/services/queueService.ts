@@ -1277,15 +1277,27 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
   try {
     const jobId = data.jobId
     
-    // Extract project info for process-flow jobs
+    // Extract project info for ALL job types
     let projectId = null
     let projectName = null
     let templateName = null
     
+    // Extract projectId from different possible locations based on job type
     if (type === 'process-flow' && data.config?.projectId) {
       projectId = data.config.projectId
-      
-      // Look up project name from database
+    } else if (data.projectId) {
+      // ai-generate, baseline-extract, etc.
+      projectId = data.projectId
+    } else if (data.variables?.project_id) {
+      // From variables
+      projectId = data.variables.project_id
+    } else if (data.project_id) {
+      // Alternative naming
+      projectId = data.project_id
+    }
+    
+    // Look up project and template names if we have IDs
+    if (projectId) {
       try {
         const projectResult = await pool.query(
           'SELECT name FROM projects WHERE id = $1',
@@ -1294,19 +1306,24 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
         if (projectResult.rows.length > 0) {
           projectName = projectResult.rows[0].name
         }
-        
-        // Look up template name if templateId is provided
-        if (data.config?.templateId) {
-          const templateResult = await pool.query(
-            'SELECT name FROM templates WHERE id = $1',
-            [data.config.templateId]
-          )
-          if (templateResult.rows.length > 0) {
-            templateName = templateResult.rows[0].name
-          }
+      } catch (err) {
+        logger.warn('Failed to lookup project name for job:', err)
+      }
+    }
+    
+    // Extract template ID and look up name
+    const templateId = data.template_id || data.config?.templateId || data.variables?.template_id || null
+    if (templateId) {
+      try {
+        const templateResult = await pool.query(
+          'SELECT name FROM templates WHERE id = $1',
+          [templateId]
+        )
+        if (templateResult.rows.length > 0) {
+          templateName = templateResult.rows[0].name
         }
       } catch (err) {
-        logger.warn('Failed to lookup project/template name for job:', err)
+        logger.warn('Failed to lookup template name for job:', err)
       }
     }
     

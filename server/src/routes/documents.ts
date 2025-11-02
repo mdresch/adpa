@@ -441,8 +441,8 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
 
     const result = await pool.query(query, params)
 
-    // Get total count
-    let countQuery = "SELECT COUNT(*) FROM documents WHERE project_id = $1"
+    // Get total count (must match WHERE conditions of main query)
+    let countQuery = "SELECT COUNT(*) FROM documents WHERE project_id = $1 AND deleted_at IS NULL AND parent_document_id IS NULL"
     const countParams = [projectId]
     let countParamCount = 1
 
@@ -494,7 +494,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
       return doc
     })
 
-    return res.json({
+    res.json({
       documents,
       pagination: {
         page: Number(page),
