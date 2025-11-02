@@ -953,6 +953,10 @@ async function testAuthentication(provider: any, config: any, startTime: number)
     if (providerType === 'azure') {
       // Azure AI Foundry uses api-key header instead of Bearer token
       headers['api-key'] = apiKey
+    } else if (providerType === 'anthropic') {
+      // Anthropic uses x-api-key header
+      headers['x-api-key'] = apiKey
+      headers['anthropic-version'] = '2023-06-01'
     } else {
       // Other providers use Bearer token
       headers['Authorization'] = `Bearer ${apiKey}`
@@ -965,6 +969,49 @@ async function testAuthentication(provider: any, config: any, startTime: number)
     logger.info(`API Key configured: ${!!apiKey}`)
     logger.info(`API Key length: ${apiKey ? apiKey.length : 0}`)
     
+    // Special handling for Anthropic - requires POST with body
+    if (providerType === 'anthropic') {
+      const minimalBody = {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "test" }]
+      }
+      
+      const response = await fetch(authEndpoint, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(minimalBody),
+        signal: AbortSignal.timeout(15000)
+      })
+      
+      const responseTime = Date.now() - startTime
+      
+      // Anthropic returns 200 for success, even for minimal test
+      if (response.ok) {
+        return {
+          success: true,
+          response: "✅ API key authentication successful",
+          tokensUsed: 1, // Minimal test
+          error: null,
+          responseTime: responseTime,
+          timestamp: new Date().toISOString()
+        }
+      } else if (response.status === 401) {
+        return {
+          success: false,
+          response: "❌ API key authentication failed (invalid key)",
+          tokensUsed: 0,
+          error: 'Invalid API key',
+          responseTime: responseTime,
+          timestamp: new Date().toISOString()
+        }
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`Authentication test failed (${response.status} ${response.statusText}) - ${errorText}`)
+      }
+    }
+    
+    // Standard GET request for other providers
     const response = await fetch(authEndpoint, {
       method: 'GET',
       headers: headers,
@@ -1434,6 +1481,9 @@ function getAuthTestEndpoint(providerType: string, baseEndpoint: string): string
       return `${cleanEndpoint}/models`
     case 'groq':
       return `${cleanEndpoint}/models`
+    case 'anthropic':
+      // Anthropic doesn't have a /models endpoint - use /v1/messages with minimal call
+      return `${cleanEndpoint}/v1/messages`
     case 'deepseek':
       return `${cleanEndpoint}/models`
     case 'moonshot':
