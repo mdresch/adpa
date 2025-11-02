@@ -60,27 +60,34 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   useEffect(() => {
     void fetchEntityCounts()
     void fetchAIProviders()
-  }, [projectId])
+    
+    // Initialize with provided documents
+    if (documents && documents.length > 0) {
+      setAllDocuments(documents)
+    }
+  }, [projectId, documents])
   
   const fetchAllDocuments = async () => {
     try {
       setLoadingAllDocuments(true)
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/projects/${projectId}/documents?limit=1000`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          }
-        }
-      )
       
-      if (response.ok) {
-        const data = await response.json()
-        setAllDocuments(data.documents || data.data || [])
-      }
+      // Use apiClient to get documents (same method as parent component)
+      const documentsData = await apiClient.getProjectDocuments(projectId, { 
+        page: 1, 
+        limit: 1000 
+      })
+      
+      console.log('[EXTRACTION] Fetched documents:', documentsData)
+      
+      const docs = documentsData.documents || documentsData.data || []
+      setAllDocuments(docs)
+      
+      console.log('[EXTRACTION] Set allDocuments:', docs.length)
+      
     } catch (error) {
-      console.error('Failed to fetch all documents:', error)
+      console.error('[EXTRACTION] Failed to fetch all documents:', error)
       // Fallback to provided documents if fetch fails
+      console.log('[EXTRACTION] Falling back to provided documents:', documents.length)
       setAllDocuments(documents)
     } finally {
       setLoadingAllDocuments(false)
