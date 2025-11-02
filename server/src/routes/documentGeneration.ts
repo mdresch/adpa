@@ -345,11 +345,12 @@ router.post("/generate-new-version",
       const newVersion = semanticVersionService.getNextAIVersion(currentVersion)
       const newVersionNumber = document.version + 1
 
-      // Save current version to history
+      // Save current version to history (if not already saved)
       await pool.query(
         `INSERT INTO document_versions 
          (id, document_id, version, semantic_version, content, author_id, created_at, change_type, generation_metadata)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)`,
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8)
+         ON CONFLICT (document_id, version) DO NOTHING`,
         [
           uuidv4(),
           existingDocumentId,
@@ -361,6 +362,8 @@ router.post("/generate-new-version",
           JSON.stringify({ provider, model, temperature })
         ]
       )
+      
+      log.info(`Version ${currentVersion} saved to history (or already exists)`)
 
       // Update document with new version
       const updateResult = await pool.query(
