@@ -154,9 +154,7 @@ export default function ProjectDetail() {
   const projectId = params?.id as string
   const router = useRouter()
   const { isAuthenticated } = useAuth()
-  
-  // Join project WebSocket room for real-time updates
-  useProjectUpdates(projectId)
+  const { joinRoom, leaveRoom } = useWebSocket()
 
   const [project, setProject] = useState<ExtendedProject | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -1783,6 +1781,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Listen for document creation events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
+    // Join the project room to receive events
+    const room = `project:${projectId}`
+    joinRoom(room)
+    
     const handleDocumentCreated = (data: { document?: { project_id: string; name: string } }) => {
       try {
         const doc = data?.document
@@ -1799,8 +1801,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
     return () => {
       off("document:created", handleDocumentCreated)
+      leaveRoom(room)
     }
-  }, [projectId, on, off])
+  }, [projectId, on, off, joinRoom, leaveRoom])
 
   // Documents are now filtered server-side, so we use them directly
   const displayDocuments = documents
