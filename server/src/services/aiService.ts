@@ -830,6 +830,8 @@ class AIService {
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-sonnet-4',
       'azure': 'gpt-4',
+      'deepseek': 'deepseek-chat',
+      'moonshot': 'kimi-k2-0905-preview',
     }
 
     // Define provider-specific model families
@@ -839,7 +841,9 @@ class AIService {
       'groq': ['llama', 'mixtral', 'gemma'],
       'mistral': ['mistral-', 'codestral-', 'pixtral-', 'magistral-'],
       'anthropic': ['claude-'],
-      'azure': ['gpt-', 'text-']
+      'azure': ['gpt-', 'text-'],
+      'deepseek': ['deepseek-'],
+      'moonshot': ['kimi-', 'moonshot-'],
     }
 
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
@@ -933,6 +937,10 @@ class AIService {
         return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
         return ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-sonnet-4"]
+      case "deepseek":
+        return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
+      case "moonshot":
+        return ["kimi-k2-0905-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
       default:
         return []
     }

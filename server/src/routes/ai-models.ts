@@ -1132,6 +1132,18 @@ async function testModelAvailability(provider: any, config: any, model: any, sta
               'mixtral-8x7b-32768', 'gemma2-9b-it'
             ]
             break
+          case 'deepseek':
+            // DeepSeek AI models (OpenAI-compatible)
+            availableModels = [
+              'deepseek-chat', 'deepseek-reasoner', 'deepseek-coder'
+            ]
+            break
+          case 'moonshot':
+            // Moonshot AI models (Kimi K2 series, OpenAI-compatible)
+            availableModels = [
+              'kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'
+            ]
+            break
           default:
             availableModels = []
         }
