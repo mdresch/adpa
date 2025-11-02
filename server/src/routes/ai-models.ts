@@ -1398,6 +1398,10 @@ function getDefaultEndpoint(providerType: string): string {
       return 'https://api.mistral.ai/v1'
     case 'groq':
       return 'https://api.groq.com/openai/v1'
+    case 'deepseek':
+      return 'https://api.deepseek.com/v1'
+    case 'moonshot':
+      return 'https://api.moonshot.ai/v1'
     case 'ollama':
       return 'http://localhost:11434'
     default:
@@ -1419,6 +1423,10 @@ function getAuthTestEndpoint(providerType: string, baseEndpoint: string): string
     case 'mistral':
       return `${cleanEndpoint}/models`
     case 'groq':
+      return `${cleanEndpoint}/models`
+    case 'deepseek':
+      return `${cleanEndpoint}/models`
+    case 'moonshot':
       return `${cleanEndpoint}/models`
     case 'ollama':
       return `${cleanEndpoint}/api/tags`
