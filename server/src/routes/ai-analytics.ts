@@ -396,4 +396,141 @@ router.get("/trends",
   }
 )
 
+/**
+ * GET /api/ai-analytics/models/:providerId/:modelName
+ * Get detailed analytics for a specific model of a specific provider
+ */
+router.get("/models/:providerId/:modelName",
+  authenticateToken,
+  requirePermission("analytics.system"),
+  validateQuery(Joi.object({
+    period: Joi.string().valid("7d", "30d", "90d", "1y").default("30d"),
+  })),
+  async (req, res) => {
+    try {
+      const { providerId, modelName } = req.params
+      const { period = "30d" } = req.query
+      
+      const intervalMap = {
+        "7d": "7 days",
+        "30d": "30 days", 
+        "90d": "90 days",
+        "1y": "1 year",
+      }
+      const interval = intervalMap[period as keyof typeof intervalMap]
+      
+      log.info(`Fetching model analytics: ${modelName} for provider ${providerId}`)
+      
+      // Get provider details
+      const providerResult = await pool.query(`
+        SELECT * FROM ai_providers WHERE id = $1
+      `, [providerId])
+      
+      if (providerResult.rows.length === 0) {
+        return res.status(404).json({ error: "Provider not found" })
+      }
+      
+      const provider = providerResult.rows[0]
+      
+      // Get model-specific usage over time
+      const usageOverTime = await pool.query(`
+        SELECT 
+          DATE_TRUNC('day', al.created_at) as date,
+          COUNT(*) as usage_count,
+          SUM(COALESCE((al.new_values->'usage'->>'total_tokens')::int, 0)) as total_tokens,
+          SUM(COALESCE((al.new_values->'usage'->>'prompt_tokens')::int, 0)) as prompt_tokens,
+          SUM(COALESCE((al.new_values->'usage'->>'completion_tokens')::int, 0)) as completion_tokens,
+          AVG(COALESCE((al.new_values->>'response_time')::int, 0)) as avg_response_time,
+          COUNT(*) FILTER (WHERE al.new_values->>'success' = 'true') as successful_requests,
+          COUNT(*) FILTER (WHERE al.new_values->>'success' = 'false') as failed_requests
+        FROM audit_logs al
+        WHERE al.action = 'ai_generate' 
+          AND al.resource_id::uuid = $1
+          AND al.new_values->>'model' = $2
+          AND al.created_at >= NOW() - INTERVAL '${interval}'
+        GROUP BY DATE_TRUNC('day', al.created_at)
+        ORDER BY date
+      `, [providerId, modelName])
+      
+      // Get error analysis for this specific model
+      const errorAnalysis = await pool.query(`
+        SELECT 
+          al.new_values->>'error_type' as error_type,
+          al.new_values->>'error_message' as error_message,
+          COUNT(*) as error_count,
+          MAX(al.created_at) as last_occurrence
+        FROM audit_logs al
+        WHERE al.action = 'ai_generate' 
+          AND al.resource_id::uuid = $1
+          AND al.new_values->>'model' = $2
+          AND al.created_at >= NOW() - INTERVAL '${interval}'
+          AND al.new_values->>'success' = 'false'
+        GROUP BY al.new_values->>'error_type', al.new_values->>'error_message'
+        ORDER BY error_count DESC
+        LIMIT 10
+      `, [providerId, modelName])
+      
+      // Get prompt analysis (common patterns, lengths)
+      const promptAnalysis = await pool.query(`
+        SELECT 
+          LENGTH(al.new_values->>'prompt') as prompt_length,
+          COUNT(*) as count
+        FROM audit_logs al
+        WHERE al.action = 'ai_generate' 
+          AND al.resource_id::uuid = $1
+          AND al.new_values->>'model' = $2
+          AND al.created_at >= NOW() - INTERVAL '${interval}'
+        GROUP BY LENGTH(al.new_values->>'prompt')
+        ORDER BY count DESC
+        LIMIT 10
+      `, [providerId, modelName])
+      
+      // Calculate summary
+      const totalRequests = usageOverTime.rows.reduce((sum, u) => sum + Number(u.usage_count || 0), 0)
+      const totalTokens = usageOverTime.rows.reduce((sum, u) => sum + Number(u.total_tokens || 0), 0)
+      const totalPromptTokens = usageOverTime.rows.reduce((sum, u) => sum + Number(u.prompt_tokens || 0), 0)
+      const totalCompletionTokens = usageOverTime.rows.reduce((sum, u) => sum + Number(u.completion_tokens || 0), 0)
+      const successfulRequests = usageOverTime.rows.reduce((sum, u) => sum + Number(u.successful_requests || 0), 0)
+      const failedRequests = usageOverTime.rows.reduce((sum, u) => sum + Number(u.failed_requests || 0), 0)
+      const avgResponseTime = usageOverTime.rows.length > 0
+        ? usageOverTime.rows.reduce((sum, u) => sum + Number(u.avg_response_time || 0), 0) / usageOverTime.rows.length
+        : 0
+      
+      const analytics = {
+        success: true,
+        provider: {
+          id: provider.id,
+          name: provider.name,
+          type: provider.provider_type
+        },
+        model: {
+          name: modelName
+        },
+        period,
+        usageOverTime: usageOverTime.rows,
+        errorAnalysis: errorAnalysis.rows,
+        promptAnalysis: promptAnalysis.rows,
+        summary: {
+          totalRequests,
+          totalTokens,
+          promptTokens: totalPromptTokens,
+          completionTokens: totalCompletionTokens,
+          successfulRequests,
+          failedRequests,
+          successRate: totalRequests > 0 ? (successfulRequests / totalRequests) * 100 : 0,
+          avgResponseTime,
+          avgTokensPerRequest: totalRequests > 0 ? Math.round(totalTokens / totalRequests) : 0
+        }
+      }
+      
+      log.info(`Model analytics fetched: ${modelName} (${totalRequests} requests)`)
+      res.json(analytics)
+      
+    } catch (error) {
+      log.error("Model analytics error:", error)
+      res.status(500).json({ error: "Failed to fetch model analytics" })
+    }
+  }
+)
+
 export default router
