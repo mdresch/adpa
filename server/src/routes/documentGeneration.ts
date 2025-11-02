@@ -406,7 +406,7 @@ router.post("/generate-new-version",
         `SELECT id, version FROM project_baselines
          WHERE project_id = $1 
            AND status = 'approved'
-           AND baseline_content->>'document_id' = $2::text
+           AND document_corpus @> jsonb_build_array($2::text)
          ORDER BY approved_at DESC
          LIMIT 1`,
         [projectId, existingDocumentId]
