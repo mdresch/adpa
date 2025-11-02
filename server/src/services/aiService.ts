@@ -447,10 +447,10 @@ class AIService {
             : 'kimi-k2-0905-preview'
           
           logger.info(`[AI-SERVICE] Moonshot model: ${modelName}`)
-          logger.info(`[AI-SERVICE] Moonshot will call: https://api.moonshot.ai/v1/chat/completions`)
+          logger.info(`[AI-SERVICE] Moonshot will use CHAT endpoint (not responses)`)
           
           const moonshotResult = await generateText({
-            model: moonshot(modelName), // Standard call
+            model: moonshot.chat(modelName), // CRITICAL: Use .chat() to force /chat/completions endpoint
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
               { role: 'user' as const, content: userMessage }
