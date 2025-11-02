@@ -9,6 +9,8 @@ import { generateText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
+import { createXai } from "@ai-sdk/xai"
+import { createDeepSeek } from "@ai-sdk/deepseek"
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
@@ -363,6 +365,178 @@ class AIService {
       const providerType = providerResult.rows[0].provider_type
       logger.debug('[AI-SERVICE] Provider type:', providerType)
       
+      // OPTIMIZATION: Skip AI Gateway for providers not natively supported
+      // DeepSeek, Moonshot, xAI are OpenAI-compatible but not in AI Gateway's provider list
+      // Go straight to direct API to avoid unnecessary 404 errors
+      const directProviders = ['deepseek', 'moonshot', 'xai']
+      const useDirect = directProviders.includes(providerType)
+      
+      if (useDirect) {
+        logger.info(`🔄 [AI-SERVICE] Provider ${providerType} not in AI Gateway - using direct API`)
+        
+        // Get direct API key from provider configuration
+        const directApiKey = providerResult.rows[0].configuration?.apiKey
+        if (!directApiKey) {
+          throw new Error(`Direct ${providerType} API key not found in provider configuration`)
+        }
+        
+        // Handle each provider's direct API
+        if (providerType === 'deepseek') {
+          logger.info('🔄 [AI-SERVICE] Using official @ai-sdk/deepseek package...')
+          
+          const deepseek = createDeepSeek({ 
+            apiKey: directApiKey
+          })
+          
+          const deepseekModels = ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
+          const modelName = deepseekModels.includes(request.model || '') 
+            ? request.model 
+            : 'deepseek-chat'
+          
+          const deepseekResult = await generateText({
+            model: deepseek(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info(`[AI] ✓ DeepSeek/${modelName} - ${deepseekResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: deepseekResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: deepseekResult.usage?.promptTokens || 0,
+              completion_tokens: deepseekResult.usage?.completionTokens || 0,
+              total_tokens: deepseekResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content: deepseekResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: deepseekResult.usage?.promptTokens || 0,
+              completion_tokens: deepseekResult.usage?.completionTokens || 0,
+              total_tokens: deepseekResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        if (providerType === 'moonshot') {
+          logger.info('🔄 [AI-SERVICE] Using direct Moonshot AI (OpenAI-compatible)...')
+          
+          const moonshot = createOpenAI({ 
+            apiKey: directApiKey,
+            baseURL: 'https://api.moonshot.ai/v1'
+          })
+          
+          const moonshotModels = ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
+          const modelName = moonshotModels.includes(request.model || '') 
+            ? request.model 
+            : 'kimi-k2-0905-preview'
+          
+          const moonshotResult = await generateText({
+            model: moonshot(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info(`[AI] ✓ Moonshot/${modelName} - ${moonshotResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: moonshotResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: moonshotResult.usage?.promptTokens || 0,
+              completion_tokens: moonshotResult.usage?.completionTokens || 0,
+              total_tokens: moonshotResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content: moonshotResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: moonshotResult.usage?.promptTokens || 0,
+              completion_tokens: moonshotResult.usage?.completionTokens || 0,
+              total_tokens: moonshotResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        if (providerType === 'xai') {
+          logger.info('🔄 [AI-SERVICE] Using official @ai-sdk/xai package...')
+          
+          const xai = createXai({ 
+            apiKey: directApiKey
+          })
+          
+          const xaiModels = ['grok-beta', 'grok-vision-beta']
+          const modelName = xaiModels.includes(request.model || '') 
+            ? request.model 
+            : 'grok-beta'
+          
+          const xaiResult = await generateText({
+            model: xai(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info(`[AI] ✓ xAI/${modelName} - ${xaiResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: xaiResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: xaiResult.usage?.promptTokens || 0,
+              completion_tokens: xaiResult.usage?.completionTokens || 0,
+              total_tokens: xaiResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content: xaiResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: xaiResult.usage?.promptTokens || 0,
+              completion_tokens: xaiResult.usage?.completionTokens || 0,
+              total_tokens: xaiResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+      }
+      
+      // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral, Anthropic)
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
       
