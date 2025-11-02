@@ -365,6 +365,8 @@ router.post("/generate-new-version",
       
       log.info(`Version ${currentVersion} saved to history (or already exists)`)
 
+      log.info(`Updating document ${existingDocumentId} from ${currentVersion} to ${newVersion}`)
+
       // Update document with new version
       const updateResult = await pool.query(
         `UPDATE documents
@@ -400,6 +402,12 @@ router.post("/generate-new-version",
           existingDocumentId
         ]
       )
+      
+      if (updateResult.rows.length === 0) {
+        throw new Error(`Failed to update document ${existingDocumentId} - document not found or no changes made`)
+      }
+      
+      log.info(`Document updated successfully to version ${newVersion}. Rows affected: ${updateResult.rowCount}`)
 
       // Check if document is baselined and trigger drift detection
       const baselineCheck = await pool.query(
