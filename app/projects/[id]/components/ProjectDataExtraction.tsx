@@ -47,6 +47,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [selectedProvider, setSelectedProvider] = useState("google")
   const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash-exp")
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
+  
+  // WBS Import
+  const [isImportingWBS, setIsImportingWBS] = useState(false)
+  const [lastExtractedDocumentId, setLastExtractedDocumentId] = useState<string | null>(null)
 
   useEffect(() => {
     void fetchEntityCounts()
@@ -191,7 +195,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             clearInterval(pollInterval)
             setIsExtracting(false)
             setShowExtractionDialog(false)
+            
+            // Save document ID for WBS import
+            if (selectedDocuments.length > 0) {
+              setLastExtractedDocumentId(selectedDocuments[0])
+            }
+            
             toast.success(`Extraction complete! ${data.result?.totalEntities || 0} entities extracted.`)
+            
+            // Hint about WBS import if activities found
+            if (data.result?.entityCounts?.activities > 0) {
+              setTimeout(() => {
+                toast.info(
+                  `💡 Found ${data.result.entityCounts.activities} activities! You can now import them as project tasks.`,
+                  { duration: 6000 }
+                )
+              }, 1500)
+            }
+            
             void fetchEntityCounts()
           } else if (data.status === 'failed') {
             clearInterval(pollInterval)
@@ -206,6 +227,66 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
 
     // Clear interval after 5 minutes (safety)
     setTimeout(() => clearInterval(pollInterval), 300000)
+  }
+  
+  const handleImportWBS = async () => {
+    if (!lastExtractedDocumentId && selectedDocuments.length === 0) {
+      toast.error('Please run extraction first or select a document')
+      return
+    }
+    
+    const documentId = lastExtractedDocumentId || selectedDocuments[0]
+    
+    try {
+      setIsImportingWBS(true)
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      const response = await fetch(`${apiUrl}/tasks/import-wbs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          projectId,
+          documentId,
+          options: {
+            autoMatchRoles: true,
+            importDependencies: true,
+            createHierarchy: true
+          }
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to import WBS')
+      }
+      
+      const result = await response.json()
+      const data = result.data
+      
+      toast.success(
+        `WBS Import Complete! Created ${data.tasksCreated} tasks (${data.totalEstimatedHours} hours estimated)`,
+        { duration: 5000 }
+      )
+      
+      // Show detailed result
+      if (data.tasksNeedingRoleAssignment > 0) {
+        toast.info(
+          `${data.tasksNeedingRoleAssignment} tasks need role assignment`,
+          { duration: 4000 }
+        )
+      }
+      
+    } catch (error: any) {
+      console.error('WBS import failed:', error)
+      toast.error(error.message || 'Failed to import WBS')
+    } finally {
+      setIsImportingWBS(false)
+    }
   }
 
   const getTotalEntities = () => {
@@ -303,6 +384,40 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   </p>
                 </div>
               </div>
+              
+              {/* WBS Import Button */}
+              {entityCounts && (entityCounts.activities > 0 || entityCounts.deliverables > 0) && (
+                <div className="flex items-start gap-2 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg">
+                  <ListOrdered className="h-5 w-5 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                      Convert WBS to Project Tasks
+                    </p>
+                    <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
+                      Found {entityCounts.activities} activities and {entityCounts.deliverables} deliverables. 
+                      Import them as project tasks with estimated hours, roles, and dependencies.
+                    </p>
+                    <Button
+                      onClick={handleImportWBS}
+                      disabled={isImportingWBS}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      size="sm"
+                    >
+                      {isImportingWBS ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Importing WBS...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Import WBS to Tasks
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
