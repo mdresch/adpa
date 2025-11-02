@@ -335,7 +335,7 @@ router.get('/models', async (req, res) => {
           models[providerName] = ['gpt-35-turbo', 'gpt-4']
           break
         case 'anthropic':
-          models[providerName] = ['claude-3-sonnet', 'claude-3-haiku', 'claude-3-opus']
+          models[providerName] = ['claude-3-sonnet', 'claude-3-haiku', 'claude-3-opus', 'claude-haiku-4.5', 'claude-3.7-sonnet', 'claude-sonnet-4']
           break
         case 'cohere':
           models[providerName] = ['command', 'command-light']

@@ -1112,7 +1112,7 @@ class AIService {
       case "mistral":
         return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
-        return ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-sonnet-4"]
+        return ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-sonnet-4", "claude-haiku-4.5"]
       case "deepseek":
         return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
       case "moonshot":

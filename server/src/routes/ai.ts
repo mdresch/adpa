@@ -1276,7 +1276,10 @@ router.get(
               'anthropic': [
                 { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', description: 'Latest Claude model', context_window: 200000 },
                 { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Balanced performance', context_window: 200000 },
-                { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: 'Latest generation', context_window: 200000 }
+                { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: 'Latest generation', context_window: 200000 },
+                { id: 'claude-4-5-haiku', name: 'Claude Haiku 4.5', description: 'Fast and cost-effective - October 2025 release', context_window: 200000 },
+                { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', description: 'Efficient and fast', context_window: 200000 },
+                { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most capable Claude 3', context_window: 200000 }
               ],
               'azure': [
                 { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model', context_window: 8192 },
