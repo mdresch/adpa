@@ -20,7 +20,8 @@
     "create-admin": "tsx scripts/create-admin-user.ts",
     "fix-encryption": "tsx scripts/fix-encryption-migration.ts",
     "seed:baselines": "tsx scripts/seed-baseline-data.ts",
-    "drift:recompute": "tsx scripts/recompute-drift.ts"
+    "drift:recompute": "tsx scripts/recompute-drift.ts",
+    "clear-extraction-cache": "tsx scripts/clear-extraction-cache.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
