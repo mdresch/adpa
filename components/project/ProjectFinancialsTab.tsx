@@ -97,21 +97,10 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
       if (!projectResponse.ok) throw new Error('Failed to fetch project')
       
       const projectData = await projectResponse.json()
-      const project = projectData.data
+      const project = projectData.project || projectData.data  // Handle both response formats
       
-      // Get cost breakdown
-      let breakdown = null
-      try {
-        const breakdownResponse = await fetch(
-          `${apiUrl}/cost-management/projects/${projectId}/cost-breakdown`,
-          { headers: { 'Authorization': `Bearer ${token}` } }
-        )
-        if (breakdownResponse.ok) {
-          const breakdownData = await breakdownResponse.json()
-          breakdown = breakdownData.data
-        }
-      } catch (err) {
-        console.log('No cost breakdown yet, will create on save')
+      if (!project) {
+        throw new Error('Project data not found in response')
       }
       
       const financialData: ProjectFinancials = {
@@ -121,16 +110,17 @@ export default function ProjectFinancialsTab({ projectId }: ProjectFinancialsTab
         forecastCost: parseFloat(project.forecast_cost) || parseFloat(project.budget) || 0,
         percentComplete: parseFloat(project.percent_complete) || 0,
         
-        internalLaborCost: parseFloat(breakdown?.internal_labor_cost) || 0,
-        internalLaborHours: parseFloat(breakdown?.internal_labor_hours) || 0,
-        externalLaborCost: parseFloat(breakdown?.external_labor_cost) || 0,
-        externalLaborHours: parseFloat(breakdown?.external_labor_hours) || 0,
-        cloudInfrastructureCost: parseFloat(breakdown?.cloud_infrastructure_cost) || 0,
-        aiServicesCost: parseFloat(breakdown?.ai_services_cost) || 0,
-        softwareToolsCost: parseFloat(breakdown?.software_tools_cost) || 0,
-        equipmentCost: parseFloat(breakdown?.equipment_cost) || 0,
-        materialsCost: parseFloat(breakdown?.materials_cost) || 0,
-        overheadCost: parseFloat(breakdown?.overhead_cost) || 0,
+        // Read cost breakdown from project columns directly
+        internalLaborCost: parseFloat(project.internal_labor_cost) || 0,
+        internalLaborHours: 0,  // Not tracked yet
+        externalLaborCost: parseFloat(project.external_labor_cost) || 0,
+        externalLaborHours: 0,  // Not tracked yet
+        cloudInfrastructureCost: parseFloat(project.cloud_infrastructure_cost) || 0,
+        aiServicesCost: parseFloat(project.ai_services_cost) || 0,
+        softwareToolsCost: parseFloat(project.software_tools_cost) || 0,
+        equipmentCost: parseFloat(project.equipment_cost) || 0,
+        materialsCost: parseFloat(project.materials_cost) || 0,
+        overheadCost: parseFloat(project.overhead_cost) || 0,
         
         remainingBudget: 0,
         budgetUtilization: 0
