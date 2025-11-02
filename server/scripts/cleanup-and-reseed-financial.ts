@@ -20,9 +20,11 @@ if (!connectionString) {
   process.exit(1)
 }
 
-// Parse connection string to determine if SSL is needed
+// Parse connection string and build pool configuration
 const dbUrl = new URL(connectionString)
 const hostname = dbUrl.hostname.toLowerCase()
+
+// Check if SSL is required (most cloud databases require it)
 const needsSSL = hostname.includes('supabase.co') || 
                  hostname.includes('neon.tech') ||
                  hostname.includes('azure') ||
@@ -31,10 +33,23 @@ const needsSSL = hostname.includes('supabase.co') ||
                  process.env.DB_SSL === 'true' ||
                  connectionString.includes('sslmode=require')
 
-const pool = new Pool({
-  connectionString,
-  ssl: needsSSL ? { rejectUnauthorized: false } : false
-})
+// Build pool configuration (same as run-financial-migrations.ts)
+const poolConfig: any = {
+  host: dbUrl.hostname,
+  port: parseInt(dbUrl.port) || 5432,
+  database: dbUrl.pathname.slice(1).split('?')[0],
+  user: dbUrl.username,
+  password: dbUrl.password,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 30000
+}
+
+if (needsSSL) {
+  poolConfig.ssl = { rejectUnauthorized: false }
+}
+
+const pool = new Pool(poolConfig)
 
 async function cleanup() {
   console.log('\n🧹 Cleaning up duplicate test programs...\n')
