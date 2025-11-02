@@ -435,9 +435,10 @@ class AIService {
         if (providerType === 'moonshot') {
           logger.info('🔄 [AI-SERVICE] Using direct Moonshot AI (OpenAI-compatible)...')
           
+          // CRITICAL: Don't include /v1 in baseURL - createOpenAI adds it automatically
           const moonshot = createOpenAI({ 
             apiKey: directApiKey,
-            baseURL: 'https://api.moonshot.ai/v1'
+            baseURL: 'https://api.moonshot.ai'
           })
           
           const moonshotModels = ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
@@ -445,8 +446,11 @@ class AIService {
             ? request.model 
             : 'kimi-k2-0905-preview'
           
+          logger.info(`[AI-SERVICE] Moonshot model: ${modelName}`)
+          logger.info(`[AI-SERVICE] Moonshot will call: https://api.moonshot.ai/v1/chat/completions`)
+          
           const moonshotResult = await generateText({
-            model: moonshot(modelName),
+            model: moonshot(modelName), // Standard call
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
               { role: 'user' as const, content: userMessage }
