@@ -1545,11 +1545,12 @@ export default function AIProviderDetails() {
                         {analytics.modelUsage && analytics.modelUsage.length > 0 ? (
                           <div className="space-y-4">
                             {analytics.modelUsage.map((model, index) => {
-                              const totalRequests = analytics.summary?.totalRequests || 0
-                              const percentage = totalRequests > 0 ? (model.usage_count / totalRequests) * 100 : 0
-                              const tokens = typeof model.total_tokens === 'number' ? model.total_tokens : parseInt(String(model.total_tokens)) || 0
-                              const responseTime = typeof model.avg_response_time === 'number' ? model.avg_response_time : parseFloat(String(model.avg_response_time)) || 0
-                              const successRate = typeof model.success_rate === 'number' ? model.success_rate : parseFloat(String(model.success_rate)) || 0
+                              const totalRequests = Number(analytics.summary?.totalRequests || 0)
+                              const usageCount = Number(model.usage_count || 0)
+                              const percentage = totalRequests > 0 ? (usageCount / totalRequests) * 100 : 0
+                              const tokens = Number(model.total_tokens || 0)
+                              const responseTime = Number(model.avg_response_time || 0)
+                              const successRate = Number(model.success_rate || 0)
 
                               return (
                                 <div key={model.model_name} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
@@ -1563,7 +1564,7 @@ export default function AIProviderDetails() {
                                       <div>
                                         <span className="font-medium text-lg">{model.model_name}</span>
                                         <p className="text-xs text-muted-foreground">
-                                          {model.usage_count} requests ({percentage.toFixed(1)}%)
+                                          {usageCount} requests ({percentage.toFixed(1)}%)
                                         </p>
                                       </div>
                                     </div>
@@ -1603,7 +1604,7 @@ export default function AIProviderDetails() {
                                     <div className="text-center p-2 bg-muted rounded">
                                       <div className="text-muted-foreground text-xs">Tokens/Req</div>
                                       <div className="font-bold text-purple-600">
-                                        {model.usage_count > 0 ? Math.round(tokens / model.usage_count).toLocaleString() : 0}
+                                        {usageCount > 0 ? Math.round(tokens / usageCount).toLocaleString() : 0}
                                       </div>
                                     </div>
                                   </div>

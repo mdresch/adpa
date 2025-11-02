@@ -163,10 +163,14 @@ router.get("/models",
         errorPatterns: errorPatterns.rows,
         tokenEfficiency: tokenEfficiency.rows,
         summary: {
-          totalRequests: providerStats.rows.reduce((sum, p) => sum + parseInt(p.usage_count), 0),
-          totalTokens: providerStats.rows.reduce((sum, p) => sum + parseInt(p.total_tokens || 0), 0),
-          avgResponseTime: providerStats.rows.reduce((sum, p) => sum + parseFloat(p.avg_response_time || 0), 0) / providerStats.rows.length || 0,
-          overallSuccessRate: providerStats.rows.reduce((sum, p) => sum + parseFloat(p.success_rate || 0), 0) / providerStats.rows.length || 0
+          totalRequests: providerStats.rows.reduce((sum, p) => sum + Number(p.usage_count || 0), 0),
+          totalTokens: providerStats.rows.reduce((sum, p) => sum + Number(p.total_tokens || 0), 0),
+          avgResponseTime: providerStats.rows.length > 0
+            ? providerStats.rows.reduce((sum, p) => sum + Number(p.avg_response_time || 0), 0) / providerStats.rows.length
+            : 0,
+          overallSuccessRate: providerStats.rows.length > 0
+            ? providerStats.rows.reduce((sum, p) => sum + Number(p.success_rate || 0), 0) / providerStats.rows.length
+            : 0
         }
       }
       
@@ -277,10 +281,12 @@ router.get("/providers/:providerId",
         modelUsage: modelUsage.rows,
         errorAnalysis: errorAnalysis.rows,
         summary: {
-          totalRequests: usageOverTime.rows.reduce((sum, u) => sum + u.usage_count, 0),
-          totalTokens: usageOverTime.rows.reduce((sum, u) => sum + u.total_tokens, 0),
-          avgResponseTime: usageOverTime.rows.reduce((sum, u) => sum + u.avg_response_time, 0) / usageOverTime.rows.length || 0,
-          totalErrors: errorAnalysis.rows.reduce((sum, e) => sum + e.error_count, 0)
+          totalRequests: usageOverTime.rows.reduce((sum, u) => sum + Number(u.usage_count || 0), 0),
+          totalTokens: usageOverTime.rows.reduce((sum, u) => sum + Number(u.total_tokens || 0), 0),
+          avgResponseTime: usageOverTime.rows.length > 0 
+            ? usageOverTime.rows.reduce((sum, u) => sum + Number(u.avg_response_time || 0), 0) / usageOverTime.rows.length 
+            : 0,
+          totalErrors: errorAnalysis.rows.reduce((sum, e) => sum + Number(e.error_count || 0), 0)
         }
       }
       
