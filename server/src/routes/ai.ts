@@ -1261,10 +1261,55 @@ router.get(
           case 'groq':
           case 'anthropic':
           case 'azure':
-            return res.status(501).json({
-              error: "Model discovery not yet implemented for this provider",
-              message: `Automatic model discovery for ${provider.provider_type} is not yet available. Please configure models manually.`,
-              current_models: provider.available_models || []
+          case 'deepseek':
+          case 'moonshot':
+            // For these providers, return the predefined models list
+            // Model discovery API is either not available or requires special handling
+            const predefinedModels: Record<string, any[]> = {
+              'groq': [
+                { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B Versatile', description: 'Most capable Llama model', context_window: 32768 },
+                { id: 'llama-3.1-8b-instant', name: 'Llama 3.1 8B Instant', description: 'Fast and efficient', context_window: 8192 },
+                { id: 'llama3-70b-8192', name: 'Llama 3 70B', description: 'High capability model', context_window: 8192 },
+                { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', description: 'Mixture of Experts', context_window: 32768 }
+              ],
+              'anthropic': [
+                { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', description: 'Latest Claude model', context_window: 200000 },
+                { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Balanced performance', context_window: 200000 },
+                { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: 'Latest generation', context_window: 200000 }
+              ],
+              'azure': [
+                { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model', context_window: 8192 },
+                { id: 'gpt-35-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and efficient', context_window: 4096 }
+              ],
+              'deepseek': [
+                { id: 'deepseek-chat', name: 'DeepSeek Chat', description: 'Main conversational model', context_window: 32768 },
+                { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', description: 'Enhanced reasoning capabilities', context_window: 32768 },
+                { id: 'deepseek-coder', name: 'DeepSeek Coder', description: 'Specialized for code generation', context_window: 32768 }
+              ],
+              'moonshot': [
+                { id: 'kimi-k2-0905-preview', name: 'Kimi K2 Preview', description: 'Latest Kimi K2 model', context_window: 128000 },
+                { id: 'moonshot-v1-8k', name: 'Moonshot v1 8K', description: '8K context window', context_window: 8192 },
+                { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K', description: '32K context window', context_window: 32768 },
+                { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K', description: '128K context window', context_window: 131072 }
+              ]
+            }
+            
+            discoveredModels = predefinedModels[provider.provider_type] || []
+            
+            log.info(`Using predefined models for ${provider.provider_type}: ${discoveredModels.length} models`)
+            
+            // Return success with predefined models
+            return res.json({
+              provider: {
+                id: provider.id,
+                name: provider.name,
+                type: provider.provider_type
+              },
+              current_models: provider.available_models || [],
+              current_default: provider.default_model,
+              discovered_models: discoveredModels,
+              timestamp: new Date().toISOString(),
+              note: `These are the standard models for ${provider.provider_type}. Model availability may vary based on your API key and plan.`
             })
           default:
             return res.status(400).json({ error: "Unknown provider type" })
