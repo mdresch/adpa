@@ -37,6 +37,11 @@ const migrations = [
     number: '206',
     name: 'cost_management_system',
     description: 'Dynamic cost categories, roles, rates, and time tracking'
+  },
+  {
+    number: '207',
+    name: 'add_cost_columns_to_projects',
+    description: 'Add cost breakdown columns to projects table'
   }
 ]
 
