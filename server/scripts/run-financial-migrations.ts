@@ -42,6 +42,11 @@ const migrations = [
     number: '207',
     name: 'add_cost_columns_to_projects',
     description: 'Add cost breakdown columns to projects table'
+  },
+  {
+    number: '208',
+    name: 'tasks_scheduling_wbs_import',
+    description: 'Project tasks, scheduling, and AI WBS import'
   }
 ]
 
