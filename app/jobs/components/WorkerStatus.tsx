@@ -217,7 +217,6 @@ export function WorkerStatus() {
           </Card>
         </AnimatedGridItem>
       ))}
-      </div>
 
       {/* Empty State */}
       {workers.length === 0 && (
