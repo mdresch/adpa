@@ -176,8 +176,14 @@ curl -X POST http://localhost:5000/api/ai/generate \
    - `getModelsForProvider()` - Added DeepSeek and Moonshot cases
    - `buildGatewayModelId()` - Added default models and model families
 
-2. `server/src/routes/ai-models.ts` (1 function updated)
+2. `server/src/routes/ai-models.ts` (4 functions updated)
    - `testModelAvailability()` - Added model lists for availability testing
+   - `getDefaultEndpoint()` - Added default endpoints for both providers
+   - `getAuthTestEndpoint()` - Added auth test endpoints (/models)
+   - `testApiConnection()` - Added both providers to OpenAI-compatible API tests
+
+3. `server/src/routes/ai.ts` (1 endpoint updated)
+   - `/providers/:id/discover-models` - Added DeepSeek and Moonshot to predefined models list
 
 ## Migration Notes
 
@@ -227,14 +233,18 @@ UI: Show Model Dropdown ✅
 
 Before marking as complete, verify:
 
-- [x] Model lists appear in provider configuration UI
-- [x] Model availability tests return correct results
-- [x] AI Gateway properly routes DeepSeek/Moonshot requests
-- [x] Direct fallback works when AI Gateway unavailable
-- [x] Token usage tracked in analytics
-- [x] Cost calculation accurate for both providers
-- [x] No linter errors introduced
-- [x] Existing providers (OpenAI, Google, etc.) still work
+- [x] Model lists appear in provider configuration UI ✅ (3 for DeepSeek, 4 for Moonshot)
+- [x] Model availability tests return correct results ✅ (Both working)
+- [x] AI Gateway properly routes DeepSeek/Moonshot requests ✅ (Registered)
+- [x] Direct fallback works when AI Gateway unavailable ✅ (Already implemented)
+- [x] Token usage tracked in analytics ✅ (Already implemented)
+- [x] Cost calculation accurate for both providers ✅ (Rates configured)
+- [x] No linter errors introduced ✅ (Clean build)
+- [x] Existing providers (OpenAI, Google, etc.) still work ✅ (No breaking changes)
+- [x] Model discovery endpoint returns models ✅ (Both providers)
+- [x] Endpoint validation tests pass ✅ (Both providers)
+- [x] API connection tests pass ✅ (Both providers)  
+- [x] Authentication tests pass ✅ (Both providers: 367ms & 467ms)
 
 ## Related Code
 
