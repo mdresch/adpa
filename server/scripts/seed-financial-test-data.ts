@@ -202,6 +202,16 @@ async function main() {
       const plannedValue = project.budget * 0.6  // Assume we're 60% through timeline
       const earnedValue = project.budget * (project.percentComplete / 100)
       
+      // Calculate cost breakdown (40% internal labor, 25% external labor, etc.)
+      const internalLaborCost = project.actualCost * 0.40
+      const externalLaborCost = project.actualCost * 0.25
+      const cloudCost = project.actualCost * 0.20
+      const aiServicesCost = project.actualCost * 0.08
+      const softwareCost = project.actualCost * 0.03
+      const equipmentCost = project.actualCost * 0.02
+      const materialsCost = project.actualCost * 0.01
+      const overheadCost = project.actualCost * 0.01
+      
       const result = await pool.query(
         `INSERT INTO projects (
           name,
@@ -219,13 +229,18 @@ async function main() {
           materials_cost,
           equipment_cost,
           overhead_cost,
+          internal_labor_cost,
+          external_labor_cost,
+          cloud_infrastructure_cost,
+          ai_services_cost,
+          software_tools_cost,
           expected_benefits,
           start_date,
           end_date,
           owner_id,
           created_by,
           team_members
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
         RETURNING id`,
         [
           project.name,
@@ -240,9 +255,14 @@ async function main() {
           earnedValue,
           project.percentComplete,
           project.laborCost,
-          project.materialsCost,
-          project.equipmentCost,
-          project.overheadCost,
+          materialsCost,
+          equipmentCost,
+          overheadCost,
+          internalLaborCost,
+          externalLaborCost,
+          cloudCost,
+          aiServicesCost,
+          softwareCost,
           project.expectedBenefits,
           project.startDate,
           project.endDate,
