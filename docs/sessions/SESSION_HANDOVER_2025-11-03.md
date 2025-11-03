@@ -268,7 +268,10 @@
 ### **⏳ Pending Implementation**
 - ⏳ **Task Management UI** (tasks in DB, no UI yet)
   - 12-feature roadmap created (Tasks Tab, Details View, Role Assignment, Dependencies, Gantt Chart, Timesheets, etc.)
-- ⏳ **Template Fixes** (PMP 8th Edition has ESG overload)
+- ✅ **Template Fixes** (PMP 8th Edition ESG overload - FIXED!)
+  - Created revised template v2.0 with conditional ESG integration
+  - ESG now optional based on project charter requirements
+  - Standard projects use core PMBOK 8 without forced ESG sections
 - ⏳ **Groq Direct SDK** (to bypass Vercel Gateway)
 - ⏳ **Anthropic Investigation** (model access issue)
 
@@ -402,11 +405,14 @@
 
 ## ⚠️ **Known Issues (Not Blocking)**
 
-### **1. Template Issues**
+### **1. Template Issues** ✅ **RESOLVED**
 **PMP 8th Edition Template**:
-- ❌ Forces ESG (Environmental, Social, Governance) into every section
-- ❌ Not appropriate for non-ESG projects (like Data Analytics Platform)
-- 💡 **Fix**: Make ESG optional based on project type
+- ~~❌ Forces ESG (Environmental, Social, Governance) into every section~~
+- ~~❌ Not appropriate for non-ESG projects (like Data Analytics Platform)~~
+- ✅ **FIXED**: Created v2.0 template with conditional ESG integration
+  - ESG sections now optional (include only if project charter requires)
+  - Standard projects use core PMBOK 8 without ESG overhead
+  - File: `docs/templates/PMP_8TH_EDITION_REVISED.md`
 
 **Other Templates**:
 - ✅ All other templates working well (no ESG forcing)
@@ -467,10 +473,10 @@
 ## 🚀 **Recommended Next Steps**
 
 ### **Priority 1: High Value, Low Effort**
-1. 🔧 **Fix PMP 8th Edition Template** (1-2 hours)
-   - Remove forced ESG integration
-   - Make ESG optional based on project metadata
-   - Test with Data Analytics Platform project
+1. ✅ ~~**Fix PMP 8th Edition Template**~~ **COMPLETED!**
+   - ~~Remove forced ESG integration~~
+   - ~~Make ESG optional based on project metadata~~
+   - Ready to test with Data Analytics Platform project regeneration
 
 2. 💰 **Implement Groq Direct SDK** (1-2 hours)
    - Follow DeepSeek/Moonshot pattern
