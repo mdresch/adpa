@@ -1785,6 +1785,43 @@ class ProcessFlowService {
       
       logger.info(`Document saved successfully: ${savedDocument.name} (ID: ${savedDocument.id})`)
       
+      // QUALITY CONTROL GATE: Trigger automatic quality audit
+      try {
+        logger.info('[PROCESS-FLOW] Triggering automatic quality audit', {
+          documentId: savedDocument.id,
+          documentName: savedDocument.name
+        })
+        
+        const { qualityAuditService } = require('./qualityAuditService')
+        
+        // Run audit asynchronously (don't block document save)
+        qualityAuditService.auditDocument(
+          savedDocument.id,
+          finalContent,
+          config.templateType || 'unknown',
+          project,
+          config.userId || 'system'
+        ).then((auditResult: any) => {
+          logger.info('[PROCESS-FLOW] Quality audit completed', {
+            documentId: savedDocument.id,
+            overallScore: auditResult.overallScore,
+            overallGrade: auditResult.overallGrade
+          })
+        }).catch((auditError: any) => {
+          logger.error('[PROCESS-FLOW] Quality audit failed', {
+            documentId: savedDocument.id,
+            error: auditError instanceof Error ? auditError.message : String(auditError)
+          })
+          // Don't fail document generation if audit fails
+        })
+      } catch (error) {
+        logger.error('[PROCESS-FLOW] Failed to trigger quality audit', {
+          documentId: savedDocument.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Don't fail document generation if audit trigger fails
+      }
+      
       return savedDocument
       
     } catch (error) {

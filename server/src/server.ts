@@ -71,6 +71,7 @@ import documentGenerationRoutes from "./routes/documentGeneration"
 import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
+import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -228,6 +229,7 @@ app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
+app.use("/api/quality-audits", qualityAuditRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
@@ -423,6 +425,11 @@ async function startServer() {
       console.log(`✅ Server running on port ${PORT}`)
       console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
       console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
+      
+      // Initialize weekly template analysis job
+      const { initializeTemplateAnalysisJob } = require('./jobs/templateAnalysisJob')
+      initializeTemplateAnalysisJob()
+      console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
     })
   } catch (error) {
     console.error("❌ Failed to start server:", error)
