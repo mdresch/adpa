@@ -409,6 +409,39 @@ router.post("/generate-new-version",
       
       log.info(`Document updated successfully to version ${newVersion}. Rows affected: ${updateResult.rowCount}`)
 
+      // 🔥 Trigger quality audit after AI regeneration (MINOR version increment)
+      try {
+        const { qualityAuditService } = await import('../services/qualityAuditService')
+        
+        log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
+          documentId: existingDocumentId,
+          documentName: updateResult.rows[0].name,
+          previousVersion: currentVersion,
+          newVersion: newVersion,
+          provider,
+          model
+        })
+        
+        // Trigger audit asynchronously (don't block response)
+        qualityAuditService.auditDocument(
+          existingDocumentId,
+          req.user?.id || null
+        ).catch((auditError: any) => {
+          log.error('[AI-REGENERATION] Quality audit failed (non-blocking)', {
+            documentId: existingDocumentId,
+            error: auditError.message
+          })
+        })
+        
+        log.info('[AI-REGENERATION] Quality audit triggered successfully (async)')
+      } catch (error: any) {
+        // Don't fail document generation if audit fails
+        log.warn('[AI-REGENERATION] Failed to trigger quality audit', {
+          documentId: existingDocumentId,
+          error: error.message
+        })
+      }
+
       // Check if document is baselined and trigger drift detection
       const baselineCheck = await pool.query(
         `SELECT id, version FROM project_baselines
