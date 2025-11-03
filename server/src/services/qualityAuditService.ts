@@ -210,10 +210,10 @@ class QualityAuditService {
       const result = await aiService.generate({
         provider: 'google',
         model: 'gemini-2.5-flash', // Fast and cost-effective for analysis
-        systemPrompt,
-        userPrompt: analysisPrompt,
+        prompt: analysisPrompt, // User prompt (required)
+        system_prompt: systemPrompt, // System prompt (optional, snake_case)
         temperature: 0.3, // Lower temperature for consistent analysis
-        maxTokens: 4000
+        max_tokens: 4000 // Max tokens (snake_case to match interface)
       })
 
       logger.info('[QUALITY-AUDIT] AI response received', {

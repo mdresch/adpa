@@ -310,10 +310,10 @@ class TemplateImprovementService {
       const result = await aiService.generate({
         provider: 'google',
         model: 'gemini-2.5-flash',
-        systemPrompt: `You are an expert in document template design and AI prompt engineering. You analyze template performance and suggest specific, actionable improvements. Always respond with valid JSON only. Do not include any explanatory text before or after the JSON.`,
-        userPrompt: analysisPrompt,
+        prompt: analysisPrompt, // User prompt (required)
+        system_prompt: `You are an expert in document template design and AI prompt engineering. You analyze template performance and suggest specific, actionable improvements. Always respond with valid JSON only. Do not include any explanatory text before or after the JSON.`, // System prompt (optional, snake_case)
         temperature: 0.5,
-        maxTokens: 4000
+        max_tokens: 4000 // Max tokens (snake_case to match interface)
       })
 
       const parsed = JSON.parse(result.content)
