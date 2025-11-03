@@ -239,6 +239,19 @@ export async function importWBSFromProjectEntities(
         
         const taskNumber = `DEL-${String(i + 1).padStart(3, '0')}`
         
+        // Map deliverable status to project_tasks allowed values
+        const deliverableStatusMap: Record<string, string> = {
+          'not_started': 'planned',
+          'in_progress': 'in_progress',
+          'completed': 'completed',
+          'cancelled': 'cancelled',
+          'on_hold': 'on_hold',
+          'proposed': 'planned',
+          'approved': 'planned',
+          'delivered': 'completed'
+        }
+        const mappedDeliverableStatus = deliverableStatusMap[(deliverable.status || 'not_started').toLowerCase()] || 'planned'
+        
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
             project_id,
@@ -262,7 +275,7 @@ export async function importWBSFromProjectEntities(
           deliverable.name,
           deliverable.description,
           estimatedHours,
-          deliverable.status || 'planned',
+          mappedDeliverableStatus,
           deliverable.id,
           true,
           userId
@@ -298,6 +311,18 @@ export async function importWBSFromProjectEntities(
         
         const taskNumber = wbsCode || `ACT-${String(i + 1).padStart(3, '0')}`
         
+        // Map activity status to project_tasks allowed values
+        // activities table uses: not_started, in_progress, completed, cancelled
+        // project_tasks table uses: planned, in_progress, completed, on_hold, cancelled
+        const statusMap: Record<string, string> = {
+          'not_started': 'planned',
+          'in_progress': 'in_progress',
+          'completed': 'completed',
+          'cancelled': 'cancelled',
+          'on_hold': 'on_hold'
+        }
+        const mappedStatus = statusMap[(activity.status || 'not_started').toLowerCase()] || 'planned'
+        
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
             project_id,
@@ -328,7 +353,7 @@ export async function importWBSFromProjectEntities(
           estimatedHours,
           roleId,
           requiredRole,
-          activity.status || 'planned',
+          mappedStatus,
           activity.id,
           true,
           userId
