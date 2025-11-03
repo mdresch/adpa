@@ -490,8 +490,11 @@ The ADPA system represents a significant advancement in document processing auto
 
   // Smooth scroll to section
   const scrollToSection = (sectionId: string) => {
+    console.log('[TOC] Attempting to scroll to:', sectionId)
     const element = window.document.getElementById(sectionId)
+    
     if (element) {
+      console.log('[TOC] Element found, scrolling...')
       const yOffset = -100
       const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset
       
@@ -500,6 +503,27 @@ The ADPA system represents a significant advancement in document processing auto
         behavior: 'smooth'
       })
       setActiveSection(sectionId)
+    } else {
+      console.warn('[TOC] Element not found with ID:', sectionId)
+      // Fallback: Try to find by text content
+      const allHeadings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+      const sectionText = tableOfContents.find(h => h.id === sectionId)?.text
+      
+      if (sectionText) {
+        console.log('[TOC] Trying to find heading by text:', sectionText)
+        const matchingHeading = allHeadings.find(h => 
+          h.textContent?.trim() === sectionText.trim()
+        ) as HTMLElement | undefined
+        
+        if (matchingHeading) {
+          console.log('[TOC] Found heading by text content, scrolling...')
+          matchingHeading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          window.scrollBy(0, -100) // Offset for sticky header
+          setActiveSection(sectionId)
+        } else {
+          console.error('[TOC] Could not find heading by ID or text')
+        }
+      }
     }
   }
 
@@ -939,8 +963,12 @@ The ADPA system represents a significant advancement in document processing auto
                               remarkPlugins={[remarkGfm]}
                               components={{
                                 h1({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+                                  // Extract text content (handle arrays, nested elements)
+                                  const text = Array.isArray(children) 
+                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
+                                    : String(children)
+                                  const cleanText = text.replace(/\*/g, '').trim()
+                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
                                     <h1 id={id} className="text-4xl font-bold mb-6 mt-8 pb-2 border-b border-gray-200 dark:border-gray-700 scroll-mt-24">
                                       {children}
@@ -948,8 +976,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   );
                                 },
                                 h2({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+                                  const text = Array.isArray(children) 
+                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
+                                    : String(children)
+                                  const cleanText = text.replace(/\*/g, '').trim()
+                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
                                     <h2 id={id} className="text-3xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-24">
                                       {children}
@@ -957,8 +988,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   );
                                 },
                                 h3({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+                                  const text = Array.isArray(children) 
+                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
+                                    : String(children)
+                                  const cleanText = text.replace(/\*/g, '').trim()
+                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
                                     <h3 id={id} className="text-2xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-200 scroll-mt-24">
                                       {children}
