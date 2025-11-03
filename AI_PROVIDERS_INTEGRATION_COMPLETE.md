@@ -185,7 +185,7 @@ The dropdown should now show **xAI (Grok)**! To add it:
    ```
    Provider Name: xAI Grok
    Provider Type: xAI (Grok)
-   API Key: xai-swYZ7fopgwDgjfMERFmWvJexcKpQyuqKNoyFZNr1Pd9fLYN8wvaTqehADGOKai4fngplPaBVPnoGGo53
+   API Key: xai-YOUR_API_KEY_HERE
    Endpoint: https://api.x.ai/v1
    Default Model: grok-beta
    Priority: 1

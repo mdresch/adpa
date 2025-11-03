@@ -28,9 +28,9 @@
 
 ### Step 2: Configure Your API Key
 
-You mentioned you have an xAI API key:
+You will need your xAI API key:
 ```
-xai-swYZ7fopgwDgjfMERFmWvJexcKpQyuqKNoyFZNr1Pd9fLYN8wvaTqehADGOKai4fngplPaBVPnoGGo53
+xai-YOUR_API_KEY_HERE
 ```
 
 ⚠️ **Important**: For security, paste this API key directly in the ADPA UI, not in any files or git commits.
