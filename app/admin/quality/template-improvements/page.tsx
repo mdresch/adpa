@@ -41,6 +41,29 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 import { toast } from '@/components/ui/use-toast'
 
+interface CommonIssueItem {
+  description: string
+  count: number
+  severity?: string
+  dimension?: string
+}
+
+interface ImprovementItem {
+  issue_addressed: string
+  proposed_change: string
+  change_type: string
+  section?: string
+  expected_impact?: {
+    dimension: string
+    current_score: number
+    predicted_score: number
+    gain: number
+  }
+  priority?: string
+  implementation_difficulty?: string
+  rationale?: string
+}
+
 interface ImprovementSuggestion {
   id: string
   template_id: string
@@ -53,9 +76,9 @@ interface ImprovementSuggestion {
   current_consistency: number
   current_professional_quality: number
   current_standards_compliance: number
-  common_issues: any[]
-  issue_frequency: any
-  suggested_improvements: any[]
+  common_issues: CommonIssueItem[]
+  issue_frequency: Record<string, number>
+  suggested_improvements: ImprovementItem[]
   improvement_rationale: string
   expected_quality_gain: number
   priority: 'critical' | 'high' | 'medium' | 'low'
@@ -78,8 +101,10 @@ export default function TemplateImprovementsPage() {
   const { token } = useAuth()
 
   useEffect(() => {
-    loadSuggestions()
-  }, [filters])
+    loadSuggestions().catch((error) => {
+      console.error('Failed to load suggestions:', error)
+    })
+  }, [filters, token])
 
   const loadSuggestions = async () => {
     try {
@@ -91,7 +116,8 @@ export default function TemplateImprovementsPage() {
       if (filters.status !== 'all') queryParams.append('status', filters.status)
       if (filters.priority !== 'all') queryParams.append('priority', filters.priority)
 
-      const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements?${queryParams}`, {
+      const queryString = queryParams.toString()
+      const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements${queryString ? `?${queryString}` : ''}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
@@ -283,7 +309,7 @@ export default function TemplateImprovementsPage() {
       <div className="flex gap-4 mb-6">
         <Select 
           value={filters.status} 
-          onValueChange={(v) => setFilters({ ...filters, status: v })}
+          onValueChange={(v) => { setFilters({ ...filters, status: v }) }}
         >
           <SelectTrigger className="w-48">
             <SelectValue />
@@ -299,7 +325,7 @@ export default function TemplateImprovementsPage() {
 
         <Select 
           value={filters.priority} 
-          onValueChange={(v) => setFilters({ ...filters, priority: v })}
+          onValueChange={(v) => { setFilters({ ...filters, priority: v }) }}
         >
           <SelectTrigger className="w-48">
             <SelectValue />
@@ -338,9 +364,15 @@ export default function TemplateImprovementsPage() {
           <ImprovementSuggestionCard
             key={suggestion.id}
             suggestion={suggestion}
-            onApprove={() => handleApprove(suggestion.id)}
-            onReject={() => handleReject(suggestion.id)}
-            onImplement={() => handleImplement(suggestion.id)}
+            onApprove={() => { 
+              handleApprove(suggestion.id).catch(console.error)
+            }}
+            onReject={() => { 
+              handleReject(suggestion.id)
+            }}
+            onImplement={() => { 
+              handleImplement(suggestion.id).catch(console.error)
+            }}
           />
         ))}
       </div>
@@ -357,7 +389,7 @@ export default function TemplateImprovementsPage() {
           
           <Textarea
             value={rejectionReason}
-            onChange={(e) => setRejectionReason(e.target.value)}
+            onChange={(e) => { setRejectionReason(e.target.value) }}
             placeholder="Enter rejection reason (minimum 10 characters)..."
             className="min-h-[100px]"
           />
@@ -455,7 +487,7 @@ function ImprovementSuggestionCard({
             Common Issues Found:
           </h4>
           <ul className="list-disc list-inside space-y-1">
-            {suggestion.common_issues.slice(0, 3).map((issue: any, idx: number) => (
+            {suggestion.common_issues.slice(0, 3).map((issue: CommonIssueItem, idx: number) => (
               <li key={idx} className="text-sm text-gray-700">
                 {issue.description} 
                 <span className="text-gray-500 ml-2">
@@ -493,7 +525,7 @@ function ImprovementSuggestionCard({
           
           {expanded ? (
             <div className="space-y-3">
-              {suggestion.suggested_improvements.map((improvement: any, idx: number) => (
+              {suggestion.suggested_improvements.map((improvement: ImprovementItem, idx: number) => (
                 <div key={idx} className="border-l-4 border-blue-500 pl-4 py-3 bg-blue-50 rounded-r">
                   <div className="flex justify-between items-start mb-2">
                     <span className="font-medium text-sm">

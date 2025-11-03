@@ -78,8 +78,10 @@ export default function QualityDashboardPage() {
   const { token } = useAuth()
 
   useEffect(() => {
-    loadDashboardData()
-  }, [])
+    loadDashboardData().catch((error) => {
+      console.error('Failed to load dashboard data:', error)
+    })
+  }, [token])
 
   const loadDashboardData = async () => {
     try {
@@ -351,6 +353,8 @@ export default function QualityDashboardPage() {
 /**
  * Summary Card Component
  */
+type ColorVariant = 'blue' | 'green' | 'emerald' | 'yellow' | 'purple'
+
 function SummaryCard({
   icon,
   title,
@@ -362,9 +366,9 @@ function SummaryCard({
   title: string
   value: string | number
   subtitle: string
-  color: string
+  color: ColorVariant
 }) {
-  const colorClasses: Record<string, string> = {
+  const colorClasses: Record<ColorVariant, string> = {
     blue: 'from-blue-500 to-blue-600',
     green: 'from-green-500 to-green-600',
     emerald: 'from-emerald-500 to-emerald-600',
@@ -372,8 +376,10 @@ function SummaryCard({
     purple: 'from-purple-500 to-purple-600'
   }
 
+  const safeColor: ColorVariant = ['blue', 'green', 'emerald', 'yellow', 'purple'].includes(color) ? color : 'blue'
+
   return (
-    <Card className={`bg-gradient-to-br ${colorClasses[color]} text-white border-0`}>
+    <Card className={`bg-gradient-to-br ${colorClasses[safeColor]} text-white border-0`}>
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div>
@@ -409,12 +415,15 @@ function getQualityBadgeClass(score: number): string {
   return 'bg-red-100 text-red-800 border-red-300'
 }
 
+type SeverityLevel = 'critical' | 'major' | 'minor'
+
 function getSeverityBadgeClass(severity: string): string {
-  const classes: Record<string, string> = {
+  const classes: Record<SeverityLevel, string> = {
     critical: 'bg-red-100 text-red-800 border-red-300',
     major: 'bg-orange-100 text-orange-800 border-orange-300',
     minor: 'bg-yellow-100 text-yellow-800 border-yellow-300'
   }
-  return classes[severity] || 'bg-gray-100 text-gray-800 border-gray-300'
+  const safeSeverity: SeverityLevel = ['critical', 'major', 'minor'].includes(severity) ? (severity as SeverityLevel) : 'minor'
+  return classes[safeSeverity]
 }
 

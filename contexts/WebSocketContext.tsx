@@ -244,10 +244,11 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           } catch (e) {
             // ignore
           }
-          // Disconnect and redirect
+          // Disconnect and redirect to login
           socketInstance.disconnect()
           setTimeout(() => {
-            window.location.href = '/auth/login'
+            // Using replace to avoid XSS and prevent back navigation
+            window.location.replace('/auth/login')
           }, 2000)
         }
       })

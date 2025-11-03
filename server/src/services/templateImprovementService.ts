@@ -14,6 +14,55 @@ import { pool } from '../database/connection'
 import { aiService } from './aiService'
 import { logger } from '../utils/logger'
 
+interface AuditHistoryItem {
+  overall_score: number
+  completeness_score: number
+  consistency_score: number
+  professional_quality_score: number
+  standards_compliance_score: number
+  accuracy_score: number
+  context_relevance_score: number
+  issues: QualityIssue[]
+  recommendations: string[]
+  audited_at: string
+}
+
+interface QualityIssue {
+  severity: string
+  dimension: string
+  description: string
+  location?: string
+  recommendation?: string
+  count?: number
+}
+
+interface IssueFrequency {
+  [key: string]: number
+}
+
+interface Template {
+  id: string
+  name: string
+  type: string
+  framework: string
+  content: string | Record<string, unknown>
+  system_prompt?: string
+  description?: string
+  category?: string
+}
+
+interface ImprovementSuggestionData {
+  templateId: string
+  qualityMetrics: TemplateQualityMetrics
+  commonIssues: QualityIssue[]
+  issueFrequency: IssueFrequency
+  improvements: ImprovementItem[]
+  expectedGain: number
+  priority: string
+  analysisTokens: number
+  analysisCost: number
+}
+
 interface TemplateQualityMetrics {
   avgQuality: number
   avgCompleteness: number
@@ -26,6 +75,22 @@ interface TemplateQualityMetrics {
   lowestScore: number
   highestScore: number
   standardDeviation: number
+}
+
+interface ImprovementItem {
+  issue_addressed: string
+  proposed_change: string
+  change_type: string
+  section?: string
+  expected_impact?: {
+    dimension: string
+    current_score: number
+    predicted_score: number
+    gain: number
+  }
+  priority?: string
+  implementation_difficulty?: string
+  rationale?: string
 }
 
 interface ImprovementSuggestion {
@@ -182,7 +247,7 @@ class TemplateImprovementService {
   /**
    * Get template details
    */
-  private async getTemplate(templateId: string): Promise<any> {
+  private async getTemplate(templateId: string): Promise<Template | null> {
     const result = await pool.query(
       'SELECT * FROM templates WHERE id = $1 AND deleted_at IS NULL',
       [templateId]
@@ -194,7 +259,7 @@ class TemplateImprovementService {
   /**
    * Get quality audit history for a template
    */
-  private async getAuditHistory(templateId: string, days: number): Promise<any[]> {
+  private async getAuditHistory(templateId: string, days: number): Promise<AuditHistoryItem[]> {
     const result = await pool.query(
       `SELECT qa.*
        FROM quality_audits qa
@@ -211,7 +276,7 @@ class TemplateImprovementService {
   /**
    * Calculate aggregate quality metrics from audit history
    */
-  private calculateAggregateMetrics(auditHistory: any[]): TemplateQualityMetrics {
+  private calculateAggregateMetrics(auditHistory: AuditHistoryItem[]): TemplateQualityMetrics {
     const count = auditHistory.length
     
     const scores = auditHistory.map(a => a.overall_score)
@@ -248,18 +313,18 @@ class TemplateImprovementService {
   /**
    * Extract and categorize common issues across audits
    */
-  private extractCommonIssues(auditHistory: any[]): any[] {
-    const issueMap = new Map<string, any>()
+  private extractCommonIssues(auditHistory: AuditHistoryItem[]): QualityIssue[] {
+    const issueMap = new Map<string, QualityIssue>()
     
     auditHistory.forEach(audit => {
       const issues = audit.issues || []
       
-      issues.forEach((issue: any) => {
+      issues.forEach((issue: QualityIssue) => {
         const key = `${issue.dimension}:${issue.description}`
         
         if (issueMap.has(key)) {
           const existing = issueMap.get(key)!
-          existing.count++
+          existing.count = (existing.count || 0) + 1
         } else {
           issueMap.set(key, {
             ...issue,
@@ -279,12 +344,12 @@ class TemplateImprovementService {
   /**
    * Calculate how frequently each issue appears (%)
    */
-  private calculateIssueFrequency(commonIssues: any[], totalAudits: number): any {
-    const frequency: any = {}
+  private calculateIssueFrequency(commonIssues: QualityIssue[], totalAudits: number): IssueFrequency {
+    const frequency: IssueFrequency = {}
     
     commonIssues.forEach(issue => {
       const key = `${issue.dimension}:${issue.description}`
-      frequency[key] = Math.round((issue.count / totalAudits) * 100)
+      frequency[key] = Math.round(((issue.count || 0) / totalAudits) * 100)
     })
     
     return frequency
@@ -294,11 +359,11 @@ class TemplateImprovementService {
    * Use AI to generate specific template improvement suggestions
    */
   private async generateImprovementSuggestions(
-    template: any,
+    template: Template,
     qualityMetrics: TemplateQualityMetrics,
-    commonIssues: any[],
-    issueFrequency: any
-  ): Promise<{ improvements: ImprovementSuggestion[], tokens: number, cost: number }> {
+    commonIssues: QualityIssue[],
+    issueFrequency: IssueFrequency
+  ): Promise<{ improvements: ImprovementItem[], tokens: number, cost: number }> {
     const analysisPrompt = this.buildImprovementPrompt(
       template,
       qualityMetrics,
@@ -327,23 +392,36 @@ class TemplateImprovementService {
       const totalTokens = result.usage?.totalTokens || result.usage?.total_tokens || 0
       const estimatedCost = this.estimateCost(totalTokens)
 
-      // Clean markdown code blocks from AI response
-      let cleaned = result.content.trim()
-      if (cleaned.startsWith('```json')) {
-        cleaned = cleaned.substring(7)
-      }
-      if (cleaned.startsWith('```')) {
-        cleaned = cleaned.substring(3)
-      }
-      if (cleaned.endsWith('```')) {
-        cleaned = cleaned.substring(0, cleaned.length - 3)
-      }
-      
-      const parsed = JSON.parse(cleaned.trim())
-      return {
-        improvements: parsed.improvements || [],
-        tokens: totalTokens,
-        cost: estimatedCost
+      // Clean markdown code blocks from AI response and parse with error handling
+      try {
+        let cleaned = result.content.trim()
+        if (cleaned.startsWith('```json')) {
+          cleaned = cleaned.substring(7)
+        }
+        if (cleaned.startsWith('```')) {
+          cleaned = cleaned.substring(3)
+        }
+        if (cleaned.endsWith('```')) {
+          cleaned = cleaned.substring(0, cleaned.length - 3)
+        }
+        
+        const parsed = JSON.parse(cleaned.trim())
+        return {
+          improvements: parsed.improvements || [],
+          tokens: totalTokens,
+          cost: estimatedCost
+        }
+      } catch (parseError) {
+        logger.error('[TEMPLATE-IMPROVEMENT] Failed to parse AI response JSON', {
+          templateId: template.id,
+          parseError: parseError instanceof Error ? parseError.message : String(parseError),
+          responsePreview: result?.content?.substring(0, 200) || 'No content'
+        })
+        return {
+          improvements: [],
+          tokens: totalTokens,
+          cost: estimatedCost
+        }
       }
     } catch (error) {
       logger.error('[TEMPLATE-IMPROVEMENT] AI suggestion generation failed', {
@@ -372,10 +450,10 @@ class TemplateImprovementService {
    * Build prompt for AI improvement analysis
    */
   private buildImprovementPrompt(
-    template: any,
+    template: Template,
     qualityMetrics: TemplateQualityMetrics,
-    commonIssues: any[],
-    issueFrequency: any
+    commonIssues: QualityIssue[],
+    issueFrequency: IssueFrequency
   ): string {
     const templateContent = template.content 
       ? (typeof template.content === 'string' 
@@ -505,7 +583,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
   /**
    * Save improvement suggestions to database
    */
-  private async saveImprovementSuggestions(data: any): Promise<string> {
+  private async saveImprovementSuggestions(data: ImprovementSuggestionData): Promise<string> {
     const result = await pool.query(
       `INSERT INTO template_improvement_suggestions (
         template_id, analysis_period_start, analysis_period_end, documents_analyzed,
@@ -554,7 +632,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
    * Notify template owner of high-priority improvements
    */
   private async notifyTemplateOwner(
-    template: any,
+    template: Template,
     improvements: ImprovementSuggestion[],
     priority: string
   ): Promise<void> {
@@ -788,9 +866,9 @@ Focus on the most impactful improvements. Be specific and actionable.`
    * Apply improvements to template content
    */
   private async applyImprovements(
-    template: any,
-    improvements: any[]
-  ): Promise<any> {
+    template: Template,
+    improvements: ImprovementItem[]
+  ): Promise<string> {
     // For now, return template content with improvements appended as comments
     // In future, implement smart template modification
     
@@ -814,7 +892,7 @@ ${improvements.map((imp, idx) => `<!-- Improvement ${idx + 1}: ${imp.issue_addre
   /**
    * Generate human-readable changes summary
    */
-  private generateChangesSummary(improvements: any[]): string {
+  private generateChangesSummary(improvements: ImprovementItem[]): string {
     if (!improvements || improvements.length === 0) {
       return 'Template improvements applied'
     }

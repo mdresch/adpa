@@ -23,16 +23,13 @@ interface QualityAudit {
   overall_score: number
   overall_grade: string
   completeness_score: number
-  structure_score: number
-  formatting_score: number
-  content_depth_score: number
-  accuracy_score: number
   consistency_score: number
-  context_relevance_score: number
   professional_quality_score: number
   standards_compliance_score: number
-  issues: any[]
-  recommendations: any[]
+  accuracy_score: number
+  context_relevance_score: number
+  issues: unknown[]
+  recommendations: unknown[]
 }
 
 interface TemplateOptimizationSuggestion {
@@ -164,22 +161,30 @@ Always respond with valid JSON only.`,
       estimatedCost: `$${estimatedCost.toFixed(4)}`
     })
 
-    // Parse AI response
-    let cleaned = result.content.trim()
-    if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7)
-    if (cleaned.startsWith('```')) cleaned = cleaned.substring(3)
-    if (cleaned.endsWith('```')) cleaned = cleaned.substring(0, cleaned.length - 3)
+    // Parse AI response with error handling
+    try {
+      let cleaned = result.content.trim()
+      if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7)
+      if (cleaned.startsWith('```')) cleaned = cleaned.substring(3)
+      if (cleaned.endsWith('```')) cleaned = cleaned.substring(0, cleaned.length - 3)
 
-    const parsed = JSON.parse(cleaned.trim())
+      const parsed = JSON.parse(cleaned.trim())
 
-    return {
-      suggested_system_prompt: parsed.suggested_system_prompt,
-      suggested_content: parsed.suggested_content,
-      change_explanation: parsed.change_explanation,
-      expected_quality_gain: parsed.expected_quality_gain || 10,
-      changes_summary: parsed.changes_summary,
-      tokens: totalTokens,
-      cost: estimatedCost
+      return {
+        suggested_system_prompt: parsed.suggested_system_prompt,
+        suggested_content: parsed.suggested_content,
+        change_explanation: parsed.change_explanation,
+        expected_quality_gain: parsed.expected_quality_gain || 10,
+        changes_summary: parsed.changes_summary || { system_prompt_changes: [], content_changes: [], key_improvements: [] },
+        tokens: totalTokens,
+        cost: estimatedCost
+      }
+    } catch (error) {
+      logger.error('[TEMPLATE-OPT] Failed to parse AI optimization response', {
+        error: error instanceof Error ? error.message : String(error),
+        responsePreview: result.content.substring(0, 200)
+      })
+      throw new Error('Failed to parse AI optimization response. Please try again.')
     }
   }
 
@@ -196,14 +201,11 @@ Always respond with valid JSON only.`,
     // Identify which dimensions dropped the most
     const dimensionDrops = [
       { name: 'Completeness', before: auditBefore.completeness_score, after: auditAfter.completeness_score },
-      { name: 'Structure', before: auditBefore.structure_score, after: auditAfter.structure_score },
-      { name: 'Formatting & Style', before: auditBefore.formatting_score, after: auditAfter.formatting_score },
-      { name: 'Content Depth', before: auditBefore.content_depth_score, after: auditAfter.content_depth_score },
-      { name: 'Accuracy', before: auditBefore.accuracy_score, after: auditAfter.accuracy_score },
       { name: 'Consistency', before: auditBefore.consistency_score, after: auditAfter.consistency_score },
-      { name: 'Context Relevance', before: auditBefore.context_relevance_score, after: auditAfter.context_relevance_score },
       { name: 'Professional Quality', before: auditBefore.professional_quality_score, after: auditAfter.professional_quality_score },
-      { name: 'Standards Compliance', before: auditBefore.standards_compliance_score, after: auditAfter.standards_compliance_score }
+      { name: 'Standards Compliance', before: auditBefore.standards_compliance_score, after: auditAfter.standards_compliance_score },
+      { name: 'Accuracy', before: auditBefore.accuracy_score, after: auditAfter.accuracy_score },
+      { name: 'Context Relevance', before: auditBefore.context_relevance_score, after: auditAfter.context_relevance_score }
     ]
       .map(d => ({ ...d, drop: d.before - d.after }))
       .filter(d => d.drop > 0)

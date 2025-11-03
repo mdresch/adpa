@@ -54,7 +54,7 @@ class QualityAuditService {
     documentId: string,
     documentContent: string,
     documentType: string,
-    projectContext: any,
+    projectContext: Record<string, unknown>,
     userId: string
   ): Promise<QualityAuditResult> {
     const startTime = Date.now()
@@ -110,10 +110,10 @@ class QualityAuditService {
         findings,
         issues,
         recommendations,
-        aiProvider: analysisResults.provider || 'google',
-        aiModel: analysisResults.model || 'gemini-2.5-flash',
-        analysisTokens: analysisResults.tokens || 0,
-        analysisCost: analysisResults.cost || 0,
+        aiProvider: (analysisResults.provider as string) || 'google',
+        aiModel: (analysisResults.model as string) || 'gemini-2.5-flash',
+        analysisTokens: (analysisResults.tokens as number) || 0,
+        analysisCost: (analysisResults.cost as number) || 0,
         analysisTime
       })
 
@@ -175,18 +175,15 @@ class QualityAuditService {
                 overall_score: overallScore,
                 overall_grade: overallGrade,
                 completeness_score: dimensionalScores.completeness,
-                structure_score: dimensionalScores.structure,
-                formatting_score: dimensionalScores.formattingAndStyle,
-                content_depth_score: dimensionalScores.contentDepth,
-                accuracy_score: dimensionalScores.accuracy,
                 consistency_score: dimensionalScores.consistency,
-                context_relevance_score: dimensionalScores.contextRelevance,
                 professional_quality_score: dimensionalScores.professionalQuality,
                 standards_compliance_score: dimensionalScores.standardsCompliance,
+                accuracy_score: dimensionalScores.accuracy,
+                context_relevance_score: dimensionalScores.contextRelevance,
                 issues,
                 recommendations
               }
-            ).catch((err: any) => {
+            ).catch((err: Error) => {
               logger.error('[QUALITY-AUDIT] Template optimization failed (non-blocking)', {
                 error: err.message
               })
@@ -208,10 +205,10 @@ class QualityAuditService {
             
             const { templateImprovementService } = require('./templateImprovementService')
             
-            templateImprovementService.analyzeTemplateQuality(templateId).catch((err: any) => {
+            templateImprovementService.analyzeTemplateQuality(templateId).catch((err: Error) => {
               logger.error('[QUALITY-AUDIT] Auto-triggered template analysis failed', {
                 templateId,
-                error: err instanceof Error ? err.message : String(err)
+                error: err.message
               })
             })
           }
@@ -226,10 +223,10 @@ class QualityAuditService {
         findings,
         issues,
         recommendations,
-        aiProvider: analysisResults.provider,
-        aiModel: analysisResults.model,
-        analysisTokens: analysisResults.tokens,
-        analysisCost: analysisResults.cost,
+        aiProvider: (analysisResults.provider as string) || undefined,
+        aiModel: (analysisResults.model as string) || undefined,
+        analysisTokens: (analysisResults.tokens as number) || undefined,
+        analysisCost: (analysisResults.cost as number) || undefined,
         analysisTime
       }
     } catch (error) {
@@ -247,8 +244,8 @@ class QualityAuditService {
   private async performAnalysis(
     documentContent: string,
     documentType: string,
-    projectContext: any
-  ): Promise<any> {
+    projectContext: Record<string, unknown>
+  ): Promise<Record<string, unknown>> {
     const analysisPrompt = this.buildAnalysisPrompt(
       documentContent,
       documentType,
@@ -292,9 +289,10 @@ class QualityAuditService {
       }
 
       // Extract token usage from AI response
-      const totalTokens = result.usage?.totalTokens || result.usage?.total_tokens || 0
-      const promptTokens = result.usage?.promptTokens || result.usage?.prompt_tokens || 0
-      const completionTokens = result.usage?.completionTokens || result.usage?.completion_tokens || 0
+      const usage = result.usage as { totalTokens?: number; total_tokens?: number; promptTokens?: number; prompt_tokens?: number; completionTokens?: number; completion_tokens?: number } | undefined
+      const totalTokens = usage?.totalTokens || usage?.total_tokens || 0
+      const promptTokens = usage?.promptTokens || usage?.prompt_tokens || 0
+      const completionTokens = usage?.completionTokens || usage?.completion_tokens || 0
       const estimatedCost = this.estimateCost(totalTokens, 'google')
 
       logger.info('[QUALITY-AUDIT] Token usage captured', {
@@ -331,7 +329,7 @@ class QualityAuditService {
   private buildAnalysisPrompt(
     documentContent: string,
     documentType: string,
-    projectContext: any
+    projectContext: Record<string, unknown>
   ): string {
     const frameworkGuidance = this.getFrameworkGuidance(documentType)
     
@@ -546,7 +544,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Parse AI analysis response
    */
-  private parseAnalysisResponse(content: string): any {
+  private parseAnalysisResponse(content: string): Record<string, unknown> {
     try {
       // Remove any markdown code blocks if present
       let cleaned = content.trim()
@@ -576,7 +574,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Extract dimensional scores from analysis
    */
-  private extractDimensionalScores(analysisResults: any): QualityDimensionalScores {
+  private extractDimensionalScores(analysisResults: Record<string, unknown>): QualityDimensionalScores {
     return {
       completeness: this.validateScore(analysisResults.completeness, 70),
       consistency: this.validateScore(analysisResults.consistency, 70),
@@ -590,8 +588,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Validate score is in valid range, with fallback
    */
-  private validateScore(score: any, fallback: number): number {
-    const num = parseInt(score, 10)
+  private validateScore(score: unknown, fallback: number): number {
+    const num = parseInt(String(score), 10)
     if (isNaN(num) || num < 0 || num > 100) {
       logger.warn('[QUALITY-AUDIT] Invalid score, using fallback', { score, fallback })
       return fallback
@@ -648,8 +646,8 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Extract findings from analysis results
    */
-  private extractFindings(analysisResults: any): Record<string, string> {
-    const findings = analysisResults.findings || {}
+  private extractFindings(analysisResults: Record<string, unknown>): Record<string, string> {
+    const findings = (analysisResults.findings as Record<string, string>) || {}
     
     return {
       completeness: findings.completeness || 'No detailed findings available',
@@ -664,23 +662,27 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Extract issues from analysis
    */
-  private extractIssues(analysisResults: any): QualityIssue[] {
-    const issues = analysisResults.issues || []
+  private extractIssues(analysisResults: Record<string, unknown>): QualityIssue[] {
+    const issues = Array.isArray(analysisResults.issues) ? analysisResults.issues : []
     
-    return issues.map((issue: any) => ({
-      severity: issue.severity || 'minor',
-      dimension: issue.dimension || 'general',
-      description: issue.description || 'No description provided',
-      location: issue.location,
-      recommendation: issue.recommendation
-    }))
+    return issues.map((issue: unknown) => {
+      const issueObj = issue as Record<string, unknown>
+      const severity = issueObj.severity as string || 'minor'
+      return {
+        severity: (['critical', 'major', 'minor'].includes(severity) ? severity : 'minor') as 'critical' | 'major' | 'minor',
+        dimension: (issueObj.dimension as string) || 'general',
+        description: (issueObj.description as string) || 'No description provided',
+        location: issueObj.location as string | undefined,
+        recommendation: issueObj.recommendation as string | undefined
+      }
+    })
   }
 
   /**
    * Generate actionable recommendations
    */
-  private extractRecommendations(analysisResults: any, overallScore: number): string[] {
-    const recommendations = analysisResults.recommendations || []
+  private extractRecommendations(analysisResults: Record<string, unknown>, overallScore: number): string[] {
+    const recommendations = Array.isArray(analysisResults.recommendations) ? analysisResults.recommendations as string[] : []
 
     // Add score-specific recommendations
     const scoreRecommendations: string[] = []
@@ -699,7 +701,7 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Get default scores when AI analysis fails
    */
-  private getDefaultScores(): any {
+  private getDefaultScores(): Record<string, unknown> {
     logger.warn('[QUALITY-AUDIT] Using default scores (AI analysis failed)')
     
     return {
@@ -743,7 +745,23 @@ Remember: Your audit helps improve future document generation, so be detailed an
   /**
    * Save audit results to database
    */
-  private async saveAuditResults(auditData: any): Promise<string> {
+  private async saveAuditResults(auditData: {
+    documentId: string
+    auditJobId: string
+    overallScore: number
+    overallGrade: string
+    qualityLevel: string
+    dimensionalScores: QualityDimensionalScores
+    findings: Record<string, string>
+    issues: QualityIssue[]
+    recommendations: string[]
+    aiProvider?: string
+    aiModel?: string
+    analysisTokens?: number
+    analysisCost?: number
+    analysisTime: number
+    userId?: string
+  }): Promise<string> {
     const result = await pool.query(
       `INSERT INTO quality_audits (
         document_id, audit_job_id, overall_score, overall_grade, quality_level,

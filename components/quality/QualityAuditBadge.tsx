@@ -85,7 +85,7 @@ export function QualityAuditBadge({
         {showDetails && (
           <QualityAuditModal
             documentId={documentId}
-            onClose={() => setShowDetails(false)}
+            onClose={() => { setShowDetails(false) }}
           />
         )}
       </>
