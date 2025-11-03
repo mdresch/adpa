@@ -292,9 +292,17 @@ router.get(
       const { projectId, entityType } = req.params
       const userId = (req as any).user?.id
       
+      logger.info('[ENTITY-DETAILS-API] Request received', {
+        projectId,
+        entityType,
+        userId,
+        query: req.query
+      })
+      
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       if (!uuidRegex.test(projectId)) {
+        logger.warn('[ENTITY-DETAILS-API] Invalid project ID format', { projectId })
         return res.status(400).json({
           success: false,
           error: 'Invalid project ID format'
@@ -386,6 +394,15 @@ router.get(
          LIMIT $2 OFFSET $3`,
         [projectId, limitNum, offsetNum]
       )
+
+      logger.info('[ENTITY-DETAILS-API] Query completed', {
+        entityType,
+        tableName,
+        rowCount: result.rows.length,
+        total,
+        limit: limitNum,
+        offset: offsetNum
+      })
 
       res.json({
         success: true,

@@ -278,23 +278,30 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setSelectedEntityType(entityType)
       setShowEntityDialog(true)
       
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`,
-        {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          }
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`
+      console.log('[ENTITY-DETAILS] Fetching:', apiUrl)
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
-      )
+      })
+      
+      console.log('[ENTITY-DETAILS] Response status:', response.status)
       
       if (!response.ok) {
-        throw new Error('Failed to fetch entity details')
+        const errorData = await response.json().catch(() => ({}))
+        console.error('[ENTITY-DETAILS] Error response:', errorData)
+        throw new Error(errorData.error || `Failed to fetch entity details (${response.status})`)
       }
       
       const data = await response.json()
+      console.log('[ENTITY-DETAILS] Response data:', data)
+      console.log('[ENTITY-DETAILS] Entities count:', data.entities?.length || 0)
+      
       setEntityDetails(data.entities || [])
     } catch (error) {
-      console.error('Failed to fetch entity details:', error)
+      console.error('[ENTITY-DETAILS] Failed to fetch entity details:', error)
       toast.error('Failed to load entity details')
       setEntityDetails([])
     } finally {
