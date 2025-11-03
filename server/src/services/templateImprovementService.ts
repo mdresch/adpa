@@ -566,8 +566,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
       SELECT 
         tis.*,
         t.name as template_name,
-        t.type as template_type,
-        t.framework
+        t.framework as template_framework
       FROM template_improvement_suggestions tis
       JOIN templates t ON tis.template_id = t.id
       WHERE 1=1
