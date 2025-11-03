@@ -205,7 +205,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
   const router = useRouter()
   const projectId = params.id
   const docId = params.docId
-  const { isAuthenticated } = useAuth()
+  const { isAuthenticated, user, token } = useAuth()
 
   const [document, setDocument] = useState<Document | null>(null)
   const [project, setProject] = useState<Project | null>(null)
