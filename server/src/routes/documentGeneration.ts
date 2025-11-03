@@ -302,9 +302,10 @@ router.post("/generate-new-version",
 
       log.info(`Generating new version for document ${existingDocumentId}`)
 
-      // Get existing document
+      // Get existing document WITH template info
       const documentCheck = await pool.query(
         `SELECT d.id, d.name, d.semantic_version, d.version, d.project_id,
+                d.template_id, d.template_version,
                 p.owner_id, p.team_members
          FROM documents d
          JOIN projects p ON d.project_id = p.id
@@ -340,9 +341,48 @@ router.post("/generate-new-version",
       const wordCount = result.content.trim().split(/\s+/).filter(Boolean).length
       const characterCount = result.content.length
 
-      // Increment version (AI regeneration = minor version)
+      // Check if template has changed (for MAJOR version increment)
+      let templateChanged = false
+      let changeType = 'ai_regeneration'
+      
+      if (templateId && document.template_id) {
+        // Different template = MAJOR version
+        if (templateId !== document.template_id) {
+          templateChanged = true
+          changeType = 'template_change'
+          log.info(`Template changed: ${document.template_id} → ${templateId}`)
+        } else {
+          // Same template, check version
+          const templateInfo = await pool.query(
+            'SELECT prompt_version FROM templates WHERE id = $1',
+            [templateId]
+          )
+          if (templateInfo.rows.length > 0) {
+            const newTemplateVersion = templateInfo.rows[0].prompt_version?.toString() || '1'
+            const oldTemplateVersion = document.template_version?.toString() || '1'
+            if (newTemplateVersion !== oldTemplateVersion) {
+              templateChanged = true
+              changeType = 'template_version_update'
+              log.info(`Template version changed: ${oldTemplateVersion} → ${newTemplateVersion}`)
+            }
+          }
+        }
+      }
+
+      // Increment version based on change type
       const currentVersion = document.semantic_version || '1.0.0'
-      const newVersion = semanticVersionService.getNextAIVersion(currentVersion)
+      let newVersion: string
+      
+      if (templateChanged) {
+        // MAJOR version: Template or template version changed
+        newVersion = semanticVersionService.getNextTemplateVersion(currentVersion)
+        log.info(`🎯 MAJOR version increment (template change): ${currentVersion} → ${newVersion}`)
+      } else {
+        // MINOR version: Regular AI regeneration
+        newVersion = semanticVersionService.getNextAIVersion(currentVersion)
+        log.info(`🔄 MINOR version increment (AI regeneration): ${currentVersion} → ${newVersion}`)
+      }
+      
       const newVersionNumber = document.version + 1
 
       // Save current version to history (if not already saved)
@@ -358,8 +398,8 @@ router.post("/generate-new-version",
           currentVersion,
           typeof document.content === 'string' ? document.content : JSON.stringify(document.content),
           req.user?.id,
-          'ai_regeneration',
-          JSON.stringify({ provider, model, temperature })
+          changeType, // Use detected change type
+          JSON.stringify({ provider, model, temperature, templateChanged })
         ]
       )
       
@@ -486,6 +526,8 @@ router.post("/generate-new-version",
             new_version: newVersion,
             generated_by: 'ai',
             template_id: templateId,
+            template_changed: templateChanged,
+            change_type: changeType,
             drift_detected: driftDetected
           })
         ]
