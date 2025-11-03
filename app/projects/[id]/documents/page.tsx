@@ -53,6 +53,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
 import { toast } from "sonner"
+import { QualityAuditBadge } from "@/components/quality"
 
 // Status configuration for template badges
 const statusConfig = {
@@ -91,6 +92,9 @@ interface Document {
   mime_type?: string
   tags?: string[]
   metadata?: any
+  quality_score?: number
+  quality_status?: 'passed' | 'warning' | 'failed' | 'pending' | 'not_audited'
+  quality_audit_id?: string
 }
 
 interface DocumentStats {
@@ -461,6 +465,15 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     const sizes = ['Bytes', 'KB', 'MB', 'GB']
     const i = Math.floor(Math.log(bytes) / Math.log(k))
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Calculate quality grade from score
+  const calculateGrade = (score: number): string => {
+    if (score >= 90) return 'A'
+    if (score >= 80) return 'B'
+    if (score >= 70) return 'C'
+    if (score >= 60) return 'D'
+    return 'F'
   }
 
   // Load data on component mount
@@ -879,6 +892,15 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                   <Badge variant="outline">
                                     v{document.version}
                                   </Badge>
+                                  {document.quality_score !== undefined && document.quality_score !== null && (
+                                    <QualityAuditBadge
+                                      documentId={document.id}
+                                      score={document.quality_score}
+                                      grade={calculateGrade(document.quality_score)}
+                                      status={document.quality_status}
+                                      compact
+                                    />
+                                  )}
                                 </div>
                                 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
