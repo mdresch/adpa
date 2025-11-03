@@ -10,7 +10,7 @@
 
 CREATE TABLE IF NOT EXISTS template_improvement_suggestions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+  template_id UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
   
   -- Analysis Period
   analysis_period_start TIMESTAMP NOT NULL,
@@ -56,52 +56,32 @@ CREATE TABLE IF NOT EXISTS template_improvement_suggestions (
 );
 
 -- =======================
--- Template Versions Table
+-- Template Versions Table (Enhance Existing)
 -- =======================
 
-CREATE TABLE IF NOT EXISTS template_versions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
-  version_number INTEGER NOT NULL CHECK (version_number > 0),
-  
-  -- Template Content
-  content TEXT NOT NULL,
-  system_prompt TEXT,
-  
-  -- Quality Tracking
-  avg_quality_before INTEGER CHECK (avg_quality_before >= 0 AND avg_quality_before <= 100),
-  avg_quality_after INTEGER CHECK (avg_quality_after >= 0 AND avg_quality_after <= 100),
-  improvement_percentage DECIMAL(5, 2),
-  
-  -- Change Documentation
-  changes_summary TEXT NOT NULL,
-  improvement_suggestion_id UUID REFERENCES template_improvement_suggestions(id) ON DELETE SET NULL,
-  
-  -- Metadata
-  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_at TIMESTAMP DEFAULT NOW(),
-  active BOOLEAN DEFAULT true,
-  
-  -- Constraints
-  UNIQUE(template_id, version_number)
-);
+-- Note: template_versions table already exists with different schema
+-- We'll add quality tracking columns to the existing table
+
+ALTER TABLE template_versions
+ADD COLUMN IF NOT EXISTS avg_quality_before INTEGER CHECK (avg_quality_before >= 0 AND avg_quality_before <= 100),
+ADD COLUMN IF NOT EXISTS avg_quality_after INTEGER CHECK (avg_quality_after >= 0 AND avg_quality_after <= 100),
+ADD COLUMN IF NOT EXISTS improvement_percentage DECIMAL(5, 2),
+ADD COLUMN IF NOT EXISTS improvement_suggestion_id UUID REFERENCES template_improvement_suggestions(id) ON DELETE SET NULL;
 
 -- =======================
 -- Indexes for Performance
 -- =======================
 
 -- Template Improvement Suggestions Indexes
-CREATE INDEX idx_template_improvements_template ON template_improvement_suggestions(template_id);
-CREATE INDEX idx_template_improvements_status ON template_improvement_suggestions(status);
-CREATE INDEX idx_template_improvements_priority ON template_improvement_suggestions(priority);
-CREATE INDEX idx_template_improvements_date ON template_improvement_suggestions(created_at DESC);
-CREATE INDEX idx_template_improvements_pending ON template_improvement_suggestions(status, priority) WHERE status = 'pending_review';
+CREATE INDEX IF NOT EXISTS idx_template_improvements_template ON template_improvement_suggestions(template_id);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_status ON template_improvement_suggestions(status);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_priority ON template_improvement_suggestions(priority);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_date ON template_improvement_suggestions(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_template_improvements_pending ON template_improvement_suggestions(status, priority) WHERE status = 'pending_review';
 
--- Template Versions Indexes
-CREATE INDEX idx_template_versions_template ON template_versions(template_id);
-CREATE INDEX idx_template_versions_active ON template_versions(template_id, active) WHERE active = true;
-CREATE INDEX idx_template_versions_number ON template_versions(template_id, version_number DESC);
-CREATE INDEX idx_template_versions_suggestion ON template_versions(improvement_suggestion_id);
+-- Template Versions Indexes (some already exist, using IF NOT EXISTS)
+-- Note: idx_template_versions_template and idx_template_versions_number already exist
+CREATE INDEX IF NOT EXISTS idx_template_versions_suggestion ON template_versions(improvement_suggestion_id);
 
 -- =======================
 -- Comments for Documentation
@@ -120,16 +100,11 @@ COMMENT ON COLUMN template_improvement_suggestions.expected_quality_gain IS 'Pre
 COMMENT ON COLUMN template_improvement_suggestions.priority IS 'Urgency: critical (<70% quality, >10pt gain), high (<80%, >8pt), medium (<85%, >5pt), low (else)';
 COMMENT ON COLUMN template_improvement_suggestions.status IS 'Workflow status: pending_review → approved/rejected → implemented';
 
-COMMENT ON TABLE template_versions IS 'Version history of template content with quality tracking before/after changes';
-COMMENT ON COLUMN template_versions.version_number IS 'Sequential version number starting at 1';
-COMMENT ON COLUMN template_versions.content IS 'Full template content for this version';
-COMMENT ON COLUMN template_versions.system_prompt IS 'System prompt for AI generation (if different from template content)';
-COMMENT ON COLUMN template_versions.avg_quality_before IS 'Average quality score before this version was implemented';
-COMMENT ON COLUMN template_versions.avg_quality_after IS 'Average quality score after 30 days of using this version';
-COMMENT ON COLUMN template_versions.improvement_percentage IS 'Actual quality improvement: (after - before)';
-COMMENT ON COLUMN template_versions.changes_summary IS 'Human-readable summary of what changed in this version';
-COMMENT ON COLUMN template_versions.improvement_suggestion_id IS 'Link to the suggestion that led to this version (if applicable)';
-COMMENT ON COLUMN template_versions.active IS 'Only one version per template should be active at a time';
+-- Comments for NEW columns added to existing template_versions table
+COMMENT ON COLUMN template_versions.avg_quality_before IS 'Average quality score before this version was implemented (added by quality audit system)';
+COMMENT ON COLUMN template_versions.avg_quality_after IS 'Average quality score after 30 days of using this version (added by quality audit system)';
+COMMENT ON COLUMN template_versions.improvement_percentage IS 'Actual quality improvement: (after - before) (added by quality audit system)';
+COMMENT ON COLUMN template_versions.improvement_suggestion_id IS 'Link to the AI-generated suggestion that led to this version (added by quality audit system)';
 
 -- =======================
 -- Triggers
@@ -149,27 +124,8 @@ CREATE TRIGGER trigger_update_template_improvements_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_template_improvements_updated_at();
 
--- Ensure only one active version per template
-CREATE OR REPLACE FUNCTION ensure_single_active_template_version()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.active = true THEN
-    -- Deactivate all other versions for this template
-    UPDATE template_versions
-    SET active = false
-    WHERE template_id = NEW.template_id
-    AND id != NEW.id
-    AND active = true;
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER trigger_ensure_single_active_version
-  AFTER INSERT OR UPDATE OF active ON template_versions
-  FOR EACH ROW
-  WHEN (NEW.active = true)
-  EXECUTE FUNCTION ensure_single_active_template_version();
+-- Note: No active column trigger needed for existing template_versions table
+-- The existing schema uses published_at and deprecated_at for version management
 
 -- =======================
 -- Sample Query Examples (for testing)
@@ -178,14 +134,14 @@ CREATE TRIGGER trigger_ensure_single_active_version
 -- Get pending improvement suggestions by priority
 -- SELECT 
 --   tis.id,
---   dt.name as template_name,
+--   t.name as template_name,
 --   tis.documents_analyzed,
 --   tis.current_avg_quality,
 --   tis.expected_quality_gain,
 --   tis.priority,
 --   tis.created_at
 -- FROM template_improvement_suggestions tis
--- JOIN document_templates dt ON tis.template_id = dt.id
+-- JOIN templates t ON tis.template_id = t.id
 -- WHERE tis.status = 'pending_review'
 -- ORDER BY 
 --   CASE tis.priority
@@ -212,31 +168,31 @@ CREATE TRIGGER trigger_ensure_single_active_version
 
 -- Get templates that need improvement (low quality, no pending suggestions)
 -- SELECT 
---   dt.id,
---   dt.name,
+--   t.id,
+--   t.name,
 --   AVG(qa.overall_score) as avg_quality,
 --   COUNT(qa.id) as audit_count,
 --   COUNT(tis.id) as pending_suggestions
--- FROM document_templates dt
--- JOIN documents d ON d.template_id = dt.id
+-- FROM templates t
+-- JOIN documents d ON d.template_id = t.id
 -- JOIN quality_audits qa ON qa.document_id = d.id
--- LEFT JOIN template_improvement_suggestions tis ON tis.template_id = dt.id AND tis.status = 'pending_review'
+-- LEFT JOIN template_improvement_suggestions tis ON tis.template_id = t.id AND tis.status = 'pending_review'
 -- WHERE qa.audited_at > NOW() - INTERVAL '30 days'
--- AND dt.active = true
--- GROUP BY dt.id, dt.name
+-- AND t.deleted_at IS NULL
+-- GROUP BY t.id, t.name
 -- HAVING AVG(qa.overall_score) < 85 AND COUNT(tis.id) = 0
 -- ORDER BY avg_quality ASC;
 
 -- Get improvement effectiveness (compare predicted vs actual)
 -- SELECT 
 --   tis.id,
---   dt.name as template_name,
+--   t.name as template_name,
 --   tis.expected_quality_gain as predicted_gain,
 --   tv.improvement_percentage as actual_gain,
 --   (tv.improvement_percentage - tis.expected_quality_gain) as prediction_error
 -- FROM template_improvement_suggestions tis
 -- JOIN template_versions tv ON tv.improvement_suggestion_id = tis.id
--- JOIN document_templates dt ON dt.id = tis.template_id
+-- JOIN templates t ON t.id = tis.template_id
 -- WHERE tis.status = 'implemented'
 -- AND tv.avg_quality_after IS NOT NULL
 -- ORDER BY ABS(tv.improvement_percentage - tis.expected_quality_gain) DESC;
