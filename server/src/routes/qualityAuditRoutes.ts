@@ -341,6 +341,86 @@ router.post(
 )
 
 /**
+ * POST /api/quality-audits/template-optimization/:suggestionId/apply
+ * Apply AI-generated template optimization (MANUAL GATE)
+ */
+router.post(
+  '/template-optimization/:suggestionId/apply',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionId } = req.params
+      const userId = (req as any).user?.id
+
+      // Check if user is admin
+      const userResult = await pool.query(
+        'SELECT role FROM users WHERE id = $1',
+        [userId]
+      )
+
+      if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          error: 'Only administrators can apply template optimizations'
+        })
+      }
+
+      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      await templateOptimizationService.applyOptimization(suggestionId, userId)
+      
+      logger.info('[QUALITY-AUDIT-API] Template optimization applied', {
+        suggestionId,
+        adminId: userId
+      })
+
+      res.json({
+        success: true,
+        message: 'Template optimization applied successfully. Template version incremented.'
+      })
+    } catch (error: unknown) {
+      logger.error('[QUALITY-AUDIT-API] Failed to apply optimization', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/quality-audits/template-optimization/:suggestionId
+ * Get detailed optimization suggestion with diff view
+ */
+router.get(
+  '/template-optimization/:suggestionId',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { suggestionId } = req.params
+
+      const { templateOptimizationService } = await import('../services/templateOptimizationService')
+      const suggestion = await templateOptimizationService.getOptimizationSuggestion(suggestionId)
+      
+      if (!suggestion) {
+        return res.status(404).json({
+          success: false,
+          error: 'Optimization suggestion not found'
+        })
+      }
+
+      res.json({
+        success: true,
+        suggestion
+      })
+    } catch (error: unknown) {
+      logger.error('[QUALITY-AUDIT-API] Failed to get optimization', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      next(error)
+    }
+  }
+)
+
+/**
  * POST /api/quality-audits/analyze-templates
  * Manually trigger template analysis (admin only)
  * Optional: Analyze specific template by passing templateId in body

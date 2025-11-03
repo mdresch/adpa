@@ -121,24 +121,74 @@ class QualityAuditService {
         analysisTime: `${analysisTime}ms`
       })
 
-      // 8. Trigger template analysis if quality indicates improvement opportunities
-      // Only trigger if:
-      // - Score is below 90% (room for improvement)
-      // - Document has a template assigned
-      // - At least one dimension scored below 80%
-      if (overallScore < 90) {
-        const hasLowScore = Object.values(dimensionalScores).some(score => score < 80)
-        
-        if (hasLowScore) {
-          // Get document template ID
-          const docResult = await pool.query(
-            'SELECT template_id FROM documents WHERE id = $1',
-            [documentId]
-          )
+      // 8. Check for quality regression and trigger AI template optimization
+      const docResult = await pool.query(
+        'SELECT template_id FROM documents WHERE id = $1',
+        [documentId]
+      )
+      const templateId = docResult.rows[0]?.template_id
+
+      if (templateId) {
+        // Get previous audit for same template
+        const previousAudit = await pool.query(
+          `SELECT qa.*
+           FROM quality_audits qa
+           JOIN documents d ON qa.document_id = d.id
+           WHERE d.template_id = $1
+           AND qa.id != $2
+           AND qa.audited_at < (SELECT audited_at FROM quality_audits WHERE id = $2)
+           ORDER BY qa.audited_at DESC
+           LIMIT 1`,
+          [templateId, auditId]
+        )
+
+        // Detect quality regression (5%+ drop)
+        if (previousAudit.rows.length > 0) {
+          const prevScore = previousAudit.rows[0].overall_score
+          const qualityDrop = prevScore - overallScore
+
+          if (qualityDrop >= 5) {
+            logger.info('[QUALITY-AUDIT] 📉 Quality regression detected! Triggering AI optimization', {
+              templateId,
+              previousScore: prevScore,
+              currentScore: overallScore,
+              regression: qualityDrop
+            })
+
+            // Trigger AI-powered template optimization
+            const { templateOptimizationService } = await import('./templateOptimizationService')
+            
+            templateOptimizationService.analyzeRegressionAndOptimize(
+              templateId,
+              previousAudit.rows[0],
+              {
+                overall_score: overallScore,
+                overall_grade: overallGrade,
+                completeness_score: dimensionalScores.completeness,
+                structure_score: dimensionalScores.structure,
+                formatting_score: dimensionalScores.formattingAndStyle,
+                content_depth_score: dimensionalScores.contentDepth,
+                accuracy_score: dimensionalScores.accuracy,
+                consistency_score: dimensionalScores.consistency,
+                context_relevance_score: dimensionalScores.contextRelevance,
+                professional_quality_score: dimensionalScores.professionalQuality,
+                standards_compliance_score: dimensionalScores.standardsCompliance,
+                issues,
+                recommendations
+              }
+            ).catch((err: any) => {
+              logger.error('[QUALITY-AUDIT] Template optimization failed (non-blocking)', {
+                error: err.message
+              })
+            })
+          }
+        }
+
+        // 9. Also trigger regular template analysis if quality is below 90%
+        if (overallScore < 90) {
+          const hasLowScore = Object.values(dimensionalScores).some(score => score < 80)
           
-          const templateId = docResult.rows[0]?.template_id
-          
-          if (templateId) {
+          if (hasLowScore) {
             logger.info('[QUALITY-AUDIT] Triggering automatic template analysis', {
               documentId,
               templateId,
@@ -146,7 +196,6 @@ class QualityAuditService {
               reason: 'Quality score below 90% with improvement opportunities'
             })
             
-            // Import and trigger template analysis asynchronously (don't block)
             const { templateImprovementService } = require('./templateImprovementService')
             
             templateImprovementService.analyzeTemplateQuality(templateId).catch((err: any) => {
@@ -154,7 +203,6 @@ class QualityAuditService {
                 templateId,
                 error: err instanceof Error ? err.message : String(err)
               })
-              // Don't fail audit if template analysis fails
             })
           }
         }

@@ -5,7 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
-import { Loader2, Sparkles, CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Info } from 'lucide-react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Separator } from '@/components/ui/separator'
+import { Loader2, Sparkles, CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Info, Zap, Code, FileText, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface TemplateSuggestion {
@@ -20,12 +23,22 @@ interface TemplateSuggestion {
   document_count: number
   created_at: string
   updated_at: string
+  analysis_metadata?: {
+    optimization_type?: 'ai_generated'
+    trigger?: 'quality_regression'
+    score_before?: number
+    score_after?: number
+    regression_amount?: number
+  }
 }
 
 export function TemplateRecommendations({ templateId }: { templateId: string }) {
   const [suggestions, setSuggestions] = useState<TemplateSuggestion[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [showOptimizationDialog, setShowOptimizationDialog] = useState(false)
+  const [selectedOptimization, setSelectedOptimization] = useState<any | null>(null)
+  const [applyingOptimization, setApplyingOptimization] = useState(false)
 
   useEffect(() => {
     fetchSuggestions()
@@ -58,6 +71,51 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
     } finally {
       setLoading(false)
     }
+  }
+
+  const viewOptimization = async (suggestion: TemplateSuggestion) => {
+    setSelectedOptimization(suggestion)
+    setShowOptimizationDialog(true)
+  }
+
+  const applyOptimization = async (suggestionId: string) => {
+    try {
+      setApplyingOptimization(true)
+
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const response = await fetch(
+        `${API_BASE_URL}/quality-audits/template-optimization/${suggestionId}/apply`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to apply optimization')
+      }
+
+      toast.success('Template optimization applied! Template version incremented.')
+      setShowOptimizationDialog(false)
+      fetchSuggestions() // Reload to show updated status
+
+      // Reload page to show new template version
+      setTimeout(() => window.location.reload(), 1500)
+
+    } catch (err: any) {
+      console.error('Failed to apply optimization:', err)
+      toast.error(err.message || 'Failed to apply template optimization')
+    } finally {
+      setApplyingOptimization(false)
+    }
+  }
+
+  const isAIOptimization = (suggestion: TemplateSuggestion) => {
+    return suggestion.analysis_metadata?.optimization_type === 'ai_generated'
   }
 
   const getPriorityColor = (priority: string) => {
@@ -162,9 +220,127 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
         </Card>
       </div>
 
-      {/* Suggestions List */}
+      {/* AI-Generated Template Optimizations (Regression-triggered) */}
+      {suggestions.filter(isAIOptimization).length > 0 && (
+        <div className="space-y-4">
+          <Alert className="bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950 dark:to-blue-950 border-purple-300 dark:border-purple-700">
+            <Zap className="h-4 w-4 text-purple-600" />
+            <AlertTitle className="text-purple-900 dark:text-purple-100">🤖 AI-Generated Template Optimization Available!</AlertTitle>
+            <AlertDescription className="text-purple-800 dark:text-purple-200">
+              Quality regression detected! AI has analyzed your template changes and generated an optimized version.
+            </AlertDescription>
+          </Alert>
+
+          {suggestions.filter(isAIOptimization).map((suggestion) => {
+            const improvement = suggestion.suggested_improvements[0]
+            const isOptimization = improvement?.system_prompt && improvement?.template_content
+            
+            if (!isOptimization) return null
+
+            return (
+              <Card key={suggestion.id} className="border-2 border-purple-400 dark:border-purple-600 bg-gradient-to-br from-white to-purple-50 dark:from-gray-900 dark:to-purple-950">
+                <CardHeader>
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <CardTitle className="flex items-center gap-2 text-lg">
+                        <Sparkles className="h-5 w-5 text-purple-600" />
+                        AI-Optimized Template Ready for Review
+                      </CardTitle>
+                      <CardDescription className="mt-2">
+                        Quality regression: {suggestion.analysis_metadata?.score_before}% → {suggestion.analysis_metadata?.score_after}% 
+                        (📉 {suggestion.analysis_metadata?.regression_amount}% drop)
+                      </CardDescription>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-3xl font-bold text-green-600">+{suggestion.expected_quality_gain}%</div>
+                      <p className="text-xs text-muted-foreground">Predicted Gain</p>
+                    </div>
+                  </div>
+                </CardHeader>
+
+                <CardContent className="space-y-4">
+                  {/* Quality Comparison */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-3 bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 rounded-lg">
+                      <p className="text-xs font-medium text-red-700 dark:text-red-300 mb-1">Current (v2)</p>
+                      <div className="text-2xl font-bold text-red-600">{suggestion.analysis_metadata?.score_after}%</div>
+                    </div>
+                    <div className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                      <p className="text-xs font-medium text-green-700 dark:text-green-300 mb-1">Predicted (v3)</p>
+                      <div className="text-2xl font-bold text-green-600">{(suggestion.analysis_metadata?.score_after || 80) + suggestion.expected_quality_gain}%</div>
+                    </div>
+                  </div>
+
+                  {/* Changes Summary */}
+                  {improvement.changes_summary && (
+                    <div className="space-y-3">
+                      <Separator />
+                      <h4 className="font-semibold text-sm flex items-center gap-2">
+                        <Code className="h-4 w-4" />
+                        AI-Generated Improvements
+                      </h4>
+                      
+                      {improvement.changes_summary.key_improvements && (
+                        <div className="space-y-2">
+                          {improvement.changes_summary.key_improvements.map((imp: string, idx: number) => (
+                            <div key={idx} className="flex items-start gap-2 text-sm">
+                              <CheckCircle className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+                              <span>{imp}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <Separator />
+                  <div className="flex items-center justify-between pt-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => viewOptimization(suggestion)}
+                    >
+                      <FileText className="h-4 w-4 mr-2" />
+                      View Full Diff
+                    </Button>
+
+                    {suggestion.status === 'pending_review' && (
+                      <Button 
+                        className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                        onClick={() => applyOptimization(suggestion.id)}
+                        disabled={applyingOptimization}
+                      >
+                        {applyingOptimization ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Applying...
+                          </>
+                        ) : (
+                          <>
+                            <Zap className="h-4 w-4 mr-2" />
+                            ✅ Apply to Template (Increment to v3)
+                          </>
+                        )}
+                      </Button>
+                    )}
+
+                    {suggestion.status === 'implemented' && (
+                      <Badge className="bg-green-600">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Applied Successfully
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Regular Suggestions List */}
       <div className="space-y-4">
-        {suggestions.map((suggestion) => {
+        {suggestions.filter(s => !isAIOptimization(s)).map((suggestion) => {
           const StatusIcon = getStatusIcon(suggestion.status)
           
           return (
@@ -271,6 +447,175 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
           )
         })}
       </div>
+
+      {/* Optimization Diff Dialog */}
+      <Dialog open={showOptimizationDialog} onOpenChange={setShowOptimizationDialog}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-600" />
+              AI-Generated Template Optimization
+            </DialogTitle>
+            <DialogDescription>
+              Review the AI-suggested improvements to your template. Click "Apply to Template" to increment version and update.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedOptimization && selectedOptimization.suggested_improvements[0] && (
+            <Tabs defaultValue="comparison" className="mt-4">
+              <TabsList>
+                <TabsTrigger value="comparison">Side-by-Side</TabsTrigger>
+                <TabsTrigger value="explanation">Explanation</TabsTrigger>
+                <TabsTrigger value="changes">Change Summary</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="comparison" className="space-y-4 mt-4">
+                {/* System Prompt Comparison */}
+                <div>
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <Code className="h-4 w-4" />
+                    System Prompt
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Badge variant="outline" className="mb-2">Current (v2)</Badge>
+                      <pre className="text-xs bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto max-h-64">
+                        {selectedOptimization.suggested_improvements[0].system_prompt || 'No system prompt'}
+                      </pre>
+                    </div>
+                    <div>
+                      <Badge className="mb-2 bg-green-600">Suggested (v3)</Badge>
+                      <pre className="text-xs bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto max-h-64">
+                        {selectedOptimization.suggested_improvements[0].system_prompt || 'No changes'}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+
+                <Separator />
+
+                {/* Template Content Comparison */}
+                <div>
+                  <h4 className="font-semibold mb-2 flex items-center gap-2">
+                    <FileText className="h-4 w-4" />
+                    Template Content
+                  </h4>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Badge variant="outline" className="mb-2">Current (v2)</Badge>
+                      <pre className="text-xs bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto max-h-96">
+                        {selectedOptimization.suggested_improvements[0].template_content?.substring(0, 2000) || 'No content'}
+                        {selectedOptimization.suggested_improvements[0].template_content?.length > 2000 && '\n\n... (truncated)'}
+                      </pre>
+                    </div>
+                    <div>
+                      <Badge className="mb-2 bg-green-600">Suggested (v3)</Badge>
+                      <pre className="text-xs bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto max-h-96">
+                        {selectedOptimization.suggested_improvements[0].template_content?.substring(0, 2000) || 'No changes'}
+                        {selectedOptimization.suggested_improvements[0].template_content?.length > 2000 && '\n\n... (truncated)'}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="explanation" className="mt-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">AI Analysis</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm whitespace-pre-wrap">
+                      {selectedOptimization.suggested_improvements[0]?.proposed_change || 
+                       selectedOptimization.suggested_improvements[0]?.change_explanation ||
+                       'No explanation provided'}
+                    </p>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="changes" className="mt-4">
+                {selectedOptimization.suggested_improvements[0]?.changes_summary && (
+                  <div className="space-y-4">
+                    {selectedOptimization.suggested_improvements[0].changes_summary.system_prompt_changes && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm">System Prompt Changes</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="list-disc list-inside space-y-1 text-sm">
+                            {selectedOptimization.suggested_improvements[0].changes_summary.system_prompt_changes.map((change: string, idx: number) => (
+                              <li key={idx}>{change}</li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {selectedOptimization.suggested_improvements[0].changes_summary.content_changes && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm">Template Content Changes</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="list-disc list-inside space-y-1 text-sm">
+                            {selectedOptimization.suggested_improvements[0].changes_summary.content_changes.map((change: string, idx: number) => (
+                              <li key={idx}>{change}</li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {selectedOptimization.suggested_improvements[0].changes_summary.key_improvements && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-sm">Expected Quality Improvements</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <ul className="list-disc list-inside space-y-1 text-sm text-green-700 dark:text-green-300">
+                            {selectedOptimization.suggested_improvements[0].changes_summary.key_improvements.map((imp: string, idx: number) => (
+                              <li key={idx}>{imp}</li>
+                            ))}
+                          </ul>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+          )}
+
+          <DialogFooter className="mt-6">
+            <Button variant="outline" onClick={() => setShowOptimizationDialog(false)}>
+              Cancel
+            </Button>
+            {selectedOptimization?.status === 'pending_review' && (
+              <Button
+                className="bg-gradient-to-r from-purple-600 to-blue-600"
+                onClick={() => {
+                  applyOptimization(selectedOptimization.id)
+                  setShowOptimizationDialog(false)
+                }}
+                disabled={applyingOptimization}
+              >
+                {applyingOptimization ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Applying...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    ✅ Apply to Template
+                  </>
+                )}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
