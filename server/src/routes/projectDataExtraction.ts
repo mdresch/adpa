@@ -280,5 +280,79 @@ router.post(
   }
 )
 
+/**
+ * GET /api/project-data-extraction/entities/:projectId/:entityType
+ * Get detailed entities of a specific type for a project
+ */
+router.get(
+  '/entities/:projectId/:entityType',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { projectId, entityType } = req.params
+      const { limit = '100', offset = '0' } = req.query
+
+      // Map entity type to table name
+      const tableMap: Record<string, string> = {
+        stakeholders: 'stakeholders',
+        requirements: 'requirements',
+        risks: 'risks',
+        milestones: 'milestones',
+        constraints: 'constraints',
+        successCriteria: 'success_criteria',
+        bestPractices: 'best_practices',
+        phases: 'phases',
+        resources: 'resources',
+        qualityStandards: 'quality_standards',
+        deliverables: 'deliverables',
+        scopeItems: 'scope_items',
+        activities: 'activities'
+      }
+
+      const tableName = tableMap[entityType]
+      if (!tableName) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid entity type: ${entityType}`
+        })
+      }
+
+      // Get total count
+      const countResult = await pool!.query(
+        `SELECT COUNT(*) as total FROM ${tableName} WHERE project_id = $1`,
+        [projectId]
+      )
+      const total = parseInt(countResult.rows[0]?.total || '0')
+
+      // Get entities with pagination
+      const result = await pool!.query(
+        `SELECT * FROM ${tableName} 
+         WHERE project_id = $1 
+         ORDER BY created_at DESC 
+         LIMIT $2 OFFSET $3`,
+        [projectId, limit, offset]
+      )
+
+      res.json({
+        success: true,
+        entityType,
+        entities: result.rows,
+        pagination: {
+          total,
+          limit: parseInt(limit as string),
+          offset: parseInt(offset as string),
+          hasMore: total > parseInt(offset as string) + parseInt(limit as string)
+        }
+      })
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-API] Entity fetch failed', {
+        error: error instanceof Error ? error.message : String(error),
+        entityType: req.params.entityType
+      })
+      next(error)
+    }
+  }
+)
+
 export default router
 

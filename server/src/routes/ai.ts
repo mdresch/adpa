@@ -1274,12 +1274,12 @@ router.get(
                 { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B', description: 'Mixture of Experts', context_window: 32768 }
               ],
               'anthropic': [
-                { id: 'claude-3-7-sonnet-20250219', name: 'Claude 3.7 Sonnet', description: 'Latest Claude model', context_window: 200000 },
-                { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet', description: 'Balanced performance', context_window: 200000 },
-                { id: 'claude-sonnet-4', name: 'Claude Sonnet 4', description: 'Latest generation', context_window: 200000 },
-                { id: 'claude-4-5-haiku', name: 'Claude Haiku 4.5', description: 'Fast and cost-effective - October 2025 release', context_window: 200000 },
-                { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku', description: 'Efficient and fast', context_window: 200000 },
-                { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most capable Claude 3', context_window: 200000 }
+                { id: 'claude-sonnet-4.0', name: 'Claude Sonnet 4.0', description: 'Latest Sonnet (Tier 1)', context_window: 200000 },
+                { id: 'claude-haiku-4.0', name: 'Claude Haiku 4.0', description: 'Fast and cost-effective (Tier 1)', context_window: 200000 },
+                { id: 'claude-opus-4.0', name: 'Claude Opus 4.0', description: 'Most capable (Tier 1)', context_window: 200000 },
+                { id: 'claude-4-sonnet', name: 'Claude 4 Sonnet', description: 'Alternative naming', context_window: 200000 },
+                { id: 'claude-4-haiku', name: 'Claude 4 Haiku', description: 'Alternative naming', context_window: 200000 },
+                { id: 'claude-4-opus', name: 'Claude 4 Opus', description: 'Alternative naming', context_window: 200000 }
               ],
               'azure': [
                 { id: 'gpt-4', name: 'GPT-4', description: 'Most capable model', context_window: 8192 },
@@ -1291,7 +1291,7 @@ router.get(
                 { id: 'deepseek-coder', name: 'DeepSeek Coder', description: 'Specialized for code generation', context_window: 32768 }
               ],
               'moonshot': [
-                { id: 'kimi-k2-0905-preview', name: 'Kimi K2 Preview', description: 'Latest Kimi K2 model', context_window: 128000 },
+                { id: 'kimi-k2-turbo-preview', name: 'Kimi K2 Turbo Preview', description: 'Official Moonshot working model', context_window: 128000 },
                 { id: 'moonshot-v1-8k', name: 'Moonshot v1 8K', description: '8K context window', context_window: 8192 },
                 { id: 'moonshot-v1-32k', name: 'Moonshot v1 32K', description: '32K context window', context_window: 32768 },
                 { id: 'moonshot-v1-128k', name: 'Moonshot v1 128K', description: '128K context window', context_window: 131072 }

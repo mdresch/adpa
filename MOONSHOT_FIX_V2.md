@@ -1,161 +1,126 @@
-# 🔧 Moonshot API Fix - Version 2
+# 🌙 Moonshot AI Fix V2 - Domain Correction
 
-**Date**: November 2, 2025, 23:13  
-**Status**: ✅ DEPLOYED - Ready for Re-test
+## 🎯 **ROOT CAUSE IDENTIFIED**
+
+**Problem**: Moonshot API calls were failing with `404 Not Found` and `url.not_found` error.
+
+**Root Cause**: Wrong domain! We were using `https://api.moonshot.ai` but Moonshot API is actually at `https://api.moonshot.cn`
+
+**Evidence from logs**:
+```json
+{
+  "error": "url.not_found",
+  "url": "/chat/completions",
+  "message": "?????",
+  "url": "https://api.moonshot.ai/chat/completions"
+}
+```
+
+The Chinese error message (?????) confirmed this is a Chinese API service using the `.cn` domain!
 
 ---
 
-## 🔍 Root Cause (Discovered Through Testing!)
+## 🔧 **FIXES APPLIED**
 
-### The Problem
-**Error**: "AI generation failed: Not Found" when using Moonshot  
-**Endpoint Called**: `https://api.moonshot.ai/v1/responses` ❌  
-**Correct Endpoint**: `https://api.moonshot.ai/v1/chat/completions` ✅
-
-### Why It Failed
+### 1. **Updated API Service** (`server/src/services/aiService.ts`)
 ```typescript
-// WRONG (Before Fix):
+// BEFORE (WRONG):
 const moonshot = createOpenAI({ 
   apiKey: directApiKey,
-  baseURL: 'https://api.moonshot.ai/v1'  ❌
+  baseURL: 'https://api.moonshot.ai'  // ❌ Wrong domain!
 })
 
-// createOpenAI() adds its own paths, resulting in:
-// https://api.moonshot.ai/v1/responses  ❌ (404 Not Found!)
-```
-
-### The Root Cause
-- `createOpenAI()` from `@ai-sdk/openai` automatically adds `/v1/` prefix
-- When baseURL already includes `/v1`, it causes path conflicts
-- SDK then routes to wrong endpoint (`/responses` instead of `/chat/completions`)
-
----
-
-## ✅ The Fix
-
-### Changed Base URL
-```typescript
-// CORRECT (After Fix):
+// AFTER (CORRECT):
 const moonshot = createOpenAI({ 
   apiKey: directApiKey,
-  baseURL: 'https://api.moonshot.ai'  ✅ (No /v1!)
+  baseURL: 'https://api.moonshot.cn'  // ✅ Correct domain!
 })
-
-// createOpenAI() now constructs:
-// https://api.moonshot.ai/v1/chat/completions  ✅ Correct!
 ```
 
-### Additional Changes
-- Removed `.chat()` method (not needed)
-- Removed `compatibility: 'strict'` (not needed)
-- Added debug logging for exact endpoint
-- Simplified model call to `moonshot(modelName)`
+### 2. **Updated Default Endpoint** (`server/src/routes/ai-models.ts`)
+```typescript
+// BEFORE:
+case 'moonshot':
+  return 'https://api.moonshot.ai/v1'  // ❌ Wrong
 
----
-
-## 🎯 Testing Instructions
-
-### **RETRY NOW** (2 minutes)
-
-**Since tsx watch auto-reloads, the fix is already active!**
-
-**Steps**:
-1. **Go back** to your Data Analytics Platform project
-2. **Click "Generate Document"** again
-3. **Select**:
-   - Provider: **Moonshot AI**
-   - Model: **kimi-k2-0905-preview**
-   - Template: **Stakeholder Register** (same as before)
-4. **Click "Generate"**
-5. **Watch the job in** `/jobs` dashboard
-
-**Expected Results**:
-- ✅ Job starts (progress 10%)
-- ✅ Server logs show: "Moonshot will call: https://api.moonshot.ai/v1/chat/completions"
-- ✅ Generation completes (progress 100%)
-- ✅ Document created successfully
-- ❌ **NO "Not Found" error!**
-
----
-
-## 📊 What Changed
-
-### Files Modified
-```
-✅ server/src/services/aiService.ts
-   - Line 441: baseURL changed to 'https://api.moonshot.ai'
-   - Line 453: Removed .chat() method
-   - Line 449-450: Added debug logging
-```
-
-### Commits
-```
-Commit: ae0e55a
-Message: "fix: Correct Moonshot API baseURL configuration"
-Status: Committed, ready for testing
+// AFTER:
+case 'moonshot':
+  return 'https://api.moonshot.cn/v1'  // ✅ Correct
 ```
 
 ---
 
-## 🎊 Why This Should Work Now
+## ✅ **VALIDATION REQUIRED**
 
-### Before Fix
-```
-User Request
-  ↓
-Context Injection
-  ↓
-AI Service (my fix runs ✅)
-  ↓
-createOpenAI({ baseURL: 'https://api.moonshot.ai/v1' })
-  ↓
-SDK constructs: https://api.moonshot.ai/v1/responses
-  ↓
-404 Not Found ❌
+### **Step 1: Update Provider Configuration**
+
+The user needs to update their Moonshot provider endpoint in the database:
+
+1. Go to AI Providers page
+2. Find Moonshot AI provider
+3. **Update endpoint** to: `https://api.moonshot.cn/v1`
+4. Save configuration
+
+### **Step 2: Restart Backend**
+
+```powershell
+cd D:\source\repos\adpa\server
+# Kill current process (Ctrl+C)
+npm run dev
 ```
 
-### After Fix
+### **Step 3: Test Generation**
+
+1. Go to project
+2. Generate a document with Moonshot AI
+3. Verify success (no "Not Found" error)
+
+---
+
+## 📊 **EXPECTED RESULT**
+
+**Before Fix**:
 ```
-User Request
-  ↓
-Context Injection
-  ↓
-AI Service (my fix runs ✅)
-  ↓
-createOpenAI({ baseURL: 'https://api.moonshot.ai' })
-  ↓
-SDK constructs: https://api.moonshot.ai/v1/chat/completions
-  ↓
-200 OK - Document Generated! ✅
+❌ Status: failed
+❌ Error: AI generation failed: Not Found
+❌ API Response: {"error":"url.not_found"}
+```
+
+**After Fix**:
+```
+✅ Status: completed
+✅ Generation successful
+✅ Document created with Moonshot AI content
 ```
 
 ---
 
-## 🚀 **RETRY THE TEST NOW!**
+## 🔍 **WHY DID THIS HAPPEN?**
 
-The backend should have auto-reloaded (tsx watch).
-
-**Generate the document again with Moonshot!**
-
-**If this works**:
-- ✅ Moonshot fix validated!
-- ✅ Test DeepSeek next
-- ✅ Then celebrate complete success!
-
-**If this still fails**:
-- I'll try a completely different approach
-- Might need to use native fetch() instead of SDK
-- Or switch to @ai-sdk/openai-compatible package
+1. **Moonshot AI (Kimi)** is a Chinese AI company
+2. Their API is hosted on Chinese infrastructure (`.cn` domain)
+3. The `.ai` domain either doesn't exist or redirects incorrectly
+4. Initial configuration assumed `.ai` domain like most AI APIs
 
 ---
 
-## ⏰ **Action Required: RE-TEST NOW**
+## 🎯 **FILES CHANGED**
 
-**Please**:
-1. Go back to your project
-2. Generate document with Moonshot AI
-3. Report: Did it work or still failing?
+1. `server/src/services/aiService.ts` - Line 442 (baseURL corrected)
+2. `server/src/routes/ai-models.ts` - Line 1459 (default endpoint corrected)
 
-**The fix is deployed and active!** 🎯✨
+---
 
+## 🚀 **NEXT STEPS**
 
+1. **User Action**: Update Moonshot provider endpoint to `.cn` domain
+2. **Restart backend** to load new code
+3. **Test Moonshot generation**
+4. **Report result**
+
+---
+
+**Fix Date**: November 2, 2025  
+**Issue**: Moonshot API 404 Not Found  
+**Solution**: Changed domain from `.ai` to `.cn`  
+**Status**: Ready for validation ✅

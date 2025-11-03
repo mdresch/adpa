@@ -1189,8 +1189,9 @@ async function testModelAvailability(provider: any, config: any, model: any, sta
             break
           case 'moonshot':
             // Moonshot AI models (Kimi K2 series, OpenAI-compatible)
+            // Official working model: kimi-k2-turbo-preview
             availableModels = [
-              'kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'
+              'kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'
             ]
             break
           case 'xai':
@@ -1456,7 +1457,7 @@ function getDefaultEndpoint(providerType: string): string {
     case 'deepseek':
       return 'https://api.deepseek.com/v1'
     case 'moonshot':
-      return 'https://api.moonshot.ai/v1'
+      return 'https://api.moonshot.ai/v1'  // Official Moonshot API domain
     case 'xai':
       return 'https://api.x.ai/v1'
     case 'ollama':

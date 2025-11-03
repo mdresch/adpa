@@ -56,6 +56,12 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [allDocuments, setAllDocuments] = useState<Array<{ id: string; name: string; title?: string }>>([])
   const [loadingAllDocuments, setLoadingAllDocuments] = useState(false)
   const [documentSearchTerm, setDocumentSearchTerm] = useState("")
+  
+  // Entity Details Dialog
+  const [showEntityDialog, setShowEntityDialog] = useState(false)
+  const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
+  const [entityDetails, setEntityDetails] = useState<any[]>([])
+  const [loadingEntityDetails, setLoadingEntityDetails] = useState(false)
 
   useEffect(() => {
     void fetchEntityCounts()
@@ -266,6 +272,36 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     setTimeout(() => clearInterval(pollInterval), 300000)
   }
   
+  const fetchEntityDetails = async (entityType: string) => {
+    try {
+      setLoadingEntityDetails(true)
+      setSelectedEntityType(entityType)
+      setShowEntityDialog(true)
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        }
+      )
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch entity details')
+      }
+      
+      const data = await response.json()
+      setEntityDetails(data.entities || [])
+    } catch (error) {
+      console.error('Failed to fetch entity details:', error)
+      toast.error('Failed to load entity details')
+      setEntityDetails([])
+    } finally {
+      setLoadingEntityDetails(false)
+    }
+  }
+  
   const handleImportWBS = async () => {
     if (!lastExtractedDocumentId && selectedDocuments.length === 0) {
       toast.error('Please run extraction first or select a document')
@@ -339,6 +375,20 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       (doc.title || doc.name).toLowerCase().includes(searchLower)
     )
   }
+  
+  const renderEntityField = (key: string, value: any): string => {
+    if (value === null || value === undefined) return '-'
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+    if (typeof value === 'object') return JSON.stringify(value, null, 2)
+    if (key.includes('date') || key.includes('Date')) {
+      return new Date(value).toLocaleDateString()
+    }
+    return String(value)
+  }
+  
+  const getEntityTypeLabel = (entityType: string): string => {
+    return entityTypes.find(et => et.key === entityType)?.label || entityType
+  }
 
   const hasData = getTotalEntities() > 0
 
@@ -406,22 +456,45 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   {getTotalEntities()}
                 </Badge>
               </div>
+              
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                Click on any entity type below to view details
+              </p>
 
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {entityTypes.map(({ key, label, icon: Icon, color }) => (
-                  <div
-                    key={key}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${color}`} />
-                      <span className="text-sm font-medium">{label}</span>
+                {entityTypes.map(({ key, label, icon: Icon, color }) => {
+                  const count = entityCounts?.[key as keyof EntityCounts] || 0
+                  const isClickable = count > 0
+                  
+                  return (
+                    <div
+                      key={key}
+                      className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
+                        isClickable 
+                          ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm' 
+                          : 'opacity-50 cursor-not-allowed'
+                      }`}
+                      onClick={() => isClickable && fetchEntityDetails(key)}
+                      role={isClickable ? 'button' : undefined}
+                      tabIndex={isClickable ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault()
+                          fetchEntityDetails(key)
+                        }
+                      }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon className={`h-4 w-4 ${color}`} />
+                        <span className="text-sm font-medium">{label}</span>
+                      </div>
+                      <Badge variant={isClickable ? "default" : "outline"}>
+                        {count}
+                      </Badge>
                     </div>
-                    <Badge variant="outline">
-                      {entityCounts?.[key as keyof EntityCounts] || 0}
-                    </Badge>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -472,6 +545,74 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         </CardContent>
       </Card>
 
+      {/* Entity Details Dialog */}
+      <Dialog open={showEntityDialog} onOpenChange={setShowEntityDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedEntityType && entityTypes.find(et => et.key === selectedEntityType) && (
+                <>
+                  {(() => {
+                    const EntityIcon = entityTypes.find(et => et.key === selectedEntityType)!.icon
+                    return <EntityIcon className="h-5 w-5" />
+                  })()}
+                  {getEntityTypeLabel(selectedEntityType)} Details
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {entityDetails.length} {getEntityTypeLabel(selectedEntityType || '')} extracted from project documents
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {loadingEntityDetails ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : entityDetails.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Info className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium mb-1">No {getEntityTypeLabel(selectedEntityType || '')} Found</p>
+                <p className="text-sm">Try running extraction again with different documents</p>
+              </div>
+            ) : (
+              <div className="space-y-4 pr-2">
+                {entityDetails.map((entity, index) => (
+                  <Card key={entity.id || index} className="overflow-hidden">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">
+                        {entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType || '')} #${index + 1}`}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {Object.entries(entity)
+                        .filter(([key]) => !['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata'].includes(key))
+                        .map(([key, value]) => (
+                          <div key={key} className="grid grid-cols-3 gap-2 text-sm">
+                            <span className="font-medium text-muted-foreground capitalize">
+                              {key.replace(/_/g, ' ')}:
+                            </span>
+                            <span className="col-span-2 break-words">
+                              {renderEntityField(key, value)}
+                            </span>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowEntityDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
       {/* Extraction Dialog */}
       <Dialog open={showExtractionDialog} onOpenChange={setShowExtractionDialog}>
         <DialogContent className="max-w-2xl">

@@ -11,6 +11,8 @@ import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
 import { createXai } from "@ai-sdk/xai"
 import { createDeepSeek } from "@ai-sdk/deepseek"
+import OpenAI from "openai"  // Native OpenAI SDK for Moonshot
+import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
@@ -367,8 +369,9 @@ class AIService {
       
       // OPTIMIZATION: Skip AI Gateway for providers not natively supported
       // DeepSeek, Moonshot, xAI are OpenAI-compatible but not in AI Gateway's provider list
-      // Go straight to direct API to avoid unnecessary 404 errors
-      const directProviders = ['deepseek', 'moonshot', 'xai']
+      // Anthropic bypassed to use user's direct credits (avoid Vercel AI Gateway billing)
+      // Go straight to direct API to avoid unnecessary 404 errors or Vercel billing
+      const directProviders = ['deepseek', 'moonshot', 'xai', 'anthropic']
       const useDirect = directProviders.includes(providerType)
       
       if (useDirect) {
@@ -433,57 +436,64 @@ class AIService {
         }
         
         if (providerType === 'moonshot') {
-          logger.info('🔄 [AI-SERVICE] Using direct Moonshot AI (OpenAI-compatible)...')
+          logger.info('🔄 [AI-SERVICE] Using NATIVE OpenAI SDK for Moonshot...')
           
-          // CRITICAL: Don't include /v1 in baseURL - createOpenAI adds it automatically
-          const moonshot = createOpenAI({ 
+          // OFFICIAL: Use native OpenAI SDK as per Moonshot documentation
+          const moonshotClient = new OpenAI({ 
             apiKey: directApiKey,
-            baseURL: 'https://api.moonshot.ai'
+            baseURL: 'https://api.moonshot.ai/v1'
           })
           
-          const moonshotModels = ['kimi-k2-0905-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
+          // Official models from Moonshot docs
+          const moonshotModels = ['kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
           const modelName = moonshotModels.includes(request.model || '') 
             ? request.model 
-            : 'kimi-k2-0905-preview'
+            : 'kimi-k2-turbo-preview'  // Use official working model
           
           logger.info(`[AI-SERVICE] Moonshot model: ${modelName}`)
-          logger.info(`[AI-SERVICE] Moonshot will use CHAT endpoint (not responses)`)
+          logger.info(`[AI-SERVICE] Calling native chat.completions.create() - as per official docs`)
           
-          const moonshotResult = await generateText({
-            model: moonshot.chat(modelName), // CRITICAL: Use .chat() to force /chat/completions endpoint
+          // Use native OpenAI SDK - exactly as Moonshot documentation shows
+          const completion = await moonshotClient.chat.completions.create({
+            model: modelName,
             messages: [
               ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
               { role: 'user' as const, content: userMessage }
             ],
-            temperature: request.temperature,
-            maxTokens: request.max_tokens
+            temperature: request.temperature || 0.7,
+            max_tokens: request.max_tokens
           })
           
-          logger.info(`[AI] ✓ Moonshot/${modelName} - ${moonshotResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          const totalTokens = completion.usage?.total_tokens || 0
+          const promptTokens = completion.usage?.prompt_tokens || 0
+          const completionTokens = completion.usage?.completion_tokens || 0
+          const content = completion.choices[0]?.message?.content || ''
+          
+          logger.info(`[AI] ✓ Moonshot/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
           
           // Update usage stats
           await this.updateUsageStats(request.provider, {
-            total_tokens: moonshotResult.usage?.totalTokens || 0,
+            total_tokens: totalTokens,
           })
           
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: moonshotResult.usage?.promptTokens || 0,
-              completion_tokens: moonshotResult.usage?.completionTokens || 0,
-              total_tokens: moonshotResult.usage?.totalTokens || 0,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
           return {
-            content: moonshotResult.text,
+            content,
             provider: request.provider,
             model: modelName,
             usage: {
-              prompt_tokens: moonshotResult.usage?.promptTokens || 0,
-              completion_tokens: moonshotResult.usage?.completionTokens || 0,
-              total_tokens: moonshotResult.usage?.totalTokens || 0,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
             },
           }
         }
@@ -538,9 +548,86 @@ class AIService {
             },
           }
         }
+        
+        if (providerType === 'anthropic') {
+          logger.info('🔄 [AI-SERVICE] Using NATIVE Anthropic SDK to bypass Vercel AI Gateway...')
+          
+          // Use native Anthropic SDK to use user's direct credits
+          const anthropicClient = new Anthropic({ 
+            apiKey: directApiKey
+          })
+          
+          // Claude models - Tier 1 accounts have Claude 4.x series
+          // Based on user's rate limits showing "Claude Haiku 4.x" and "Claude Sonnet 4.x"
+          const anthropicModels = [
+            'claude-sonnet-4.0',
+            'claude-4-sonnet',
+            'claude-haiku-4.0', 
+            'claude-4-haiku',
+            'claude-opus-4.0',
+            'claude-4-opus'
+          ]
+          const modelName = anthropicModels.includes(request.model || '') 
+            ? request.model 
+            : 'claude-sonnet-4.0'  // Default to Sonnet 4 (latest)
+          
+          logger.info(`[AI-SERVICE] Anthropic model: ${modelName}`)
+          logger.info(`[AI-SERVICE] Calling native Anthropic messages.create()`)
+          
+          // Build messages for Anthropic (separate system from messages)
+          const anthropicMessages: Array<{ role: 'user' | 'assistant', content: string }> = []
+          
+          // Add user message
+          anthropicMessages.push({
+            role: 'user',
+            content: userMessage
+          })
+          
+          // Call native Anthropic API
+          const completion = await anthropicClient.messages.create({
+            model: modelName,
+            max_tokens: request.max_tokens || 4096,
+            system: systemMessage || undefined,  // System is separate in Anthropic
+            messages: anthropicMessages,
+            temperature: request.temperature || 0.7
+          })
+          
+          const content = completion.content[0]?.type === 'text' ? completion.content[0].text : ''
+          const totalTokens = completion.usage.input_tokens + completion.usage.output_tokens
+          const promptTokens = completion.usage.input_tokens
+          const completionTokens = completion.usage.output_tokens
+          
+          logger.info(`[AI] ✓ Anthropic/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: totalTokens,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            },
+          }
+        }
       }
       
-      // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral, Anthropic)
+      // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral)
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
       
@@ -1116,11 +1203,11 @@ class AIService {
       case "mistral":
         return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
-        return ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-sonnet-4", "claude-haiku-4.5"]
+        return ["claude-sonnet-4.0", "claude-haiku-4.0", "claude-opus-4.0", "claude-4-sonnet", "claude-4-haiku", "claude-4-opus"]
       case "deepseek":
         return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
       case "moonshot":
-        return ["kimi-k2-0905-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+        return ["kimi-k2-turbo-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
       case "xai":
         return ["grok-beta", "grok-vision-beta"]
       default:
