@@ -771,9 +771,12 @@ Remember: Your audit helps improve future document generation, so be detailed an
    */
   async getDocumentAudit(documentId: string): Promise<any> {
     const result = await pool.query(
-      `SELECT qa.*, d.title as document_title, d.type as document_type
+      `SELECT qa.*, 
+              COALESCE(d.title, d.name) as document_title,
+              t.name as document_type
        FROM quality_audits qa
        JOIN documents d ON qa.document_id = d.id
+       LEFT JOIN templates t ON d.template_id = t.id
        WHERE qa.document_id = $1
        ORDER BY qa.audited_at DESC
        LIMIT 1`,
