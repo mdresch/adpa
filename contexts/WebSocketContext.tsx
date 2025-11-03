@@ -259,8 +259,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     const handleOk = (data: any) => {
         if (data?.room === room) {
-          toast.success(`Joined ${room}`)
-          console.log(`Joined room: ${room}`)
+          // Only log in debug mode to avoid console spam
+          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+            console.log(`Joined room: ${room}`)
+          }
       socket.off("join:ok", handleOk)
       socket.off("join:error", handleError)
           // Mark room as joined for auto-rejoin and persist
@@ -313,8 +315,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
       const handleOk = (data: any) => {
         if (data?.room === room) {
-          toast.success(`Left ${room}`)
-          console.log(`Left room: ${room}`)
+          // Only log in debug mode to avoid console spam
+          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+            console.log(`Left room: ${room}`)
+          }
           socket.off("leave:ok", handleOk)
           socket.off("leave:error", handleError)
           // Remove from joinedRooms and persist
