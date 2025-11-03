@@ -310,12 +310,15 @@ router.get(
       }
 
       // SECURITY: Verify user has access to this project
-      // Check if user is the project owner
+      // Check if user is the project owner (owner_id or created_by)
       const projectAccess = await pool!.query(
         `SELECT p.id 
          FROM projects p
          WHERE p.id = $1 
-         AND (p.created_by = $2 OR p.owner_id = $2)
+         AND (
+           COALESCE(p.owner_id, p.created_by) = $2 
+           OR p.created_by = $2
+         )
          LIMIT 1`,
         [projectId, userId]
       )

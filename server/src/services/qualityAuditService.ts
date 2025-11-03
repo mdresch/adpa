@@ -216,6 +216,22 @@ class QualityAuditService {
         maxTokens: 4000
       })
 
+      logger.info('[QUALITY-AUDIT] AI response received', {
+        hasContent: !!result?.content,
+        contentType: typeof result?.content,
+        contentLength: result?.content?.length || 0,
+        hasUsage: !!result?.usage
+      })
+
+      // Validate result before parsing
+      if (!result || !result.content) {
+        logger.error('[QUALITY-AUDIT] AI returned empty or invalid result', {
+          hasResult: !!result,
+          resultKeys: result ? Object.keys(result) : []
+        })
+        return this.getDefaultScores()
+      }
+
       // Parse JSON response
       const analysisData = this.parseAnalysisResponse(result.content)
 
@@ -228,7 +244,8 @@ class QualityAuditService {
       }
     } catch (error) {
       logger.error('[QUALITY-AUDIT] AI analysis failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       })
       
       // Fallback: Return default scores if AI fails
