@@ -319,7 +319,7 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
                   <MetadataCard
                     icon={<DollarSign className="h-5 w-5 text-green-600" />}
                     label="Analysis Cost"
-                    value={audit.analysis_cost ? `$${audit.analysis_cost.toFixed(4)}` : 'N/A'}
+                    value={audit.analysis_cost ? `$${parseFloat(audit.analysis_cost).toFixed(4)}` : 'N/A'}
                   />
                   
                   <MetadataCard
