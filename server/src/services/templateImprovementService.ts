@@ -306,8 +306,9 @@ class TemplateImprovementService {
       issueCount: commonIssues.length
     })
 
+    let result: any = null
     try {
-      const result = await aiService.generate({
+      result = await aiService.generate({
         provider: 'google',
         model: 'gemini-2.5-flash',
         prompt: analysisPrompt, // User prompt (required)
@@ -316,12 +317,25 @@ class TemplateImprovementService {
         max_tokens: 4000 // Max tokens (snake_case to match interface)
       })
 
-      const parsed = JSON.parse(result.content)
+      // Clean markdown code blocks from AI response
+      let cleaned = result.content.trim()
+      if (cleaned.startsWith('```json')) {
+        cleaned = cleaned.substring(7)
+      }
+      if (cleaned.startsWith('```')) {
+        cleaned = cleaned.substring(3)
+      }
+      if (cleaned.endsWith('```')) {
+        cleaned = cleaned.substring(0, cleaned.length - 3)
+      }
+      
+      const parsed = JSON.parse(cleaned.trim())
       return parsed.improvements || []
     } catch (error) {
       logger.error('[TEMPLATE-IMPROVEMENT] AI suggestion generation failed', {
         templateId: template.id,
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        responsePreview: result?.content?.substring(0, 200) || 'No content'
       })
       return []
     }
