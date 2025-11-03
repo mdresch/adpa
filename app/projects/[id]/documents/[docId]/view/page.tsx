@@ -1385,13 +1385,22 @@ The ADPA system represents a significant advancement in document processing auto
                             <p className="text-sm font-medium">Overall Quality</p>
                             <div className="flex items-center justify-between">
                               <span className="text-3xl font-bold text-primary">
-                                {(document as any).generation_metadata.qualityMetrics.overall}
+                                {(document as any).generation_metadata.qualityMetrics.overallQuality || 
+                                 (document as any).generation_metadata.qualityMetrics.overall || 0}%
                               </span>
                               <Badge 
                                 variant="secondary" 
                                 className="text-sm px-3 py-1"
                               >
-                                {(document as any).generation_metadata.qualityMetrics.grade}
+                                {(() => {
+                                  const score = (document as any).generation_metadata.qualityMetrics.overallQuality || 
+                                               (document as any).generation_metadata.qualityMetrics.overall || 0
+                                  if (score >= 90) return 'A (Excellent)'
+                                  if (score >= 80) return 'B (Good)'
+                                  if (score >= 70) return 'C (Fair)'
+                                  if (score >= 60) return 'D (Poor)'
+                                  return 'F (Needs Improvement)'
+                                })()}
                               </Badge>
                             </div>
                           </div>
@@ -1405,11 +1414,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-blue-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.completeness }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.completeness || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.completeness}
+                                    {(document as any).generation_metadata.qualityMetrics.completeness || 0}%
                                   </span>
                                 </div>
                               </div>
@@ -1419,25 +1428,25 @@ The ADPA system represents a significant advancement in document processing auto
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-green-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.structure }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.structure}
+                                    {(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%
                                   </span>
                                 </div>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Formatting</span>
+                                <span className="text-sm text-muted-foreground">Formatting & Style</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-purple-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.formatting }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.formatting}
+                                    {(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%
                                   </span>
                                 </div>
                               </div>
@@ -1447,11 +1456,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-orange-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.depth }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.depth}
+                                    {(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%
                                   </span>
                                 </div>
                               </div>
