@@ -1298,6 +1298,27 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           console.log('📄 [CONFLICT-RESOLUTION] Creating separate document...')
           setCreatingDocument(true)
           
+          // Build AI prompt if not already provided (same logic as 'new-version')
+          let separatePrompt = conflictData.generationData.userPrompt
+          
+          if (!separatePrompt) {
+            console.log('🔨 [CONFLICT-RESOLUTION] Building AI prompt for separate document...')
+            // Build the prompt using existing logic
+            const templateContent = getTemplateContent(conflictData.generationData.templateId)
+            const sections = Array.isArray(templateContent.sections) ? templateContent.sections : []
+            const projectDesc = project?.description || 'No project description available.'
+            const projectName = project?.name || 'Unknown Project'
+            const framework = project?.framework || 'General'
+            
+            separatePrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
+
+**Project Name**: ${projectName}
+**Framework**: ${framework}
+**Description**: ${projectDesc}
+
+Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a production-ready, stakeholder-presentable document with comprehensive coverage of all sections.`
+          }
+          
           // Create new document with modified name
           const newName = `${documentName} (Alternative)`
           const separateResult = await apiClient.generateDocument({
@@ -1305,7 +1326,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             name: newName,
             description: documentDescription,
             templateId: conflictData.generationData.templateId,
-            userPrompt: conflictData.generationData.userPrompt,
+            userPrompt: separatePrompt,
             provider: conflictData.generationData.provider,
             model: conflictData.generationData.model,
             temperature: conflictData.generationData.temperature,
