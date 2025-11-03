@@ -345,6 +345,7 @@ router.post(
 /**
  * POST /api/quality-audits/analyze-templates
  * Manually trigger template analysis (admin only)
+ * Optional: Analyze specific template by passing templateId in body
  */
 router.post(
   '/analyze-templates',
@@ -361,17 +362,40 @@ router.post(
         })
       }
 
-      logger.info('[QUALITY-AUDIT-API] Manual template analysis triggered')
+      const { templateId } = req.body
 
-      // Run async (don't wait for completion)
-      templateImprovementService.analyzeAllTemplates().catch(err => {
-        logger.error('[QUALITY-AUDIT-API] Template analysis failed', { error: err })
-      })
-      
-      res.json({
-        success: true,
-        message: 'Template analysis started. This may take several minutes.'
-      })
+      if (templateId) {
+        // Analyze specific template
+        logger.info('[QUALITY-AUDIT-API] Manual template analysis triggered for specific template', {
+          templateId
+        })
+
+        // Run async (don't wait for completion)
+        templateImprovementService.analyzeTemplateQuality(templateId).catch(err => {
+          logger.error('[QUALITY-AUDIT-API] Template analysis failed', { 
+            templateId,
+            error: err 
+          })
+        })
+        
+        res.json({
+          success: true,
+          message: `Template analysis started for template ${templateId}. Check back in a few minutes.`
+        })
+      } else {
+        // Analyze all templates
+        logger.info('[QUALITY-AUDIT-API] Manual template analysis triggered for all templates')
+
+        // Run async (don't wait for completion)
+        templateImprovementService.analyzeAllTemplates().catch(err => {
+          logger.error('[QUALITY-AUDIT-API] Template analysis failed', { error: err })
+        })
+        
+        res.json({
+          success: true,
+          message: 'Template analysis started for all templates. This may take several minutes.'
+        })
+      }
     } catch (error: unknown) {
       logger.error('[QUALITY-AUDIT-API] Failed to start template analysis', {
         error: error instanceof Error ? error.message : String(error)

@@ -220,6 +220,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     category: "general"
   })
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [analyzingTemplate, setAnalyzingTemplate] = useState(false)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -425,6 +426,36 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       }
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Trigger template analysis
+  const handleTriggerTemplateAnalysis = async () => {
+    try {
+      setAnalyzingTemplate(true)
+      
+      const response = await fetch('/api/quality-audits/analyze-templates', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          templateId: document?.template_id
+        })
+      })
+      
+      const data = await response.json()
+      
+      if (data.success) {
+        toast.success('Template analysis started! Check /admin/quality/template-improvements in a few minutes.')
+      } else {
+        toast.error(data.error || 'Failed to trigger analysis')
+      }
+    } catch (error) {
+      toast.error('Failed to trigger template analysis')
+    } finally {
+      setAnalyzingTemplate(false)
     }
   }
 
@@ -1826,6 +1857,66 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       })()}
                     </CardContent>
                   </AnimatedCard>
+
+                  {/* Admin Actions - Template Analysis */}
+                  {user?.role === 'admin' && document?.template_id && (
+                    <AnimatedCard className="border-purple-200 bg-gradient-to-br from-purple-50 to-indigo-50">
+                      <CardHeader>
+                        <CardTitle className="flex items-center space-x-2">
+                          <Sparkles className="h-5 w-5 text-purple-600" />
+                          <span>Template Improvement (Admin Only)</span>
+                        </CardTitle>
+                        <CardDescription>
+                          Trigger AI-powered analysis to improve this template for future documents
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="p-4 bg-white rounded-lg border border-purple-200">
+                            <h4 className="font-semibold text-sm mb-2">How It Works:</h4>
+                            <ol className="text-xs text-gray-600 space-y-1 list-decimal list-inside">
+                              <li>AI analyzes quality patterns across all documents using this template</li>
+                              <li>Identifies common issues (e.g., Professional Quality: 55%)</li>
+                              <li>Generates specific improvement suggestions</li>
+                              <li>Admin reviews and approves changes</li>
+                              <li>Future documents automatically score higher!</li>
+                            </ol>
+                          </div>
+                          
+                          <div className="flex gap-3">
+                            <Button
+                              onClick={handleTriggerTemplateAnalysis}
+                              disabled={analyzingTemplate}
+                              className="flex-1"
+                              variant="default"
+                            >
+                              {analyzingTemplate ? (
+                                <>
+                                  <Clock className="mr-2 h-4 w-4 animate-spin" />
+                                  Analyzing...
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="mr-2 h-4 w-4" />
+                                  Trigger Template Analysis
+                                </>
+                              )}
+                            </Button>
+                            
+                            <Link href="/admin/quality/template-improvements">
+                              <Button variant="outline">
+                                View Suggestions
+                              </Button>
+                            </Link>
+                          </div>
+                          
+                          <div className="text-xs text-gray-500 italic">
+                            ℹ️ Analysis typically takes 2-3 minutes. Results will appear in the Template Improvements dashboard.
+                          </div>
+                        </div>
+                      </CardContent>
+                    </AnimatedCard>
+                  )}
                 </div>
 
                 {/* Source Documents */}
