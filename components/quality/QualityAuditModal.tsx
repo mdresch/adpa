@@ -29,7 +29,6 @@ import {
   DollarSign,
   Zap
 } from 'lucide-react'
-import { useAuth } from '@/hooks/use-auth'
 
 interface QualityAuditModalProps {
   documentId: string
@@ -73,7 +72,6 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
   const [audit, setAudit] = useState<QualityAudit | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const { token } = useAuth()
 
   useEffect(() => {
     loadAuditData()
@@ -85,10 +83,16 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
       setError(null)
 
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const authToken = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      if (!authToken) {
+        throw new Error('No authentication token found. Please log in again.')
+      }
 
       const response = await fetch(`${API_BASE_URL}/quality-audits/document/${documentId}`, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
         }
       })
 
