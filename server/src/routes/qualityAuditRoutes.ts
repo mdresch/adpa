@@ -31,9 +31,8 @@ router.get(
         `SELECT d.id, d.project_id
          FROM documents d
          JOIN projects p ON d.project_id = p.id
-         LEFT JOIN project_members pm ON p.id = pm.project_id
          WHERE d.id = $1
-         AND (p.created_by = $2 OR pm.user_id = $2)
+         AND (p.created_by = $2 OR p.owner_id = $2)
          LIMIT 1`,
         [documentId, userId]
       )
@@ -89,9 +88,8 @@ router.post(
         `SELECT d.id, d.project_id
          FROM documents d
          JOIN projects p ON d.project_id = p.id
-         LEFT JOIN project_members pm ON p.id = pm.project_id
          WHERE d.id = $1
-         AND (p.created_by = $2 OR pm.user_id = $2)
+         AND (p.created_by = $2 OR p.owner_id = $2)
          LIMIT 1`,
         [documentId, userId]
       )
