@@ -469,21 +469,23 @@ router.post("/generate-new-version",
         )
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
         
-        // Trigger audit asynchronously (don't block response)
-        qualityAuditService.auditDocument(
-          existingDocumentId,
-          result.content, // Document content
-          templateId, // Document type (template ID)
-          projectContext, // Project context
-          req.user?.id || null // User ID
-        ).catch((auditError: any) => {
-          log.error('[AI-REGENERATION] Quality audit failed (non-blocking)', {
+        // Enqueue quality audit job (async, non-blocking)
+        const auditJobId = require('uuid').v4()
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
+          documentId: existingDocumentId,
+          documentContent: result.content,
+          documentType: templateId,
+          projectContext,
+          userId: req.user?.id || null
+        }).catch((auditError: any) => {
+          log.error('[AI-REGENERATION] Failed to enqueue quality audit (non-blocking)', {
             documentId: existingDocumentId,
             error: auditError.message
           })
         })
         
-        log.info('[AI-REGENERATION] Quality audit triggered successfully (async)')
+        log.info('[AI-REGENERATION] Quality audit job enqueued', { auditJobId })
       } catch (error: any) {
         // Don't fail document generation if audit fails
         log.warn('[AI-REGENERATION] Failed to trigger quality audit', {

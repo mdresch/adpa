@@ -114,17 +114,19 @@ class TemplateImprovementService {
       })
 
       // 6. Use AI to analyze template and suggest improvements
-      const improvements = await this.generateImprovementSuggestions(
+      const aiAnalysisResult = await this.generateImprovementSuggestions(
         template,
         qualityMetrics,
         commonIssues,
         issueFrequency
       )
       
-      if (!improvements || improvements.length === 0) {
+      if (!aiAnalysisResult || !aiAnalysisResult.improvements || aiAnalysisResult.improvements.length === 0) {
         logger.info('[TEMPLATE-IMPROVEMENT] No improvements suggested', { templateId })
         return
       }
+
+      const { improvements, tokens, cost } = aiAnalysisResult
 
       // 7. Calculate expected quality gain
       const expectedGain = this.estimateQualityGain(qualityMetrics, improvements)
@@ -140,7 +142,9 @@ class TemplateImprovementService {
         templateId,
         suggestionCount: improvements.length,
         expectedGain,
-        priority
+        priority,
+        analysisTokens: tokens,
+        analysisCost: `$${cost.toFixed(4)}`
       })
 
       // 9. Save improvement suggestions
@@ -151,7 +155,9 @@ class TemplateImprovementService {
         issueFrequency,
         improvements,
         expectedGain,
-        priority
+        priority,
+        analysisTokens: tokens,
+        analysisCost: cost
       })
       
       // 9. Notify template owner if high/critical priority
@@ -292,7 +298,7 @@ class TemplateImprovementService {
     qualityMetrics: TemplateQualityMetrics,
     commonIssues: any[],
     issueFrequency: any
-  ): Promise<ImprovementSuggestion[]> {
+  ): Promise<{ improvements: ImprovementSuggestion[], tokens: number, cost: number }> {
     const analysisPrompt = this.buildImprovementPrompt(
       template,
       qualityMetrics,
@@ -317,6 +323,10 @@ class TemplateImprovementService {
         max_tokens: 4000 // Max tokens (snake_case to match interface)
       })
 
+      // Extract token usage
+      const totalTokens = result.usage?.totalTokens || result.usage?.total_tokens || 0
+      const estimatedCost = this.estimateCost(totalTokens)
+
       // Clean markdown code blocks from AI response
       let cleaned = result.content.trim()
       if (cleaned.startsWith('```json')) {
@@ -330,15 +340,32 @@ class TemplateImprovementService {
       }
       
       const parsed = JSON.parse(cleaned.trim())
-      return parsed.improvements || []
+      return {
+        improvements: parsed.improvements || [],
+        tokens: totalTokens,
+        cost: estimatedCost
+      }
     } catch (error) {
       logger.error('[TEMPLATE-IMPROVEMENT] AI suggestion generation failed', {
         templateId: template.id,
         error: error instanceof Error ? error.message : String(error),
         responsePreview: result?.content?.substring(0, 200) || 'No content'
       })
-      return []
+      return {
+        improvements: [],
+        tokens: 0,
+        cost: 0
+      }
     }
+  }
+
+  /**
+   * Estimate cost for template improvement analysis
+   */
+  private estimateCost(tokens: number): number {
+    // Gemini 2.5 Flash pricing
+    const costPer1M = 0.50 // $0.50 per 1M tokens (average of input/output)
+    return (tokens / 1000000) * costPer1M
   }
 
   /**
@@ -486,8 +513,8 @@ Focus on the most impactful improvements. Be specific and actionable.`
         current_professional_quality, current_standards_compliance,
         common_issues, issue_frequency, suggested_improvements,
         improvement_rationale, expected_quality_gain, priority,
-        analyzer_ai_provider, analyzer_ai_model
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+        analyzer_ai_provider, analyzer_ai_model, analysis_tokens, analysis_cost
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
       RETURNING id`,
       [
         data.templateId,
@@ -506,7 +533,9 @@ Focus on the most impactful improvements. Be specific and actionable.`
         data.expectedGain,
         data.priority,
         'google',
-        'gemini-2.5-flash'
+        'gemini-2.5-flash',
+        data.analysisTokens || 0,
+        data.analysisCost || 0
       ]
     )
 
@@ -574,7 +603,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
     const params: any[] = []
     let paramIndex = 1
 
-    if (filters?.status) {
+    if (filters?.status && filters.status !== 'all') {
       query += ` AND tis.status = $${paramIndex++}`
       params.push(filters.status)
     }

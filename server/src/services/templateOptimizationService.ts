@@ -151,6 +151,19 @@ Always respond with valid JSON only.`,
       max_tokens: 8000
     })
 
+    // Extract token usage for analytics
+    const totalTokens = result.usage?.totalTokens || result.usage?.total_tokens || 0
+    const promptTokens = result.usage?.promptTokens || result.usage?.prompt_tokens || 0
+    const completionTokens = result.usage?.completionTokens || result.usage?.completion_tokens || 0
+    const estimatedCost = (totalTokens / 1000000) * 0.50 // Gemini 2.0 Flash Exp pricing
+
+    logger.info('[TEMPLATE-OPT] AI optimization generated', {
+      totalTokens,
+      promptTokens,
+      completionTokens,
+      estimatedCost: `$${estimatedCost.toFixed(4)}`
+    })
+
     // Parse AI response
     let cleaned = result.content.trim()
     if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7)
@@ -164,7 +177,9 @@ Always respond with valid JSON only.`,
       suggested_content: parsed.suggested_content,
       change_explanation: parsed.change_explanation,
       expected_quality_gain: parsed.expected_quality_gain || 10,
-      changes_summary: parsed.changes_summary
+      changes_summary: parsed.changes_summary,
+      tokens: totalTokens,
+      cost: estimatedCost
     }
   }
 
@@ -300,8 +315,10 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
       `INSERT INTO template_improvement_suggestions
        (id, template_id, status, priority, expected_quality_gain, current_avg_quality,
         analysis_period_start, analysis_period_end, documents_analyzed,
-        common_issues, suggested_improvements, improvement_rationale, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW() - INTERVAL '1 day', NOW(), $7, $8, $9, $10, NOW())`,
+        common_issues, suggested_improvements, improvement_rationale,
+        analyzer_ai_provider, analyzer_ai_model, analysis_tokens, analysis_cost,
+        created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW() - INTERVAL '1 day', NOW(), $7, $8, $9, $10, $11, $12, $13, $14, NOW())`,
       [
         suggestionId,
         templateId,
@@ -333,7 +350,11 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
             generated_at: new Date().toISOString()
           }
         }]),
-        `AI-generated optimization triggered by quality regression: ${scoreBefore}% → ${scoreAfter}% (-${scoreBefore - scoreAfter}%)`
+        `AI-generated optimization triggered by quality regression: ${scoreBefore}% → ${scoreAfter}% (-${scoreBefore - scoreAfter}%)`,
+        'google',
+        'gemini-2.0-flash-exp',
+        optimization.tokens || 0,
+        optimization.cost || 0
       ]
     )
 
@@ -378,34 +399,15 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
       await pool.query(
         `UPDATE templates
          SET 
-           content = $1,
-           system_prompt = $2,
-           prompt_version = $3,
-           updated_at = NOW(),
-           updated_by = $4,
-           metadata = jsonb_set(
-             COALESCE(metadata, '{}'::jsonb),
-             '{optimization_history}',
-             COALESCE(metadata->'optimization_history', '[]'::jsonb) || 
-             jsonb_build_array(jsonb_build_object(
-               'suggestion_id', $5::text,
-               'applied_at', NOW(),
-               'applied_by', $4::text,
-               'previous_version', $3::integer - 1,
-               'new_version', $3::integer,
-               'quality_improvement', $6::numeric,
-               'changes_summary', $7::jsonb
-             ))
-           )
-         WHERE id = $8`,
+           content = $1::jsonb,
+           system_prompt = $2::text,
+           prompt_version = $3::integer,
+           updated_at = NOW()
+         WHERE id = $4::uuid`,
         [
-          improvement.template_content,
+          JSON.stringify(improvement.template_content),
           improvement.system_prompt,
           newVersion,
-          adminId,
-          suggestionId,
-          suggestion.expected_quality_gain,
-          JSON.stringify(improvement.changes_summary),
           suggestion.template_id
         ]
       )
@@ -420,11 +422,16 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
         [adminId, suggestionId]
       )
 
+      // Clear template cache so UI shows updated version immediately
+      const { cache } = await import('../utils/redis')
+      await cache.del(`template:${suggestion.template_id}`)
+
       logger.info('[TEMPLATE-OPT] Template optimization applied successfully', {
         templateId: suggestion.template_id,
         previousVersion: suggestion.prompt_version,
         newVersion,
-        expectedGain: suggestion.expected_quality_gain
+        expectedGain: suggestion.expected_quality_gain,
+        cacheCleared: true
       })
 
     } catch (error: any) {

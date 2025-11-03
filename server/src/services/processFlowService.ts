@@ -1828,22 +1828,25 @@ class ProcessFlowService {
           documentName: savedDocument.name
         })
         
-        // Run audit asynchronously (don't block document save)
-        // Pass null for userId if not provided (system-generated audit)
-        qualityAuditService.auditDocument(
-          savedDocument.id,
-          finalContent,
-          config.templateType || 'unknown',
-          project,
-          config.userId || null
-        ).then((auditResult: any) => {
-          logger.info('[PROCESS-FLOW] Quality audit completed', {
+        // Enqueue quality audit job (async, non-blocking)
+        const { queueService } = await import('./queueService')
+        const { v4: uuidv4 } = await import('uuid')
+        const auditJobId = uuidv4()
+        
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
+          documentId: savedDocument.id,
+          documentContent: finalContent,
+          documentType: config.templateType || 'unknown',
+          projectContext: project,
+          userId: config.userId || null
+        }).then(() => {
+          logger.info('[PROCESS-FLOW] Quality audit job enqueued', {
             documentId: savedDocument.id,
-            overallScore: auditResult.overallScore,
-            overallGrade: auditResult.overallGrade
+            auditJobId
           })
         }).catch((auditError: any) => {
-          logger.error('[PROCESS-FLOW] Quality audit failed', {
+          logger.error('[PROCESS-FLOW] Failed to enqueue quality audit', {
             documentId: savedDocument.id,
             error: auditError instanceof Error ? auditError.message : String(auditError)
           })

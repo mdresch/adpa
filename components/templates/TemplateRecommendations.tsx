@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
+import { Progress } from '@/components/ui/progress'
 import { Loader2, Sparkles, CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Info, Zap, Code, FileText, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 

@@ -103,7 +103,10 @@ router.post(
 
       // Get document content and context
       const docResult = await pool.query(
-        'SELECT content, type, project_id FROM documents WHERE id = $1',
+        `SELECT d.content, d.title, d.project_id, t.name as document_type
+         FROM documents d
+         LEFT JOIN templates t ON d.template_id = t.id
+         WHERE d.id = $1`,
         [documentId]
       )
 
@@ -131,7 +134,7 @@ router.post(
       const auditResult = await qualityAuditService.auditDocument(
         documentId,
         document.content,
-        document.type,
+        document.document_type || document.title || 'Document',
         projectResult.rows[0],
         userId
       )

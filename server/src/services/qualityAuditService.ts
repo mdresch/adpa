@@ -59,6 +59,16 @@ class QualityAuditService {
   ): Promise<QualityAuditResult> {
     const startTime = Date.now()
     
+    // Validate inputs
+    if (!documentContent || typeof documentContent !== 'string') {
+      logger.error('[QUALITY-AUDIT] Invalid document content', {
+        documentId,
+        hasContent: !!documentContent,
+        contentType: typeof documentContent
+      })
+      throw new Error('Document content is required for quality audit')
+    }
+    
     logger.info('[QUALITY-AUDIT] Starting audit', { 
       documentId, 
       documentType,
@@ -268,7 +278,8 @@ class QualityAuditService {
         hasContent: !!result?.content,
         contentType: typeof result?.content,
         contentLength: result?.content?.length || 0,
-        hasUsage: !!result?.usage
+        hasUsage: !!result?.usage,
+        usageData: result?.usage
       })
 
       // Validate result before parsing
@@ -280,6 +291,19 @@ class QualityAuditService {
         return this.getDefaultScores()
       }
 
+      // Extract token usage from AI response
+      const totalTokens = result.usage?.totalTokens || result.usage?.total_tokens || 0
+      const promptTokens = result.usage?.promptTokens || result.usage?.prompt_tokens || 0
+      const completionTokens = result.usage?.completionTokens || result.usage?.completion_tokens || 0
+      const estimatedCost = this.estimateCost(totalTokens, 'google')
+
+      logger.info('[QUALITY-AUDIT] Token usage captured', {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+        estimatedCost: `$${estimatedCost.toFixed(4)}`
+      })
+
       // Parse JSON response
       const analysisData = this.parseAnalysisResponse(result.content)
 
@@ -287,8 +311,8 @@ class QualityAuditService {
         ...analysisData,
         provider: 'google',
         model: 'gemini-2.5-flash',
-        tokens: result.usage?.totalTokens || 0,
-        cost: this.estimateCost(result.usage?.totalTokens || 0, 'google')
+        tokens: totalTokens,
+        cost: estimatedCost
       }
     } catch (error) {
       logger.error('[QUALITY-AUDIT] AI analysis failed', {
@@ -694,7 +718,11 @@ Remember: Your audit helps improve future document generation, so be detailed an
         context_relevance: 'AI analysis unavailable - default score applied'
       },
       issues: [],
-      recommendations: ['AI analysis was unavailable. Manual review recommended.']
+      recommendations: ['AI analysis was unavailable. Manual review recommended.'],
+      provider: 'none',
+      model: 'none',
+      tokens: 0,
+      cost: 0
     }
   }
 

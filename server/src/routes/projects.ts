@@ -725,15 +725,19 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
           characterCount
         })
 
-        // Run audit asynchronously (don't block response)
-        qualityAuditService.auditDocument(
+        // Enqueue quality audit job (async, non-blocking)
+        const { queueService } = await import('../services/queueService')
+        const auditJobId = require('uuid').v4()
+        
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
           documentId,
-          content,
-          updatedDoc.type || 'unknown',
-          { id: projectId, name: 'Project' },
+          documentContent: content,
+          documentType: updatedDoc.type || 'unknown',
+          projectContext: { id: projectId, name: 'Project' },
           userId
-        ).catch((auditError: any) => {
-          log.error('[MANUAL-EDIT] Quality audit failed', {
+        }).catch((auditError: any) => {
+          log.error('[MANUAL-EDIT] Failed to enqueue quality audit', {
             documentId,
             error: auditError.message
           })

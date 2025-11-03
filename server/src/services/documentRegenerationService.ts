@@ -377,21 +377,25 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         )
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
         
-        // Trigger audit asynchronously (don't block response)
-        qualityAuditService.auditDocument(
-          newDocumentId,
-          aiResponse.content,
-          templateId,
+        // Enqueue quality audit job (async, non-blocking)
+        const { queueService } = await import('./queueService')
+        const auditJobId = uuidv4()
+        
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
+          documentId: newDocumentId,
+          documentContent: aiResponse.content,
+          documentType: templateId,
           projectContext,
-          params.userId
-        ).catch((auditError: any) => {
-          log.error('[AI-REGENERATION] Quality audit failed (non-blocking)', {
+          userId: params.userId
+        }).catch((auditError: any) => {
+          log.error('[AI-REGENERATION] Failed to enqueue quality audit (non-blocking)', {
             documentId: newDocumentId,
             error: auditError.message
           })
         })
         
-        log.info('[AI-REGENERATION] Quality audit triggered successfully (async)')
+        log.info('[AI-REGENERATION] Quality audit job enqueued', { auditJobId })
       } catch (error: any) {
         log.warn('[AI-REGENERATION] Failed to trigger quality audit', {
           documentId: newDocumentId,
