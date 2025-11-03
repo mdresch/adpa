@@ -246,13 +246,12 @@ export async function importWBSFromProjectEntities(
             task_name,
             description,
             estimated_hours,
-            phase,
             status,
             priority,
             source_entity_id,
             imported_from_wbs,
             created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
             description = EXCLUDED.description,
@@ -264,7 +263,6 @@ export async function importWBSFromProjectEntities(
           deliverable.name,
           deliverable.description,
           estimatedHours,
-          'Planning', // Deliverables typically in planning
           deliverable.status || 'planned',
           deliverable.priority || 'medium',
           deliverable.id,
@@ -302,12 +300,6 @@ export async function importWBSFromProjectEntities(
         
         const taskNumber = wbsCode || `ACT-${String(i + 1).padStart(3, '0')}`
         
-        // Determine phase from category or default to Execution
-        const phase = activity.category === 'planning' ? 'Planning' :
-                     activity.category === 'testing' ? 'Testing' :
-                     activity.category === 'deployment' ? 'Deployment' :
-                     'Execution'
-        
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
             project_id,
@@ -318,12 +310,11 @@ export async function importWBSFromProjectEntities(
             estimated_hours,
             required_role_id,
             required_role_name,
-            phase,
             status,
             source_entity_id,
             imported_from_wbs,
             created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
             description = EXCLUDED.description,
@@ -339,7 +330,6 @@ export async function importWBSFromProjectEntities(
           estimatedHours,
           roleId,
           requiredRole,
-          phase,
           activity.status || 'planned',
           activity.id,
           true,
@@ -443,13 +433,12 @@ export async function importWBSFromDocument(
             estimated_hours,
             required_role_id,
             required_role_name,
-            phase,
             status,
             source_document_id,
             source_entity_id,
             imported_from_wbs,
             created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
             description = EXCLUDED.description,
@@ -465,7 +454,6 @@ export async function importWBSFromDocument(
           estimatedHours,
           roleId,
           requiredRole,
-          activity.metadata?.phase || 'Execution',
           'planned',
           documentId,
           activity.id,

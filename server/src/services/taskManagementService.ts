@@ -89,10 +89,9 @@ export async function createTask(
         planned_start_date,
         planned_end_date,
         priority,
-        phase,
         status,
         created_by
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING 
         id,
         task_number as "taskNumber",
@@ -110,7 +109,6 @@ export async function createTask(
       input.plannedStartDate,
       input.plannedEndDate,
       input.priority || 'medium',
-      input.phase,
       'planned',
       userId
     ])
