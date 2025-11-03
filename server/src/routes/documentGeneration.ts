@@ -422,10 +422,20 @@ router.post("/generate-new-version",
           model
         })
         
+        // Get project context for audit
+        const projectQuery = await pool.query(
+          'SELECT id, name, framework, description FROM projects WHERE id = $1',
+          [projectId]
+        )
+        const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
+        
         // Trigger audit asynchronously (don't block response)
         qualityAuditService.auditDocument(
           existingDocumentId,
-          req.user?.id || null
+          result.content, // Document content
+          templateId, // Document type (template ID)
+          projectContext, // Project context
+          req.user?.id || null // User ID
         ).catch((auditError: any) => {
           log.error('[AI-REGENERATION] Quality audit failed (non-blocking)', {
             documentId: existingDocumentId,
@@ -463,7 +473,7 @@ router.post("/generate-new-version",
       // Log activity
       await pool.query(
         `INSERT INTO audit_logs 
-         (id, user_id, action, resource_type, resource_id, details)
+         (id, user_id, action, resource_type, resource_id, new_values)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           uuidv4(),
