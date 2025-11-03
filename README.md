@@ -363,6 +363,78 @@ We welcome contributions to the ADPA Framework! Please follow these guidelines:
 - Include environment information and logs
 - Label issues appropriately (bug, enhancement, documentation)
 
+### GitHub Copilot Cleanup Specialist Agent
+
+The ADPA Framework includes a specialized **Cleanup Specialist** GitHub Copilot agent designed to automatically improve code quality and maintainability.
+
+#### 🧠 What the Cleanup Specialist Does
+
+The cleanup specialist agent is configured to:
+
+- 🧹 **Remove dead or unused code** - Eliminates unused imports, variables, functions, and commented-out code
+- 🔁 **Eliminate duplication** - Finds and consolidates duplicate code blocks across the codebase
+- ✨ **Refactor messy patterns** - Simplifies complex logic and improves code structure
+- 📄 **Improve formatting** - Ensures consistent style across TypeScript, JavaScript, SQL, and Markdown files
+- 📚 **Enhance documentation** - Cleans up comments, fixes typos, and removes outdated documentation
+- 🎯 **Maintain consistency** - Applies project-specific conventions and standards
+
+#### 🚀 How to Use the Cleanup Specialist
+
+**Option 1: Via GitHub Web Interface**
+1. Go to your repository on GitHub
+2. Navigate to an issue or pull request
+3. Click on the Copilot icon and select "cleanup-specialist" from the agents dropdown
+4. Assign the agent a cleanup task (e.g., "Clean up unused imports in the server directory")
+
+**Option 2: Via GitHub CLI**
+```bash
+# Trigger cleanup for a specific directory
+gh copilot agent cleanup-specialist "Remove dead code from app/components"
+
+# Clean up a specific file
+gh copilot agent cleanup-specialist "Refactor app/api/documents/route.ts for better readability"
+
+# General cleanup
+gh copilot agent cleanup-specialist "Clean up duplicate code in the server modules"
+```
+
+**Option 3: In Pull Requests**
+- Comment on a PR: `@github-copilot cleanup-specialist please review this PR for cleanup opportunities`
+- The agent will analyze the code and suggest improvements
+
+#### 📋 Best Practices
+
+**What to Ask the Agent:**
+- "Remove all unused imports from the frontend codebase"
+- "Find and eliminate duplicate code in server/src/modules"
+- "Refactor complex functions in server/src/services to improve readability"
+- "Clean up and standardize formatting across all TypeScript files"
+- "Remove console.log statements from production code"
+
+**What NOT to Ask:**
+- Don't ask it to add new features (it's focused on cleanup only)
+- Don't ask it to modify database migration files (these are historical records)
+- Don't ask it to change core business logic without review
+
+#### 🛡️ Safety Features
+
+The cleanup specialist is configured with project-specific constraints:
+- Preserves all working business logic
+- Follows ADPA Framework conventions (Markdown storage, UUID primary keys, etc.)
+- Respects TypeScript strict mode requirements
+- Never modifies database migration files
+- Asks for clarification when changes might be risky
+
+#### 📖 Agent Configuration
+
+The agent is defined in `.github/agents/cleanup-specialist.md` and includes:
+- Comprehensive cleanup guidelines specific to the ADPA Framework
+- Examples of good cleanup practices
+- Project-specific coding standards
+- Clear boundaries on what should and shouldn't be modified
+
+For more details, see the [cleanup specialist agent configuration](.github/agents/cleanup-specialist.md).
+
 ## License
 
 This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
