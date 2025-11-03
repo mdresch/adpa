@@ -227,8 +227,9 @@ export async function updateTask(
       parentTaskId: 'parent_task_id'
     }
     
+    // Security: Validate key exists in fieldMap to prevent prototype pollution
     Object.entries(updates).forEach(([key, value]) => {
-      if (value !== undefined && fieldMap[key]) {
+      if (value !== undefined && fieldMap.hasOwnProperty(key) && fieldMap[key]) {
         setClauses.push(`${fieldMap[key]} = $${paramIndex++}`)
         values.push(value)
       }

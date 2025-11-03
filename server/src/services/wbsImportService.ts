@@ -73,11 +73,13 @@ function parseEstimatedHours(text: string): number | null {
 /**
  * Parse WBS code from activity name or description
  * Looks for patterns like: "5.1.1", "5.1.2", "1.2.3.4"
+ * Security: Limited to max 5 levels to prevent ReDoS attacks
  */
 function parseWBSCode(text: string): string | null {
   if (!text) return null
   
-  const pattern = /(\d+(?:\.\d+)+)/
+  // Safe pattern: Max 5 levels deep to prevent ReDoS (e.g., "1.2.3.4.5")
+  const pattern = /\b(\d+(?:\.\d+){1,4})\b/
   const match = text.match(pattern)
   return match ? match[1] : null
 }
