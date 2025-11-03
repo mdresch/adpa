@@ -331,15 +331,15 @@ The ADPA system represents a significant advancement in document processing auto
     }
   ]
 
-  useEffect(() => {
-    const loadDocument = async () => {
-      setIsLoading(true)
-      try {
-        // Fetch document from API
-        const [documentResponse, versionsResponse] = await Promise.all([
-          apiClient.get(`/projects/${projectId}/documents/${documentId}`),
-          apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
-        ])
+  // Extract fetchDocument so it can be reused by saveEdit
+  const fetchDocument = async () => {
+    setIsLoading(true)
+    try {
+      // Fetch document from API
+      const [documentResponse, versionsResponse] = await Promise.all([
+        apiClient.get(`/projects/${projectId}/documents/${documentId}`),
+        apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
+      ])
         
         const documentData = documentResponse
         const versionsData = versionsResponse || []
@@ -449,9 +449,10 @@ The ADPA system represents a significant advancement in document processing auto
       } finally {
         setIsLoading(false)
       }
-    }
+  }
 
-    loadDocument()
+  useEffect(() => {
+    fetchDocument()
     
     // Extract TOC when document loads
     if (mockDocument.content) {
