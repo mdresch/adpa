@@ -290,7 +290,61 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId, entityType } = req.params
-      const { limit = '100', offset = '0' } = req.query
+      const userId = (req as any).user?.id
+      
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid project ID format'
+        })
+      }
+
+      // SECURITY: Verify user has access to this project
+      const projectAccess = await pool!.query(
+        `SELECT p.id 
+         FROM projects p
+         LEFT JOIN project_members pm ON p.id = pm.project_id
+         WHERE p.id = $1 
+         AND (p.created_by = $2 OR pm.user_id = $2)
+         LIMIT 1`,
+        [projectId, userId]
+      )
+
+      if (projectAccess.rows.length === 0) {
+        logger.warn('[EXTRACTION-API] Unauthorized access attempt', {
+          projectId,
+          userId,
+          entityType
+        })
+        return res.status(403).json({
+          success: false,
+          error: 'Access denied: You do not have permission to view this project'
+        })
+      }
+
+      // Validate and sanitize pagination parameters
+      const limitParam = req.query.limit as string | undefined
+      const offsetParam = req.query.offset as string | undefined
+      
+      const limitNum = limitParam ? parseInt(limitParam, 10) : 100
+      const offsetNum = offsetParam ? parseInt(offsetParam, 10) : 0
+      
+      // Validate parsed numbers
+      if (isNaN(limitNum) || limitNum < 1 || limitNum > 1000) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid limit parameter (must be 1-1000)'
+        })
+      }
+      
+      if (isNaN(offsetNum) || offsetNum < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid offset parameter (must be >= 0)'
+        })
+      }
 
       // Map entity type to table name
       const tableMap: Record<string, string> = {
@@ -324,13 +378,13 @@ router.get(
       )
       const total = parseInt(countResult.rows[0]?.total || '0')
 
-      // Get entities with pagination
+      // Get entities with pagination (using validated numbers)
       const result = await pool!.query(
         `SELECT * FROM ${tableName} 
          WHERE project_id = $1 
          ORDER BY created_at DESC 
          LIMIT $2 OFFSET $3`,
-        [projectId, limit, offset]
+        [projectId, limitNum, offsetNum]
       )
 
       res.json({
@@ -339,9 +393,9 @@ router.get(
         entities: result.rows,
         pagination: {
           total,
-          limit: parseInt(limit as string),
-          offset: parseInt(offset as string),
-          hasMore: total > parseInt(offset as string) + parseInt(limit as string)
+          limit: limitNum,
+          offset: offsetNum,
+          hasMore: total > offsetNum + limitNum
         }
       })
     } catch (error: unknown) {
