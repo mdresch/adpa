@@ -336,9 +336,11 @@ class TemplateImprovementService {
     commonIssues: any[],
     issueFrequency: any
   ): string {
-    const templateContent = typeof template.content === 'string' 
-      ? template.content 
-      : JSON.stringify(template.content)
+    const templateContent = template.content 
+      ? (typeof template.content === 'string' 
+          ? template.content 
+          : JSON.stringify(template.content))
+      : 'No template content available'
 
     const issuesText = commonIssues.map((issue, idx) => {
       const key = `${issue.dimension}:${issue.description}`
