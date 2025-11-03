@@ -60,10 +60,21 @@ DROP COLUMN IF EXISTS quality_status,
 DROP COLUMN IF EXISTS quality_audit_id;
 
 -- =======================
--- Drop Tables (in correct order due to foreign keys)
+-- Remove Quality Columns from Template Versions Table
+-- (Note: template_versions table existed before, only remove columns we added)
 -- =======================
 
-DROP TABLE IF EXISTS template_versions CASCADE;
+ALTER TABLE template_versions
+DROP COLUMN IF EXISTS avg_quality_before,
+DROP COLUMN IF EXISTS avg_quality_after,
+DROP COLUMN IF EXISTS improvement_percentage,
+DROP COLUMN IF EXISTS improvement_suggestion_id;
+
+-- =======================
+-- Drop Tables (in correct order due to foreign keys)
+-- (Note: template_versions is NOT dropped as it existed before)
+-- =======================
+
 DROP TABLE IF EXISTS template_improvement_suggestions CASCADE;
 DROP TABLE IF EXISTS quality_audits CASCADE;
 
@@ -71,7 +82,7 @@ DROP TABLE IF EXISTS quality_audits CASCADE;
 -- Verification
 -- =======================
 
--- Verify tables are dropped
+-- Verify quality system tables are dropped
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'quality_audits') THEN
@@ -82,8 +93,18 @@ BEGIN
     RAISE EXCEPTION 'template_improvement_suggestions table still exists!';
   END IF;
   
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'template_versions') THEN
-    RAISE EXCEPTION 'template_versions table still exists!';
+  -- Verify template_versions still exists (it's a pre-existing table)
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'template_versions') THEN
+    RAISE EXCEPTION 'template_versions table was incorrectly dropped!';
+  END IF;
+  
+  -- Verify added columns were removed
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'template_versions' 
+    AND column_name IN ('avg_quality_before', 'avg_quality_after', 'improvement_percentage', 'improvement_suggestion_id')
+  ) THEN
+    RAISE EXCEPTION 'Quality columns still exist in template_versions table!';
   END IF;
   
   RAISE NOTICE 'Quality system successfully rolled back';

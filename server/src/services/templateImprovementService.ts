@@ -172,9 +172,9 @@ class TemplateImprovementService {
        FROM quality_audits qa
        JOIN documents d ON qa.document_id = d.id
        WHERE d.template_id = $1
-       AND qa.audited_at > NOW() - INTERVAL '${days} days'
+       AND qa.audited_at > NOW() - ($2 * INTERVAL '1 day')
        ORDER BY qa.audited_at DESC`,
-      [templateId]
+      [templateId, days]
     )
 
     return result.rows
@@ -644,7 +644,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
 
     // 4. Get current version number
     const latestVersion = await this.getLatestTemplateVersion(suggestion.template_id)
-    const newVersionNumber = latestVersion ? `${parseInt(latestVersion.version_number) + 1}` : '1'
+    const newVersionNumber = latestVersion ? parseInt(latestVersion.version_number) + 1 : 1
 
     // 5. Create new template version
     await pool.query(

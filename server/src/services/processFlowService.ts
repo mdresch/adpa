@@ -7,6 +7,7 @@ import { Pool } from 'pg'
 import crypto from 'crypto'
 import { logger } from '../utils/logger'
 import { documentCompressionService, DocumentCompressionOptions } from './documentCompressionService'
+import { qualityAuditService } from './qualityAuditService'
 
 export interface ProcessFlowStep {
   id: number
@@ -52,6 +53,9 @@ export interface WorkflowConfiguration {
   includeMetadata: boolean
   includeRelationships: boolean
   includeStakeholders: boolean
+  // Optional fields for quality audit
+  templateType?: string
+  userId?: string
   // Optional progress callback for real-time updates
   onProgress?: (stepName: string, current: number, total: number, details?: any) => Promise<void> | void
 }
@@ -1792,15 +1796,14 @@ class ProcessFlowService {
           documentName: savedDocument.name
         })
         
-        const { qualityAuditService } = require('./qualityAuditService')
-        
         // Run audit asynchronously (don't block document save)
+        // Pass null for userId if not provided (system-generated audit)
         qualityAuditService.auditDocument(
           savedDocument.id,
           finalContent,
           config.templateType || 'unknown',
           project,
-          config.userId || 'system'
+          config.userId || null
         ).then((auditResult: any) => {
           logger.info('[PROCESS-FLOW] Quality audit completed', {
             documentId: savedDocument.id,
