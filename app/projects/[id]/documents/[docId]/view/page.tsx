@@ -493,7 +493,8 @@ The ADPA system represents a significant advancement in document processing auto
     console.log('[TOC] Attempting to scroll to:', sectionId)
     console.log('[TOC] Current TOC items:', tableOfContents.map(h => ({ id: h.id, text: h.text })))
     
-    const element = document.getElementById(sectionId)
+    // Use window.document to avoid conflicts
+    const element = window.document.getElementById(sectionId)
     
     if (element) {
       console.log('[TOC] ✅ Element found! Scrolling...')
@@ -517,11 +518,11 @@ The ADPA system represents a significant advancement in document processing auto
     } else {
       console.warn('[TOC] ❌ Element not found with ID:', sectionId)
       console.log('[TOC] All element IDs on page:', 
-        Array.from(document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-'))
+        Array.from(window.document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-'))
       )
       
       // Fallback: Try to find by text content
-      const allHeadings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+      const allHeadings = Array.from(window.document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
       const sectionText = tableOfContents.find(h => h.id === sectionId)?.text
       
       console.log('[TOC] Searching for heading with text:', sectionText)
