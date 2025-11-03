@@ -34,6 +34,7 @@ import { Award, Target, ArrowUp, Brain, Archive, ClipboardCheck, Sparkles } from
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
+import { TemplateRecommendations } from "@/components/templates/TemplateRecommendations"
 
 interface Template {
   id: string
@@ -665,10 +666,14 @@ export default function TemplateDetailPage() {
                       </CardHeader>
                       <CardContent className="space-y-4">
                         <Tabs defaultValue="overview">
-                          <TabsList className="grid w-full grid-cols-3">
+                          <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
                             <TabsTrigger value="content">Content</TabsTrigger>
                             <TabsTrigger value="variables">Variables</TabsTrigger>
+                            <TabsTrigger value="recommendations">
+                              <Sparkles className="h-4 w-4 mr-1" />
+                              Recommendations
+                            </TabsTrigger>
                           </TabsList>
                           
                           <TabsContent value="overview" className="space-y-4 mt-4">
@@ -811,6 +816,10 @@ export default function TemplateDetailPage() {
                                 <p className="text-sm text-muted-foreground">No variables defined</p>
                               )}
                             </div>
+                          </TabsContent>
+                          
+                          <TabsContent value="recommendations" className="mt-4">
+                            <TemplateRecommendations templateId={template.id} />
                           </TabsContent>
                         </Tabs>
                       </CardContent>
