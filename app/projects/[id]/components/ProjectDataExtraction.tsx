@@ -56,7 +56,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [allDocuments, setAllDocuments] = useState<Array<{ id: string; name: string; title?: string }>>([])
   const [loadingAllDocuments, setLoadingAllDocuments] = useState(false)
   const [documentSearchTerm, setDocumentSearchTerm] = useState("")
-  
+
   // Entity Details Dialog
   const [showEntityDialog, setShowEntityDialog] = useState(false)
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
@@ -463,8 +463,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   const isClickable = count > 0
                   
                   return (
-                    <div
-                      key={key}
+                  <div
+                    key={key}
                       className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
                         isClickable 
                           ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm' 
@@ -479,15 +479,15 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                           fetchEntityDetails(key)
                         }
                       }}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Icon className={`h-4 w-4 ${color}`} />
-                        <span className="text-sm font-medium">{label}</span>
-                      </div>
+                  >
+                    <div className="flex items-center gap-2">
+                      <Icon className={`h-4 w-4 ${color}`} />
+                      <span className="text-sm font-medium">{label}</span>
+                    </div>
                       <Badge variant={isClickable ? "default" : "outline"}>
                         {count}
-                      </Badge>
-                    </div>
+                    </Badge>
+                  </div>
                   )
                 })}
               </div>
@@ -607,7 +607,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       {/* Extraction Dialog */}
       <Dialog open={showExtractionDialog} onOpenChange={setShowExtractionDialog}>
         <DialogContent className="max-w-2xl">
