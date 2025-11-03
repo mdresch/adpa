@@ -218,8 +218,8 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         templateChanged: actualVersionType === 'major' && params.versionType !== 'major'
       })
 
-      // Step 5: Create new document (not a version entry) (85%)
-      log.info(`Creating new document with version ${nextVersion}`)
+      // Step 5: Save current version to history, then update in-place (85%)
+      log.info(`Updating existing document to version ${nextVersion}`)
       await this.updateJobStatus(params.jobId, 'processing', 85, `Creating version ${nextVersion}...`)
       this.emitProgress({
         jobId: params.jobId,
@@ -230,57 +230,71 @@ Please generate a comprehensive, updated version that incorporates all recent pr
 
       // Calculate word count
       const wordCount = aiResponse.content.trim().split(/\s+/).length
+      const characterCount = aiResponse.content.length
 
-      // Create a new document entry (not a version)
-      const newDocResult = await pool.query(
-        `INSERT INTO documents (
-          id,
-          name,
-          content,
-          template_id,
-          template_version,
-          project_id,
-          created_by,
-          author,
-          parent_document_id,
-          is_regeneration,
-          semantic_version,
-          version,
-          word_count,
-          generation_metadata,
-          status,
-          created_at,
-          updated_at
-        ) VALUES (
-          gen_random_uuid(),
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          $8,
-          true,
-          $9,
-          1,
-          $10,
-          $11,
-          'published',
-          NOW(),
-          NOW()
-        ) RETURNING id, name, semantic_version`,
+      // Parse semantic version parts for integer increment
+      const versionParts = nextVersion.split('.').map(v => parseInt(v) || 0)
+      const nextIntegerVersion = document.version + 1
+
+      // 📸 STEP 5A: Save current document state to document_versions table
+      log.info(`Saving current version ${document.semantic_version} to history`)
+      await pool.query(
+        `INSERT INTO document_versions
+         (id, document_id, version, semantic_version, content, author_id, created_at, change_type, change_description, generation_metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
+         ON CONFLICT (document_id, version) DO NOTHING`,
         [
-          `${document.name} (${nextVersion})`, // Append version to name
-          aiResponse.content,
-          templateId,
-          currentTemplateVersion?.toString() || '1', // Store current template version
-          projectId,
+          uuidv4(),
+          params.documentId,
+          document.version.toString(),
+          document.semantic_version || '1.0.0',
+          document.content,
           params.userId,
-          'System Administrator', // Author name
-          params.documentId, // Link to parent
+          actualVersionType === 'major' ? 'template_change' : 'ai_regeneration',
+          `AI regeneration (${actualVersionType}) - previous version v${document.semantic_version}`,
+          document.generation_metadata || null
+        ]
+      )
+
+      // 📝 STEP 5B: Update existing document with new content and version
+      log.info(`Updating document ${params.documentId} to version ${nextVersion}`)
+      const updateResult = await pool.query(
+        `UPDATE documents
+         SET 
+           content = $1,
+           version = $2,
+           semantic_version = $3,
+           template_version = $4,
+           word_count = $5,
+           character_count = $6,
+           updated_by = $7,
+           updated_at = NOW(),
+           is_regeneration = true,
+           generation_metadata = $8::jsonb,
+           metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{regeneration}',
+             jsonb_build_object(
+               'regenerated_at', NOW(),
+               'regenerated_by', $7::text,
+               'previous_version', $9::text,
+               'new_version', $3::text,
+               'regeneration_type', $10::text,
+               'template_changed', $11::boolean,
+               'provider', $12::text,
+               'model', $13::text
+             )
+           )
+         WHERE id = $14
+         RETURNING id, name, semantic_version`,
+        [
+          aiResponse.content,
+          nextIntegerVersion,
           nextVersion,
+          currentTemplateVersion?.toString() || '1',
           wordCount,
+          characterCount,
+          params.userId,
           JSON.stringify({
             provider: params.provider,
             model: params.model || 'default',
@@ -290,16 +304,21 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             template_id: templateId,
             template_version: currentTemplateVersion,
             generated_at: new Date().toISOString(),
-            parent_document_id: params.documentId,
             regeneration_type: actualVersionType,
             requested_version_type: params.versionType,
             version_upgraded: actualVersionType !== params.versionType
-          })
+          }),
+          document.semantic_version || '1.0.0', // previous version
+          actualVersionType, // change type
+          actualVersionType === 'major', // template_changed boolean
+          params.provider,
+          params.model || 'default',
+          params.documentId // WHERE id = ...
         ]
       )
 
-      const newDocument = newDocResult.rows[0]
-      const newDocumentId = newDocument.id
+      const updatedDocument = updateResult.rows[0]
+      const newDocumentId = params.documentId // Use existing ID, not new one
 
       // Step 6: Complete job (100%)
       log.info('Regeneration completed successfully')
@@ -311,7 +330,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         newDocumentId
       )
       
-      // Update job with context summary and new document ID
+      // Update job with context summary and version info
       await pool.query(
         `UPDATE regeneration_jobs 
          SET context_summary = $1,
@@ -325,20 +344,66 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             ai_summary: aiResponse.context_summary
           }),
           JSON.stringify({
-            new_document_id: newDocumentId,
-            new_document_name: newDocument.name,
-            new_document_version: nextVersion
+            document_id: newDocumentId, // Same document ID (updated in-place)
+            document_name: updatedDocument.name,
+            previous_version: document.semantic_version,
+            new_version: nextVersion,
+            version_type: actualVersionType,
+            template_changed: actualVersionType === 'major'
           }),
           params.jobId
         ]
       )
+
+      // 🔥 Trigger quality audit after AI regeneration
+      try {
+        const { qualityAuditService } = await import('./qualityAuditService')
+        
+        log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
+          documentId: newDocumentId,
+          documentName: updatedDocument.name,
+          previousVersion: document.semantic_version,
+          newVersion: nextVersion,
+          versionType: actualVersionType,
+          provider: params.provider,
+          model: params.model
+        })
+        
+        // Get project context for audit
+        const projectQuery = await pool.query(
+          'SELECT id, name, framework, description FROM projects WHERE id = $1',
+          [projectId]
+        )
+        const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
+        
+        // Trigger audit asynchronously (don't block response)
+        qualityAuditService.auditDocument(
+          newDocumentId,
+          aiResponse.content,
+          templateId,
+          projectContext,
+          params.userId
+        ).catch((auditError: any) => {
+          log.error('[AI-REGENERATION] Quality audit failed (non-blocking)', {
+            documentId: newDocumentId,
+            error: auditError.message
+          })
+        })
+        
+        log.info('[AI-REGENERATION] Quality audit triggered successfully (async)')
+      } catch (error: any) {
+        log.warn('[AI-REGENERATION] Failed to trigger quality audit', {
+          documentId: newDocumentId,
+          error: error.message
+        })
+      }
 
       this.emitComplete({
         jobId: params.jobId,
         userId: params.userId,
         versionId: newDocumentId,
         versionNumber: nextVersion,
-        documentName: newDocument.name
+        documentName: updatedDocument.name
       })
 
       log.info('Document regeneration job completed successfully')
