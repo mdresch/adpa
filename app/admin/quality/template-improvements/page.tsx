@@ -85,11 +85,13 @@ export default function TemplateImprovementsPage() {
     try {
       setLoading(true)
       
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
       const queryParams = new URLSearchParams()
       if (filters.status !== 'all') queryParams.append('status', filters.status)
       if (filters.priority !== 'all') queryParams.append('priority', filters.priority)
 
-      const response = await fetch(`/api/quality-audits/template-improvements?${queryParams}`, {
+      const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements?${queryParams}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       })
 
@@ -110,7 +112,9 @@ export default function TemplateImprovementsPage() {
 
   const handleTriggerAnalysis = async () => {
     try {
-      const response = await fetch('/api/quality-audits/analyze-templates', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
+      const response = await fetch(`${API_BASE_URL}/quality-audits/analyze-templates`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -139,7 +143,9 @@ export default function TemplateImprovementsPage() {
 
   const handleApprove = async (suggestionId: string) => {
     try {
-      const response = await fetch(`/api/quality-audits/template-improvements/${suggestionId}/approve`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
+      const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/approve`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -184,7 +190,9 @@ export default function TemplateImprovementsPage() {
     }
 
     try {
-      const response = await fetch(`/api/quality-audits/template-improvements/${selectedSuggestion}/reject`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
+      const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements/${selectedSuggestion}/reject`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -222,7 +230,9 @@ export default function TemplateImprovementsPage() {
     }
 
     try {
-      const response = await fetch(`/api/quality-audits/template-improvements/${suggestionId}/implement`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
+      const response = await fetch(`${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/implement`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -434,7 +434,9 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     try {
       setAnalyzingTemplate(true)
       
-      const response = await fetch('/api/quality-audits/analyze-templates', {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
+      const response = await fetch(`${API_BASE_URL}/quality-audits/analyze-templates`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -85,14 +85,16 @@ export default function QualityDashboardPage() {
     try {
       setLoading(true)
 
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+
       const [statsRes, providersRes, issuesRes] = await Promise.all([
-        fetch('/api/quality-audits/stats', {
+        fetch(`${API_BASE_URL}/quality-audits/stats`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('/api/quality-audits/provider-comparison', {
+        fetch(`${API_BASE_URL}/quality-audits/provider-comparison`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('/api/quality-audits/common-issues?limit=15', {
+        fetch(`${API_BASE_URL}/quality-audits/common-issues?limit=15`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ])

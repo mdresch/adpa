@@ -84,7 +84,9 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
       setLoading(true)
       setError(null)
 
-      const response = await fetch(`/api/quality-audits/document/${documentId}`, {
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+
+      const response = await fetch(`${API_BASE_URL}/quality-audits/document/${documentId}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
