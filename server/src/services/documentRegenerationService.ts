@@ -262,13 +262,13 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       const updateResult = await pool.query(
         `UPDATE documents
          SET 
-           content = $1,
-           version = $2,
-           semantic_version = $3,
-           template_version = $4,
-           word_count = $5,
-           character_count = $6,
-           updated_by = $7,
+           content = $1::text,
+           version = $2::integer,
+           semantic_version = $3::varchar,
+           template_version = $4::varchar,
+           word_count = $5::integer,
+           character_count = $6::integer,
+           updated_by = $7::uuid,
            updated_at = NOW(),
            is_regeneration = true,
            generation_metadata = $8::jsonb,
@@ -286,7 +286,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
                'model', $13::text
              )
            )
-         WHERE id = $14
+         WHERE id = $14::uuid
          RETURNING id, name, semantic_version`,
         [
           aiResponse.content,
