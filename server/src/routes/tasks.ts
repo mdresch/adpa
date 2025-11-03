@@ -27,14 +27,15 @@ const router = express.Router()
 
 /**
  * POST /api/tasks/import-wbs
- * Import WBS from AI-extracted document entities to project tasks
+ * Import WBS from AI-extracted entities to project tasks
  */
 router.post('/import-wbs',
   authenticateToken,
   requirePermission('projects.manage'),
   validate(Joi.object({
     projectId: Joi.string().uuid().required(),
-    documentId: Joi.string().uuid().required(),
+    documentId: Joi.string().uuid().optional(),
+    useProjectEntities: Joi.boolean().optional(),
     options: Joi.object({
       createHierarchy: Joi.boolean().optional(),
       importDependencies: Joi.boolean().optional(),
@@ -46,11 +47,11 @@ router.post('/import-wbs',
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const userId = (req as any).user?.id
-      const { projectId, documentId, options } = req.body
+      const { projectId, documentId, useProjectEntities, options } = req.body
       
-      const result = await wbsImportService.importWBSFromDocument(
+      // Import from project-level entities if useProjectEntities is true
+      const result = await wbsImportService.importWBSFromProjectEntities(
         projectId,
-        documentId,
         userId,
         options || {}
       )
@@ -58,7 +59,7 @@ router.post('/import-wbs',
       res.status(201).json({
         success: true,
         data: result,
-        message: `Imported ${result.tasksCreated} tasks from WBS`
+        message: `Imported ${result.tasksCreated} tasks from extracted entities`
       })
     } catch (error: any) {
       log.error('WBS import failed', error)

@@ -303,19 +303,13 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   }
   
   const handleImportWBS = async () => {
-    if (!lastExtractedDocumentId && selectedDocuments.length === 0) {
-      toast.error('Please run extraction first or select a document')
-      return
-    }
-    
-    const documentId = lastExtractedDocumentId || selectedDocuments[0]
-    
     try {
       setIsImportingWBS(true)
       
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       
+      // Import from extracted entities (project-level) instead of requiring specific document
       const response = await fetch(`${apiUrl}/tasks/import-wbs`, {
         method: 'POST',
         headers: {
@@ -324,7 +318,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         },
         body: JSON.stringify({
           projectId,
-          documentId,
+          // Use project-level entities if no specific document
+          useProjectEntities: true,
           options: {
             autoMatchRoles: true,
             importDependencies: true,

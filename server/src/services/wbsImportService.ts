@@ -177,6 +177,198 @@ async function findRoleByName(roleName: string): Promise<string | null> {
 }
 
 /**
+ * Import WBS from project-level AI-extracted entities to project tasks
+ */
+export async function importWBSFromProjectEntities(
+  projectId: string,
+  userId: string,
+  options: WBSImportOptions = {}
+): Promise<WBSImportResult> {
+  const result: WBSImportResult = {
+    tasksCreated: 0,
+    tasksUpdated: 0,
+    dependenciesCreated: 0,
+    totalEstimatedHours: 0,
+    totalEstimatedCost: 0,
+    tasksNeedingRoleAssignment: 0,
+    errors: []
+  }
+  
+  try {
+    logger.info('Starting WBS import from project entities', { projectId, options })
+    
+    // 1. Get extracted activities from project tables
+    const activitiesResult = await pool.query(`
+      SELECT id, name, description, category, phase, start_date, end_date, 
+             estimated_hours, estimated_days, assigned_to, status, dependencies
+      FROM activities
+      WHERE project_id = $1
+      ORDER BY name
+    `, [projectId])
+    
+    // 2. Get extracted deliverables
+    const deliverablesResult = await pool.query(`
+      SELECT id, name, description, type, due_date, status, owner, 
+             acceptance_criteria, priority
+      FROM deliverables
+      WHERE project_id = $1
+      ORDER BY name
+    `, [projectId])
+    
+    const activities = activitiesResult.rows
+    const deliverables = deliverablesResult.rows
+    const totalItems = activities.length + deliverables.length
+    
+    if (totalItems === 0) {
+      throw new Error('No activities or deliverables found in extracted data. Please run extraction first.')
+    }
+    
+    logger.info('Found items to import', { 
+      activities: activities.length, 
+      deliverables: deliverables.length,
+      total: totalItems
+    })
+    
+    // 3. Import deliverables as parent tasks
+    for (let i = 0; i < deliverables.length; i++) {
+      const deliverable = deliverables[i]
+      
+      try {
+        const fullText = `${deliverable.name} ${deliverable.description || ''}`
+        const estimatedHours = parseEstimatedHours(fullText) || 40 // Default 40h for deliverables
+        
+        const taskNumber = `DEL-${String(i + 1).padStart(3, '0')}`
+        
+        const taskResult = await pool.query(`
+          INSERT INTO project_tasks (
+            project_id,
+            task_number,
+            task_name,
+            description,
+            estimated_hours,
+            phase,
+            status,
+            priority,
+            source_entity_id,
+            imported_from_wbs,
+            created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          ON CONFLICT (project_id, task_number) DO UPDATE SET
+            task_name = EXCLUDED.task_name,
+            description = EXCLUDED.description,
+            updated_at = NOW()
+          RETURNING id, estimated_hours
+        `, [
+          projectId,
+          taskNumber,
+          deliverable.name,
+          deliverable.description,
+          estimatedHours,
+          'Planning', // Deliverables typically in planning
+          deliverable.status || 'planned',
+          deliverable.priority || 'medium',
+          deliverable.id,
+          true,
+          userId
+        ])
+        
+        result.tasksCreated++
+        if (estimatedHours) {
+          result.totalEstimatedHours += estimatedHours
+        }
+        
+      } catch (error: any) {
+        result.errors.push(`Failed to import deliverable ${deliverable.name}: ${error.message}`)
+        logger.error('Failed to import deliverable', { error, deliverable: deliverable.name })
+      }
+    }
+    
+    // 4. Import activities as tasks
+    for (let i = 0; i < activities.length; i++) {
+      const activity = activities[i]
+      
+      try {
+        const fullText = `${activity.name} ${activity.description || ''}`
+        const wbsCode = parseWBSCode(fullText) || parseWBSCode(activity.name)
+        const estimatedHours = activity.estimated_hours || 
+                              (activity.estimated_days ? activity.estimated_days * 8 : null) ||
+                              parseEstimatedHours(fullText)
+        const requiredRole = extractRequiredRole(fullText)
+        
+        // Find role ID if role name found
+        let roleId = null
+        if (requiredRole && options.autoMatchRoles) {
+          roleId = await findRoleByName(requiredRole)
+        }
+        
+        const taskNumber = wbsCode || `ACT-${String(i + 1).padStart(3, '0')}`
+        
+        const taskResult = await pool.query(`
+          INSERT INTO project_tasks (
+            project_id,
+            task_number,
+            wbs_code,
+            task_name,
+            description,
+            estimated_hours,
+            required_role_id,
+            required_role_name,
+            phase,
+            status,
+            source_entity_id,
+            imported_from_wbs,
+            created_by
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+          ON CONFLICT (project_id, task_number) DO UPDATE SET
+            task_name = EXCLUDED.task_name,
+            description = EXCLUDED.description,
+            estimated_hours = EXCLUDED.estimated_hours,
+            updated_at = NOW()
+          RETURNING id, estimated_hours
+        `, [
+          projectId,
+          taskNumber,
+          wbsCode,
+          activity.name,
+          activity.description,
+          estimatedHours,
+          roleId,
+          requiredRole,
+          activity.phase || 'Execution',
+          activity.status || 'planned',
+          activity.id,
+          true,
+          userId
+        ])
+        
+        const task = taskResult.rows[0]
+        result.tasksCreated++
+        
+        if (estimatedHours) {
+          result.totalEstimatedHours += estimatedHours
+        }
+        
+        if (!roleId && requiredRole) {
+          result.tasksNeedingRoleAssignment++
+        }
+        
+      } catch (error: any) {
+        result.errors.push(`Failed to import activity ${activity.name}: ${error.message}`)
+        logger.error('Failed to import activity', { error, activity: activity.name })
+      }
+    }
+    
+    logger.info('WBS import from project entities completed', { result })
+    
+    return result
+    
+  } catch (error) {
+    logger.error('WBS import from project entities failed', { error, projectId })
+    throw error
+  }
+}
+
+/**
  * Import WBS from AI-extracted document entities to project tasks
  */
 export async function importWBSFromDocument(
