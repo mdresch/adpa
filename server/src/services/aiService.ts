@@ -557,19 +557,9 @@ class AIService {
             apiKey: directApiKey
           })
           
-          // Claude models - Tier 1 accounts have Claude 4.x series
-          // Based on user's rate limits showing "Claude Haiku 4.x" and "Claude Sonnet 4.x"
-          const anthropicModels = [
-            'claude-sonnet-4.0',
-            'claude-4-sonnet',
-            'claude-haiku-4.0', 
-            'claude-4-haiku',
-            'claude-opus-4.0',
-            'claude-4-opus'
-          ]
-          const modelName = anthropicModels.includes(request.model || '') 
-            ? request.model 
-            : 'claude-sonnet-4.0'  // Default to Sonnet 4 (latest)
+          // Use the model name provided by the user
+          // Don't override to claude-4.x series - respect user's model choice
+          const modelName = request.model || 'claude-3-5-sonnet-20241022'  // Default to Claude 3.5 Sonnet (widely available)
           
           logger.info(`[AI-SERVICE] Anthropic model: ${modelName}`)
           logger.info(`[AI-SERVICE] Calling native Anthropic messages.create()`)
