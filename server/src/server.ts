@@ -71,6 +71,7 @@ import documentGenerationRoutes from "./routes/documentGeneration"
 import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
+import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -228,6 +229,7 @@ app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
+app.use("/api/quality-audits", qualityAuditRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
@@ -249,10 +251,30 @@ io.on("connection", (socket) => {
         }
 
         try {
-          const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+          // VALIDATE JWT FIRST - don't hit database if token is malformed
+          let decoded: any
+          try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+          } catch (jwtError: any) {
+            // JWT malformed, expired, or invalid - reject immediately
+            logger.warn('WebSocket JWT validation failed', {
+              error: jwtError.message,
+              room
+            })
+            socket.emit('join:error', { 
+              room, 
+              message: 'Invalid or expired token. Please log out and log back in.',
+              code: 'JWT_INVALID'
+            })
+            // Disconnect socket to prevent retry storm
+            socket.disconnect(true)
+            return
+          }
+
           const userId = decoded?.userId
           if (!userId) {
-            socket.emit('join:error', { room, message: 'Invalid token' })
+            socket.emit('join:error', { room, message: 'Invalid token payload', code: 'USER_ID_MISSING' })
+            socket.disconnect(true)
             return
           }
 
@@ -423,6 +445,11 @@ async function startServer() {
       console.log(`✅ Server running on port ${PORT}`)
       console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
       console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
+      
+      // Initialize weekly template analysis job
+      const { initializeTemplateAnalysisJob } = require('./jobs/templateAnalysisJob')
+      initializeTemplateAnalysisJob()
+      console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
     })
   } catch (error) {
     console.error("❌ Failed to start server:", error)

@@ -314,7 +314,8 @@ class AIService {
       provider: request.provider,
       model: request.model,
       temperature: request.temperature,
-      promptLength: request.prompt.length
+      promptLength: request.prompt?.length || 0,
+      hasPrompt: !!request.prompt
     })
     
     // Fetch AI Gateway API key from database

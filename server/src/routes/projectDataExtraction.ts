@@ -292,9 +292,17 @@ router.get(
       const { projectId, entityType } = req.params
       const userId = (req as any).user?.id
       
+      logger.info('[ENTITY-DETAILS-API] Request received', {
+        projectId,
+        entityType,
+        userId,
+        query: req.query
+      })
+      
       // Validate UUID format
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
       if (!uuidRegex.test(projectId)) {
+        logger.warn('[ENTITY-DETAILS-API] Invalid project ID format', { projectId })
         return res.status(400).json({
           success: false,
           error: 'Invalid project ID format'
@@ -302,12 +310,15 @@ router.get(
       }
 
       // SECURITY: Verify user has access to this project
+      // Check if user is the project owner (owner_id or created_by)
       const projectAccess = await pool!.query(
         `SELECT p.id 
          FROM projects p
-         LEFT JOIN project_members pm ON p.id = pm.project_id
          WHERE p.id = $1 
-         AND (p.created_by = $2 OR pm.user_id = $2)
+         AND (
+           COALESCE(p.owner_id, p.created_by) = $2 
+           OR p.created_by = $2
+         )
          LIMIT 1`,
         [projectId, userId]
       )
@@ -386,6 +397,15 @@ router.get(
          LIMIT $2 OFFSET $3`,
         [projectId, limitNum, offsetNum]
       )
+
+      logger.info('[ENTITY-DETAILS-API] Query completed', {
+        entityType,
+        tableName,
+        rowCount: result.rows.length,
+        total,
+        limit: limitNum,
+        offset: offsetNum
+      })
 
       res.json({
         success: true,

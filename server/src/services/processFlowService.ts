@@ -7,6 +7,7 @@ import { Pool } from 'pg'
 import crypto from 'crypto'
 import { logger } from '../utils/logger'
 import { documentCompressionService, DocumentCompressionOptions } from './documentCompressionService'
+import { qualityAuditService } from './qualityAuditService'
 
 export interface ProcessFlowStep {
   id: number
@@ -52,6 +53,9 @@ export interface WorkflowConfiguration {
   includeMetadata: boolean
   includeRelationships: boolean
   includeStakeholders: boolean
+  // Optional fields for quality audit
+  templateType?: string
+  userId?: string
   // Optional progress callback for real-time updates
   onProgress?: (stepName: string, current: number, total: number, details?: any) => Promise<void> | void
 }
@@ -1784,6 +1788,77 @@ class ProcessFlowService {
       const savedDocument = result.rows[0]
       
       logger.info(`Document saved successfully: ${savedDocument.name} (ID: ${savedDocument.id})`)
+      
+      // 📸 Save initial version snapshot to document_versions table
+      // This ensures v1.0.0 is always available in version history
+      try {
+        const { v4: uuidv4 } = await import('uuid')
+        
+        await this.pool.query(
+          `INSERT INTO document_versions 
+           (id, document_id, version, semantic_version, content, author_id, created_at, change_type, change_description, generation_metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
+           ON CONFLICT (document_id, version) DO NOTHING`,
+          [
+            uuidv4(),
+            savedDocument.id,
+            '1', // Initial integer version
+            '1.0.0', // Initial semantic version
+            finalContent,
+            config.userId || null,
+            'initial_version',
+            'Initial version created by AI',
+            JSON.stringify(generationMetadata)
+          ]
+        )
+        
+        logger.info(`Initial version v1.0.0 saved to version history for document ${savedDocument.id}`)
+      } catch (versionError: any) {
+        logger.warn('[VERSION-SNAPSHOT] Failed to save initial version snapshot', {
+          documentId: savedDocument.id,
+          error: versionError.message
+        })
+        // Don't fail document creation if version snapshot fails
+      }
+      
+      // QUALITY CONTROL GATE: Trigger automatic quality audit
+      try {
+        logger.info('[PROCESS-FLOW] Triggering automatic quality audit', {
+          documentId: savedDocument.id,
+          documentName: savedDocument.name
+        })
+        
+        // Enqueue quality audit job (async, non-blocking)
+        const { queueService } = await import('./queueService')
+        const { v4: uuidv4 } = await import('uuid')
+        const auditJobId = uuidv4()
+        
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
+          documentId: savedDocument.id,
+          documentContent: finalContent,
+          documentType: config.templateType || 'unknown',
+          projectContext: project,
+          userId: config.userId || null
+        }).then(() => {
+          logger.info('[PROCESS-FLOW] Quality audit job enqueued', {
+            documentId: savedDocument.id,
+            auditJobId
+          })
+        }).catch((auditError: any) => {
+          logger.error('[PROCESS-FLOW] Failed to enqueue quality audit', {
+            documentId: savedDocument.id,
+            error: auditError instanceof Error ? auditError.message : String(auditError)
+          })
+          // Don't fail document generation if audit fails
+        })
+      } catch (error) {
+        logger.error('[PROCESS-FLOW] Failed to trigger quality audit', {
+          documentId: savedDocument.id,
+          error: error instanceof Error ? error.message : String(error)
+        })
+        // Don't fail document generation if audit trigger fails
+      }
       
       return savedDocument
       

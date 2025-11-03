@@ -331,15 +331,15 @@ The ADPA system represents a significant advancement in document processing auto
     }
   ]
 
-  useEffect(() => {
-    const loadDocument = async () => {
-      setIsLoading(true)
-      try {
-        // Fetch document from API
-        const [documentResponse, versionsResponse] = await Promise.all([
-          apiClient.get(`/projects/${projectId}/documents/${documentId}`),
-          apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
-        ])
+  // Extract fetchDocument so it can be reused by saveEdit
+  const fetchDocument = async () => {
+    setIsLoading(true)
+    try {
+      // Fetch document from API
+      const [documentResponse, versionsResponse] = await Promise.all([
+        apiClient.get(`/projects/${projectId}/documents/${documentId}`),
+        apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
+      ])
         
         const documentData = documentResponse
         const versionsData = versionsResponse || []
@@ -449,9 +449,10 @@ The ADPA system represents a significant advancement in document processing auto
       } finally {
         setIsLoading(false)
       }
-    }
+  }
 
-    loadDocument()
+  useEffect(() => {
+    fetchDocument()
     
     // Extract TOC when document loads
     if (mockDocument.content) {
@@ -489,16 +490,66 @@ The ADPA system represents a significant advancement in document processing auto
 
   // Smooth scroll to section
   const scrollToSection = (sectionId: string) => {
+    console.log('[TOC] Attempting to scroll to:', sectionId)
+    console.log('[TOC] Current TOC items:', tableOfContents.map(h => ({ id: h.id, text: h.text })))
+    
+    // Use window.document to avoid conflicts
     const element = window.document.getElementById(sectionId)
+    
     if (element) {
-      const yOffset = -100
-      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset
+      console.log('[TOC] ✅ Element found! Scrolling...')
+      console.log('[TOC] Element position:', {
+        top: element.getBoundingClientRect().top,
+        scrollY: window.scrollY,
+        offsetHeight: element.offsetHeight
+      })
       
-      window.scrollTo({ 
-        top: y, 
+      // Use modern scrollIntoView with offset
+      const elementPosition = element.getBoundingClientRect().top
+      const offsetPosition = elementPosition + window.scrollY - 120 // 120px offset for header
+      
+      window.scrollTo({
+        top: offsetPosition,
         behavior: 'smooth'
       })
+      
       setActiveSection(sectionId)
+      console.log('[TOC] Scroll command sent')
+    } else {
+      console.warn('[TOC] ❌ Element not found with ID:', sectionId)
+      console.log('[TOC] All element IDs on page:', 
+        Array.from(window.document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-'))
+      )
+      
+      // Fallback: Try to find by text content
+      const allHeadings = Array.from(window.document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+      const sectionText = tableOfContents.find(h => h.id === sectionId)?.text
+      
+      console.log('[TOC] Searching for heading with text:', sectionText)
+      console.log('[TOC] All heading texts on page:', allHeadings.map(h => h.textContent?.trim()))
+      
+      if (sectionText) {
+        // Try exact match first
+        let matchingHeading = allHeadings.find(h => 
+          h.textContent?.trim() === sectionText.trim()
+        ) as HTMLElement | undefined
+        
+        // Try case-insensitive partial match if exact fails
+        if (!matchingHeading) {
+          matchingHeading = allHeadings.find(h => 
+            h.textContent?.toLowerCase().includes(sectionText.toLowerCase())
+          ) as HTMLElement | undefined
+        }
+        
+        if (matchingHeading) {
+          console.log('[TOC] ✅ Found heading by text content, scrolling...')
+          matchingHeading.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          window.scrollBy({ top: -120, behavior: 'smooth' }) // Offset for sticky header
+          setActiveSection(sectionId)
+        } else {
+          console.error('[TOC] ❌ Could not find heading by ID or text')
+        }
+      }
     }
   }
 
@@ -609,10 +660,16 @@ The ADPA system represents a significant advancement in document processing auto
         tags: document.tags || []
       })
       
-      // Update local state with the response data
-      setDocument({ ...document, content: editedContent, updated_at: new Date().toISOString() })
-      toast.success("Document saved successfully")
+      toast.success("Document saved successfully! Refreshing...")
       setIsEditing(false)
+      
+      // 🔄 Reload document data to get new version number and updated metadata
+      await fetchDocument()
+      
+      // Re-extract TOC from new content
+      if (editedContent) {
+        extractTableOfContents(editedContent)
+      }
     } catch (error) {
       console.error("Failed to save document:", error)
       toast.error("Failed to save document")
@@ -932,8 +989,12 @@ The ADPA system represents a significant advancement in document processing auto
                               remarkPlugins={[remarkGfm]}
                               components={{
                                 h1({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+                                  // Extract text content (handle arrays, nested elements)
+                                  const text = Array.isArray(children) 
+                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
+                                    : String(children)
+                                  const cleanText = text.replace(/\*/g, '').trim()
+                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
                                     <h1 id={id} className="text-4xl font-bold mb-6 mt-8 pb-2 border-b border-gray-200 dark:border-gray-700 scroll-mt-24">
                                       {children}
@@ -941,8 +1002,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   );
                                 },
                                 h2({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+                                  const text = Array.isArray(children) 
+                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
+                                    : String(children)
+                                  const cleanText = text.replace(/\*/g, '').trim()
+                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
                                     <h2 id={id} className="text-3xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-24">
                                       {children}
@@ -950,8 +1014,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   );
                                 },
                                 h3({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+                                  const text = Array.isArray(children) 
+                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
+                                    : String(children)
+                                  const cleanText = text.replace(/\*/g, '').trim()
+                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
                                   return (
                                     <h3 id={id} className="text-2xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-200 scroll-mt-24">
                                       {children}
@@ -1385,13 +1452,22 @@ The ADPA system represents a significant advancement in document processing auto
                             <p className="text-sm font-medium">Overall Quality</p>
                             <div className="flex items-center justify-between">
                               <span className="text-3xl font-bold text-primary">
-                                {(document as any).generation_metadata.qualityMetrics.overall}
+                                {(document as any).generation_metadata.qualityMetrics.overallQuality || 
+                                 (document as any).generation_metadata.qualityMetrics.overall || 0}%
                               </span>
                               <Badge 
                                 variant="secondary" 
                                 className="text-sm px-3 py-1"
                               >
-                                {(document as any).generation_metadata.qualityMetrics.grade}
+                                {(() => {
+                                  const score = (document as any).generation_metadata.qualityMetrics.overallQuality || 
+                                               (document as any).generation_metadata.qualityMetrics.overall || 0
+                                  if (score >= 90) return 'A (Excellent)'
+                                  if (score >= 80) return 'B (Good)'
+                                  if (score >= 70) return 'C (Fair)'
+                                  if (score >= 60) return 'D (Poor)'
+                                  return 'F (Needs Improvement)'
+                                })()}
                               </Badge>
                             </div>
                           </div>
@@ -1405,11 +1481,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-blue-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.completeness }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.completeness || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.completeness}
+                                    {(document as any).generation_metadata.qualityMetrics.completeness || 0}%
                                   </span>
                                 </div>
                               </div>
@@ -1419,25 +1495,25 @@ The ADPA system represents a significant advancement in document processing auto
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-green-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.structure }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.structure}
+                                    {(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%
                                   </span>
                                 </div>
                               </div>
                               <div className="flex justify-between items-center">
-                                <span className="text-sm text-muted-foreground">Formatting</span>
+                                <span className="text-sm text-muted-foreground">Formatting & Style</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-purple-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.formatting }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.formatting}
+                                    {(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%
                                   </span>
                                 </div>
                               </div>
@@ -1447,11 +1523,11 @@ The ADPA system represents a significant advancement in document processing auto
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
                                     <div 
                                       className="h-full bg-orange-500 transition-all"
-                                      style={{ width: (document as any).generation_metadata.qualityMetrics.depth }}
+                                      style={{ width: `${(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%` }}
                                     />
                                   </div>
                                   <span className="text-sm font-medium w-12 text-right">
-                                    {(document as any).generation_metadata.qualityMetrics.depth}
+                                    {(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%
                                   </span>
                                 </div>
                               </div>

@@ -302,9 +302,10 @@ router.post("/generate-new-version",
 
       log.info(`Generating new version for document ${existingDocumentId}`)
 
-      // Get existing document
+      // Get existing document WITH template info
       const documentCheck = await pool.query(
         `SELECT d.id, d.name, d.semantic_version, d.version, d.project_id,
+                d.template_id, d.template_version,
                 p.owner_id, p.team_members
          FROM documents d
          JOIN projects p ON d.project_id = p.id
@@ -340,9 +341,48 @@ router.post("/generate-new-version",
       const wordCount = result.content.trim().split(/\s+/).filter(Boolean).length
       const characterCount = result.content.length
 
-      // Increment version (AI regeneration = minor version)
+      // Check if template has changed (for MAJOR version increment)
+      let templateChanged = false
+      let changeType = 'ai_regeneration'
+      
+      if (templateId && document.template_id) {
+        // Different template = MAJOR version
+        if (templateId !== document.template_id) {
+          templateChanged = true
+          changeType = 'template_change'
+          log.info(`Template changed: ${document.template_id} → ${templateId}`)
+        } else {
+          // Same template, check version
+          const templateInfo = await pool.query(
+            'SELECT prompt_version FROM templates WHERE id = $1',
+            [templateId]
+          )
+          if (templateInfo.rows.length > 0) {
+            const newTemplateVersion = templateInfo.rows[0].prompt_version?.toString() || '1'
+            const oldTemplateVersion = document.template_version?.toString() || '1'
+            if (newTemplateVersion !== oldTemplateVersion) {
+              templateChanged = true
+              changeType = 'template_version_update'
+              log.info(`Template version changed: ${oldTemplateVersion} → ${newTemplateVersion}`)
+            }
+          }
+        }
+      }
+
+      // Increment version based on change type
       const currentVersion = document.semantic_version || '1.0.0'
-      const newVersion = semanticVersionService.getNextAIVersion(currentVersion)
+      let newVersion: string
+      
+      if (templateChanged) {
+        // MAJOR version: Template or template version changed
+        newVersion = semanticVersionService.getNextTemplateVersion(currentVersion)
+        log.info(`🎯 MAJOR version increment (template change): ${currentVersion} → ${newVersion}`)
+      } else {
+        // MINOR version: Regular AI regeneration
+        newVersion = semanticVersionService.getNextAIVersion(currentVersion)
+        log.info(`🔄 MINOR version increment (AI regeneration): ${currentVersion} → ${newVersion}`)
+      }
+      
       const newVersionNumber = document.version + 1
 
       // Save current version to history (if not already saved)
@@ -358,8 +398,8 @@ router.post("/generate-new-version",
           currentVersion,
           typeof document.content === 'string' ? document.content : JSON.stringify(document.content),
           req.user?.id,
-          'ai_regeneration',
-          JSON.stringify({ provider, model, temperature })
+          changeType, // Use detected change type
+          JSON.stringify({ provider, model, temperature, templateChanged })
         ]
       )
       
@@ -409,6 +449,51 @@ router.post("/generate-new-version",
       
       log.info(`Document updated successfully to version ${newVersion}. Rows affected: ${updateResult.rowCount}`)
 
+      // 🔥 Trigger quality audit after AI regeneration (MINOR version increment)
+      try {
+        const { qualityAuditService } = await import('../services/qualityAuditService')
+        
+        log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
+          documentId: existingDocumentId,
+          documentName: updateResult.rows[0].name,
+          previousVersion: currentVersion,
+          newVersion: newVersion,
+          provider,
+          model
+        })
+        
+        // Get project context for audit
+        const projectQuery = await pool.query(
+          'SELECT id, name, framework, description FROM projects WHERE id = $1',
+          [projectId]
+        )
+        const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
+        
+        // Enqueue quality audit job (async, non-blocking)
+        const auditJobId = require('uuid').v4()
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
+          documentId: existingDocumentId,
+          documentContent: result.content,
+          documentType: templateId,
+          projectContext,
+          userId: req.user?.id || null
+        }).catch((auditError: any) => {
+          log.error('[AI-REGENERATION] Failed to enqueue quality audit (non-blocking)', {
+            documentId: existingDocumentId,
+            error: auditError.message
+          })
+        })
+        
+        log.info('[AI-REGENERATION] Quality audit job enqueued', { auditJobId })
+      } catch (error: any) {
+        // Don't fail document generation if audit fails
+        log.warn('[AI-REGENERATION] Failed to trigger quality audit', {
+          documentId: existingDocumentId,
+          error: error.message
+        })
+      }
+
       // Check if document is baselined and trigger drift detection
       const baselineCheck = await pool.query(
         `SELECT id, version FROM project_baselines
@@ -430,7 +515,7 @@ router.post("/generate-new-version",
       // Log activity
       await pool.query(
         `INSERT INTO audit_logs 
-         (id, user_id, action, resource_type, resource_id, details)
+         (id, user_id, action, resource_type, resource_id, new_values)
          VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           uuidv4(),
@@ -443,6 +528,8 @@ router.post("/generate-new-version",
             new_version: newVersion,
             generated_by: 'ai',
             template_id: templateId,
+            template_changed: templateChanged,
+            change_type: changeType,
             drift_detected: driftDetected
           })
         ]

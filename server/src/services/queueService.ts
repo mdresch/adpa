@@ -159,6 +159,23 @@ const regenerationQueueOptions = {
 
 export const regenerationQueue = new Bull("document-regeneration", regenerationQueueOptions)
 
+// Quality Audit Queue Options
+const qualityAuditQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 2,
+    backoff: {
+      type: "exponential",
+      delay: 3000,
+    },
+    timeout: 120000, // 2 minutes timeout for AI quality analysis
+  },
+}
+
+export const qualityAuditQueue = new Bull("quality-audit", qualityAuditQueueOptions)
+
 // Project Data Extraction Queue Options
 const extractionQueueOptions = {
   redis: bullRedisConfig,
@@ -1020,6 +1037,63 @@ regenerationQueue.on("failed", (job, err) => {
   logger.error(`Regeneration job failed: ${job.id}`, err)
 })
 
+// Quality Audit job processor
+qualityAuditQueue.process("quality-audit", async (job) => {
+  const { jobId, documentId, documentContent, documentType, projectContext, userId } = job.data
+
+  try {
+    // Update job status to processing and assign worker
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID, "quality-audit")
+
+    logger.info(`[QUALITY-AUDIT-JOB] Starting quality audit job ${jobId} for document ${documentId}`)
+
+    // Import quality audit service
+    const { qualityAuditService } = await import('./qualityAuditService')
+
+    // Run the audit
+    const auditResult = await qualityAuditService.auditDocument(
+      documentId,
+      documentContent,
+      documentType,
+      projectContext,
+      userId
+    )
+
+    // Update job status to completed
+    await updateJobStatus(jobId, "completed", 100, WORKER_ID, "quality-audit")
+
+    logger.info(`[QUALITY-AUDIT-JOB] Quality audit completed: ${jobId}`, {
+      overallScore: auditResult.overallScore,
+      grade: auditResult.overallGrade
+    })
+
+    return { success: true, auditResult, jobId }
+  } catch (error) {
+    logger.error(`[QUALITY-AUDIT-JOB] Quality audit job failed: ${jobId}`, error)
+    
+    // Update job status to failed
+    await updateJobStatus(
+      jobId, 
+      "failed", 
+      0, 
+      WORKER_ID, 
+      "quality-audit",
+      error instanceof Error ? error.message : String(error)
+    )
+    
+    throw error
+  }
+})
+
+// Quality Audit queue event listeners
+qualityAuditQueue.on("completed", (job, result) => {
+  logger.info(`Quality audit job completed: ${job.id}`)
+})
+
+qualityAuditQueue.on("failed", (job, err) => {
+  logger.error(`Quality audit job failed: ${job.id}`, err)
+})
+
 // Project Data Extraction job processor
 // Define entity types for granular extraction
 const ENTITY_TYPES = [
@@ -1355,6 +1429,10 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
         queueName = "document-regeneration"
         queue = regenerationQueue
         break
+      case "quality-audit":
+        queueName = "quality-audit"
+        queue = qualityAuditQueue
+        break
       case "extract-project-data":
         queueName = "project-data-extraction"
         queue = extractionQueue
@@ -1496,29 +1574,48 @@ export async function updateJobStatus(
 
 export async function cancelJob(jobId: string): Promise<boolean> {
   try {
-    // Try to remove from ALL queues (including process-flow queue)
-    const aiJob = await aiQueue.getJob(jobId)
-    if (aiJob) {
-      await aiJob.remove()
-      logger.info(`Removed job ${jobId} from aiQueue`)
+    // Try to remove from ALL queues
+    const queues = [
+      { queue: aiQueue, name: 'aiQueue' },
+      { queue: documentQueue, name: 'documentQueue' },
+      { queue: pipelineQueue, name: 'pipelineQueue' },
+      { queue: processFlowQueue, name: 'processFlowQueue' },
+      { queue: regenerationQueue, name: 'regenerationQueue' },
+      { queue: qualityAuditQueue, name: 'qualityAuditQueue' },
+      { queue: extractionQueue, name: 'extractionQueue' },
+      { queue: baselineQueue, name: 'baselineQueue' }
+    ]
+
+    let jobFound = false
+
+    for (const { queue, name } of queues) {
+      try {
+        const job = await queue.getJob(jobId)
+        if (job) {
+          // Check if job is currently processing
+          const state = await job.getState()
+          
+          if (state === 'active') {
+            // Job is actively running - move to failed instead of removing
+            await job.moveToFailed({ message: 'Cancelled by user' }, true)
+            logger.info(`Moved active job ${jobId} from ${name} to failed (was processing)`)
+          } else {
+            // Job is waiting/delayed - safe to remove
+            await job.remove()
+            logger.info(`Removed job ${jobId} from ${name}`)
+          }
+          
+          jobFound = true
+          break // Found it, no need to check other queues
+        }
+      } catch (queueError: any) {
+        // Queue doesn't have this job, continue to next
+        logger.debug(`Job ${jobId} not in ${name}`)
+      }
     }
 
-    const docJob = await documentQueue.getJob(jobId)
-    if (docJob) {
-      await docJob.remove()
-      logger.info(`Removed job ${jobId} from documentQueue`)
-    }
-
-    const pipelineJob = await pipelineQueue.getJob(jobId)
-    if (pipelineJob) {
-      await pipelineJob.remove()
-      logger.info(`Removed job ${jobId} from pipelineQueue`)
-    }
-
-    const processFlowJob = await processFlowQueue.getJob(jobId)
-    if (processFlowJob) {
-      await processFlowJob.remove()
-      logger.info(`Removed job ${jobId} from processFlowQueue`)
+    if (!jobFound) {
+      logger.warn(`Job ${jobId} not found in any queue`)
     }
 
     // Update database
@@ -1623,4 +1720,5 @@ export const queueService = {
   baselineQueue,
   processFlowQueue,
   regenerationQueue,
+  qualityAuditQueue,
 }

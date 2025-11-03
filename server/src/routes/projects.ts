@@ -617,86 +617,137 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
 
     const currentDoc = docResult.rows[0]
     
-    // Calculate next patch version
-    const versionResult = await pool.query(
-      `SELECT calculate_next_document_version($1::UUID, 'patch'::VARCHAR(10)) as next_version`,
-      [documentId]
-    )
-    const nextVersion = versionResult.rows[0].next_version
+    // Calculate next versions (both integer and semantic)
+    const currentVersionInt = parseInt(currentDoc.version) || 1
+    const nextVersionInt = currentVersionInt + 1
+    
+    // Parse semantic version (handles "1.0.0", "1", etc.)
+    const currentSemantic = currentDoc.semantic_version || currentDoc.version?.toString() || '1.0.0'
+    const semParts = currentSemantic.split('.')
+    let major = parseInt(semParts[0]) || 1
+    let minor = parseInt(semParts[1]) || 0
+    let patch = parseInt(semParts[2]) || 0
+    
+    // Increment patch for manual edits
+    patch += 1
+    const nextSemanticVersion = `${major}.${minor}.${patch}`
 
     // Calculate word count
     const wordCount = content ? content.trim().split(/\s+/).filter(Boolean).length : 0
+    const characterCount = content ? content.length : 0
 
-    // Create a new document with patch version (manual edit)
-    const newDocResult = await pool.query(
-      `INSERT INTO documents (
-        id,
-        name,
-        content,
-        template_id,
-        template_version,
-        project_id,
-        created_by,
-        author,
-        parent_document_id,
-        is_regeneration,
-        semantic_version,
-        version,
-        word_count,
-        generation_metadata,
-        status,
-        title,
-        tags,
-        created_at,
-        updated_at
-      ) VALUES (
-        gen_random_uuid(),
-        $1,
-        $2,
-        $3,
-        $4,
-        $5,
-        $6,
-        $7,
-        $8,
-        false,
-        $9,
-        1,
-        $10,
-        $11,
-        $12,
-        $13,
-        $14,
-        NOW(),
-        NOW()
-      ) RETURNING *`,
+    // 📸 STEP 1: Save current version to document_versions table (snapshot)
+    await pool.query(
+      `INSERT INTO document_versions 
+       (id, document_id, version, semantic_version, content, author_id, created_at, change_type, change_description, generation_metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
+       ON CONFLICT (document_id, version) DO NOTHING`,
       [
-        `${currentDoc.name} (${nextVersion})`, // Append version to name
+        uuidv4(),
+        documentId,
+        currentDoc.version?.toString() || '1',
+        currentSemantic,
+        currentDoc.content,
+        currentDoc.updated_by || currentDoc.created_by,
+        'manual_edit',
+        `Manual edit by user - previous version v${currentSemantic}`,
+        currentDoc.generation_metadata || null
+      ]
+    )
+    
+    log.info(`Saved v${currentSemantic} to version history`)
+
+    // 📝 STEP 2: Update the current document with new content and incremented versions
+    const updateResult = await pool.query(
+      `UPDATE documents 
+       SET content = COALESCE($1, content),
+           name = COALESCE($2, name),
+           version = $3::integer,
+           semantic_version = $4::varchar,
+           word_count = $5::integer,
+           character_count = $6::integer,
+           updated_by = $7::uuid,
+           updated_at = NOW(),
+           metadata = jsonb_set(
+             COALESCE(metadata, '{}'::jsonb),
+             '{last_edit}',
+             jsonb_build_object(
+               'edited_at', NOW(),
+               'edited_by', $7::text,
+               'previous_version', $8::text,
+               'new_version', $4::text,
+               'edit_type', 'manual_content_edit'
+             )
+           )
+       WHERE id = $9::uuid AND project_id = $10::uuid
+       RETURNING *`,
+      [
         content,
-        currentDoc.template_id,
-        currentDoc.template_version || currentDoc.current_template_version?.toString() || '1',
-        projectId,
-        userId,
-        req.user?.name || 'User', // Author name
-        documentId, // Link to parent
-        nextVersion,
+        title || currentDoc.name,
+        nextVersionInt, // Integer: 1, 2, 3
+        nextSemanticVersion, // String: "1.0.1", "1.0.2"
         wordCount,
-        JSON.stringify({
-          edit_type: 'manual',
-          edited_at: new Date().toISOString(),
-          edited_by: userId,
-          parent_version: currentDoc.semantic_version || currentDoc.version?.toString() || '1.0.0',
-          changes: 'Manual edit'
-        }),
-        currentDoc.status,
-        title || currentDoc.title || currentDoc.name,
-        tags ? JSON.stringify(tags) : currentDoc.tags
+        characterCount,
+        userId,
+        currentSemantic, // Previous semantic version
+        documentId,
+        projectId
       ]
     )
 
-    log.info(`Manual edit saved as patch version ${nextVersion}`)
+    if (updateResult.rows.length === 0) {
+      return res.status(404).json({ error: "Document not found or no changes made" })
+    }
 
-    res.json(newDocResult.rows[0])
+    const updatedDoc = updateResult.rows[0]
+
+    log.info(`Manual edit saved - version updated from v${currentSemantic} to v${nextSemanticVersion}`, {
+      documentId,
+      userId,
+      wordCount,
+      characterCount,
+      previousSemanticVersion: currentSemantic,
+      newSemanticVersion: nextSemanticVersion,
+      previousVersionInt: currentVersionInt,
+      newVersionInt: nextVersionInt
+    })
+
+    // 🔥 Trigger quality audit after manual content edit
+    if (content) {
+      try {
+        const { qualityAuditService } = await import('../services/qualityAuditService')
+        
+        log.info('[MANUAL-EDIT] Triggering quality audit after content modification', {
+          documentId,
+          documentName: updatedDoc.name,
+          version: `v${nextSemanticVersion}`,
+          wordCount,
+          characterCount
+        })
+
+        // Enqueue quality audit job (async, non-blocking)
+        const { queueService } = await import('../services/queueService')
+        const auditJobId = require('uuid').v4()
+        
+        queueService.addJob('quality-audit', {
+          jobId: auditJobId,
+          documentId,
+          documentContent: content,
+          documentType: updatedDoc.type || 'unknown',
+          projectContext: { id: projectId, name: 'Project' },
+          userId
+        }).catch((auditError: any) => {
+          log.error('[MANUAL-EDIT] Failed to enqueue quality audit', {
+            documentId,
+            error: auditError.message
+          })
+        })
+      } catch (importError: any) {
+        log.error('[MANUAL-EDIT] Failed to import quality audit service', importError)
+      }
+    }
+
+    res.json(updatedDoc)
   } catch (error) {
     log.error("Update document error:", error)
     res.status(500).json({ error: "Internal server error" })

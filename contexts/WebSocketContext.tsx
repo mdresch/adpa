@@ -226,6 +226,33 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         })
       })
 
+      // Global JWT error handler to stop retry storms
+      socketInstance.on("join:error", (err: any) => {
+        if (err.code === 'JWT_INVALID' || err.message?.includes('Invalid or expired token')) {
+          // This is a global handler for auto-rejoin failures
+          console.error('JWT authentication failed, forcing logout')
+          toast.error('Session expired', {
+            description: 'Please log in again to continue',
+          })
+          // Clear all persisted rooms
+          try {
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
+              sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':status')
+              sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':attempts')
+            }
+          } catch (e) {
+            // ignore
+          }
+          // Disconnect and redirect to login
+          socketInstance.disconnect()
+          setTimeout(() => {
+            // Using replace to avoid XSS and prevent back navigation
+            window.location.replace('/auth/login')
+          }, 2000)
+        }
+      })
+
       socketInstance.on("security:alert", (data) => {
         toast.warning("Security Alert", {
           description: data.message,
@@ -259,8 +286,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
     const handleOk = (data: any) => {
         if (data?.room === room) {
-          toast.success(`Joined ${room}`)
-          console.log(`Joined room: ${room}`)
+          // Only log in debug mode to avoid console spam
+          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+            console.log(`Joined room: ${room}`)
+          }
       socket.off("join:ok", handleOk)
       socket.off("join:error", handleError)
           // Mark room as joined for auto-rejoin and persist
@@ -281,8 +310,30 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
       const handleError = (err: any) => {
         if (err?.room === room) {
-          toast.error(`Failed to join ${room}: ${err.message || 'access denied'}`)
-          console.warn(`Join denied for room ${room}:`, err)
+          // Check if this is a JWT auth error
+          if (err.code === 'JWT_INVALID' || err.message?.includes('Invalid or expired token')) {
+            // Force logout on JWT errors to prevent retry storms
+            toast.error('Session expired', {
+              description: 'Please log in again to continue',
+            })
+            // Clear persisted rooms to prevent auto-rejoin loop
+            try {
+              if (typeof window !== 'undefined') {
+                sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
+                sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':status')
+                sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':attempts')
+              }
+            } catch (e) {
+              // ignore
+            }
+            // Redirect to login after a short delay
+            setTimeout(() => {
+              window.location.href = '/auth/login'
+            }, 2000)
+          } else {
+            toast.error(`Failed to join ${room}: ${err.message || 'access denied'}`)
+            console.warn(`Join denied for room ${room}:`, err)
+          }
           socket.off("join:ok", handleOk)
           socket.off("join:error", handleError)
         }
@@ -313,8 +364,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
 
       const handleOk = (data: any) => {
         if (data?.room === room) {
-          toast.success(`Left ${room}`)
-          console.log(`Left room: ${room}`)
+          // Only log in debug mode to avoid console spam
+          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+            console.log(`Left room: ${room}`)
+          }
           socket.off("leave:ok", handleOk)
           socket.off("leave:error", handleError)
           // Remove from joinedRooms and persist
