@@ -121,6 +121,45 @@ class QualityAuditService {
         analysisTime: `${analysisTime}ms`
       })
 
+      // 8. Trigger template analysis if quality indicates improvement opportunities
+      // Only trigger if:
+      // - Score is below 90% (room for improvement)
+      // - Document has a template assigned
+      // - At least one dimension scored below 80%
+      if (overallScore < 90) {
+        const hasLowScore = Object.values(dimensionalScores).some(score => score < 80)
+        
+        if (hasLowScore) {
+          // Get document template ID
+          const docResult = await pool.query(
+            'SELECT template_id FROM documents WHERE id = $1',
+            [documentId]
+          )
+          
+          const templateId = docResult.rows[0]?.template_id
+          
+          if (templateId) {
+            logger.info('[QUALITY-AUDIT] Triggering automatic template analysis', {
+              documentId,
+              templateId,
+              overallScore,
+              reason: 'Quality score below 90% with improvement opportunities'
+            })
+            
+            // Import and trigger template analysis asynchronously (don't block)
+            const { templateImprovementService } = require('./templateImprovementService')
+            
+            templateImprovementService.analyzeTemplateQuality(templateId).catch((err: any) => {
+              logger.error('[QUALITY-AUDIT] Auto-triggered template analysis failed', {
+                templateId,
+                error: err instanceof Error ? err.message : String(err)
+              })
+              // Don't fail audit if template analysis fails
+            })
+          }
+        }
+      }
+
       return {
         overallScore,
         overallGrade,

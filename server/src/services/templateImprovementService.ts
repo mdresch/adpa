@@ -61,16 +61,38 @@ class TemplateImprovementService {
         return
       }
 
-      // 2. Get quality audit history (last 30 days)
+      // 2. Check if recent analysis already exists (avoid spam)
+      const recentSuggestion = await pool.query(
+        `SELECT id, created_at, status
+         FROM template_improvement_suggestions
+         WHERE template_id = $1
+         AND created_at > NOW() - INTERVAL '24 hours'
+         AND status IN ('pending_review', 'approved')
+         ORDER BY created_at DESC
+         LIMIT 1`,
+        [templateId]
+      )
+      
+      if (recentSuggestion.rows.length > 0) {
+        logger.info('[TEMPLATE-IMPROVEMENT] Recent suggestion exists, skipping analysis', {
+          templateId,
+          existingSuggestionId: recentSuggestion.rows[0].id,
+          status: recentSuggestion.rows[0].status,
+          createdAt: recentSuggestion.rows[0].created_at
+        })
+        return // Don't spam analysis - wait 24 hours between runs
+      }
+
+      // 3. Get quality audit history (last 30 days)
       const auditHistory = await this.getAuditHistory(templateId, 30)
       
-      if (auditHistory.length < 5) {
+      if (auditHistory.length < 1) {
         logger.info('[TEMPLATE-IMPROVEMENT] Insufficient data for analysis', {
           templateId,
           auditCount: auditHistory.length,
-          required: 5
+          required: 1
         })
-        return // Need at least 5 audits for meaningful analysis
+        return // Need at least 1 audit for meaningful analysis
       }
 
       logger.info('[TEMPLATE-IMPROVEMENT] Analyzing quality history', {
@@ -78,10 +100,10 @@ class TemplateImprovementService {
         auditCount: auditHistory.length
       })
 
-      // 3. Calculate aggregate quality metrics
+      // 4. Calculate aggregate quality metrics
       const qualityMetrics = this.calculateAggregateMetrics(auditHistory)
       
-      // 4. Extract common issues and patterns
+      // 5. Extract common issues and patterns
       const commonIssues = this.extractCommonIssues(auditHistory)
       const issueFrequency = this.calculateIssueFrequency(commonIssues, auditHistory.length)
       
@@ -91,7 +113,7 @@ class TemplateImprovementService {
         avgQuality: qualityMetrics.avgQuality
       })
 
-      // 5. Use AI to analyze template and suggest improvements
+      // 6. Use AI to analyze template and suggest improvements
       const improvements = await this.generateImprovementSuggestions(
         template,
         qualityMetrics,
@@ -104,10 +126,10 @@ class TemplateImprovementService {
         return
       }
 
-      // 6. Calculate expected quality gain
+      // 7. Calculate expected quality gain
       const expectedGain = this.estimateQualityGain(qualityMetrics, improvements)
       
-      // 7. Determine priority
+      // 8. Determine priority
       const priority = this.calculatePriority(
         qualityMetrics.avgQuality,
         expectedGain,
@@ -121,7 +143,7 @@ class TemplateImprovementService {
         priority
       })
 
-      // 8. Save improvement suggestions
+      // 9. Save improvement suggestions
       await this.saveImprovementSuggestions({
         templateId,
         qualityMetrics,
