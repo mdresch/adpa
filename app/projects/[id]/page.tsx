@@ -20,10 +20,13 @@ import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
 import { OverviewTab } from "./components/OverviewTab"
 import { DocumentsTab } from "./components/DocumentsTab"
+import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
+import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from "sonner"
+import { useRouter } from "next/navigation"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -149,7 +152,9 @@ interface ExtendedProject extends Project {
 export default function ProjectDetail() {
   const params = useParams()
   const projectId = params?.id as string
+  const router = useRouter()
   const { isAuthenticated } = useAuth()
+  const { joinRoom, leaveRoom } = useWebSocket()
 
   const [project, setProject] = useState<ExtendedProject | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -158,6 +163,14 @@ export default function ProjectDetail() {
   const [documentsLoading, setDocumentsLoading] = useState(true)
   const [stakeholdersLoading, setStakeholdersLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  
+  // Smart Document Versioning state
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
+  const [conflictData, setConflictData] = useState<{
+    existingDocument: any
+    templateName: string
+    generationData: any
+  } | null>(null)
   const [documentsPagination, setDocumentsPagination] = useState<{
     page: number
     limit: number
@@ -433,6 +446,65 @@ export default function ProjectDetail() {
     }
     
     return { title: documentName || "Document", sections: ['Overview', 'Details'], framework: 'General' }
+  }
+
+  // Handle template selection with conflict check
+  const handleTemplateSelect = async (templateId: string) => {
+    console.log('📋 [TEMPLATE-SELECT] Template selected:', templateId)
+    setSelectedTemplate(templateId)
+    
+    // If no template selected (user cleared selection), return
+    if (!templateId) {
+      return
+    }
+    
+    // Check for template conflict immediately
+    console.log('🔍 [TEMPLATE-SELECT] Checking for conflicts...')
+    try {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const checkUrl = getApiUrl(`/document-generation/check-template`)
+      const checkResp = await fetch(checkUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          projectId,
+          templateId
+        })
+      })
+      
+      if (checkResp.status === 409) {
+        // Template conflict detected!
+        const conflictInfo = await checkResp.json()
+        console.log('⚠️ [TEMPLATE-SELECT] Conflict detected - showing dialog')
+        
+        const template = templates.find(t => t.id === templateId)
+        
+        // We don't have the prompt yet, so we'll build it when needed
+        setConflictData({
+          existingDocument: conflictInfo.existing,
+          templateName: template?.name || 'Unknown Template',
+          generationData: {
+            projectId,
+            templateId,
+            documentName,
+            documentDescription,
+            provider: selectedProvider,
+            model: selectedModel,
+            temperature: aiTemperature,
+            // Note: userPrompt will be built when user selects action
+          }
+        })
+        setConflictDialogOpen(true)
+      } else {
+        console.log('✅ [TEMPLATE-SELECT] No conflict - template is available')
+      }
+    } catch (checkError) {
+      console.log('ℹ️ [TEMPLATE-SELECT] Conflict check failed, proceeding normally')
+      // Continue normally if check fails
+    }
   }
 
   // Create new document
@@ -1078,37 +1150,79 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         hasMetadata: !!documentData.generation_metadata
       })
 
-      console.log('🌐 [SAVE-3/6] Calling apiClient.createDocument()...')
-      const createResult = await apiClient.createDocument(projectId, documentData)
-      console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.id || 'unknown')
+      console.log('🌐 [SAVE-3/6] Calling apiClient.generateDocument() with conflict detection...')
       
-      // Step 4: Complete!
-      console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
-      setGenerationProgress({
-        step: 4,
-        totalSteps: 4,
-        message: 'Document created successfully! ✓',
-        percentage: 100,
-      })
+      try {
+        // Use new endpoint that includes conflict detection
+        const createResult = await apiClient.generateDocument({
+          projectId,
+          name: documentName,
+          description: documentDescription,
+          templateId: selectedTemplate,
+          userPrompt: aiPrompt,
+          provider: selectedProvider,
+          model: selectedModel,
+          temperature: aiTemperature,
+          includeStakeholders: true,
+          includeDocuments: true,
+        })
+        
+        console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.document?.id || 'unknown')
+        
+        // Step 4: Complete!
+        console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
+        setGenerationProgress({
+          step: 4,
+          totalSteps: 4,
+          message: 'Document created successfully! ✓',
+          percentage: 100,
+        })
 
-      // Small delay to show success message
-      await new Promise(resolve => setTimeout(resolve, 800))
+        // Small delay to show success message
+        await new Promise(resolve => setTimeout(resolve, 800))
 
-      toast.success("Document created successfully!")
-      console.log('✅ [SAVE-6/6] Success toast displayed')
+        toast.success("Document created successfully!")
+        console.log('✅ [SAVE-6/6] Success toast displayed')
 
-      // Reset form
-      console.log('🔄 [CLEANUP-1/3] Resetting form state...')
-      setDocumentName("")
-      setDocumentDescription("")
-      setSelectedTemplate("")
-      setCreateDialogOpen(false)
-      setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+        // Reset form
+        console.log('🔄 [CLEANUP-1/3] Resetting form state...')
+        setDocumentName("")
+        setDocumentDescription("")
+        setSelectedTemplate("")
+        setCreateDialogOpen(false)
+        setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
 
-      // Refresh documents list
-      console.log('🔄 [CLEANUP-2/3] Refreshing documents list...')
-      await fetchDocuments()
-      console.log('✅ [CLEANUP-3/3] All done! Document generation complete!')
+        // Refresh documents list
+        console.log('🔄 [CLEANUP-2/3] Refreshing documents list...')
+        await fetchDocuments()
+        console.log('✅ [CLEANUP-3/3] All done! Document generation complete!')
+        
+      } catch (apiError: any) {
+        // Check for template conflict (409 status)
+        if (apiError.status === 409 && apiError.data?.code === 'TEMPLATE_ALREADY_USED') {
+          console.log('⚠️ [CONFLICT] Template already used - showing conflict dialog')
+          const template = templates.find(t => t.id === selectedTemplate)
+          
+          setConflictData({
+            existingDocument: apiError.data.existing,
+            templateName: template?.name || 'Unknown Template',
+            generationData: {
+              projectId,
+              templateId: selectedTemplate,
+              userPrompt: aiPrompt,
+              provider: selectedProvider,
+              model: selectedModel,
+              temperature: aiTemperature,
+            }
+          })
+          setConflictDialogOpen(true)
+          setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
+        } else {
+          // Other API errors
+          throw apiError
+        }
+      }
+      
     } catch (error) {
       console.error("❌ [ERROR] Failed to create document:", error)
       console.error("❌ [ERROR] Error details:", {
@@ -1119,6 +1233,133 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       setGenerationProgress({ step: 0, totalSteps: 4, message: '', percentage: 0 })
     } finally {
       console.log('🏁 [FINALLY] Resetting creatingDocument flag')
+      setCreatingDocument(false)
+    }
+  }
+
+  // Handle template conflict resolution
+  const handleConflictResolution = async (action: 'new-version' | 'separate' | 'view-existing') => {
+    if (!conflictData) return
+    
+    try {
+      switch (action) {
+        case 'new-version':
+          console.log('🔄 [CONFLICT-RESOLUTION] Creating new version...')
+          setCreatingDocument(true)
+          
+          // Build AI prompt if not already provided
+          let aiPrompt = conflictData.generationData.userPrompt
+          
+          if (!aiPrompt) {
+            console.log('🔨 [CONFLICT-RESOLUTION] Building AI prompt...')
+            // Build the prompt using existing logic
+            const templateContent = getTemplateContent(conflictData.generationData.templateId)
+            const sections = Array.isArray(templateContent.sections) ? templateContent.sections : []
+            const projectDesc = project?.description || 'No project description available.'
+            const projectName = project?.name || 'Unknown Project'
+            const framework = project?.framework || 'General'
+            
+            aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
+
+**Project Name**: ${projectName}
+**Framework**: ${framework}
+**Description**: ${projectDesc}
+
+Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a production-ready, stakeholder-presentable document with comprehensive coverage of all sections.`
+          }
+          
+          // Generate as new version of existing document
+          const result = await apiClient.generateDocumentNewVersion({
+            existingDocumentId: conflictData.existingDocument.id,
+            projectId: conflictData.generationData.projectId,
+            templateId: conflictData.generationData.templateId,
+            userPrompt: aiPrompt,
+            provider: conflictData.generationData.provider || selectedProvider,
+            model: conflictData.generationData.model || selectedModel,
+            temperature: conflictData.generationData.temperature || aiTemperature,
+          })
+          
+          toast.success(
+            `Document updated to v${result.newVersion}`,
+            {
+              description: result.driftDetected 
+                ? '⚠️ Baseline drift detected - review changes' 
+                : 'Version history preserved'
+            }
+          )
+          
+          console.log('✅ [CONFLICT-RESOLUTION] New version created:', result.newVersion)
+          
+          // Navigate to updated document in standard document editor
+          router.push(`/projects/${projectId}/documents/${conflictData.existingDocument.id}/view`)
+          break
+          
+        case 'separate':
+          console.log('📄 [CONFLICT-RESOLUTION] Creating separate document...')
+          setCreatingDocument(true)
+          
+          // Build AI prompt if not already provided (same logic as 'new-version')
+          let separatePrompt = conflictData.generationData.userPrompt
+          
+          if (!separatePrompt) {
+            console.log('🔨 [CONFLICT-RESOLUTION] Building AI prompt for separate document...')
+            // Build the prompt using existing logic
+            const templateContent = getTemplateContent(conflictData.generationData.templateId)
+            const sections = Array.isArray(templateContent.sections) ? templateContent.sections : []
+            const projectDesc = project?.description || 'No project description available.'
+            const projectName = project?.name || 'Unknown Project'
+            const framework = project?.framework || 'General'
+            
+            separatePrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
+
+**Project Name**: ${projectName}
+**Framework**: ${framework}
+**Description**: ${projectDesc}
+
+Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a production-ready, stakeholder-presentable document with comprehensive coverage of all sections.`
+          }
+          
+          // Create new document with modified name
+          const newName = `${documentName} (Alternative)`
+          const separateResult = await apiClient.generateDocument({
+            projectId: conflictData.generationData.projectId,
+            name: newName,
+            description: documentDescription,
+            templateId: conflictData.generationData.templateId,
+            userPrompt: separatePrompt,
+            provider: conflictData.generationData.provider,
+            model: conflictData.generationData.model,
+            temperature: conflictData.generationData.temperature,
+            includeStakeholders: true,
+            includeDocuments: true,
+          })
+          
+          toast.success("Separate document created successfully!")
+          console.log('✅ [CONFLICT-RESOLUTION] Separate document created')
+          break
+          
+        case 'view-existing':
+          console.log('👁️ [CONFLICT-RESOLUTION] Navigating to existing document...')
+          // Navigate to existing document in standard document editor
+          router.push(`/projects/${projectId}/documents/${conflictData.existingDocument.id}/view`)
+          break
+      }
+      
+      // Clean up
+      setConflictDialogOpen(false)
+      setConflictData(null)
+      setCreateDialogOpen(false)
+      setDocumentName("")
+      setDocumentDescription("")
+      setSelectedTemplate("")
+      
+      // Refresh documents list
+      await fetchDocuments()
+      
+    } catch (error) {
+      console.error("❌ [CONFLICT-RESOLUTION] Failed:", error)
+      toast.error("Failed to resolve conflict")
+    } finally {
       setCreatingDocument(false)
     }
   }
@@ -1561,6 +1802,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
   // Listen for document creation events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
+    // Join the project room to receive events
+    const room = `project:${projectId}`
+    joinRoom(room)
+    
     const handleDocumentCreated = (data: { document?: { project_id: string; name: string } }) => {
       try {
         const doc = data?.document
@@ -1577,8 +1822,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
     return () => {
       off("document:created", handleDocumentCreated)
+      leaveRoom(room)
     }
-  }, [projectId, on, off])
+  }, [projectId, on, off, joinRoom, leaveRoom])
 
   // Documents are now filtered server-side, so we use them directly
   const displayDocuments = documents
@@ -1829,7 +2075,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                             aria-label="Select Template"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
                             value={selectedTemplate}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedTemplate(e.target.value)}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => handleTemplateSelect(e.target.value)}
                             required
                           >
                             <option value="">Choose a template</option>
@@ -2571,6 +2817,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                 </TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="baseline">Baseline</TabsTrigger>
+                <TabsTrigger value="financials">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Financials
+                </TabsTrigger>
                 <TabsTrigger value="variables">Variables</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
               </TabsList>
@@ -2624,6 +2874,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
                 <BaselineManagement projectId={projectId} documents={documents} />
               </TabsContent>
 
+              <TabsContent value="financials" className="space-y-4">
+                {/* Financials Tab - Cost tracking and budgeting */}
+                <ProjectFinancialsTab projectId={projectId} />
+              </TabsContent>
+
               <TabsContent value="variables" className="space-y-4">
                 <VariablesTab 
                   project={project} 
@@ -2639,6 +2894,17 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           </div>
         </main>
       </div>
+
+      {/* Smart Document Versioning - Template Conflict Dialog */}
+      {conflictData && (
+        <TemplateConflictDialog
+          open={conflictDialogOpen}
+          onOpenChange={setConflictDialogOpen}
+          existingDocument={conflictData.existingDocument}
+          templateName={conflictData.templateName}
+          onAction={handleConflictResolution}
+        />
+      )}
     </div>
   )
 }

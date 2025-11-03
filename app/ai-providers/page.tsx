@@ -123,7 +123,7 @@ export default function AIProviders() {
   const [formState, setFormState] = useState<{
     id: string
     name: string
-    type: "openai" | "google" | "azure" | "mistral" | "ollama" | "copilot"
+    type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "ollama" | "copilot"
     apiKey: string
     endpoint: string
     priority: number
@@ -194,8 +194,8 @@ export default function AIProviders() {
     const uiType = state.type
     const providerType = uiType === "copilot" ? "openai" : uiType
 
-    if (!["openai", "google", "azure", "mistral", "ollama"].includes(providerType)) {
-      errs.type = "Unsupported provider type for creation. Choose OpenAI, Google, Azure, Mistral, or Ollama."
+    if (!["openai", "google", "azure", "mistral", "groq", "anthropic", "deepseek", "moonshot", "xai", "ollama"].includes(providerType)) {
+      errs.type = "Unsupported provider type for creation."
     }
 
     // Skip API key validation for Ollama providers (they don't need API keys)
@@ -691,7 +691,11 @@ export default function AIProviders() {
                             <SelectItem value="groq">Groq AI (FREE & Fast)</SelectItem>
                             <SelectItem value="azure">Azure AI Foundry</SelectItem>
                             <SelectItem value="mistral">Mistral AI</SelectItem>
-                            <SelectItem value="ollama">Ollama</SelectItem>
+                            <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                            <SelectItem value="deepseek">DeepSeek AI</SelectItem>
+                            <SelectItem value="moonshot">Moonshot AI (Kimi)</SelectItem>
+                            <SelectItem value="xai">xAI (Grok)</SelectItem>
+                            <SelectItem value="ollama">Ollama (Local)</SelectItem>
                             <SelectItem value="copilot">GitHub Copilot</SelectItem>
                           </SelectContent>
                         </Select>

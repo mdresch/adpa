@@ -643,7 +643,8 @@ async function testApiConnection(provider: any, config: any, startTime: number) 
     let testUrl = cleanEndpoint
     
     // Build test URL based on provider type
-    if (providerType === 'mistral' || providerType === 'groq' || providerType === 'openai') {
+    if (providerType === 'mistral' || providerType === 'groq' || providerType === 'openai' || 
+        providerType === 'deepseek' || providerType === 'moonshot' || providerType === 'xai') {
       testUrl = `${cleanEndpoint}/models`
     }
     
@@ -660,7 +661,8 @@ async function testApiConnection(provider: any, config: any, startTime: number) 
     }
     
     // Add authentication header for OpenAI-compatible APIs
-    if ((providerType === 'groq' || providerType === 'mistral' || providerType === 'openai') && config.apiKey) {
+    if ((providerType === 'groq' || providerType === 'mistral' || providerType === 'openai' ||
+         providerType === 'deepseek' || providerType === 'moonshot' || providerType === 'xai') && config.apiKey) {
       headers['Authorization'] = `Bearer ${config.apiKey}`
     }
     
@@ -951,6 +953,10 @@ async function testAuthentication(provider: any, config: any, startTime: number)
     if (providerType === 'azure') {
       // Azure AI Foundry uses api-key header instead of Bearer token
       headers['api-key'] = apiKey
+    } else if (providerType === 'anthropic') {
+      // Anthropic uses x-api-key header
+      headers['x-api-key'] = apiKey
+      headers['anthropic-version'] = '2023-06-01'
     } else {
       // Other providers use Bearer token
       headers['Authorization'] = `Bearer ${apiKey}`
@@ -963,6 +969,49 @@ async function testAuthentication(provider: any, config: any, startTime: number)
     logger.info(`API Key configured: ${!!apiKey}`)
     logger.info(`API Key length: ${apiKey ? apiKey.length : 0}`)
     
+    // Special handling for Anthropic - requires POST with body
+    if (providerType === 'anthropic') {
+      const minimalBody = {
+        model: "claude-3-5-sonnet-20241022",
+        max_tokens: 1,
+        messages: [{ role: "user", content: "test" }]
+      }
+      
+      const response = await fetch(authEndpoint, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(minimalBody),
+        signal: AbortSignal.timeout(15000)
+      })
+      
+      const responseTime = Date.now() - startTime
+      
+      // Anthropic returns 200 for success, even for minimal test
+      if (response.ok) {
+        return {
+          success: true,
+          response: "✅ API key authentication successful",
+          tokensUsed: 1, // Minimal test
+          error: null,
+          responseTime: responseTime,
+          timestamp: new Date().toISOString()
+        }
+      } else if (response.status === 401) {
+        return {
+          success: false,
+          response: "❌ API key authentication failed (invalid key)",
+          tokensUsed: 0,
+          error: 'Invalid API key',
+          responseTime: responseTime,
+          timestamp: new Date().toISOString()
+        }
+      } else {
+        const errorText = await response.text().catch(() => 'Unknown error')
+        throw new Error(`Authentication test failed (${response.status} ${response.statusText}) - ${errorText}`)
+      }
+    }
+    
+    // Standard GET request for other providers
     const response = await fetch(authEndpoint, {
       method: 'GET',
       headers: headers,
@@ -1130,6 +1179,25 @@ async function testModelAvailability(provider: any, config: any, model: any, sta
             availableModels = [
               'llama-3.1-70b-versatile', 'llama-3.1-8b-instant', 'llama-3.2-90b-text-preview',
               'mixtral-8x7b-32768', 'gemma2-9b-it'
+            ]
+            break
+          case 'deepseek':
+            // DeepSeek AI models (OpenAI-compatible)
+            availableModels = [
+              'deepseek-chat', 'deepseek-reasoner', 'deepseek-coder'
+            ]
+            break
+          case 'moonshot':
+            // Moonshot AI models (Kimi K2 series, OpenAI-compatible)
+            // Official working model: kimi-k2-turbo-preview
+            availableModels = [
+              'kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'
+            ]
+            break
+          case 'xai':
+            // xAI (X.AI) models - Grok series
+            availableModels = [
+              'grok-beta', 'grok-vision-beta'
             ]
             break
           default:
@@ -1386,6 +1454,12 @@ function getDefaultEndpoint(providerType: string): string {
       return 'https://api.mistral.ai/v1'
     case 'groq':
       return 'https://api.groq.com/openai/v1'
+    case 'deepseek':
+      return 'https://api.deepseek.com/v1'
+    case 'moonshot':
+      return 'https://api.moonshot.ai/v1'  // Official Moonshot API domain
+    case 'xai':
+      return 'https://api.x.ai/v1'
     case 'ollama':
       return 'http://localhost:11434'
     default:
@@ -1407,6 +1481,15 @@ function getAuthTestEndpoint(providerType: string, baseEndpoint: string): string
     case 'mistral':
       return `${cleanEndpoint}/models`
     case 'groq':
+      return `${cleanEndpoint}/models`
+    case 'anthropic':
+      // Anthropic doesn't have a /models endpoint - use /v1/messages with minimal call
+      return `${cleanEndpoint}/v1/messages`
+    case 'deepseek':
+      return `${cleanEndpoint}/models`
+    case 'moonshot':
+      return `${cleanEndpoint}/models`
+    case 'xai':
       return `${cleanEndpoint}/models`
     case 'ollama':
       return `${cleanEndpoint}/api/tags`

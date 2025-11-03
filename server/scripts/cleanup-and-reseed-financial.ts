@@ -1,0 +1,115 @@
+/**
+ * Cleanup and Reseed Financial Test Data
+ * 
+ * This script:
+ * 1. Removes duplicate "Digital Transformation Initiative" programs
+ * 2. Ensures migration 207 is applied (cost columns)
+ * 3. Reseeds fresh financial test data
+ */
+
+import { Pool } from 'pg'
+import * as dotenv from 'dotenv'
+import * as path from 'path'
+
+dotenv.config({ path: path.join(__dirname, '../.env') })
+
+const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL
+
+if (!connectionString) {
+  console.error('❌ DATABASE_URL or POSTGRES_URL not found in environment variables')
+  process.exit(1)
+}
+
+// Parse connection string and build pool configuration
+const dbUrl = new URL(connectionString)
+const hostname = dbUrl.hostname.toLowerCase()
+
+// Check if SSL is required (most cloud databases require it)
+const needsSSL = hostname.includes('supabase.co') || 
+                 hostname.includes('neon.tech') ||
+                 hostname.includes('azure') ||
+                 hostname.includes('amazonaws.com') ||
+                 hostname.includes('render.com') ||
+                 process.env.DB_SSL === 'true' ||
+                 connectionString.includes('sslmode=require')
+
+// Build pool configuration (same as run-financial-migrations.ts)
+const poolConfig: any = {
+  host: dbUrl.hostname,
+  port: parseInt(dbUrl.port) || 5432,
+  database: dbUrl.pathname.slice(1).split('?')[0],
+  user: dbUrl.username,
+  password: dbUrl.password,
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 30000
+}
+
+if (needsSSL) {
+  poolConfig.ssl = { rejectUnauthorized: false }
+}
+
+const pool = new Pool(poolConfig)
+
+async function cleanup() {
+  console.log('\n🧹 Cleaning up duplicate test programs...\n')
+  
+  try {
+    // Find all "Digital Transformation Initiative" programs
+    const result = await pool.query(
+      `SELECT id, name, created_at 
+       FROM programs 
+       WHERE name = 'Digital Transformation Initiative'
+       ORDER BY created_at DESC`
+    )
+    
+    if (result.rows.length === 0) {
+      console.log('✅ No test programs found to clean up')
+      return
+    }
+    
+    console.log(`Found ${result.rows.length} test program(s)`)
+    
+    // Delete all test programs (cascade will delete related data)
+    for (const program of result.rows) {
+      console.log(`   Deleting: ${program.name} (${program.id})`)
+      await pool.query('DELETE FROM programs WHERE id = $1', [program.id])
+    }
+    
+    console.log(`✅ Cleaned up ${result.rows.length} test program(s)\n`)
+    
+  } catch (error) {
+    console.error('❌ Cleanup failed:', error)
+    throw error
+  }
+}
+
+async function main() {
+  console.log('🚀 Cleanup and Reseed Financial Test Data\n')
+  console.log('============================================================')
+  
+  try {
+    // Step 1: Cleanup
+    await cleanup()
+    
+    // Step 2: Close pool
+    await pool.end()
+    
+    console.log('============================================================')
+    console.log('✅ Cleanup complete!\n')
+    console.log('📋 Next steps:')
+    console.log('   1. Run: npm run migrate:financial   (to apply migration 207)')
+    console.log('   2. Run: npm run seed:financial      (to create fresh test data)')
+    console.log('============================================================\n')
+    
+    process.exit(0)
+    
+  } catch (error) {
+    console.error('\n❌ Script failed:', error)
+    await pool.end()
+    process.exit(1)
+  }
+}
+
+main()
+

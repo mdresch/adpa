@@ -38,14 +38,23 @@ router.get("/",
           j.created_at,
           j.data as job_data,
           j.result,
+          j.worker_id,
+          j.worker_process_id,
+          j.queue_name,
+          j.queue_position,
+          j.queued_at,
+          j.processing_started_at,
           COALESCE(j.project_name, p.name) as project_name,
           COALESCE(j.template_name, t.name) as template_name,
           COALESCE(j.document_name, d.name) as document_name,
-          d.id as document_id
+          d.id as document_id,
+          u.name as user_name,
+          u.email as user_email
         FROM jobs j
         LEFT JOIN projects p ON j.project_id = p.id OR (j.data->>'projectId')::uuid = p.id OR (j.data->'variables'->>'project_id')::uuid = p.id
         LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
         LEFT JOIN documents d ON d.generation_metadata->>'job_id' = j.id::text
+        LEFT JOIN users u ON j.created_by = u.id
         WHERE j.created_by = $1
       `
 
@@ -129,11 +138,18 @@ router.get("/",
           error: job.error_message,
           startTime: job.started_at,
           completedTime: job.completed_at,
-          queuedTime: job.created_at,
+          queuedTime: job.queued_at || job.created_at,
+          processingStartedAt: job.processing_started_at,
           priority: jobData.priority || 'medium',
-          queue: job.type === 'ai-generate' ? 'ai-processing' : job.type,
-          worker: jobData.worker_id || jobData.worker || 'Unassigned',
+          queue: job.queue_name || (job.type === 'ai-generate' ? 'ai-processing' : job.type),
+          worker: job.worker_id || jobData.worker_id || jobData.worker || 'Unassigned',
+          workerProcessId: job.worker_process_id,
+          queuePosition: job.queue_position,
           logs: jobData.logs || [],
+          projectName: job.project_name,
+          templateName: job.template_name,
+          documentName: job.document_name,
+          userName: job.user_name,
           // Additional metadata for AI jobs
           metadata: {
             provider: jobData.provider,
@@ -146,6 +162,13 @@ router.get("/",
             document_id: job.document_id,
             document_name: job.document_name,
             tokens: jobData.tokens || job.result?.usage,
+            // Worker and queue information
+            worker_id: job.worker_id,
+            worker_process_id: job.worker_process_id,
+            queue_name: job.queue_name,
+            queue_position: job.queue_position,
+            user_name: job.user_name,
+            user_email: job.user_email,
             // Process-flow specific progress fields
             currentStep: jobData.currentStep,
             compressionProgress: jobData.compressionProgress,

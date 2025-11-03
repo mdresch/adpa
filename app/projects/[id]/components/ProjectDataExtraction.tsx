@@ -14,7 +14,7 @@ import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
   projectId: string
-  documents: Array<{ id: string; name: string }>
+  documents: Array<{ id: string; name: string; title?: string }>
 }
 
 interface EntityCounts {
@@ -47,11 +47,58 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [selectedProvider, setSelectedProvider] = useState("google")
   const [selectedModel, setSelectedModel] = useState("gemini-2.0-flash-exp")
   const [selectedDocuments, setSelectedDocuments] = useState<string[]>([])
+  
+  // WBS Import
+  const [isImportingWBS, setIsImportingWBS] = useState(false)
+  const [lastExtractedDocumentId, setLastExtractedDocumentId] = useState<string | null>(null)
+  
+  // All documents (not paginated) for extraction selection
+  const [allDocuments, setAllDocuments] = useState<Array<{ id: string; name: string; title?: string }>>([])
+  const [loadingAllDocuments, setLoadingAllDocuments] = useState(false)
+  const [documentSearchTerm, setDocumentSearchTerm] = useState("")
+
+  // Entity Details Dialog
+  const [showEntityDialog, setShowEntityDialog] = useState(false)
+  const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
+  const [entityDetails, setEntityDetails] = useState<any[]>([])
+  const [loadingEntityDetails, setLoadingEntityDetails] = useState(false)
 
   useEffect(() => {
     void fetchEntityCounts()
     void fetchAIProviders()
-  }, [projectId])
+    
+    // Initialize with provided documents
+    if (documents && documents.length > 0) {
+      setAllDocuments(documents)
+    }
+  }, [projectId, documents])
+  
+  const fetchAllDocuments = async () => {
+    try {
+      setLoadingAllDocuments(true)
+      
+      // Use apiClient to get documents (same method as parent component)
+      const documentsData = await apiClient.getProjectDocuments(projectId, { 
+        page: 1, 
+        limit: 1000 
+      })
+      
+      console.log('[EXTRACTION] Fetched documents:', documentsData)
+      
+      const docs = documentsData.documents || documentsData.data || []
+      setAllDocuments(docs)
+      
+      console.log('[EXTRACTION] Set allDocuments:', docs.length)
+      
+    } catch (error) {
+      console.error('[EXTRACTION] Failed to fetch all documents:', error)
+      // Fallback to provided documents if fetch fails
+      console.log('[EXTRACTION] Falling back to provided documents:', documents.length)
+      setAllDocuments(documents)
+    } finally {
+      setLoadingAllDocuments(false)
+    }
+  }
 
   const fetchEntityCounts = async () => {
     try {
@@ -191,7 +238,24 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             clearInterval(pollInterval)
             setIsExtracting(false)
             setShowExtractionDialog(false)
+            
+            // Save document ID for WBS import
+            if (selectedDocuments.length > 0) {
+              setLastExtractedDocumentId(selectedDocuments[0])
+            }
+            
             toast.success(`Extraction complete! ${data.result?.totalEntities || 0} entities extracted.`)
+            
+            // Hint about WBS import if activities found
+            if (data.result?.entityCounts?.activities > 0) {
+              setTimeout(() => {
+                toast.info(
+                  `💡 Found ${data.result.entityCounts.activities} activities! You can now import them as project tasks.`,
+                  { duration: 6000 }
+                )
+              }, 1500)
+            }
+            
             void fetchEntityCounts()
           } else if (data.status === 'failed') {
             clearInterval(pollInterval)
@@ -207,10 +271,118 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     // Clear interval after 5 minutes (safety)
     setTimeout(() => clearInterval(pollInterval), 300000)
   }
+  
+  const fetchEntityDetails = async (entityType: string) => {
+    try {
+      setLoadingEntityDetails(true)
+      setSelectedEntityType(entityType)
+      setShowEntityDialog(true)
+      
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        }
+      )
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch entity details')
+      }
+      
+      const data = await response.json()
+      setEntityDetails(data.entities || [])
+    } catch (error) {
+      console.error('Failed to fetch entity details:', error)
+      toast.error('Failed to load entity details')
+      setEntityDetails([])
+    } finally {
+      setLoadingEntityDetails(false)
+    }
+  }
+  
+  const handleImportWBS = async () => {
+    try {
+      setIsImportingWBS(true)
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      // Import from extracted entities (project-level) instead of requiring specific document
+      const response = await fetch(`${apiUrl}/tasks/import-wbs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          projectId,
+          // Use project-level entities if no specific document
+          useProjectEntities: true,
+          options: {
+            autoMatchRoles: true,
+            importDependencies: true,
+            createHierarchy: true
+          }
+        })
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to import WBS')
+      }
+      
+      const result = await response.json()
+      const data = result.data
+      
+      toast.success(
+        `WBS Import Complete! Created ${data.tasksCreated} tasks (${data.totalEstimatedHours} hours estimated)`,
+        { duration: 5000 }
+      )
+      
+      // Show detailed result
+      if (data.tasksNeedingRoleAssignment > 0) {
+        toast.info(
+          `${data.tasksNeedingRoleAssignment} tasks need role assignment`,
+          { duration: 4000 }
+        )
+      }
+      
+    } catch (error: any) {
+      console.error('WBS import failed:', error)
+      toast.error(error.message || 'Failed to import WBS')
+    } finally {
+      setIsImportingWBS(false)
+    }
+  }
 
   const getTotalEntities = () => {
     if (!entityCounts) return 0
     return Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
+  }
+  
+  const getFilteredDocuments = () => {
+    if (!documentSearchTerm) return allDocuments
+    
+    const searchLower = documentSearchTerm.toLowerCase()
+    return allDocuments.filter(doc => 
+      (doc.title || doc.name).toLowerCase().includes(searchLower)
+    )
+  }
+  
+  const renderEntityField = (key: string, value: any): string => {
+    if (value === null || value === undefined) return '-'
+    if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+    if (typeof value === 'object') return JSON.stringify(value, null, 2)
+    if (key.includes('date') || key.includes('Date')) {
+      return new Date(value).toLocaleDateString()
+    }
+    return String(value)
+  }
+  
+  const getEntityTypeLabel = (entityType: string): string => {
+    return entityTypes.find(et => et.key === entityType)?.label || entityType
   }
 
   const hasData = getTotalEntities() > 0
@@ -245,7 +417,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             </CardDescription>
           </div>
           <Button
-            onClick={() => setShowExtractionDialog(true)}
+            onClick={() => {
+              setShowExtractionDialog(true)
+              void fetchAllDocuments()
+            }}
             disabled={loading || documents.length === 0}
             size="sm"
             className="gap-2"
@@ -276,22 +451,45 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   {getTotalEntities()}
                 </Badge>
               </div>
+              
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Info className="h-3 w-3" />
+                Click on any entity type below to view details
+              </p>
 
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {entityTypes.map(({ key, label, icon: Icon, color }) => (
+                {entityTypes.map(({ key, label, icon: Icon, color }) => {
+                  const count = entityCounts?.[key as keyof EntityCounts] || 0
+                  const isClickable = count > 0
+                  
+                  return (
                   <div
                     key={key}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 transition-colors"
+                      className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
+                        isClickable 
+                          ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm' 
+                          : 'opacity-50 cursor-not-allowed'
+                      }`}
+                      onClick={() => isClickable && fetchEntityDetails(key)}
+                      role={isClickable ? 'button' : undefined}
+                      tabIndex={isClickable ? 0 : undefined}
+                      onKeyDown={(e) => {
+                        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                          e.preventDefault()
+                          fetchEntityDetails(key)
+                        }
+                      }}
                   >
                     <div className="flex items-center gap-2">
                       <Icon className={`h-4 w-4 ${color}`} />
                       <span className="text-sm font-medium">{label}</span>
                     </div>
-                    <Badge variant="outline">
-                      {entityCounts?.[key as keyof EntityCounts] || 0}
+                      <Badge variant={isClickable ? "default" : "outline"}>
+                        {count}
                     </Badge>
                   </div>
-                ))}
+                  )
+                })}
               </div>
 
               <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
@@ -303,10 +501,112 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   </p>
                 </div>
               </div>
+              
+              {/* WBS Import Button */}
+              {entityCounts && (entityCounts.activities > 0 || entityCounts.deliverables > 0) && (
+                <div className="flex items-start gap-2 p-4 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20 border-2 border-purple-200 dark:border-purple-800 rounded-lg">
+                  <ListOrdered className="h-5 w-5 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
+                  <div className="flex-1">
+                    <p className="font-semibold text-purple-900 dark:text-purple-100 mb-1">
+                      Convert WBS to Project Tasks
+                    </p>
+                    <p className="text-sm text-purple-700 dark:text-purple-300 mb-3">
+                      Found {entityCounts.activities} activities and {entityCounts.deliverables} deliverables. 
+                      Import them as project tasks with estimated hours, roles, and dependencies.
+                    </p>
+                    <Button
+                      onClick={handleImportWBS}
+                      disabled={isImportingWBS}
+                      className="bg-purple-600 hover:bg-purple-700 text-white"
+                      size="sm"
+                    >
+                      {isImportingWBS ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Importing WBS...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Import WBS to Tasks
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Entity Details Dialog */}
+      <Dialog open={showEntityDialog} onOpenChange={setShowEntityDialog}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {selectedEntityType && entityTypes.find(et => et.key === selectedEntityType) && (
+                <>
+                  {(() => {
+                    const EntityIcon = entityTypes.find(et => et.key === selectedEntityType)!.icon
+                    return <EntityIcon className="h-5 w-5" />
+                  })()}
+                  {getEntityTypeLabel(selectedEntityType)} Details
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              {entityDetails.length} {getEntityTypeLabel(selectedEntityType || '')} extracted from project documents
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {loadingEntityDetails ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : entityDetails.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <Info className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium mb-1">No {getEntityTypeLabel(selectedEntityType || '')} Found</p>
+                <p className="text-sm">Try running extraction again with different documents</p>
+              </div>
+            ) : (
+              <div className="space-y-4 pr-2">
+                {entityDetails.map((entity, index) => (
+                  <Card key={entity.id || index} className="overflow-hidden">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-base">
+                        {entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType || '')} #${index + 1}`}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {Object.entries(entity)
+                        .filter(([key]) => !['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata'].includes(key))
+                        .map(([key, value]) => (
+                          <div key={key} className="grid grid-cols-3 gap-2 text-sm">
+                            <span className="font-medium text-muted-foreground capitalize">
+                              {key.replace(/_/g, ' ')}:
+                            </span>
+                            <span className="col-span-2 break-words">
+                              {renderEntityField(key, value)}
+                            </span>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => setShowEntityDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Extraction Dialog */}
       <Dialog open={showExtractionDialog} onOpenChange={setShowExtractionDialog}>
@@ -414,41 +714,101 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               </div>
 
               <div className="space-y-2">
-                <Label>Document Selection (Optional)</Label>
-                <div className="border rounded-lg p-3 max-h-48 overflow-y-auto space-y-2">
-                  <div className="flex items-center space-x-2 pb-2 border-b">
-                    <Checkbox
-                      id="select-all"
-                      checked={selectedDocuments.length === documents.length}
-                      onCheckedChange={(checked) => {
-                        setSelectedDocuments(checked ? documents.map(d => d.id) : [])
-                      }}
+                <div className="flex items-center justify-between">
+                  <Label>Document Selection (Optional)</Label>
+                  {!loadingAllDocuments && allDocuments.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {allDocuments.length} documents available
+                    </span>
+                  )}
+                </div>
+                
+                {/* Search Input */}
+                {allDocuments.length > 10 && (
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search documents..."
+                      value={documentSearchTerm}
+                      onChange={(e) => setDocumentSearchTerm(e.target.value)}
+                      className="w-full px-3 py-2 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
-                    <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
-                      Select All ({documents.length} documents)
-                    </label>
+                    {documentSearchTerm && (
+                      <button
+                        onClick={() => setDocumentSearchTerm("")}
+                        className="absolute right-2 top-2 text-gray-400 hover:text-gray-600"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-                  {documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={doc.id}
-                        checked={selectedDocuments.includes(doc.id)}
-                        onCheckedChange={(checked) => {
-                          setSelectedDocuments(
-                            checked
-                              ? [...selectedDocuments, doc.id]
-                              : selectedDocuments.filter((id) => id !== doc.id)
-                          )
-                        }}
-                      />
-                      <label htmlFor={doc.id} className="text-sm cursor-pointer">
-                        {doc.name}
-                      </label>
+                )}
+                
+                <div className="border rounded-lg p-3 max-h-64 overflow-y-auto space-y-2">
+                  {loadingAllDocuments ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground mr-2" />
+                      <span className="text-sm text-muted-foreground">Loading all documents...</span>
                     </div>
-                  ))}
+                  ) : (
+                    <>
+                      <div className="flex items-center space-x-2 pb-2 border-b sticky top-0 bg-white dark:bg-gray-950">
+                        <Checkbox
+                          id="select-all"
+                          checked={getFilteredDocuments().length > 0 && 
+                                   getFilteredDocuments().every(d => selectedDocuments.includes(d.id))}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              // Add all filtered documents to selection
+                              const filteredIds = getFilteredDocuments().map(d => d.id)
+                              setSelectedDocuments([...new Set([...selectedDocuments, ...filteredIds])])
+                            } else {
+                              // Remove all filtered documents from selection
+                              const filteredIds = getFilteredDocuments().map(d => d.id)
+                              setSelectedDocuments(selectedDocuments.filter(id => !filteredIds.includes(id)))
+                            }
+                          }}
+                        />
+                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                          Select All 
+                          {documentSearchTerm 
+                            ? ` (${getFilteredDocuments().length} filtered)` 
+                            : ` (${allDocuments.length} documents)`
+                          }
+                        </label>
+                      </div>
+                      {getFilteredDocuments().length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-4">
+                          {documentSearchTerm 
+                            ? `No documents match "${documentSearchTerm}"`
+                            : 'No documents available'
+                          }
+                        </p>
+                      ) : (
+                        getFilteredDocuments().map((doc) => (
+                          <div key={doc.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={doc.id}
+                              checked={selectedDocuments.includes(doc.id)}
+                              onCheckedChange={(checked) => {
+                                setSelectedDocuments(
+                                  checked
+                                    ? [...selectedDocuments, doc.id]
+                                    : selectedDocuments.filter((id) => id !== doc.id)
+                                )
+                              }}
+                            />
+                            <label htmlFor={doc.id} className="text-sm cursor-pointer flex-1 truncate" title={doc.title || doc.name}>
+                              {doc.title || doc.name}
+                            </label>
+                          </div>
+                        ))
+                      )}
+                    </>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Leave empty to analyze all project documents
+                  Leave empty to analyze all {allDocuments.length || 0} project documents
                 </p>
               </div>
 

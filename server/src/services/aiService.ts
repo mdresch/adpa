@@ -9,13 +9,17 @@ import { generateText } from "ai"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createMistral } from "@ai-sdk/mistral"
 import { createOpenAI } from "@ai-sdk/openai"
+import { createXai } from "@ai-sdk/xai"
+import { createDeepSeek } from "@ai-sdk/deepseek"
+import OpenAI from "openai"  // Native OpenAI SDK for Moonshot
+import Anthropic from "@anthropic-ai/sdk"  // Native Anthropic SDK
 import { logger } from "../utils/logger"
 import { pool } from "../database/connection"
 import AnalyticsTrackingService from "./analyticsTrackingService"
 
 export interface AIProvider {
   name: string
-  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "ollama"
+  type: "openai" | "google" | "azure" | "mistral" | "groq" | "anthropic" | "deepseek" | "moonshot" | "xai" | "ollama"
   apiKey: string
   configuration?: any
 }
@@ -363,6 +367,257 @@ class AIService {
       const providerType = providerResult.rows[0].provider_type
       logger.debug('[AI-SERVICE] Provider type:', providerType)
       
+      // OPTIMIZATION: Skip AI Gateway for providers not natively supported
+      // DeepSeek, Moonshot, xAI are OpenAI-compatible but not in AI Gateway's provider list
+      // Anthropic bypassed to use user's direct credits (avoid Vercel AI Gateway billing)
+      // Go straight to direct API to avoid unnecessary 404 errors or Vercel billing
+      const directProviders = ['deepseek', 'moonshot', 'xai', 'anthropic']
+      const useDirect = directProviders.includes(providerType)
+      
+      if (useDirect) {
+        logger.info(`🔄 [AI-SERVICE] Provider ${providerType} not in AI Gateway - using direct API`)
+        
+        // Get direct API key from provider configuration
+        const directApiKey = providerResult.rows[0].configuration?.apiKey
+        if (!directApiKey) {
+          throw new Error(`Direct ${providerType} API key not found in provider configuration`)
+        }
+        
+        // Handle each provider's direct API
+        if (providerType === 'deepseek') {
+          logger.info('🔄 [AI-SERVICE] Using official @ai-sdk/deepseek package...')
+          
+          const deepseek = createDeepSeek({ 
+            apiKey: directApiKey
+          })
+          
+          const deepseekModels = ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder']
+          const modelName = deepseekModels.includes(request.model || '') 
+            ? request.model 
+            : 'deepseek-chat'
+          
+          const deepseekResult = await generateText({
+            model: deepseek(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info(`[AI] ✓ DeepSeek/${modelName} - ${deepseekResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: deepseekResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: deepseekResult.usage?.promptTokens || 0,
+              completion_tokens: deepseekResult.usage?.completionTokens || 0,
+              total_tokens: deepseekResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content: deepseekResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: deepseekResult.usage?.promptTokens || 0,
+              completion_tokens: deepseekResult.usage?.completionTokens || 0,
+              total_tokens: deepseekResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        if (providerType === 'moonshot') {
+          logger.info('🔄 [AI-SERVICE] Using NATIVE OpenAI SDK for Moonshot...')
+          
+          // OFFICIAL: Use native OpenAI SDK as per Moonshot documentation
+          const moonshotClient = new OpenAI({ 
+            apiKey: directApiKey,
+            baseURL: 'https://api.moonshot.ai/v1'
+          })
+          
+          // Official models from Moonshot docs
+          const moonshotModels = ['kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k']
+          const modelName = moonshotModels.includes(request.model || '') 
+            ? request.model 
+            : 'kimi-k2-turbo-preview'  // Use official working model
+          
+          logger.info(`[AI-SERVICE] Moonshot model: ${modelName}`)
+          logger.info(`[AI-SERVICE] Calling native chat.completions.create() - as per official docs`)
+          
+          // Use native OpenAI SDK - exactly as Moonshot documentation shows
+          const completion = await moonshotClient.chat.completions.create({
+            model: modelName,
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature || 0.7,
+            max_tokens: request.max_tokens
+          })
+          
+          const totalTokens = completion.usage?.total_tokens || 0
+          const promptTokens = completion.usage?.prompt_tokens || 0
+          const completionTokens = completion.usage?.completion_tokens || 0
+          const content = completion.choices[0]?.message?.content || ''
+          
+          logger.info(`[AI] ✓ Moonshot/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: totalTokens,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            },
+          }
+        }
+        
+        if (providerType === 'xai') {
+          logger.info('🔄 [AI-SERVICE] Using official @ai-sdk/xai package...')
+          
+          const xai = createXai({ 
+            apiKey: directApiKey
+          })
+          
+          const xaiModels = ['grok-beta', 'grok-vision-beta']
+          const modelName = xaiModels.includes(request.model || '') 
+            ? request.model 
+            : 'grok-beta'
+          
+          const xaiResult = await generateText({
+            model: xai(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature,
+            maxTokens: request.max_tokens
+          })
+          
+          logger.info(`[AI] ✓ xAI/${modelName} - ${xaiResult.usage?.totalTokens || 0} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: xaiResult.usage?.totalTokens || 0,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: xaiResult.usage?.promptTokens || 0,
+              completion_tokens: xaiResult.usage?.completionTokens || 0,
+              total_tokens: xaiResult.usage?.totalTokens || 0,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content: xaiResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: xaiResult.usage?.promptTokens || 0,
+              completion_tokens: xaiResult.usage?.completionTokens || 0,
+              total_tokens: xaiResult.usage?.totalTokens || 0,
+            },
+          }
+        }
+        
+        if (providerType === 'anthropic') {
+          logger.info('🔄 [AI-SERVICE] Using NATIVE Anthropic SDK to bypass Vercel AI Gateway...')
+          
+          // Use native Anthropic SDK to use user's direct credits
+          const anthropicClient = new Anthropic({ 
+            apiKey: directApiKey
+          })
+          
+          // Use the model name provided by the user
+          // Don't override to claude-4.x series - respect user's model choice
+          const modelName = request.model || 'claude-3-5-sonnet-20241022'  // Default to Claude 3.5 Sonnet (widely available)
+          
+          logger.info(`[AI-SERVICE] Anthropic model: ${modelName}`)
+          logger.info(`[AI-SERVICE] Calling native Anthropic messages.create()`)
+          
+          // Build messages for Anthropic (separate system from messages)
+          const anthropicMessages: Array<{ role: 'user' | 'assistant', content: string }> = []
+          
+          // Add user message
+          anthropicMessages.push({
+            role: 'user',
+            content: userMessage
+          })
+          
+          // Call native Anthropic API
+          const completion = await anthropicClient.messages.create({
+            model: modelName,
+            max_tokens: request.max_tokens || 4096,
+            system: systemMessage || undefined,  // System is separate in Anthropic
+            messages: anthropicMessages,
+            temperature: request.temperature || 0.7
+          })
+          
+          const content = completion.content[0]?.type === 'text' ? completion.content[0].text : ''
+          const totalTokens = completion.usage.input_tokens + completion.usage.output_tokens
+          const promptTokens = completion.usage.input_tokens
+          const completionTokens = completion.usage.output_tokens
+          
+          logger.info(`[AI] ✓ Anthropic/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: totalTokens,
+          })
+          
+          // Track detailed AI usage for analytics
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(request.provider, modelName, {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+          })
+          
+          return {
+            content,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+              total_tokens: totalTokens,
+            },
+          }
+        }
+      }
+      
+      // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral)
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
       
@@ -830,6 +1085,9 @@ class AIService {
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-sonnet-4',
       'azure': 'gpt-4',
+      'deepseek': 'deepseek-chat',
+      'moonshot': 'kimi-k2-0905-preview',
+      'xai': 'grok-beta',
     }
 
     // Define provider-specific model families
@@ -839,7 +1097,10 @@ class AIService {
       'groq': ['llama', 'mixtral', 'gemma'],
       'mistral': ['mistral-', 'codestral-', 'pixtral-', 'magistral-'],
       'anthropic': ['claude-'],
-      'azure': ['gpt-', 'text-']
+      'azure': ['gpt-', 'text-'],
+      'deepseek': ['deepseek-'],
+      'moonshot': ['kimi-', 'moonshot-'],
+      'xai': ['grok-'],
     }
 
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
@@ -932,7 +1193,13 @@ class AIService {
       case "mistral":
         return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
-        return ["claude-3-7-sonnet-20250219", "claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-sonnet-4"]
+        return ["claude-sonnet-4.0", "claude-haiku-4.0", "claude-opus-4.0", "claude-4-sonnet", "claude-4-haiku", "claude-4-opus"]
+      case "deepseek":
+        return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
+      case "moonshot":
+        return ["kimi-k2-turbo-preview", "moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"]
+      case "xai":
+        return ["grok-beta", "grok-vision-beta"]
       default:
         return []
     }
@@ -1033,6 +1300,7 @@ class AIService {
       'mistral': 0.70,      // Mistral Small
       'deepseek': 0.60,     // DeepSeek Chat (competitive pricing)
       'moonshot': 12.00,    // Kimi K2 128K context
+      'xai': 5.00,          // xAI Grok (estimated pricing)
       'groq': 0.00,         // Groq free tier
       'azure': 30.00,       // Similar to OpenAI
       'ollama': 0.00,       // Local deployment - FREE

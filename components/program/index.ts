@@ -4,6 +4,7 @@
  */
 
 export { MetricsDashboard } from './MetricsDashboard';
+export { default as FinancialDashboard } from './FinancialDashboard';
 export type { 
   ProgramMetrics, 
   BudgetMetrics, 
@@ -13,3 +14,9 @@ export type {
   Risk,
   Milestone
 } from './types';
+export type {
+  FinancialSummary,
+  EVMMetrics,
+  FinancialAnalysis,
+  FinancialDashboardData
+} from './FinancialDashboard';

@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MetricsDashboard } from '@/components/program/MetricsDashboard';
 import { ProgramProjectsTab } from '@/components/program/ProgramProjectsTab';
 import { ProgramMetrics } from '@/components/program/types';
+import FinancialDashboard from '@/components/program/FinancialDashboard';
 import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
@@ -452,9 +453,10 @@ export default function ProgramDetailPage() {
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-4 lg:w-[600px]">
+                <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="projects">Projects</TabsTrigger>
+                  <TabsTrigger value="finances">Finances</TabsTrigger>
                   <TabsTrigger value="risks">Risks</TabsTrigger>
                   <TabsTrigger value="reports">Reports</TabsTrigger>
                 </TabsList>
@@ -481,6 +483,17 @@ export default function ProgramDetailPage() {
                 <TabsContent value="projects" className="mt-6">
                   {programId ? (
                     <ProgramProjectsTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Finances Tab - Financial Management & EVM Dashboard */}
+                <TabsContent value="finances" className="mt-6">
+                  {programId ? (
+                    <FinancialDashboard programId={programId} />
                   ) : (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-8 w-8 animate-spin" />

@@ -182,7 +182,7 @@ aiQueue.process("ai-generate", async (job) => {
 
   try {
     // Update job status to processing and assign worker
-    await updateJobStatus(jobId, "processing", 10, WORKER_ID)
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID, "ai-processing")
 
     // Generate content using AI service. Use ContextAwareAIService if job provides contextual identifiers
     const useContext = !!job.data.use_context || !!job.data.projectId || !!job.data.documentIds || !!job.data.template_id
@@ -577,7 +577,7 @@ documentQueue.process("document-convert", async (job) => {
   const { jobId, userId, documentId, format } = job.data
 
   try {
-    await updateJobStatus(jobId, "processing", 20, WORKER_ID)
+    await updateJobStatus(jobId, "processing", 20, WORKER_ID, "document-processing")
 
     // Get document
     const docResult = await pool.query("SELECT * FROM documents WHERE id = $1", [documentId])
@@ -653,7 +653,7 @@ baselineQueue.process("baseline-extract", async (job) => {
 
   try {
     // Update job status to processing and assign worker
-    await updateJobStatus(jobId, "processing", 10, WORKER_ID)
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID, "baseline-processing")
     
     // Look up project name if not provided
     if (!project_name && project_id) {
@@ -759,7 +759,7 @@ processFlowQueue.process("process-flow", async (job) => {
     }
     
     // Update job status to processing
-    await updateJobStatus(jobId, "processing", 5, WORKER_ID)
+    await updateJobStatus(jobId, "processing", 5, WORKER_ID, "process-flow-processing")
     
     // Get project name for better job identification
     let projectName = 'Unknown Project'
@@ -1039,7 +1039,7 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
   try {
     logger.info(`[EXTRACTION-PARENT] Starting orchestration: ${jobId}`, { projectId })
     
-    await updateJobStatus(jobId, "processing", 5, WORKER_ID)
+    await updateJobStatus(jobId, "processing", 5, WORKER_ID, "project-data-extraction")
     
     // Create child jobs for each entity type (resilient, independent extraction)
     const childJobPromises = ENTITY_TYPES.map((entityType, index) => {
@@ -1116,7 +1116,7 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
     
   } catch (error: any) {
     logger.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
-    await updateJobStatus(jobId, "failed", undefined, WORKER_ID)
+    await updateJobStatus(jobId, "failed", undefined, WORKER_ID, "project-data-extraction")
     await pool.query(
       `UPDATE jobs SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
       [error.message, jobId]
@@ -1174,7 +1174,7 @@ async function finalizeExtractionJob(jobId: string, projectId: string) {
   try {
     logger.info(`[EXTRACTION-PARENT] Finalizing job ${jobId}`)
     
-    await updateJobStatus(jobId, "processing", 95, WORKER_ID)
+    await updateJobStatus(jobId, "processing", 95, WORKER_ID, "project-data-extraction")
     
     // Query actual counts from database (child jobs already saved)
     const countQueries = await Promise.all([
@@ -1277,15 +1277,27 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
   try {
     const jobId = data.jobId
     
-    // Extract project info for process-flow jobs
+    // Extract project info for ALL job types
     let projectId = null
     let projectName = null
     let templateName = null
     
+    // Extract projectId from different possible locations based on job type
     if (type === 'process-flow' && data.config?.projectId) {
       projectId = data.config.projectId
-      
-      // Look up project name from database
+    } else if (data.projectId) {
+      // ai-generate, baseline-extract, etc.
+      projectId = data.projectId
+    } else if (data.variables?.project_id) {
+      // From variables
+      projectId = data.variables.project_id
+    } else if (data.project_id) {
+      // Alternative naming
+      projectId = data.project_id
+    }
+    
+    // Look up project and template names if we have IDs
+    if (projectId) {
       try {
         const projectResult = await pool.query(
           'SELECT name FROM projects WHERE id = $1',
@@ -1294,55 +1306,71 @@ export async function addJob(type: string, data: any, options?: any): Promise<st
         if (projectResult.rows.length > 0) {
           projectName = projectResult.rows[0].name
         }
-        
-        // Look up template name if templateId is provided
-        if (data.config?.templateId) {
-          const templateResult = await pool.query(
-            'SELECT name FROM templates WHERE id = $1',
-            [data.config.templateId]
-          )
-          if (templateResult.rows.length > 0) {
-            templateName = templateResult.rows[0].name
-          }
-        }
       } catch (err) {
-        logger.warn('Failed to lookup project/template name for job:', err)
+        logger.warn('Failed to lookup project name for job:', err)
       }
     }
     
-    // Save job to database with project context
-    await pool.query(
-      `
-      INSERT INTO jobs (id, type, status, data, created_by, project_id, project_name, template_name)
-      VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7)
-    `,
-      [jobId, type, JSON.stringify(data), data.userId, projectId, projectName, templateName]
-    )
-
-    // Add to appropriate queue
+    // Extract template ID and look up name
+    const templateId = data.template_id || data.config?.templateId || data.variables?.template_id || null
+    if (templateId) {
+      try {
+        const templateResult = await pool.query(
+          'SELECT name FROM templates WHERE id = $1',
+          [templateId]
+        )
+        if (templateResult.rows.length > 0) {
+          templateName = templateResult.rows[0].name
+        }
+      } catch (err) {
+        logger.warn('Failed to lookup template name for job:', err)
+      }
+    }
+    
+    // Determine queue name based on type
+    let queueName: string
     let queue: Bull.Queue
     switch (type) {
       case "ai-generate":
+        queueName = "ai-processing"
         queue = aiQueue
         break
       case "document-convert":
+        queueName = "document-processing"
         queue = documentQueue
         break
       case "pipeline-processing":
+        queueName = "pipeline-processing"
         queue = pipelineQueue
         break
       case "baseline-extract":
+        queueName = "baseline-processing"
         queue = baselineQueue
         break
       case "process-flow":
+        queueName = "process-flow-processing"
         queue = processFlowQueue
         break
       case "document-regeneration":
+        queueName = "document-regeneration"
         queue = regenerationQueue
+        break
+      case "extract-project-data":
+        queueName = "project-data-extraction"
+        queue = extractionQueue
         break
       default:
         throw new Error(`Unknown job type: ${type}`)
     }
+    
+    // Save job to database with project context and queue info
+    await pool.query(
+      `
+      INSERT INTO jobs (id, type, status, data, created_by, project_id, project_name, template_name, queue_name, queued_at)
+      VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
+    `,
+      [jobId, type, JSON.stringify(data), data.userId, projectId, projectName, templateName, queueName]
+    )
 
     await queue.add(type, data, {
       jobId,
@@ -1381,10 +1409,16 @@ export async function getJobStatus(jobId: string): Promise<any> {
 // Generate unique worker ID for this process
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`
 
-export async function updateJobStatus(jobId: string, status: string, progress?: number, workerId?: string): Promise<void> {
+export async function updateJobStatus(
+  jobId: string, 
+  status: string, 
+  progress?: number, 
+  workerId?: string,
+  queueName?: string
+): Promise<void> {
   try {
     const updateFields = ["status = $2"]
-    const params = [jobId, status]
+    const params: any[] = [jobId, status]
     let paramCount = 2
 
     if (progress !== undefined) {
@@ -1393,15 +1427,33 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
       params.push(progress.toString())
     }
 
+    // Add worker ID and process ID when job starts processing
+    if (workerId) {
+      paramCount++
+      updateFields.push(`worker_id = $${paramCount}`)
+      params.push(workerId)
+      
+      // Add worker process ID
+      paramCount++
+      updateFields.push(`worker_process_id = $${paramCount}`)
+      params.push(process.pid)
+      
+      // Update data JSONB to include worker_id for backward compatibility
+      paramCount++
+      updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', to_jsonb($${paramCount}::text))`)
+      params.push(workerId)
+    }
+
+    // Add queue name
+    if (queueName) {
+      paramCount++
+      updateFields.push(`queue_name = $${paramCount}`)
+      params.push(queueName)
+    }
+
     if (status === "processing" && progress === 10) {
       updateFields.push(`started_at = CURRENT_TIMESTAMP`)
-      
-      // Update data JSONB to include worker_id
-      if (workerId) {
-        paramCount++
-        updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', to_jsonb($${paramCount}::text))`)
-        params.push(workerId)
-      }
+      updateFields.push(`processing_started_at = CURRENT_TIMESTAMP`)
     }
 
     await pool.query(
@@ -1409,8 +1461,20 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
       params
     )
 
-    // Emit real-time update
-    const jobResult = await pool.query("SELECT * FROM jobs WHERE id = $1", [jobId])
+    // Emit real-time update with enriched data
+    const jobResult = await pool.query(`
+      SELECT j.*, 
+             p.name as project_name, 
+             t.name as template_name, 
+             u.name as user_name,
+             u.email as user_email
+      FROM jobs j
+      LEFT JOIN projects p ON j.project_id = p.id
+      LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
+      LEFT JOIN users u ON j.created_by = u.id
+      WHERE j.id = $1
+    `, [jobId])
+    
     if (jobResult.rows.length > 0) {
       const job = jobResult.rows[0]
       io.emit("job:status", {
@@ -1418,6 +1482,11 @@ export async function updateJobStatus(jobId: string, status: string, progress?: 
         userId: job.created_by,
         status,
         progress,
+        workerId,
+        queueName,
+        projectName: job.project_name,
+        templateName: job.template_name,
+        userName: job.user_name,
       })
     }
   } catch (error) {

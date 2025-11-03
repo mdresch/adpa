@@ -233,16 +233,21 @@ async function getProjectMetrics(programId: string) {
  */
 export async function calculateMetrics(programId: string) {
   try {
-    // Check cache first
+    // Check cache first (with error handling)
     const cacheKey = getCacheKey(programId)
-    const cached = await cache.get(cacheKey)
+    let cached = null
     
-    if (cached) {
-      logger.info(`Cache hit for program metrics: ${programId}`)
-      return {
-        ...cached,
-        cached: true
+    try {
+      cached = await cache.get(cacheKey)
+      if (cached) {
+        logger.info(`Cache hit for program metrics: ${programId}`)
+        return {
+          ...cached,
+          cached: true
+        }
       }
+    } catch (cacheError) {
+      logger.warn('Cache get failed, continuing without cache:', cacheError)
     }
 
     logger.info(`Calculating metrics for program: ${programId}`)
@@ -267,9 +272,13 @@ export async function calculateMetrics(programId: string) {
       cached: false
     }
 
-    // Cache the results
-    await cache.set(cacheKey, metrics, CACHE_TTL)
-    logger.info(`Cached metrics for program: ${programId}`)
+    // Cache the results (with error handling)
+    try {
+      await cache.set(cacheKey, metrics, CACHE_TTL)
+      logger.info(`Cached metrics for program: ${programId}`)
+    } catch (cacheError) {
+      logger.warn('Cache set failed, continuing without caching:', cacheError)
+    }
 
     return metrics
   } catch (error) {

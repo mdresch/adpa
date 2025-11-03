@@ -99,6 +99,26 @@ export default function AIProviderDetails() {
   const [advancedConfigOpen, setAdvancedConfigOpen] = useState(false)
   const [currentConfigOpen, setCurrentConfigOpen] = useState(false)
   
+  // Analytics state
+  const [analytics, setAnalytics] = useState<{
+    period?: string
+    modelUsage?: Array<{
+      model_name: string
+      usage_count: number
+      total_tokens: number
+      avg_response_time: number
+      success_rate: number
+    }>
+    summary?: {
+      totalRequests: number
+      totalTokens: number
+      avgResponseTime: number
+      totalErrors: number
+    }
+  }>({})
+  const [analyticsPeriod, setAnalyticsPeriod] = useState<"7d" | "30d" | "90d" | "1y">("30d")
+  const [loadingAnalytics, setLoadingAnalytics] = useState(false)
+  
   // Add model state
   const [addingModel, setAddingModel] = useState(false)
   const [newModelForm, setNewModelForm] = useState<{
@@ -217,11 +237,38 @@ export default function AIProviderDetails() {
     }
   }
 
+  // Load provider analytics
+  const loadProviderAnalytics = async (period: string = analyticsPeriod) => {
+    setLoadingAnalytics(true)
+    try {
+      const response = await apiClient.get<any>(`/ai-analytics/providers/${providerId}?period=${period}`)
+      if (response.success) {
+        setAnalytics({
+          period: response.period,
+          modelUsage: response.modelUsage,
+          summary: response.summary
+        })
+      }
+    } catch (err: any) {
+      console.error("Failed to load analytics:", err)
+    } finally {
+      setLoadingAnalytics(false)
+    }
+  }
+
   useEffect(() => {
     if (providerId) {
       loadProviderDetails()
+      loadProviderAnalytics()
     }
   }, [providerId])
+
+  // Reload analytics when period changes
+  useEffect(() => {
+    if (providerId) {
+      loadProviderAnalytics(analyticsPeriod)
+    }
+  }, [analyticsPeriod])
 
   const handleToggleProvider = async () => {
     if (!provider) return
@@ -1372,93 +1419,248 @@ export default function AIProviderDetails() {
               </TabsContent>
 
               <TabsContent value="analytics" className="space-y-4">
-                {/* Overview Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Total Requests
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">
-                        {(provider.usage_stats?.total_requests || 0).toLocaleString()}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        All-time API calls
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Total Tokens
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">
-                        {(provider.usage_stats?.total_tokens || 0).toLocaleString()}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Tokens processed
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Avg Response Time
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold">
-                        {provider.usage_stats?.avg_response_time 
-                          ? `${provider.usage_stats.avg_response_time.toFixed(1)}s`
-                          : "N/A"}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Average latency
-                      </p>
-                    </CardContent>
-                  </Card>
-
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium text-muted-foreground">
-                        Success Rate
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold text-green-600">
-                        {provider.usage_stats?.success_rate 
-                          ? `${(provider.usage_stats.success_rate * 100).toFixed(1)}%`
-                          : provider.usage_stats?.total_requests > 0 ? "100%" : "N/A"}
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Successful requests
-                      </p>
-                    </CardContent>
-                  </Card>
+                {/* Period Selector */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">Provider Analytics</h3>
+                    <p className="text-sm text-muted-foreground">Detailed usage statistics and model performance</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {(['7d', '30d', '90d', '1y'] as const).map((period) => (
+                      <Button
+                        key={period}
+                        variant={analyticsPeriod === period ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setAnalyticsPeriod(period)}
+                        disabled={loadingAnalytics}
+                      >
+                        {period === '7d' && '7 Days'}
+                        {period === '30d' && '30 Days'}
+                        {period === '90d' && '90 Days'}
+                        {period === '1y' && '1 Year'}
+                      </Button>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Cost Analysis */}
+                {loadingAnalytics ? (
+                  <Card>
+                    <CardContent className="py-12">
+                      <div className="text-center">
+                        <Activity className="h-12 w-12 mx-auto mb-4 animate-spin text-muted-foreground" />
+                        <p className="text-muted-foreground">Loading analytics...</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    {/* Summary Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Total Requests
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">
+                            {(analytics.summary?.totalRequests || 0).toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Last {analyticsPeriod === '7d' ? '7 days' : analyticsPeriod === '30d' ? '30 days' : analyticsPeriod === '90d' ? '90 days' : '1 year'}
+                          </p>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Total Tokens
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">
+                            {(() => {
+                              const tokens = analytics.summary?.totalTokens || 0
+                              if (tokens >= 1000000) return `${(tokens / 1000000).toFixed(1)}M`
+                              if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}K`
+                              return tokens.toLocaleString()
+                            })()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Tokens processed
+                          </p>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Avg Response Time
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold">
+                            {(() => {
+                              const ms = analytics.summary?.avgResponseTime || 0
+                              if (ms < 1000) return `${Math.round(ms)}ms`
+                              return `${(ms / 1000).toFixed(1)}s`
+                            })()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Average latency
+                          </p>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader className="pb-3">
+                          <CardTitle className="text-sm font-medium text-muted-foreground">
+                            Total Errors
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className={`text-3xl font-bold ${(analytics.summary?.totalErrors || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                            {(analytics.summary?.totalErrors || 0).toLocaleString()}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Failed requests
+                          </p>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* ⭐ MODEL-SPECIFIC USAGE - KEY FEATURE ⭐ */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Zap className="h-5 w-5" />
+                          Model Usage Breakdown
+                        </CardTitle>
+                        <CardDescription>
+                          Usage statistics per model for this provider
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {analytics.modelUsage && analytics.modelUsage.length > 0 ? (
+                          <div className="space-y-4">
+                            {analytics.modelUsage.map((model, index) => {
+                              const totalRequests = Number(analytics.summary?.totalRequests || 0)
+                              const usageCount = Number(model.usage_count || 0)
+                              const percentage = totalRequests > 0 ? (usageCount / totalRequests) * 100 : 0
+                              const tokens = Number(model.total_tokens || 0)
+                              const responseTime = Number(model.avg_response_time || 0)
+                              const successRate = Number(model.success_rate || 0)
+
+                              return (
+                                <div key={model.model_name} className="p-4 border rounded-lg hover:shadow-md transition-shadow">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-3">
+                                      <div className={`w-3 h-3 rounded-full ${
+                                        index === 0 ? 'bg-blue-500' :
+                                        index === 1 ? 'bg-green-500' :
+                                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                      }`} />
+                                      <div>
+                                        <span className="font-medium text-lg">{model.model_name}</span>
+                                        <p className="text-xs text-muted-foreground">
+                                          {usageCount} requests ({percentage.toFixed(1)}%)
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <Badge variant={successRate >= 95 ? "default" : "destructive"}>
+                                      {successRate.toFixed(1)}% Success
+                                    </Badge>
+                                  </div>
+
+                                  {/* Progress bar */}
+                                  <div className="w-full bg-muted rounded-full h-2.5 mb-3">
+                                    <div 
+                                      className={`h-2.5 rounded-full transition-all ${
+                                        index === 0 ? 'bg-blue-500' :
+                                        index === 1 ? 'bg-green-500' :
+                                        index === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                                      }`}
+                                      style={{ width: `${percentage}%` }}
+                                    ></div>
+                                  </div>
+
+                                  {/* Model metrics */}
+                                  <div className="grid grid-cols-3 gap-3 text-sm">
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <div className="text-muted-foreground text-xs">Tokens</div>
+                                      <div className="font-bold text-blue-600">
+                                        {tokens >= 1000000 ? `${(tokens / 1000000).toFixed(1)}M` :
+                                         tokens >= 1000 ? `${(tokens / 1000).toFixed(1)}K` : 
+                                         tokens.toLocaleString()}
+                                      </div>
+                                    </div>
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <div className="text-muted-foreground text-xs">Avg Speed</div>
+                                      <div className="font-bold text-green-600">
+                                        {responseTime < 1000 ? `${Math.round(responseTime)}ms` : `${(responseTime / 1000).toFixed(1)}s`}
+                                      </div>
+                                    </div>
+                                    <div className="text-center p-2 bg-muted rounded">
+                                      <div className="text-muted-foreground text-xs">Tokens/Req</div>
+                                      <div className="font-bold text-purple-600">
+                                        {usageCount > 0 ? Math.round(tokens / usageCount).toLocaleString() : 0}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+                            <p className="text-sm text-muted-foreground">No model usage data for this period</p>
+                            <p className="text-xs text-muted-foreground mt-1">Generate documents to see model-specific analytics</p>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Empty State */}
+                    {(!analytics.summary || analytics.summary.totalRequests === 0) && (
+                      <Card className="border-dashed">
+                        <CardContent className="pt-6">
+                          <div className="text-center py-8">
+                            <BarChart3 className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+                            <h3 className="text-lg font-semibold mb-2">No Usage Data Yet</h3>
+                            <p className="text-muted-foreground mb-4 max-w-md mx-auto">
+                              Start using this AI provider and detailed analytics including model-specific metrics will appear here.
+                            </p>
+                            <Button onClick={() => router.push('/projects')}>
+                              <Zap className="h-4 w-4 mr-2" />
+                              Generate Your First Document
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </>
+                )}
+              </TabsContent>
+
+              <TabsContent value="discover" className="space-y-4">
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <BarChart3 className="h-5 w-5" />
-                      Cost Analysis
+                      <Zap className="h-5 w-5" />
+                      Model Discovery
                     </CardTitle>
                     <CardDescription>
-                      Estimated costs and token usage breakdown
+                      Discover available models from {provider?.name}'s API and sync them to your database.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-6">
-                      {/* Cost Overview */}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="p-4 bg-muted rounded-lg">
+                  <CardContent className="space-y-6">
+                    {/* Current Configuration */}
+                    <div className="space-y-3">
+                      <h4 className="text-sm font-semibold">Current Configuration</h4>
+                      <div className="bg-muted p-4 rounded-lg space-y-2">
+                        <div className="flex justify-between items-center text-sm">
                           <div className="text-sm text-muted-foreground mb-1">Estimated Total Cost</div>
                           <div className="text-2xl font-bold">
                             ${(provider.usage_stats?.estimated_cost || 0).toFixed(4)}

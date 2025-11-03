@@ -441,8 +441,8 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
 
     const result = await pool.query(query, params)
 
-    // Get total count
-    let countQuery = "SELECT COUNT(*) FROM documents WHERE project_id = $1"
+    // Get total count (must match WHERE conditions of main query)
+    let countQuery = "SELECT COUNT(*) FROM documents WHERE project_id = $1 AND deleted_at IS NULL AND parent_document_id IS NULL"
     const countParams = [projectId]
     let countParamCount = 1
 
@@ -494,7 +494,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
       return doc
     })
 
-    return res.json({
+    res.json({
       documents,
       pagination: {
         page: Number(page),
@@ -633,6 +633,70 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
   }
 })
 
+// Get document version history
+router.get("/:id/versions", authenticateToken, validateParams(Joi.object({ id: schemas.uuid })), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+    
+    log.info(`Fetching version history for document ${id}`)
+
+    // Get all versions from document_versions table
+    const versionsResult = await pool.query(
+      `SELECT 
+        dv.id,
+        dv.document_id,
+        dv.version,
+        dv.semantic_version,
+        dv.content,
+        dv.change_description as changes,
+        dv.change_type,
+        dv.created_at,
+        dv.author_id,
+        u.name as author_name,
+        dv.generation_metadata
+       FROM document_versions dv
+       LEFT JOIN users u ON dv.author_id = u.id
+       WHERE dv.document_id = $1
+       ORDER BY dv.created_at DESC`,
+      [id]
+    )
+    
+    // Also get current document version
+    const currentDocResult = await pool.query(
+      `SELECT 
+        d.id,
+        d.id as document_id,
+        d.version,
+        d.semantic_version,
+        d.content,
+        'Current version' as changes,
+        'current' as change_type,
+        d.updated_at as created_at,
+        d.updated_by as author_id,
+        u.name as author_name,
+        d.generation_metadata
+       FROM documents d
+       LEFT JOIN users u ON d.updated_by = u.id
+       WHERE d.id = $1 AND d.deleted_at IS NULL`,
+      [id]
+    )
+    
+    // Combine versions: current version + historical versions
+    const allVersions = [
+      ...(currentDocResult.rows.length > 0 ? currentDocResult.rows : []),
+      ...versionsResult.rows
+    ]
+    
+    log.info(`Found ${versionsResult.rows.length} historical versions + ${currentDocResult.rows.length} current version`)
+
+    res.json(allVersions)
+  } catch (error) {
+    log.error("Failed to get document versions:", error)
+    res.status(500).json({ error: "Failed to retrieve document versions" })
+  }
+})
+
 // Create document
 router.post("/project/:projectId", 
   authenticateToken, 
@@ -760,6 +824,7 @@ router.post("/project/:projectId",
       // Track template usage
       if (template_id && result.rows[0]) {
         try {
+          // Insert into template_usage table
           await pool.query(`
             INSERT INTO template_usage (
               template_id, document_id, user_id, project_id, 
@@ -768,7 +833,40 @@ router.post("/project/:projectId",
             VALUES ($1, $2, $3, $4, NOW(), $5, true)
           `, [template_id, id, req.user?.id, projectId, wordCount])
           
-          log.info('Template usage tracked')
+          log.info('Template usage tracked in template_usage table')
+          
+          // 🔧 FIX: Also increment template's validation_count and success_count
+          // This was previously only done for AI-generated documents, causing counters to get stuck
+          try {
+            // Default quality score of 0.85 (85%) for manually created documents
+            // This marks them as successful since default quality_threshold is 0.70 (70%)
+            const qualityScore = 0.85
+            
+            await pool.query(
+              'SELECT update_template_validation($1, $2, $3)',
+              [template_id, qualityScore, req.user?.id]
+            )
+            
+            log.info('✅ Template validation counters incremented', {
+              template_id,
+              quality_score: qualityScore
+            })
+            
+            // Clear template cache so UI shows updated metrics immediately
+            try {
+              const { cache } = require('../utils/redis')
+              await cache.del(`template:${template_id}`)
+              log.info('🔄 Template cache cleared for fresh metrics display')
+            } catch (cacheError) {
+              log.warn('Failed to clear template cache:', cacheError)
+            }
+          } catch (validationError) {
+            log.error('⚠️ Failed to increment template validation counters:', {
+              template_id,
+              error: validationError.message
+            })
+            // Don't fail the document creation if counter update fails
+          }
         } catch (error) {
           log.warn('Failed to track template usage:', error)
         }

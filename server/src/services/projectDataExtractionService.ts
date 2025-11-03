@@ -1549,11 +1549,25 @@ Requirements:
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
+      
+      // Truncate fields to match database constraints
+      const name = s.name?.substring(0, 255) || 'Unnamed Stakeholder'
+      const role = s.role?.substring(0, 100) || 'Stakeholder'
+      const email = s.email?.substring(0, 255) || null
+      
+      // Log if truncation occurred
+      if (s.name && s.name.length > 255) {
+        logger.warn(`[EXTRACTION] Stakeholder name truncated from ${s.name.length} to 255 chars: "${s.name.substring(0, 50)}..."`)
+      }
+      if (s.role && s.role.length > 100) {
+        logger.warn(`[EXTRACTION] Stakeholder role truncated from ${s.role.length} to 100 chars: "${s.role.substring(0, 50)}..."`)
+      }
+      
       values.push(
         projectId,
-        s.name,
-        s.role,
-        s.email || null,
+        name,
+        role,
+        email,
         s.interest_level,
         s.influence_level,
         s.expectations || null,
@@ -2096,18 +2110,19 @@ Requirements:
       )
       
       // Validate and sanitize dates using utility functions
-      const startDate = isValidDate(p.start_date) ? p.start_date : null
+      let startDate = isValidDate(p.start_date) ? p.start_date : null
       let endDate = isValidDate(p.end_date) ? p.end_date : null
+      
+      // start_date is NOT NULL in database - provide default if missing
+      if (!startDate) {
+        startDate = getCurrentDate()
+        logger.warn(`[EXTRACTION] Phase "${p.name}" missing start_date, defaulting to ${startDate}`)
+      }
       
       // end_date is NOT NULL in database - provide default if missing
       if (!endDate) {
-        if (startDate) {
-          // Default: 30 days after start_date
-          endDate = addDays(startDate, 30)
-        } else {
-          // No valid dates at all - use current date + 30 days
-          endDate = addDays(getCurrentDate(), 30)
-        }
+        // Default: 30 days after start_date
+        endDate = addDays(startDate, 30)
         logger.warn(`[EXTRACTION] Phase "${p.name}" missing end_date, defaulting to ${endDate}`)
       }
       

@@ -6,6 +6,8 @@ import { childLogger } from '../utils/logger'
 import programService from '../services/programService'
 import projectService from '../services/projectService'
 import * as programMetricsService from '../services/programMetricsService'
+import * as programFinancialService from '../services/programFinancialService'
+import * as evmCalculator from '../services/evmCalculator'
 
 const router = express.Router()
 
@@ -110,6 +112,224 @@ router.get("/:id/metrics", authenticateToken, async (req, res) => {
     })
   }
 })
+
+// ================================================================
+// FINANCIAL MANAGEMENT ROUTES (Phase 3A)
+// ================================================================
+
+/**
+ * GET /api/programs/:id/financials
+ * Get comprehensive financial summary for a program
+ */
+router.get('/:id/financials', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    log.info('Fetching financial summary', { programId })
+    
+    const summary = await programFinancialService.getProgramFinancialSummary(programId)
+    
+    res.json({ success: true, data: summary })
+  } catch (error) {
+    log.error('Failed to fetch financial summary', error)
+    res.status(500).json({ error: 'Failed to fetch financial summary' })
+  }
+})
+
+/**
+ * GET /api/programs/:id/evm
+ * Get EVM (Earned Value Management) metrics for a program
+ */
+router.get('/:id/evm', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    const reportingDate = req.query.reportingDate 
+      ? new Date(req.query.reportingDate as string) 
+      : new Date()
+    
+    log.info('Calculating EVM metrics', { programId, reportingDate })
+    
+    const evmMetrics = await evmCalculator.calculateEVMMetrics(programId, reportingDate)
+    
+    // Save to database for historical tracking
+    await evmCalculator.saveEVMMetrics(evmMetrics)
+    
+    res.json({ success: true, data: evmMetrics })
+  } catch (error) {
+    log.error('Failed to calculate EVM metrics', error)
+    res.status(500).json({ error: 'Failed to calculate EVM metrics' })
+  }
+})
+
+/**
+ * GET /api/programs/:id/evm/history
+ * Get historical EVM metrics for trend analysis
+ */
+router.get('/:id/evm/history', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined
+    const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined
+    const limit = req.query.limit ? parseInt(req.query.limit as string) : 12
+    
+    log.info('Fetching EVM history', { programId, startDate, endDate, limit })
+    
+    const history = await evmCalculator.getHistoricalEVMMetrics(programId, startDate, endDate, limit)
+    
+    res.json({ success: true, data: history })
+  } catch (error) {
+    log.error('Failed to fetch EVM history', error)
+    res.status(500).json({ error: 'Failed to fetch EVM history' })
+  }
+})
+
+/**
+ * GET /api/programs/:id/roi-analysis
+ * Get complete financial analysis (ROI, NPV, payback period)
+ */
+router.get('/:id/roi-analysis', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    log.info('Performing financial analysis', { programId })
+    
+    const analysis = await programFinancialService.getFinancialAnalysis(programId)
+    
+    // Save to database
+    await programFinancialService.saveFinancialAnalysis(analysis)
+    
+    res.json({ success: true, data: analysis })
+  } catch (error) {
+    log.error('Failed to perform financial analysis', error)
+    res.status(500).json({ error: 'Failed to perform financial analysis' })
+  }
+})
+
+/**
+ * GET /api/programs/:id/financial-dashboard
+ * Get complete financial dashboard data (summary + EVM + analysis)
+ */
+router.get('/:id/financial-dashboard', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    log.info('Fetching financial dashboard', { programId })
+    
+    const dashboard = await programFinancialService.getFinancialDashboard(programId)
+    
+    res.json({ success: true, data: dashboard })
+  } catch (error) {
+    log.error('Failed to fetch financial dashboard', error)
+    res.status(500).json({ error: 'Failed to fetch financial dashboard' })
+  }
+})
+
+/**
+ * POST /api/programs/:id/budget
+ * Create or update program budget
+ */
+router.post('/:id/budget', 
+  authenticateToken, 
+  requirePermission('programs.manage'),
+  validate(Joi.object({
+    fiscalYear: Joi.number().integer().min(2020).max(2100).required(),
+    fiscalQuarter: Joi.number().integer().min(1).max(4).required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      const { fiscalYear, fiscalQuarter } = req.body
+      const userId = (req as any).user?.id
+      
+      log.info('Creating program budget', { programId, fiscalYear, fiscalQuarter })
+      
+      const budgetId = await programFinancialService.createProgramBudget(
+        programId,
+        fiscalYear,
+        fiscalQuarter,
+        userId
+      )
+      
+      res.status(201).json({ success: true, data: { budgetId } })
+    } catch (error) {
+      log.error('Failed to create program budget', error)
+      res.status(500).json({ error: 'Failed to create program budget' })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/forecast
+ * Create financial forecast
+ */
+router.post('/:id/forecast',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(Joi.object({
+    forecastDate: Joi.date().required(),
+    forecastType: Joi.string().valid('monthly', 'quarterly', 'reforecast', 'baseline').required(),
+    forecastTotalCost: Joi.number().min(0).required(),
+    forecastCompletionDate: Joi.date().optional(),
+    forecastBenefitRealization: Joi.number().default(0),
+    bestCaseCost: Joi.number().optional(),
+    mostLikelyCost: Joi.number().optional(),
+    worstCaseCost: Joi.number().optional(),
+    assumptions: Joi.string().optional(),
+    confidenceLevel: Joi.number().integer().min(0).max(100).optional(),
+    status: Joi.string().valid('draft', 'submitted', 'approved').default('draft')
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      const forecastData = { ...req.body, programId }
+      
+      log.info('Creating forecast', { programId })
+      
+      const forecastId = await programFinancialService.createForecast(forecastData)
+      
+      res.status(201).json({ success: true, data: { forecastId } })
+    } catch (error) {
+      log.error('Failed to create forecast', error)
+      res.status(500).json({ error: 'Failed to create forecast' })
+    }
+  }
+)
+
+/**
+ * PUT /api/programs/projects/:projectId/earned-value
+ * Update project earned value based on completion percentage
+ */
+router.put('/projects/:projectId/earned-value',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(Joi.object({
+    percentComplete: Joi.number().min(0).max(100).required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { projectId } = req.params
+      const { percentComplete } = req.body
+      
+      log.info('Updating project earned value', { projectId, percentComplete })
+      
+      await evmCalculator.updateProjectEarnedValue(projectId, percentComplete)
+      
+      res.json({ success: true, message: 'Earned value updated successfully' })
+    } catch (error) {
+      log.error('Failed to update earned value', error)
+      res.status(500).json({ error: 'Failed to update earned value' })
+    }
+  }
+)
+
+// ================================================================
+// END FINANCIAL MANAGEMENT ROUTES
+// ================================================================
 
 // Get program (must come AFTER specific routes like /:id/projects and /:id/metrics)
 router.get('/:id', authenticateToken, requirePermission('programs.view'), async (req, res) => {
