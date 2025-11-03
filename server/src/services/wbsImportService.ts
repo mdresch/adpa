@@ -247,11 +247,10 @@ export async function importWBSFromProjectEntities(
             description,
             estimated_hours,
             status,
-            priority,
             source_entity_id,
             imported_from_wbs,
             created_by
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
             description = EXCLUDED.description,
@@ -264,7 +263,6 @@ export async function importWBSFromProjectEntities(
           deliverable.description,
           estimatedHours,
           deliverable.status || 'planned',
-          deliverable.priority || 'medium',
           deliverable.id,
           true,
           userId
