@@ -298,9 +298,10 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
 
     await pool.query(
       `INSERT INTO template_improvement_suggestions
-       (id, template_id, status, priority, expected_quality_gain, avg_quality_before,
-        common_issues, suggested_improvements, created_at, analysis_metadata)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9)`,
+       (id, template_id, status, priority, expected_quality_gain, current_avg_quality,
+        analysis_period_start, analysis_period_end, documents_analyzed,
+        common_issues, suggested_improvements, improvement_rationale, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW() - INTERVAL '1 day', NOW(), $7, $8, $9, $10, NOW())`,
       [
         suggestionId,
         templateId,
@@ -308,9 +309,10 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
         optimization.expected_quality_gain > 10 ? 'high' : 'medium',
         optimization.expected_quality_gain,
         scoreAfter, // Current score after regression
+        2, // Documents analyzed (before and after)
         JSON.stringify([{
           dimension: 'overall',
-          description: `Quality regression detected: ${scoreBefore}% → ${scoreAfter}%`,
+          description: `Quality regression detected: ${scoreBefore}% → ${scoreAfter}% (-${scoreBefore - scoreAfter}%)`,
           count: 1
         }]),
         JSON.stringify([{
@@ -320,16 +322,18 @@ Make the system prompt crystal-clear and the template structure easy for AI to f
           section: 'entire_template',
           system_prompt: optimization.suggested_system_prompt,
           template_content: optimization.suggested_content,
-          changes_summary: optimization.changes_summary
+          changes_summary: optimization.changes_summary,
+          // Embed metadata in the improvement object
+          metadata: {
+            optimization_type: 'ai_generated',
+            trigger: 'quality_regression',
+            score_before: scoreBefore,
+            score_after: scoreAfter,
+            regression_amount: scoreBefore - scoreAfter,
+            generated_at: new Date().toISOString()
+          }
         }]),
-        JSON.stringify({
-          optimization_type: 'ai_generated',
-          trigger: 'quality_regression',
-          score_before: scoreBefore,
-          score_after: scoreAfter,
-          regression_amount: scoreBefore - scoreAfter,
-          generated_at: new Date().toISOString()
-        })
+        `AI-generated optimization triggered by quality regression: ${scoreBefore}% → ${scoreAfter}% (-${scoreBefore - scoreAfter}%)`
       ]
     )
 
