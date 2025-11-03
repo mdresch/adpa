@@ -1824,7 +1824,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       off("document:created", handleDocumentCreated)
       leaveRoom(room)
     }
-  }, [projectId, on, off, joinRoom, leaveRoom])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]) // Only rejoin when projectId changes, not when WebSocket functions change
 
   // Documents are now filtered server-side, so we use them directly
   const displayDocuments = documents

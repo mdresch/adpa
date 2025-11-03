@@ -609,10 +609,16 @@ The ADPA system represents a significant advancement in document processing auto
         tags: document.tags || []
       })
       
-      // Update local state with the response data
-      setDocument({ ...document, content: editedContent, updated_at: new Date().toISOString() })
-      toast.success("Document saved successfully")
+      toast.success("Document saved successfully! Refreshing...")
       setIsEditing(false)
+      
+      // 🔄 Reload document data to get new version number and updated metadata
+      await fetchDocument()
+      
+      // Re-extract TOC from new content
+      if (editedContent) {
+        extractTableOfContents(editedContent)
+      }
     } catch (error) {
       console.error("Failed to save document:", error)
       toast.error("Failed to save document")

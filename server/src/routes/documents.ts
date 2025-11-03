@@ -805,21 +805,48 @@ router.post("/project/:projectId",
         `
         INSERT INTO documents (
           id, project_id, name, content, template_id, status, created_by, updated_by, 
-          word_count, character_count,
+          word_count, character_count, version, semantic_version,
           template_version, template_author, template_framework, template_category, 
           template_complexity, template_metadata, generation_metadata
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING *
       `,
         [
           id, projectId, name, contentString, template_id, status, req.user?.id, 
-          wordCount, characterCount,
+          wordCount, characterCount, 1, '1.0.0', // Initial version and semantic_version
           templateVersion, templateAuthor, templateFramework, templateCategory,
           templateComplexity, templateMetadata ? JSON.stringify(templateMetadata) : null,
           generationMetadata ? JSON.stringify(generationMetadata) : null
         ]
       )
+
+      // 📸 Save initial version snapshot to document_versions table
+      // This ensures v1.0.0 is always available in version history
+      try {
+        await pool.query(
+          `INSERT INTO document_versions 
+           (id, document_id, version, semantic_version, content, author_id, created_at, change_type, change_description, generation_metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
+           ON CONFLICT (document_id, version) DO NOTHING`,
+          [
+            uuidv4(),
+            id,
+            '1',
+            '1.0.0',
+            contentString,
+            req.user?.id,
+            'initial_version',
+            'Initial version - document created',
+            generationMetadata ? JSON.stringify(generationMetadata) : null
+          ]
+        )
+        
+        log.info(`📸 Initial version v1.0.0 saved to version history`)
+      } catch (versionError: any) {
+        log.warn('[VERSION-SNAPSHOT] Failed to save initial version', { error: versionError.message })
+        // Don't fail document creation if version snapshot fails
+      }
 
       // Track template usage
       if (template_id && result.rows[0]) {
@@ -1128,6 +1155,38 @@ router.put("/:id",
         reason: (req.headers['x-access-reason'] as string) || undefined,
         ctx: { userId: req.user?.id, ip: req.ip, userAgent: req.headers['user-agent'] as string, requestId: (req as any).requestId }
       })
+
+      // 🔥 NEW: Trigger quality audit if content was modified
+      if (content && contentString && result.rows[0]) {
+        try {
+          const { qualityAuditService } = await import('../services/qualityAuditService')
+          
+          log.info('[MANUAL-EDIT] Triggering quality audit after content modification', {
+            documentId: id,
+            documentName: result.rows[0].name,
+            userId: req.user?.id,
+            oldVersion: doc.version,
+            newVersion: result.rows[0].version
+          })
+
+          // Run audit asynchronously (don't block response)
+          qualityAuditService.auditDocument(
+            id,
+            contentString,
+            result.rows[0].type || 'unknown',
+            { id: result.rows[0].project_id, name: 'Project' }, // Minimal project info
+            req.user?.id
+          ).catch((auditError: any) => {
+            log.error('[MANUAL-EDIT] Quality audit failed', {
+              documentId: id,
+              error: auditError.message
+            })
+            // Don't fail the update if audit fails
+          })
+        } catch (importError: any) {
+          log.error('[MANUAL-EDIT] Failed to import quality audit service', importError)
+        }
+      }
 
       // 🔥 NEW: Re-validate against baseline after manual edit
       let driftRevalidation = null

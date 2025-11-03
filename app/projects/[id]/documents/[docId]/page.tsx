@@ -450,7 +450,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       const data = await response.json()
       
       if (data.success) {
-        toast.success('Template analysis started! Check /admin/quality/template-improvements in a few minutes.')
+        toast.success('Template analysis started! Check ow /admin/quality/template-improvements in a few minutes.')
       } else {
         toast.error(data.error || 'Failed to trigger analysis')
       }

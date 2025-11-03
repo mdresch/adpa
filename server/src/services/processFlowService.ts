@@ -1789,6 +1789,38 @@ class ProcessFlowService {
       
       logger.info(`Document saved successfully: ${savedDocument.name} (ID: ${savedDocument.id})`)
       
+      // 📸 Save initial version snapshot to document_versions table
+      // This ensures v1.0.0 is always available in version history
+      try {
+        const { v4: uuidv4 } = await import('uuid')
+        
+        await this.pool.query(
+          `INSERT INTO document_versions 
+           (id, document_id, version, semantic_version, content, author_id, created_at, change_type, change_description, generation_metadata)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, $8, $9)
+           ON CONFLICT (document_id, version) DO NOTHING`,
+          [
+            uuidv4(),
+            savedDocument.id,
+            '1', // Initial integer version
+            '1.0.0', // Initial semantic version
+            finalContent,
+            config.userId || null,
+            'initial_version',
+            'Initial version created by AI',
+            JSON.stringify(generationMetadata)
+          ]
+        )
+        
+        logger.info(`Initial version v1.0.0 saved to version history for document ${savedDocument.id}`)
+      } catch (versionError: any) {
+        logger.warn('[VERSION-SNAPSHOT] Failed to save initial version snapshot', {
+          documentId: savedDocument.id,
+          error: versionError.message
+        })
+        // Don't fail document creation if version snapshot fails
+      }
+      
       // QUALITY CONTROL GATE: Trigger automatic quality audit
       try {
         logger.info('[PROCESS-FLOW] Triggering automatic quality audit', {

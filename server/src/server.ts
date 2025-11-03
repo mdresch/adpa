@@ -251,10 +251,30 @@ io.on("connection", (socket) => {
         }
 
         try {
-          const decoded: any = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+          // VALIDATE JWT FIRST - don't hit database if token is malformed
+          let decoded: any
+          try {
+            decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+          } catch (jwtError: any) {
+            // JWT malformed, expired, or invalid - reject immediately
+            logger.warn('WebSocket JWT validation failed', {
+              error: jwtError.message,
+              room
+            })
+            socket.emit('join:error', { 
+              room, 
+              message: 'Invalid or expired token. Please log out and log back in.',
+              code: 'JWT_INVALID'
+            })
+            // Disconnect socket to prevent retry storm
+            socket.disconnect(true)
+            return
+          }
+
           const userId = decoded?.userId
           if (!userId) {
-            socket.emit('join:error', { room, message: 'Invalid token' })
+            socket.emit('join:error', { room, message: 'Invalid token payload', code: 'USER_ID_MISSING' })
+            socket.disconnect(true)
             return
           }
 
