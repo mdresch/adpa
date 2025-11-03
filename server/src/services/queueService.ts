@@ -1496,29 +1496,47 @@ export async function updateJobStatus(
 
 export async function cancelJob(jobId: string): Promise<boolean> {
   try {
-    // Try to remove from ALL queues (including process-flow queue)
-    const aiJob = await aiQueue.getJob(jobId)
-    if (aiJob) {
-      await aiJob.remove()
-      logger.info(`Removed job ${jobId} from aiQueue`)
+    // Try to remove from ALL queues
+    const queues = [
+      { queue: aiQueue, name: 'aiQueue' },
+      { queue: documentQueue, name: 'documentQueue' },
+      { queue: pipelineQueue, name: 'pipelineQueue' },
+      { queue: processFlowQueue, name: 'processFlowQueue' },
+      { queue: regenerationQueue, name: 'regenerationQueue' },
+      { queue: extractionQueue, name: 'extractionQueue' },
+      { queue: baselineQueue, name: 'baselineQueue' }
+    ]
+
+    let jobFound = false
+
+    for (const { queue, name } of queues) {
+      try {
+        const job = await queue.getJob(jobId)
+        if (job) {
+          // Check if job is currently processing
+          const state = await job.getState()
+          
+          if (state === 'active') {
+            // Job is actively running - move to failed instead of removing
+            await job.moveToFailed({ message: 'Cancelled by user' }, true)
+            logger.info(`Moved active job ${jobId} from ${name} to failed (was processing)`)
+          } else {
+            // Job is waiting/delayed - safe to remove
+            await job.remove()
+            logger.info(`Removed job ${jobId} from ${name}`)
+          }
+          
+          jobFound = true
+          break // Found it, no need to check other queues
+        }
+      } catch (queueError: any) {
+        // Queue doesn't have this job, continue to next
+        logger.debug(`Job ${jobId} not in ${name}`)
+      }
     }
 
-    const docJob = await documentQueue.getJob(jobId)
-    if (docJob) {
-      await docJob.remove()
-      logger.info(`Removed job ${jobId} from documentQueue`)
-    }
-
-    const pipelineJob = await pipelineQueue.getJob(jobId)
-    if (pipelineJob) {
-      await pipelineJob.remove()
-      logger.info(`Removed job ${jobId} from pipelineQueue`)
-    }
-
-    const processFlowJob = await processFlowQueue.getJob(jobId)
-    if (processFlowJob) {
-      await processFlowJob.remove()
-      logger.info(`Removed job ${jobId} from processFlowQueue`)
+    if (!jobFound) {
+      logger.warn(`Job ${jobId} not found in any queue`)
     }
 
     // Update database
