@@ -199,8 +199,8 @@ export async function importWBSFromProjectEntities(
     
     // 1. Get extracted activities from project tables
     const activitiesResult = await pool.query(`
-      SELECT id, name, description, category, phase, start_date, end_date, 
-             estimated_hours, estimated_days, assigned_to, status, dependencies
+      SELECT id, name, activity_name, description, category, start_date, end_date, 
+             assigned_to, status
       FROM activities
       WHERE project_id = $1
       ORDER BY name
@@ -288,11 +288,10 @@ export async function importWBSFromProjectEntities(
       const activity = activities[i]
       
       try {
-        const fullText = `${activity.name} ${activity.description || ''}`
-        const wbsCode = parseWBSCode(fullText) || parseWBSCode(activity.name)
-        const estimatedHours = activity.estimated_hours || 
-                              (activity.estimated_days ? activity.estimated_days * 8 : null) ||
-                              parseEstimatedHours(fullText)
+        const activityName = activity.activity_name || activity.name
+        const fullText = `${activityName} ${activity.description || ''}`
+        const wbsCode = parseWBSCode(fullText) || parseWBSCode(activityName)
+        const estimatedHours = parseEstimatedHours(fullText) || 8 // Default 8 hours if not found
         const requiredRole = extractRequiredRole(fullText)
         
         // Find role ID if role name found
@@ -302,6 +301,12 @@ export async function importWBSFromProjectEntities(
         }
         
         const taskNumber = wbsCode || `ACT-${String(i + 1).padStart(3, '0')}`
+        
+        // Determine phase from category or default to Execution
+        const phase = activity.category === 'planning' ? 'Planning' :
+                     activity.category === 'testing' ? 'Testing' :
+                     activity.category === 'deployment' ? 'Deployment' :
+                     'Execution'
         
         const taskResult = await pool.query(`
           INSERT INTO project_tasks (
@@ -329,12 +334,12 @@ export async function importWBSFromProjectEntities(
           projectId,
           taskNumber,
           wbsCode,
-          activity.name,
+          activityName,
           activity.description,
           estimatedHours,
           roleId,
           requiredRole,
-          activity.phase || 'Execution',
+          phase,
           activity.status || 'planned',
           activity.id,
           true,
