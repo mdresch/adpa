@@ -310,12 +310,12 @@ router.get(
       }
 
       // SECURITY: Verify user has access to this project
+      // Check if user is the project owner or part of team_members array
       const projectAccess = await pool!.query(
         `SELECT p.id 
          FROM projects p
-         LEFT JOIN project_members pm ON p.id = pm.project_id
          WHERE p.id = $1 
-         AND (p.created_by = $2 OR pm.user_id = $2)
+         AND (p.created_by = $2 OR p.owner_id = $2 OR $2 = ANY(COALESCE(p.team_members, ARRAY[]::UUID[])))
          LIMIT 1`,
         [projectId, userId]
       )
