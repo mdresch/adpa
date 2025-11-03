@@ -209,7 +209,7 @@ export async function importWBSFromProjectEntities(
     // 2. Get extracted deliverables
     const deliverablesResult = await pool.query(`
       SELECT id, name, description, type, due_date, status, owner, 
-             acceptance_criteria, priority
+             acceptance_criteria
       FROM deliverables
       WHERE project_id = $1
       ORDER BY name
