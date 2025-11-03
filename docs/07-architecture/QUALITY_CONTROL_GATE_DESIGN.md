@@ -997,27 +997,835 @@ logger.info('[QUALITY-INSIGHTS] Provider performance', {
 });
 ```
 
-### 7.2 Template Improvement
+---
 
-Track quality issues by template:
+### 7.2 Template Improvement System
+
+**Critical Feature**: Quality Control Gate analyzes patterns across audits to **automatically suggest template improvements**.
+
+#### 7.2.1 Track Quality Issues by Template
 
 ```sql
 SELECT 
   d.template_id,
   t.name as template_name,
+  t.content as template_content,
   AVG(qa.overall_score) as avg_quality,
   AVG(qa.completeness_score) as avg_completeness,
-  COUNT(*) as usage_count
+  AVG(qa.consistency_score) as avg_consistency,
+  AVG(qa.professional_quality_score) as avg_professional_quality,
+  AVG(qa.standards_compliance_score) as avg_standards_compliance,
+  COUNT(*) as usage_count,
+  ARRAY_AGG(DISTINCT qa.issues) as all_issues,
+  ARRAY_AGG(DISTINCT qa.recommendations) as all_recommendations
 FROM quality_audits qa
 JOIN documents d ON qa.document_id = d.id
 JOIN document_templates t ON d.template_id = t.id
 WHERE qa.audited_at > NOW() - INTERVAL '30 days'
-GROUP BY d.template_id, t.name
-HAVING COUNT(*) > 5
+GROUP BY d.template_id, t.name, t.content
+HAVING COUNT(*) >= 5  -- Need at least 5 samples
 ORDER BY avg_quality ASC;
 ```
 
-Identify templates that consistently produce lower quality and improve prompts.
+#### 7.2.2 Template Improvement Database Schema
+
+```sql
+-- Track template improvement suggestions
+CREATE TABLE template_improvement_suggestions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+  
+  -- Analysis
+  analysis_period_start TIMESTAMP NOT NULL,
+  analysis_period_end TIMESTAMP NOT NULL,
+  documents_analyzed INTEGER NOT NULL,
+  
+  -- Current Quality Metrics
+  current_avg_quality INTEGER CHECK (current_avg_quality >= 0 AND current_avg_quality <= 100),
+  current_completeness INTEGER CHECK (current_completeness >= 0 AND current_completeness <= 100),
+  current_consistency INTEGER CHECK (current_consistency >= 0 AND current_consistency <= 100),
+  current_professional_quality INTEGER CHECK (current_professional_quality >= 0 AND current_professional_quality <= 100),
+  current_standards_compliance INTEGER CHECK (current_standards_compliance >= 0 AND current_standards_compliance <= 100),
+  
+  -- Common Issues (from aggregated audits)
+  common_issues JSONB NOT NULL DEFAULT '[]', -- Patterns across multiple audits
+  issue_frequency JSONB NOT NULL DEFAULT '{}', -- How often each issue appears
+  
+  -- AI-Generated Suggestions
+  suggested_improvements JSONB NOT NULL DEFAULT '[]', -- Specific template changes
+  improvement_rationale TEXT, -- Why these improvements are recommended
+  expected_quality_gain INTEGER, -- Predicted quality improvement (0-100)
+  
+  -- Priority & Status
+  priority VARCHAR(10) CHECK (priority IN ('critical', 'high', 'medium', 'low')),
+  status VARCHAR(20) CHECK (status IN ('pending_review', 'approved', 'implemented', 'rejected')) DEFAULT 'pending_review',
+  
+  -- AI Analysis
+  analyzer_ai_provider VARCHAR(50),
+  analyzer_ai_model VARCHAR(100),
+  analysis_tokens INTEGER,
+  analysis_cost DECIMAL(10, 6),
+  
+  -- Workflow
+  created_at TIMESTAMP DEFAULT NOW(),
+  reviewed_by UUID REFERENCES users(id),
+  reviewed_at TIMESTAMP,
+  implemented_by UUID REFERENCES users(id),
+  implemented_at TIMESTAMP,
+  
+  -- Indexes
+  INDEX idx_template_improvements_template (template_id),
+  INDEX idx_template_improvements_status (status),
+  INDEX idx_template_improvements_priority (priority),
+  INDEX idx_template_improvements_date (created_at DESC)
+);
+
+-- Track template versions and improvements
+CREATE TABLE template_versions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  template_id UUID NOT NULL REFERENCES document_templates(id) ON DELETE CASCADE,
+  version_number INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  system_prompt TEXT,
+  
+  -- Quality Tracking
+  avg_quality_before INTEGER, -- Before this version
+  avg_quality_after INTEGER,  -- After this version
+  improvement_percentage DECIMAL(5, 2),
+  
+  -- Change Documentation
+  changes_summary TEXT NOT NULL,
+  improvement_suggestion_id UUID REFERENCES template_improvement_suggestions(id),
+  
+  -- Metadata
+  created_by UUID REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  active BOOLEAN DEFAULT true,
+  
+  UNIQUE(template_id, version_number),
+  INDEX idx_template_versions_template (template_id),
+  INDEX idx_template_versions_active (template_id, active)
+);
+```
+
+#### 7.2.3 Template Improvement Service
+
+```typescript
+// server/src/services/templateImprovementService.ts
+
+class TemplateImprovementService {
+  /**
+   * Analyze template performance and generate improvement suggestions
+   * Runs weekly as a background job
+   */
+  async analyzeTemplateQuality(templateId: string): Promise<void> {
+    logger.info('[TEMPLATE-IMPROVEMENT] Analyzing template', { templateId });
+
+    // 1. Get template details
+    const template = await this.getTemplate(templateId);
+    
+    // 2. Get quality audit history (last 30 days)
+    const auditHistory = await this.getAuditHistory(templateId, 30);
+    
+    if (auditHistory.length < 5) {
+      logger.info('[TEMPLATE-IMPROVEMENT] Insufficient data', {
+        templateId,
+        auditCount: auditHistory.length
+      });
+      return; // Need at least 5 audits for meaningful analysis
+    }
+
+    // 3. Calculate aggregate quality metrics
+    const qualityMetrics = this.calculateAggregateMetrics(auditHistory);
+    
+    // 4. Extract common issues and patterns
+    const commonIssues = this.extractCommonIssues(auditHistory);
+    const issueFrequency = this.calculateIssueFrequency(commonIssues);
+    
+    // 5. Use AI to analyze template and suggest improvements
+    const improvements = await this.generateImprovementSuggestions(
+      template,
+      qualityMetrics,
+      commonIssues,
+      issueFrequency
+    );
+    
+    // 6. Calculate expected quality gain
+    const expectedGain = this.estimateQualityGain(
+      qualityMetrics,
+      improvements
+    );
+    
+    // 7. Determine priority
+    const priority = this.calculatePriority(
+      qualityMetrics.avgQuality,
+      expectedGain,
+      auditHistory.length
+    );
+    
+    // 8. Save improvement suggestions
+    await this.saveImprovementSuggestions({
+      templateId,
+      qualityMetrics,
+      commonIssues,
+      issueFrequency,
+      improvements,
+      expectedGain,
+      priority
+    });
+    
+    // 9. Notify template owner if high/critical priority
+    if (priority === 'critical' || priority === 'high') {
+      await this.notifyTemplateOwner(template, improvements, priority);
+    }
+  }
+
+  /**
+   * Use AI to generate specific template improvement suggestions
+   */
+  private async generateImprovementSuggestions(
+    template: any,
+    qualityMetrics: any,
+    commonIssues: any[],
+    issueFrequency: any
+  ): Promise<any[]> {
+    const analysisPrompt = `
+# Template Improvement Analysis
+
+You are an expert in project management documentation and AI prompt engineering. Analyze this template and its quality performance to suggest specific improvements.
+
+## Template Information
+**Name**: ${template.name}
+**Type**: ${template.type}
+**Current Version**: ${template.version}
+
+## Current Template Content:
+${template.content}
+
+## System Prompt:
+${template.system_prompt || 'No system prompt defined'}
+
+## Quality Performance (last 30 days)
+- **Average Overall Quality**: ${qualityMetrics.avgQuality}%
+- **Average Completeness**: ${qualityMetrics.avgCompleteness}%
+- **Average Consistency**: ${qualityMetrics.avgConsistency}%
+- **Average Professional Quality**: ${qualityMetrics.avgProfessionalQuality}%
+- **Average Standards Compliance**: ${qualityMetrics.avgStandardsCompliance}%
+- **Documents Generated**: ${qualityMetrics.documentCount}
+
+## Common Issues Found (across ${qualityMetrics.documentCount} documents):
+
+${commonIssues.map((issue, idx) => `
+${idx + 1}. **${issue.type}** (Frequency: ${issueFrequency[issue.type] || 0}%)
+   - Description: ${issue.description}
+   - Typical Location: ${issue.location}
+   - Impact on Quality: ${issue.impact}
+`).join('\n')}
+
+## Your Task:
+
+Analyze the template and suggest **specific, actionable improvements** to address the common issues and increase quality scores.
+
+For each improvement suggestion, provide:
+
+1. **Issue Addressed**: Which common issue(s) this fixes
+2. **Proposed Change**: Exact text changes or additions to the template
+3. **Change Type**: prompt_enhancement | structure_improvement | validation_rule | example_addition | clarity_improvement
+4. **Section**: Which section of the template to modify
+5. **Expected Impact**: Predicted improvement in quality dimension (completeness, consistency, etc.)
+6. **Priority**: critical | high | medium | low
+7. **Implementation Difficulty**: easy | moderate | complex
+
+## Example Suggestions:
+
+**If Consistency Issues are Common:**
+- Add explicit instruction: "Use consistent terminology throughout. When using acronyms, expand on first use (e.g., Project Management Body of Knowledge (PMBOK)), then use acronym thereafter."
+- Add validation rule: "Before finalizing, verify all stakeholder names match between sections"
+
+**If Completeness Issues are Common:**
+- Add minimum length requirements: "Each performance domain section must be at least 200 words with concrete examples"
+- Add checklist: "Ensure all 8 performance domains are addressed with specific project context"
+
+**If Professional Quality Issues are Common:**
+- Add style guidance: "Use active voice. Write concisely. Target executive audience."
+- Add examples: "Good: 'The project will deliver $4.2M in savings.' Bad: 'Savings of $4.2M are expected to be delivered by the project.'"
+
+## Response Format (JSON):
+
+{
+  "improvements": [
+    {
+      "issue_addressed": "<which issue this fixes>",
+      "proposed_change": "<exact text to add/modify in template>",
+      "change_type": "prompt_enhancement|structure_improvement|validation_rule|example_addition|clarity_improvement",
+      "section": "<section identifier or 'system_prompt'>",
+      "expected_impact": {
+        "dimension": "completeness|consistency|professional_quality|standards_compliance",
+        "current_score": <number>,
+        "predicted_score": <number>,
+        "gain": <number>
+      },
+      "priority": "critical|high|medium|low",
+      "implementation_difficulty": "easy|moderate|complex",
+      "rationale": "<why this improvement will help>"
+    }
+  ],
+  "overall_expected_gain": <estimated overall quality improvement 0-100>,
+  "summary": "<brief summary of key improvements>"
+}
+
+Be specific. Provide exact text that can be added to the template. Focus on the top 5-10 most impactful improvements.
+`;
+
+    const result = await aiService.generate({
+      provider: 'google',
+      model: 'gemini-2.5-flash',
+      systemPrompt: `You are an expert in document template design and AI prompt engineering. You analyze template performance and suggest specific, actionable improvements. Always respond with valid JSON only.`,
+      userPrompt: analysisPrompt,
+      temperature: 0.5,
+      responseFormat: 'json'
+    });
+
+    const suggestions = JSON.parse(result.content);
+    return suggestions.improvements || [];
+  }
+
+  /**
+   * Calculate aggregate quality metrics from audit history
+   */
+  private calculateAggregateMetrics(auditHistory: any[]): any {
+    const count = auditHistory.length;
+    
+    return {
+      avgQuality: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.overall_score, 0) / count
+      ),
+      avgCompleteness: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.completeness_score, 0) / count
+      ),
+      avgConsistency: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.consistency_score, 0) / count
+      ),
+      avgProfessionalQuality: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.professional_quality_score, 0) / count
+      ),
+      avgStandardsCompliance: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.standards_compliance_score, 0) / count
+      ),
+      avgAccuracy: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.accuracy_score, 0) / count
+      ),
+      avgContextRelevance: Math.round(
+        auditHistory.reduce((sum, a) => sum + a.context_relevance_score, 0) / count
+      ),
+      documentCount: count,
+      lowestScore: Math.min(...auditHistory.map(a => a.overall_score)),
+      highestScore: Math.max(...auditHistory.map(a => a.overall_score)),
+      standardDeviation: this.calculateStdDev(
+        auditHistory.map(a => a.overall_score)
+      )
+    };
+  }
+
+  /**
+   * Extract and categorize common issues across audits
+   */
+  private extractCommonIssues(auditHistory: any[]): any[] {
+    const issueMap = new Map<string, any>();
+    
+    auditHistory.forEach(audit => {
+      const issues = audit.issues || [];
+      issues.forEach((issue: any) => {
+        const key = `${issue.dimension}:${issue.description}`;
+        if (issueMap.has(key)) {
+          issueMap.get(key).count++;
+        } else {
+          issueMap.set(key, {
+            ...issue,
+            count: 1
+          });
+        }
+      });
+    });
+    
+    // Return issues that appear in >20% of audits
+    const threshold = auditHistory.length * 0.2;
+    return Array.from(issueMap.values())
+      .filter(issue => issue.count >= threshold)
+      .sort((a, b) => b.count - a.count);
+  }
+
+  /**
+   * Calculate how frequently each issue appears (%)
+   */
+  private calculateIssueFrequency(commonIssues: any[]): any {
+    const total = commonIssues.reduce((sum, issue) => sum + issue.count, 0);
+    const frequency: any = {};
+    
+    commonIssues.forEach(issue => {
+      const key = `${issue.dimension}:${issue.description}`;
+      frequency[key] = Math.round((issue.count / total) * 100);
+    });
+    
+    return frequency;
+  }
+
+  /**
+   * Estimate quality gain from implementing improvements
+   */
+  private estimateQualityGain(
+    qualityMetrics: any,
+    improvements: any[]
+  ): number {
+    // Sum expected gains from individual improvements
+    const totalGain = improvements.reduce(
+      (sum, imp) => sum + (imp.expected_impact?.gain || 0),
+      0
+    );
+    
+    // Cap at realistic maximum (diminishing returns)
+    const maxGain = 100 - qualityMetrics.avgQuality;
+    return Math.min(totalGain, maxGain * 0.8); // 80% of theoretical max
+  }
+
+  /**
+   * Calculate improvement priority based on quality and impact
+   */
+  private calculatePriority(
+    currentQuality: number,
+    expectedGain: number,
+    sampleSize: number
+  ): string {
+    // Critical: Quality < 70% and expected gain > 10 points
+    if (currentQuality < 70 && expectedGain > 10) return 'critical';
+    
+    // High: Quality < 80% and expected gain > 8 points
+    if (currentQuality < 80 && expectedGain > 8) return 'high';
+    
+    // Medium: Quality < 85% and expected gain > 5 points
+    if (currentQuality < 85 && expectedGain > 5) return 'medium';
+    
+    // Low: Everything else
+    return 'low';
+  }
+
+  /**
+   * Save improvement suggestions to database
+   */
+  private async saveImprovementSuggestions(data: any): Promise<void> {
+    await pool.query(
+      `INSERT INTO template_improvement_suggestions (
+        template_id, analysis_period_start, analysis_period_end, documents_analyzed,
+        current_avg_quality, current_completeness, current_consistency,
+        current_professional_quality, current_standards_compliance,
+        common_issues, issue_frequency, suggested_improvements,
+        improvement_rationale, expected_quality_gain, priority,
+        analyzer_ai_provider, analyzer_ai_model
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+      [
+        data.templateId,
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // 30 days ago
+        new Date(),
+        data.qualityMetrics.documentCount,
+        data.qualityMetrics.avgQuality,
+        data.qualityMetrics.avgCompleteness,
+        data.qualityMetrics.avgConsistency,
+        data.qualityMetrics.avgProfessionalQuality,
+        data.qualityMetrics.avgStandardsCompliance,
+        JSON.stringify(data.commonIssues),
+        JSON.stringify(data.issueFrequency),
+        JSON.stringify(data.improvements),
+        data.improvements[0]?.rationale || 'See individual improvements',
+        data.expectedGain,
+        data.priority,
+        'google',
+        'gemini-2.5-flash'
+      ]
+    );
+  }
+
+  /**
+   * Notify template owner of high-priority improvements
+   */
+  private async notifyTemplateOwner(
+    template: any,
+    improvements: any[],
+    priority: string
+  ): Promise<void> {
+    logger.info('[TEMPLATE-IMPROVEMENT] Notifying owner', {
+      templateId: template.id,
+      priority,
+      improvementCount: improvements.length
+    });
+    
+    // TODO: Send email/notification to template owner
+    // Include link to review improvements in admin panel
+  }
+
+  /**
+   * Calculate standard deviation
+   */
+  private calculateStdDev(values: number[]): number {
+    const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+    const squaredDiffs = values.map(v => Math.pow(v - mean, 2));
+    const avgSquaredDiff = squaredDiffs.reduce((sum, v) => sum + v, 0) / values.length;
+    return Math.sqrt(avgSquaredDiff);
+  }
+}
+
+export const templateImprovementService = new TemplateImprovementService();
+```
+
+#### 7.2.4 Automated Weekly Template Analysis Job
+
+```typescript
+// server/src/jobs/templateAnalysisJob.ts
+
+import { templateImprovementService } from '../services/templateImprovementService';
+
+/**
+ * Weekly job to analyze all active templates and generate improvement suggestions
+ */
+export async function runTemplateAnalysisJob(): Promise<void> {
+  logger.info('[TEMPLATE-ANALYSIS-JOB] Starting weekly analysis');
+
+  try {
+    // Get all active templates
+    const templates = await pool.query(`
+      SELECT id, name
+      FROM document_templates
+      WHERE active = true
+    `);
+
+    logger.info('[TEMPLATE-ANALYSIS-JOB] Analyzing templates', {
+      count: templates.rows.length
+    });
+
+    // Analyze each template
+    for (const template of templates.rows) {
+      try {
+        await templateImprovementService.analyzeTemplateQuality(template.id);
+      } catch (error) {
+        logger.error('[TEMPLATE-ANALYSIS-JOB] Template analysis failed', {
+          templateId: template.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+        // Continue with other templates
+      }
+    }
+
+    logger.info('[TEMPLATE-ANALYSIS-JOB] Analysis complete');
+  } catch (error) {
+    logger.error('[TEMPLATE-ANALYSIS-JOB] Job failed', {
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
+
+// Schedule weekly (every Monday at 2 AM)
+import cron from 'node-cron';
+cron.schedule('0 2 * * 1', runTemplateAnalysisJob);
+```
+
+#### 7.2.5 Template Improvement Dashboard UI
+
+```typescript
+// app/admin/templates/improvements/page.tsx
+
+export default function TemplateImprovementsPage() {
+  const [suggestions, setSuggestions] = useState<any[]>([]);
+  const [filters, setFilters] = useState({
+    status: 'pending_review',
+    priority: 'all'
+  });
+
+  return (
+    <div className="container mx-auto py-8">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Template Improvement Suggestions</h1>
+        <Button onClick={triggerAnalysis}>
+          <RefreshCw className="mr-2" />
+          Run Analysis Now
+        </Button>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4 mb-6">
+        <Select value={filters.status} onValueChange={(v) => setFilters({ ...filters, status: v })}>
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending_review">Pending Review</SelectItem>
+            <SelectItem value="approved">Approved</SelectItem>
+            <SelectItem value="implemented">Implemented</SelectItem>
+            <SelectItem value="rejected">Rejected</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Select value={filters.priority} onValueChange={(v) => setFilters({ ...filters, priority: v })}>
+          <SelectTrigger className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Priorities</SelectItem>
+            <SelectItem value="critical">Critical</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="low">Low</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Suggestion Cards */}
+      <div className="space-y-4">
+        {suggestions.map((suggestion) => (
+          <ImprovementSuggestionCard
+            key={suggestion.id}
+            suggestion={suggestion}
+            onApprove={() => handleApprove(suggestion.id)}
+            onReject={() => handleReject(suggestion.id)}
+            onImplement={() => handleImplement(suggestion.id)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ImprovementSuggestionCard({ suggestion, onApprove, onReject, onImplement }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const priorityColors = {
+    critical: 'bg-red-500',
+    high: 'bg-orange-500',
+    medium: 'bg-yellow-500',
+    low: 'bg-blue-500'
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex justify-between items-start">
+          <div>
+            <CardTitle>{suggestion.template_name}</CardTitle>
+            <CardDescription>
+              {suggestion.documents_analyzed} documents analyzed • 
+              Current quality: {suggestion.current_avg_quality}% • 
+              Expected gain: +{suggestion.expected_quality_gain}%
+            </CardDescription>
+          </div>
+          <Badge className={priorityColors[suggestion.priority]}>
+            {suggestion.priority.toUpperCase()}
+          </Badge>
+        </div>
+      </CardHeader>
+
+      <CardContent>
+        {/* Summary */}
+        <div className="mb-4">
+          <h4 className="font-semibold mb-2">Common Issues Found:</h4>
+          <ul className="list-disc list-inside space-y-1">
+            {suggestion.common_issues.slice(0, 3).map((issue: any, idx: number) => (
+              <li key={idx} className="text-sm text-gray-700">
+                {issue.description} <span className="text-gray-500">({issue.count} occurrences)</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Suggested Improvements */}
+        <div className="mb-4">
+          <h4 className="font-semibold mb-2">
+            Suggested Improvements ({suggestion.suggested_improvements.length}):
+          </h4>
+          
+          {expanded ? (
+            <div className="space-y-3">
+              {suggestion.suggested_improvements.map((improvement: any, idx: number) => (
+                <div key={idx} className="border-l-4 border-blue-500 pl-4 py-2">
+                  <div className="flex justify-between items-start mb-2">
+                    <span className="font-medium">{improvement.change_type.replace('_', ' ')}</span>
+                    <Badge variant="outline">{improvement.implementation_difficulty}</Badge>
+                  </div>
+                  <p className="text-sm mb-2">{improvement.issue_addressed}</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm font-mono mb-2">
+                    {improvement.proposed_change}
+                  </div>
+                  <p className="text-xs text-gray-600">{improvement.rationale}</p>
+                  <div className="text-xs text-green-600 mt-1">
+                    Expected: {improvement.expected_impact.dimension} 
+                    {improvement.expected_impact.current_score}% → {improvement.expected_impact.predicted_score}%
+                    (+{improvement.expected_impact.gain}%)
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600">
+              {suggestion.suggested_improvements[0]?.proposed_change.substring(0, 150)}...
+            </p>
+          )}
+          
+          <Button
+            variant="link"
+            size="sm"
+            onClick={() => setExpanded(!expanded)}
+            className="mt-2"
+          >
+            {expanded ? 'Show Less' : 'Show All Improvements'}
+          </Button>
+        </div>
+
+        {/* Actions */}
+        {suggestion.status === 'pending_review' && (
+          <div className="flex gap-2">
+            <Button onClick={onApprove} variant="default">
+              <Check className="mr-2 h-4 w-4" />
+              Approve
+            </Button>
+            <Button onClick={onImplement} variant="secondary">
+              <Wrench className="mr-2 h-4 w-4" />
+              Implement Now
+            </Button>
+            <Button onClick={onReject} variant="destructive">
+              <X className="mr-2 h-4 w-4" />
+              Reject
+            </Button>
+          </div>
+        )}
+
+        {suggestion.status === 'approved' && (
+          <Button onClick={onImplement}>
+            <Wrench className="mr-2 h-4 w-4" />
+            Implement Changes
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+```
+
+---
+
+### 7.3 Template Version Control
+
+When improvements are implemented, create new template version:
+
+```typescript
+async function implementTemplateImprovements(
+  suggestionId: string,
+  userId: string
+): Promise<void> {
+  // 1. Get improvement suggestion
+  const suggestion = await getImprovementSuggestion(suggestionId);
+  
+  // 2. Get current template
+  const currentTemplate = await getTemplate(suggestion.template_id);
+  
+  // 3. Apply improvements to template content
+  const newContent = applyImprovements(
+    currentTemplate.content,
+    suggestion.suggested_improvements
+  );
+  
+  // 4. Get current version number
+  const latestVersion = await getLatestTemplateVersion(suggestion.template_id);
+  const newVersionNumber = (latestVersion?.version_number || 0) + 1;
+  
+  // 5. Create new template version
+  await pool.query(
+    `INSERT INTO template_versions (
+      template_id, version_number, content, system_prompt,
+      avg_quality_before, changes_summary, improvement_suggestion_id,
+      created_by, active
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      suggestion.template_id,
+      newVersionNumber,
+      newContent,
+      currentTemplate.system_prompt,
+      suggestion.current_avg_quality,
+      generateChangesSummary(suggestion.suggested_improvements),
+      suggestionId,
+      userId,
+      true
+    ]
+  );
+  
+  // 6. Deactivate previous version
+  await pool.query(
+    `UPDATE template_versions
+     SET active = false
+     WHERE template_id = $1 AND version_number < $2`,
+    [suggestion.template_id, newVersionNumber]
+  );
+  
+  // 7. Update main template
+  await pool.query(
+    `UPDATE document_templates
+     SET content = $1, version = $2, updated_at = NOW()
+     WHERE id = $3`,
+    [newContent, newVersionNumber, suggestion.template_id]
+  );
+  
+  // 8. Mark suggestion as implemented
+  await pool.query(
+    `UPDATE template_improvement_suggestions
+     SET status = 'implemented', implemented_by = $1, implemented_at = NOW()
+     WHERE id = $2`,
+    [userId, suggestionId]
+  );
+  
+  logger.info('[TEMPLATE-IMPROVEMENT] Implemented improvements', {
+    templateId: suggestion.template_id,
+    version: newVersionNumber,
+    suggestionId
+  });
+}
+```
+
+---
+
+### 7.4 A/B Testing Framework (Future Enhancement)
+
+```typescript
+/**
+ * Compare quality of old vs. new template versions
+ */
+async function trackTemplateVersionQuality(
+  templateId: string,
+  versionNumber: number
+): Promise<void> {
+  // After 30 days, compare quality metrics
+  const qualityAfter = await pool.query(`
+    SELECT AVG(overall_score) as avg_quality
+    FROM quality_audits qa
+    JOIN documents d ON qa.document_id = d.id
+    WHERE d.template_id = $1
+    AND d.created_at > (
+      SELECT created_at 
+      FROM template_versions 
+      WHERE template_id = $1 AND version_number = $2
+    )
+    AND d.created_at < NOW() - INTERVAL '30 days'
+  `, [templateId, versionNumber]);
+  
+  // Update template version with quality after
+  await pool.query(`
+    UPDATE template_versions
+    SET avg_quality_after = $1,
+        improvement_percentage = $1 - avg_quality_before
+    WHERE template_id = $2 AND version_number = $3
+  `, [
+    qualityAfter.rows[0].avg_quality,
+    templateId,
+    versionNumber
+  ]);
+}
+```
 
 ---
 
