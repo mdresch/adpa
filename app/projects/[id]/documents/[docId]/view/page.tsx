@@ -491,37 +491,62 @@ The ADPA system represents a significant advancement in document processing auto
   // Smooth scroll to section
   const scrollToSection = (sectionId: string) => {
     console.log('[TOC] Attempting to scroll to:', sectionId)
-    const element = window.document.getElementById(sectionId)
+    console.log('[TOC] Current TOC items:', tableOfContents.map(h => ({ id: h.id, text: h.text })))
+    
+    const element = document.getElementById(sectionId)
     
     if (element) {
-      console.log('[TOC] Element found, scrolling...')
-      const yOffset = -100
-      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset
+      console.log('[TOC] ✅ Element found! Scrolling...')
+      console.log('[TOC] Element position:', {
+        top: element.getBoundingClientRect().top,
+        scrollY: window.scrollY,
+        offsetHeight: element.offsetHeight
+      })
       
-      window.scrollTo({ 
-        top: y, 
+      // Use modern scrollIntoView with offset
+      const elementPosition = element.getBoundingClientRect().top
+      const offsetPosition = elementPosition + window.scrollY - 120 // 120px offset for header
+      
+      window.scrollTo({
+        top: offsetPosition,
         behavior: 'smooth'
       })
+      
       setActiveSection(sectionId)
+      console.log('[TOC] Scroll command sent')
     } else {
-      console.warn('[TOC] Element not found with ID:', sectionId)
+      console.warn('[TOC] ❌ Element not found with ID:', sectionId)
+      console.log('[TOC] All element IDs on page:', 
+        Array.from(document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-'))
+      )
+      
       // Fallback: Try to find by text content
       const allHeadings = Array.from(document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
       const sectionText = tableOfContents.find(h => h.id === sectionId)?.text
       
+      console.log('[TOC] Searching for heading with text:', sectionText)
+      console.log('[TOC] All heading texts on page:', allHeadings.map(h => h.textContent?.trim()))
+      
       if (sectionText) {
-        console.log('[TOC] Trying to find heading by text:', sectionText)
-        const matchingHeading = allHeadings.find(h => 
+        // Try exact match first
+        let matchingHeading = allHeadings.find(h => 
           h.textContent?.trim() === sectionText.trim()
         ) as HTMLElement | undefined
         
+        // Try case-insensitive partial match if exact fails
+        if (!matchingHeading) {
+          matchingHeading = allHeadings.find(h => 
+            h.textContent?.toLowerCase().includes(sectionText.toLowerCase())
+          ) as HTMLElement | undefined
+        }
+        
         if (matchingHeading) {
-          console.log('[TOC] Found heading by text content, scrolling...')
+          console.log('[TOC] ✅ Found heading by text content, scrolling...')
           matchingHeading.scrollIntoView({ behavior: 'smooth', block: 'start' })
-          window.scrollBy(0, -100) // Offset for sticky header
+          window.scrollBy({ top: -120, behavior: 'smooth' }) // Offset for sticky header
           setActiveSection(sectionId)
         } else {
-          console.error('[TOC] Could not find heading by ID or text')
+          console.error('[TOC] ❌ Could not find heading by ID or text')
         }
       }
     }
