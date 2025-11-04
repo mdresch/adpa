@@ -70,15 +70,11 @@ export default function AssessmentsListPage() {
     
     // Set up auto-refresh for processing assessments
     const interval = setInterval(() => {
-      // Check if any assessments are still processing
-      const hasProcessing = assessments.some(a => a.status === 'processing');
-      if (hasProcessing) {
-        loadAssessments();
-      }
+      loadAssessments();
     }, 5000); // Poll every 5 seconds
     
     return () => clearInterval(interval);
-  }, [assessments]);
+  }, []); // Only run once on mount
 
   const loadAssessments = async () => {
     try {
