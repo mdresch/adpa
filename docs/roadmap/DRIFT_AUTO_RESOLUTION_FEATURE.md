@@ -387,7 +387,9 @@ export class DriftDetectionService {
     )
     driftPoints.push(...milestoneDrift)
     
-    // ... check all 13 entity types
+    // ... check all 14 entity types (scope_items, deliverables, requirements, milestones, 
+    // phases, activities, resources, technologies, stakeholders, constraints, risks, 
+    // success_criteria, quality_standards, best_practices)
     
     return driftPoints
   }
@@ -945,7 +947,7 @@ Resolution: Keep all 15, just note the additions in change log
 - [ ] Click "Resolve Drift" → Preview changes
 - [ ] Apply resolution → Document updated
 - [ ] Verify drift resolved
-- [ ] Test all 13 entity types
+- [ ] Test all 14 entity types (scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices)
 - [ ] Test all 3 strategies
 
 ---
@@ -954,7 +956,7 @@ Resolution: Keep all 15, just note the additions in change log
 
 ### Phase 1: Backend (Days 1-3)
 - Automatic drift detection on save
-- Drift comparison logic for all 13 entity types
+- Drift comparison logic for all 14 entity types
 - AI resolution service
 - Resolution strategies
 
@@ -985,7 +987,7 @@ Resolution: Keep all 15, just note the additions in change log
 - [ ] Drift record marked as resolved
 - [ ] Audit log created
 - [ ] WebSocket notifications sent
-- [ ] Works for all 13 entity types
+- [ ] Works for all 14 entity types
 - [ ] Performance: Resolution generated in < 5 seconds
 
 ---

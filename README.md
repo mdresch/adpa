@@ -225,6 +225,33 @@ All generated documents undergo comprehensive validation:
 
 See [Generated Documents](generated-documents/README.md) for detailed validation documentation.
 
+### Testing Drift Detection & Resolution
+
+The ADPA Framework includes an Automatic Drift Detection & Resolution feature that monitors documents for deviations from approved baselines and provides AI-powered one-click resolution.
+
+#### Quick Start: Create Test Baseline
+
+```bash
+# Navigate to server directory
+cd server
+
+# Create a comprehensive test baseline for your project
+npm run create-test-baseline <PROJECT_ID>
+
+# Example with project ID
+npm run create-test-baseline 123e4567-e89b-12d3-a456-426614174000
+```
+
+This creates a comprehensive baseline with:
+- 5 stakeholders (from sponsors to designers)
+- 4 risks (external, resource, technical, financial)
+- 6 milestones with dependencies
+- 5 requirements (approved and draft)
+- Budget, timeline, and success criteria
+- All 14 entity types for comprehensive testing (scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices)
+
+**For detailed testing instructions**, see [Drift Resolution Testing Guide](docs/testing/DRIFT_RESOLUTION_TESTING_GUIDE.md).
+
 ### Building Documentation
 
 Generated documents are stored in the `generated-documents/` directory with organized structure:
