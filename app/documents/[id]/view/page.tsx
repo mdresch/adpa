@@ -38,6 +38,9 @@ import ReactMarkdown from "react-markdown"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
+import { useDriftDetection } from "@/hooks/use-drift-detection"
+import { DriftAlertBanner } from "@/components/drift/DriftAlertBanner"
+import { DriftResolutionDialog } from "@/components/drift/DriftResolutionDialog"
 // @ts-ignore
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 // @ts-ignore
@@ -106,6 +109,19 @@ export default function DocumentViewerPage() {
   
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
+
+  // ⭐ Drift detection hook
+  const {
+    driftAlert,
+    resolutionPreview,
+    isResolving,
+    isApplying,
+    handleResolveDrift,
+    handleApplyResolution,
+    dismissDriftAlert
+  } = useDriftDetection(documentId, document?.project_id)
+
+  const [showResolutionDialog, setShowResolutionDialog] = useState(false)
 
   useEffect(() => {
     if (documentId && user) {
@@ -435,6 +451,21 @@ ${doc.content}
   const toggleBookmark = () => {
     setIsBookmarked(!isBookmarked)
     toast.success(isBookmarked ? "Bookmark removed" : "Document bookmarked")
+  }
+
+  // ⭐ Drift resolution handlers
+  const onResolveDriftClick = async () => {
+    setShowResolutionDialog(true)
+    await handleResolveDrift('balanced')
+  }
+
+  const onApplyDriftResolution = async () => {
+    const success = await handleApplyResolution()
+    if (success) {
+      setShowResolutionDialog(false)
+      // Refresh document to show updated content
+      await fetchDocument()
+    }
   }
 
   // Generate table of contents from markdown content
@@ -774,6 +805,26 @@ ${doc.content}
                     </div>
                   </div>
                 </motion.div>
+
+                {/* ⭐ Drift Alert Banner */}
+                {driftAlert && !isFullScreen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                  >
+                    <DriftAlertBanner
+                      driftRecordId={driftAlert.driftRecordId}
+                      severity={driftAlert.severity}
+                      driftCount={driftAlert.driftCount}
+                      summary={driftAlert.summary}
+                      onResolve={onResolveDriftClick}
+                      onDismiss={dismissDriftAlert}
+                      onViewDetails={() => setShowResolutionDialog(true)}
+                      isResolving={isResolving}
+                    />
+                  </motion.div>
+                )}
 
                 {/* Full Screen Mode */}
                 {isFullScreen ? (
@@ -1161,6 +1212,15 @@ ${doc.content}
         result={result}
         onClose={resetRegeneration}
         documentId={documentId}
+      />
+
+      {/* ⭐ Drift Resolution Dialog */}
+      <DriftResolutionDialog
+        open={showResolutionDialog}
+        onClose={() => setShowResolutionDialog(false)}
+        resolutionPreview={resolutionPreview}
+        onApply={onApplyDriftResolution}
+        isApplying={isApplying}
       />
     </div>
   )
