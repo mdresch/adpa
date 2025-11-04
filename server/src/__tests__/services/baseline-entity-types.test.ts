@@ -9,7 +9,7 @@
  */
 
 import { pool } from '../../database/connection'
-import { createBaselineFromExtractedEntities } from '../../services/baselineService'
+import { createBaselineFromEntities } from '../../services/baselineService'
 
 // Define all 14 entity types in the system
 const ALL_ENTITY_TYPES = [
@@ -207,7 +207,7 @@ describe('Baseline Entity Types - All 14 Types', () => {
       }
       
       // Create baseline from extracted entities
-      const baseline = await createBaselineFromExtractedEntities(testProjectId, testUserId)
+      const baseline = await createBaselineFromEntities(testProjectId, testUserId)
       
       // Verify baseline was created
       expect(baseline).toBeDefined()
@@ -235,7 +235,7 @@ describe('Baseline Entity Types - All 14 Types', () => {
       // Don't insert any entities - all types are empty
       
       // Create baseline should still work
-      const baseline = await createBaselineFromExtractedEntities(testProjectId, testUserId)
+      const baseline = await createBaselineFromEntities(testProjectId, testUserId)
       
       expect(baseline).toBeDefined()
       expect(baseline.id).toBeDefined()

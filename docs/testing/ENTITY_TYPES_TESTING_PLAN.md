@@ -162,7 +162,7 @@ The following entity types are tested for field modifications:
 
 ## Integration with Baseline Service
 
-The tests verify integration with the `baselineService.createBaselineFromExtractedEntities()` function:
+The tests verify integration with the `baselineService.createBaselineFromEntities()` function:
 
 1. **Entity Query**: All 14 entity types are queried in parallel
 2. **Baseline Creation**: Baseline includes data from all entity types
