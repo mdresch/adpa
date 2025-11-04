@@ -34,7 +34,8 @@
     "create-test-baseline": "tsx scripts/create-test-baseline.ts",
     "create-upload-table": "tsx scripts/create-upload-batches-table.ts",
     "migrate-assessments": "tsx scripts/run-missing-migrations.ts",
-    "check-status": "tsx scripts/check-upload-status.ts"
+    "check-status": "tsx scripts/check-upload-status.ts",
+    "reset-batches": "tsx scripts/reset-failed-batches.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
