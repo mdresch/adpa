@@ -21,6 +21,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table';
+import { Label } from '@/components/ui/label';
 import {
   FileText,
   Search,
@@ -30,7 +31,8 @@ import {
   Calendar,
   TrendingUp,
   Building2,
-  Loader2
+  Loader2,
+  Plus
 } from 'lucide-react';
 
 interface Assessment {
