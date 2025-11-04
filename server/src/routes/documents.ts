@@ -279,9 +279,9 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
   try {
     const { projectId } = req.params
 
-    // Check if user has access to project
+    // Check if user has access to project (including onboarding/guest-created projects)
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)",
       [projectId, req.user?.id]
     )
 
@@ -397,9 +397,9 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const { projectId } = req.params
     const { page = 1, limit = 10, status, search } = req.query
 
-    // Check if user has access to project
+    // Check if user has access to project (including onboarding/guest-created projects)
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)",
       [projectId, req.user?.id]
     )
 
