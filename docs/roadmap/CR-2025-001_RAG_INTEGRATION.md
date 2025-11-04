@@ -351,7 +351,7 @@ ADD COLUMN context_requirements JSONB;
 | Role | Name | Decision | Date | Signature |
 |------|------|----------|------|-----------|
 | **Technical Lead** | ___________ | ☐ Approve ☐ Reject ☐ Defer | ____/____ | ___________ |
-| **Product Manager** | ___________ | ☐ Approve ☐ Reject ☐ Defer | ____/____ | ___________ |
+| **Product Manager** | Product Team | ☑ Approve ☐ Reject ☐ Defer | 11/04/2025 | Product Team |
 | **Engineering Manager** | ___________ | ☐ Approve ☐ Reject ☐ Defer | ____/____ | ___________ |
 | **CTO/VP Engineering** | ___________ | ☐ Approve ☐ Reject ☐ Defer | ____/____ | ___________ |
 
@@ -368,7 +368,7 @@ ADD COLUMN context_requirements JSONB;
 ### 10.3 Approval Status
 
 - [ ] **Technical Review Complete** - Technical Lead sign-off
-- [ ] **Business Case Approved** - Product Manager sign-off
+- [x] **Business Case Approved** - Product Manager sign-off
 - [ ] **Resource Allocation Confirmed** - Engineering Manager sign-off
 - [ ] **Final Approval** - CTO/VP Engineering sign-off
 
