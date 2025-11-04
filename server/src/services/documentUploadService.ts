@@ -12,6 +12,7 @@ import Queue, { Job } from 'bull';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
+import { pool } from '../database/connection'; // Use shared pool with correct SSL config
 import { documentConversionService, ConversionOptions } from './documentConversionService';
 import { qualityAuditService } from './qualityAuditService';
 import { io } from '../server'; // WebSocket for real-time updates
