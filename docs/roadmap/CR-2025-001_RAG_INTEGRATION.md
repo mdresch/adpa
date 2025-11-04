@@ -370,6 +370,8 @@ ADD COLUMN context_requirements JSONB;
 - [ ] **Technical Review Complete** - Technical Lead sign-off
 - [x] **Business Case Approved** - Product Manager sign-off
 - [ ] **Resource Allocation Confirmed** - Engineering Manager sign-off
+- [ ] **Business Case Approved** - Product Manager sign-off
+- [x] **Resource Allocation Confirmed** - Engineering Manager sign-off
 - [ ] **Final Approval** - CTO/VP Engineering sign-off
 
 **Current Status:** ⏳ **Pending Approval**
