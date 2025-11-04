@@ -143,6 +143,81 @@ export default function AssessmentResultsPage() {
     );
   }
 
+  // Show processing view if assessment data isn't ready yet
+  const isProcessing = !assessment.documentsByType || 
+                       assessment.documentsByType?.length === 0 ||
+                       !assessment.gaps ||
+                       !assessment.benchmarks ||
+                       !assessment.roiMetrics;
+
+  if (isProcessing) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+              Assessment Processing...
+            </CardTitle>
+            <CardDescription>
+              Your documents are being analyzed. This typically takes 2-3 minutes.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="text-center py-8">
+              <div className="text-6xl mb-4">⏳</div>
+              <h3 className="text-xl font-semibold mb-2">Processing {assessment.totalDocuments} Documents</h3>
+              <p className="text-muted-foreground mb-6">
+                AI is analyzing document types, quality scores, and maturity levels
+              </p>
+              
+              <div className="max-w-md mx-auto space-y-4 text-left">
+                <div className="flex items-center gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <span>Documents uploaded successfully</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-blue-500 flex-shrink-0" />
+                  <span>Converting to Markdown and analyzing...</span>
+                </div>
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
+                  <span>Generating gap analysis</span>
+                </div>
+                <div className="flex items-center gap-3 text-muted-foreground">
+                  <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
+                  <span>Calculating benchmarks and ROI</span>
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-3 justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => router.push('/onboarding/assessments')}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  Back to Assessments List
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => loadAssessment()}
+                >
+                  Refresh Status
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground mt-6">
+                The page will check for updates automatically.
+                <br />
+                Check the Assessments list to see processing progress.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const maturityColor = {
     1: 'text-red-600',
     2: 'text-orange-600',
