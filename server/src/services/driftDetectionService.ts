@@ -124,21 +124,19 @@ export class DriftDetectionService {
   }
 
   /**
+   * Helper function to check if an array has elements
+   */
+  private hasNonEmptyArray(arr: any): boolean {
+    return arr && Array.isArray(arr) && arr.length > 0
+  }
+
+  /**
    * Check if baseline has any entities to compare
    */
   private hasAnyEntities(baseline: Baseline): boolean {
-    const hasStakeholders = baseline.resource_baseline?.stakeholders && 
-                           Array.isArray(baseline.resource_baseline.stakeholders) && 
-                           baseline.resource_baseline.stakeholders.length > 0
-    
-    const hasRisks = baseline.scope_baseline?.risks && 
-                    Array.isArray(baseline.scope_baseline.risks) && 
-                    baseline.scope_baseline.risks.length > 0
-    
-    const hasMilestones = baseline.timeline_baseline?.milestones && 
-                         Array.isArray(baseline.timeline_baseline.milestones) && 
-                         baseline.timeline_baseline.milestones.length > 0
-    
+    const hasStakeholders = this.hasNonEmptyArray(baseline.resource_baseline?.stakeholders)
+    const hasRisks = this.hasNonEmptyArray(baseline.scope_baseline?.risks)
+    const hasMilestones = this.hasNonEmptyArray(baseline.timeline_baseline?.milestones)
     const hasBudget = baseline.cost_baseline?.total_budget !== null && 
                      baseline.cost_baseline?.total_budget !== undefined
 

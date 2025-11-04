@@ -1193,7 +1193,8 @@ router.put("/:id",
       
       // Only run drift validation if content has ACTUALLY CHANGED
       // This prevents false drift detection on every save
-      const contentHasChanged = contentString && doc.content !== contentString
+      // Note: We check both contentString existence AND inequality to handle edge cases
+      const contentHasChanged = contentString !== undefined && doc.content !== contentString
       
       if (contentHasChanged && result.rows[0]?.project_id && result.rows[0]?.content) {
         try {
