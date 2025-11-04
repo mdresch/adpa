@@ -628,7 +628,8 @@ export default function ProgramsPage() {
                       </Card>
                     </Link>
                   </div>
-                ))}
+                )
+              })}
               </div>
             </div>
             ) : searchTerm ? (
