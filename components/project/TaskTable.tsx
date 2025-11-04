@@ -27,6 +27,14 @@ import {
   Eye,
 } from "lucide-react"
 
+// Utility function to safely parse hours
+function parseHours(value: number | string | undefined | null): number {
+  if (value === null || value === undefined) return 0
+  if (typeof value === 'number') return isNaN(value) ? 0 : value
+  const parsed = parseFloat(String(value).replace(/[^\d.-]/g, ''))
+  return isNaN(parsed) ? 0 : parsed
+}
+
 interface TaskTableProps {
   tasks: Task[]
   onViewTask: (taskId: string) => void
@@ -184,10 +192,14 @@ export function TaskTable({
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                {task.estimated_hours ? `${task.estimated_hours}h` : '-'}
+                {task.estimated_hours 
+                  ? `${parseHours(task.estimated_hours).toLocaleString('en-US', { maximumFractionDigits: 1 })}h`
+                  : '-'}
               </TableCell>
               <TableCell className="text-right">
-                {task.actual_hours ? `${task.actual_hours}h` : '0h'}
+                {task.actual_hours 
+                  ? `${parseHours(task.actual_hours).toLocaleString('en-US', { maximumFractionDigits: 1 })}h`
+                  : '0h'}
               </TableCell>
               <TableCell>
                 {task.required_role_name ? (

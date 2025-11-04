@@ -16,6 +16,18 @@ interface TaskHoursViewProps {
   onUpdate: () => void
 }
 
+// Utility function to safely parse hours
+function parseHours(value: number | string | undefined | null): number {
+  if (value === null || value === undefined) return 0
+  if (typeof value === 'number') return isNaN(value) ? 0 : value
+  const parsed = parseFloat(String(value).replace(/[^\d.-]/g, ''))
+  return isNaN(parsed) ? 0 : parsed
+}
+
+function formatHours(hours: number): string {
+  return hours.toLocaleString('en-US', { maximumFractionDigits: 1, minimumFractionDigits: 0 })
+}
+
 export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
   const [showLogForm, setShowLogForm] = useState(false)
   const [formData, setFormData] = useState({
@@ -46,8 +58,8 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
     }
   }
 
-  const estimatedHours = task.estimated_hours || 0
-  const actualHours = task.actual_hours || 0
+  const estimatedHours = parseHours(task.estimated_hours)
+  const actualHours = parseHours(task.actual_hours)
   const remainingHours = Math.max(0, estimatedHours - actualHours)
   const progressPercentage = estimatedHours > 0 
     ? Math.min(100, Math.round((actualHours / estimatedHours) * 100))
@@ -62,7 +74,7 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
             <CardTitle className="text-sm font-medium">Estimated Hours</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{estimatedHours}h</p>
+            <p className="text-2xl font-bold">{formatHours(estimatedHours)}h</p>
           </CardContent>
         </Card>
 
@@ -71,7 +83,7 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
             <CardTitle className="text-sm font-medium">Actual Hours</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-2xl font-bold">{actualHours}h</p>
+            <p className="text-2xl font-bold">{formatHours(actualHours)}h</p>
           </CardContent>
         </Card>
 
@@ -81,7 +93,7 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
           </CardHeader>
           <CardContent>
             <p className={`text-2xl font-bold ${remainingHours < 0 ? 'text-destructive' : ''}`}>
-              {remainingHours}h
+              {formatHours(remainingHours)}h
             </p>
           </CardContent>
         </Card>

@@ -8,6 +8,18 @@ interface TaskMetricsProps {
   tasks: Task[]
 }
 
+// Utility function to safely parse and format hours
+function parseHours(value: number | string | undefined | null): number {
+  if (value === null || value === undefined) return 0
+  if (typeof value === 'number') return isNaN(value) ? 0 : value
+  const parsed = parseFloat(String(value).replace(/[^\d.-]/g, ''))
+  return isNaN(parsed) ? 0 : parsed
+}
+
+function formatHours(hours: number): string {
+  return hours.toLocaleString('en-US', { maximumFractionDigits: 1, minimumFractionDigits: 0 })
+}
+
 export function TaskMetrics({ tasks }: TaskMetricsProps) {
   const metrics = {
     total: tasks.length,
@@ -16,8 +28,8 @@ export function TaskMetrics({ tasks }: TaskMetricsProps) {
     planned: tasks.filter(t => t.status === 'planned').length,
     blocked: tasks.filter(t => t.status === 'blocked').length,
     unassigned: tasks.filter(t => !t.assigned_user_id).length,
-    estimatedHours: tasks.reduce((sum, t) => sum + (t.estimated_hours || 0), 0),
-    actualHours: tasks.reduce((sum, t) => sum + (t.actual_hours || 0), 0),
+    estimatedHours: tasks.reduce((sum, t) => sum + parseHours(t.estimated_hours), 0),
+    actualHours: tasks.reduce((sum, t) => sum + parseHours(t.actual_hours), 0),
   }
 
   const completionRate = metrics.total > 0 
@@ -67,7 +79,7 @@ export function TaskMetrics({ tasks }: TaskMetricsProps) {
         </CardHeader>
         <CardContent>
           <div className="text-2xl font-bold">
-            {metrics.actualHours}h / {metrics.estimatedHours}h
+            {formatHours(metrics.actualHours)}h / {formatHours(metrics.estimatedHours)}h
           </div>
           <div className="text-xs text-muted-foreground mt-1">
             {hoursProgress}% of estimated hours logged
