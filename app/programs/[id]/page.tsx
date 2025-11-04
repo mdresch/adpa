@@ -11,6 +11,8 @@ import { MetricsDashboard } from '@/components/program/MetricsDashboard';
 import { ProgramProjectsTab } from '@/components/program/ProgramProjectsTab';
 import { ProgramMetrics } from '@/components/program/types';
 import FinancialDashboard from '@/components/program/FinancialDashboard';
+import { ProgramRisksTab } from '@/components/program/ProgramRisksTab';
+import { ProgramReportsTab } from '@/components/program/ProgramReportsTab';
 import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
@@ -501,32 +503,26 @@ export default function ProgramDetailPage() {
                   )}
                 </TabsContent>
 
-                {/* Risks Tab - Placeholder */}
+                {/* Risks Tab - Full Implementation */}
                 <TabsContent value="risks" className="mt-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Risk Register</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground">
-                        Detailed risk register will be displayed here
-                      </p>
-                    </CardContent>
-                  </Card>
+                  {programId ? (
+                    <ProgramRisksTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
                 </TabsContent>
 
-                {/* Reports Tab - Placeholder */}
+                {/* Reports Tab - Full Implementation */}
                 <TabsContent value="reports" className="mt-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Program Reports</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground">
-                        Report generation and history will be displayed here
-                      </p>
-                    </CardContent>
-                  </Card>
+                  {programId ? (
+                    <ProgramReportsTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </PageTransition>
