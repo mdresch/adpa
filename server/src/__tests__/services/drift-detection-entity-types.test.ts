@@ -30,6 +30,16 @@ const ALL_ENTITY_TYPES = [
 
 type EntityType = typeof ALL_ENTITY_TYPES[number]
 
+/**
+ * Validate entity type to prevent SQL injection
+ * Even though entity types come from a controlled array, this adds defense in depth
+ */
+function validateEntityType(entityType: string): asserts entityType is EntityType {
+  if (!ALL_ENTITY_TYPES.includes(entityType as EntityType)) {
+    throw new Error(`Invalid entity type: ${entityType}. Must be one of: ${ALL_ENTITY_TYPES.join(', ')}`)
+  }
+}
+
 // Sample data for each entity type
 const SAMPLE_ENTITY_DATA: Record<EntityType, any> = {
   scope_items: { title: 'Baseline Scope Item', description: 'Original scope', priority: 'high' },
@@ -79,6 +89,7 @@ describe('Drift Detection - All 14 Entity Types', () => {
     if (testProjectId) {
       // Clean up all entity types
       for (const entityType of ALL_ENTITY_TYPES) {
+        validateEntityType(entityType) // Validate before using in SQL
         await pool.query(`DELETE FROM ${entityType} WHERE project_id = $1`, [testProjectId])
       }
       await pool.query('DELETE FROM project_baselines WHERE project_id = $1', [testProjectId])
@@ -87,12 +98,14 @@ describe('Drift Detection - All 14 Entity Types', () => {
     if (testUserId) {
       await pool.query('DELETE FROM users WHERE email = $1', ['test-drift-detection@example.com'])
     }
-    await pool.end()
+    // Note: pool.end() is removed to avoid closing the global pool
+    // The pool should be closed in a global teardown if needed
   })
 
   beforeEach(async () => {
     // Clean up entities and baselines before each test
     for (const entityType of ALL_ENTITY_TYPES) {
+      validateEntityType(entityType) // Validate before using in SQL
       await pool.query(`DELETE FROM ${entityType} WHERE project_id = $1`, [testProjectId])
     }
     await pool.query('DELETE FROM project_baselines WHERE project_id = $1', [testProjectId])
@@ -102,6 +115,9 @@ describe('Drift Detection - All 14 Entity Types', () => {
     test.each(ALL_ENTITY_TYPES)(
       'should detect when new %s entities are added after baseline',
       async (entityType) => {
+        // Validate entity type to prevent SQL injection
+        validateEntityType(entityType)
+        
         // Create baseline with one entity
         const columns = ['project_id', ...Object.keys(SAMPLE_ENTITY_DATA[entityType])]
         const values = [testProjectId, ...Object.values(SAMPLE_ENTITY_DATA[entityType])]
@@ -164,6 +180,9 @@ describe('Drift Detection - All 14 Entity Types', () => {
     test.each(ALL_ENTITY_TYPES)(
       'should detect when %s entities are removed after baseline',
       async (entityType) => {
+        // Validate entity type to prevent SQL injection
+        validateEntityType(entityType)
+        
         // Create baseline with two entities
         const columns = ['project_id', ...Object.keys(SAMPLE_ENTITY_DATA[entityType])]
         const values1 = [testProjectId, ...Object.values(SAMPLE_ENTITY_DATA[entityType])]

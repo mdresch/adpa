@@ -63,7 +63,8 @@ describe('Baseline Entity Types - All 14 Types', () => {
     if (testUserId) {
       await pool.query('DELETE FROM users WHERE email = $1', ['test-entity-types@example.com'])
     }
-    await pool.end()
+    // Note: pool.end() is removed to avoid closing the global pool
+    // The pool should be closed in a global teardown if needed
   })
 
   describe('Entity Type Tables Existence', () => {
@@ -86,6 +87,11 @@ describe('Baseline Entity Types - All 14 Types', () => {
     test.each(ALL_ENTITY_TYPES)(
       '%s table should have required columns (id, project_id, created_at)',
       async (entityType) => {
+        // Validate entityType is in our whitelist to prevent SQL injection
+        if (!ALL_ENTITY_TYPES.includes(entityType)) {
+          throw new Error(`Invalid entity type: ${entityType}`)
+        }
+        
         const result = await pool.query(
           `SELECT column_name 
            FROM information_schema.columns 
