@@ -30,7 +30,7 @@
     "test:template-optimization": "tsx scripts/test-template-optimization-direct.ts",
     "fix:task-status": "tsx scripts/fix-task-status-constraint.ts",
     "check:admin": "tsx scripts/check-admin-user.ts",
-    "show:admin": "tsx scripts/show-admin-credentials.ts"
+    "show:admin": "tsx scripts/show-admin-credentials.ts",
     "create-test-baseline": "tsx scripts/create-test-baseline.ts"
   },
   "dependencies": {
