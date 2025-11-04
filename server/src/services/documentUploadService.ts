@@ -412,8 +412,8 @@ export async function processUploadedFile(
     await job.progress(100);
     emitFileProgress(batchId, projectId, filename, 100, 'Completed');
 
-    // Update batch progress
-    await updateBatchProgress(batchId, 'success');
+    // Update batch progress (pass fileId to prevent double-counting on retries)
+    await updateBatchProgress(batchId, 'success', fileId);
 
     await client.query('COMMIT');
 
@@ -435,8 +435,8 @@ export async function processUploadedFile(
       stack: error.stack
     });
 
-    // Update batch progress
-    await updateBatchProgress(batchId, 'failed', error.message);
+    // Update batch progress (pass fileId to prevent double-counting on retries)
+    await updateBatchProgress(batchId, 'failed', fileId, error.message);
 
     emitFileProgress(batchId, projectId, filename, 100, 'Failed', error.message);
 
@@ -692,50 +692,87 @@ async function createDocumentRecord(
 /**
  * Update batch progress
  * Only counts unique files, not retry attempts
+ * Uses batch_files tracking table to prevent double-counting
  */
 async function updateBatchProgress(
   batchId: string,
   result: 'success' | 'failed',
+  fileId?: string,
   error?: string
 ): Promise<void> {
-  const field = result === 'success' ? 'successful_files' : 'failed_files';
+  const client = await pool.connect();
   
-  // Update counters and recalculate processed_files from successful + failed
-  // This ensures we only count unique files, not retry attempts
-  const query = `
-    UPDATE upload_batches
-    SET ${field} = ${field} + 1,
-        processed_files = (successful_files + ${result === 'success' ? '1' : '0'}) + 
-                         (failed_files + ${result === 'failed' ? '1' : '0'}),
-        updated_at = NOW()
-    WHERE id = $1
-    RETURNING total_files, processed_files, successful_files, failed_files
-  `;
-
-  const result_db = await pool.query(query, [batchId]);
-  
-  if (result_db.rows.length > 0) {
-    const row = result_db.rows[0];
+  try {
+    await client.query('BEGIN');
     
-    // Check if batch is complete
-    if (row.processed_files >= row.total_files) {
-      const status = row.failed_files === 0 ? 'completed' : 
-                     row.successful_files === 0 ? 'failed' : 'completed';
-      
-      await pool.query(`
-        UPDATE upload_batches
-        SET status = $1, completed_at = NOW()
-        WHERE id = $2
-      `, [status, batchId]);
-      
-      logger.info('Upload batch completed', {
-        batchId,
-        status,
-        successful: row.successful_files,
-        failed: row.failed_files,
-        total: row.total_files
-      });
+    // Check if this file has already been counted
+    const checkQuery = `
+      SELECT status FROM batch_files 
+      WHERE batch_id = $1 AND file_id = $2
+    `;
+    
+    const checkResult = await client.query(checkQuery, [batchId, fileId]);
+    
+    // If file already counted (has a final status), skip
+    if (checkResult.rows.length > 0) {
+      const existingStatus = checkResult.rows[0].status;
+      if (existingStatus === 'completed' || existingStatus === 'failed') {
+        await client.query('COMMIT');
+        return; // Already counted, skip
+      }
     }
+    
+    // Mark file as completed/failed in tracking table
+    await client.query(`
+      UPDATE batch_files 
+      SET status = $1, updated_at = NOW()
+      WHERE batch_id = $2 AND file_id = $3
+    `, [result === 'success' ? 'completed' : 'failed', batchId, fileId]);
+    
+    // Update batch counters (only increment once per unique file)
+    const field = result === 'success' ? 'successful_files' : 'failed_files';
+    
+    const updateQuery = `
+      UPDATE upload_batches
+      SET ${field} = ${field} + 1,
+          processed_files = successful_files + failed_files + ${result === 'success' ? '1' : '0'} + ${result === 'failed' ? '1' : '0'},
+          updated_at = NOW()
+      WHERE id = $1
+      RETURNING total_files, processed_files, successful_files, failed_files
+    `;
+
+    const result_db = await client.query(updateQuery, [batchId]);
+    
+    if (result_db.rows.length > 0) {
+      const row = result_db.rows[0];
+      
+      // Check if batch is complete
+      if (row.processed_files >= row.total_files) {
+        const status = row.failed_files === 0 ? 'complete' : 
+                       row.successful_files === 0 ? 'failed' : 'complete';
+        
+        await client.query(`
+          UPDATE upload_batches
+          SET status = $1, completed_at = NOW()
+          WHERE id = $2
+        `, [status, batchId]);
+        
+        logger.info('Upload batch completed', {
+          batchId,
+          status,
+          successful: row.successful_files,
+          failed: row.failed_files,
+          total: row.total_files
+        });
+      }
+    }
+    
+    await client.query('COMMIT');
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
