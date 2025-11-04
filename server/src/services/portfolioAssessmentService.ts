@@ -101,10 +101,8 @@ export interface ROICalculation {
 // SETUP
 // ============================================================================
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+// Use shared pool from connection (has correct SSL configuration)
+import { pool } from '../database/connection';
 
 // ============================================================================
 // MAIN ASSESSMENT FUNCTION

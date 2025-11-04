@@ -161,8 +161,28 @@ const optionalAuthForView = async (req: Request, res: Response, next: NextFuncti
     if (token) {
       return authenticate(req, res, next);
     }
-    // Allow guest access for viewing assessments (will be filtered by batch_id or guest_id)
-    (req as any).user = { id: 'guest', role: 'guest', isGuest: true };
+    
+    // For guest users, use the system guest user (not string 'guest')
+    const guestEmail = 'onboarding-guest@system.local';
+    const guestResult = await pool.query(
+      'SELECT id, email, role FROM users WHERE email = $1',
+      [guestEmail]
+    );
+    
+    if (guestResult.rows.length === 0) {
+      // Create guest user if doesn't exist
+      const newGuestResult = await pool.query(
+        `INSERT INTO users (id, email, name, role, is_active, created_at) 
+         VALUES (gen_random_uuid(), $1, 'Guest User', 'guest', true, NOW())
+         RETURNING id, email, role`,
+        [guestEmail]
+      );
+      (req as any).user = newGuestResult.rows[0];
+    } else {
+      (req as any).user = guestResult.rows[0];
+    }
+    
+    (req as any).user.isGuest = true;
     next();
   } catch (error) {
     next(error);
