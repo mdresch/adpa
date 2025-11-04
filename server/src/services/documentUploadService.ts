@@ -144,6 +144,33 @@ export async function createUploadBatch(
     // Create temporary tracking table for batch files
     await createBatchFileTracking(client, batchId, files);
 
+    // Create assessment record immediately for progress tracking
+    const assessmentQuery = `
+      INSERT INTO assessments (
+        id, batch_id, project_id, total_documents, status, 
+        overall_maturity_level, maturity_label, avg_quality_score
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id
+    `;
+    
+    const assessmentId = uuidv4();
+    await client.query(assessmentQuery, [
+      assessmentId,
+      batchId,
+      projectId,
+      files.length,
+      'processing',
+      1, // Default level, will be updated
+      'Processing',
+      0.00
+    ]);
+
+    logger.info('Assessment record created', {
+      assessmentId,
+      batchId,
+      projectId
+    });
+
     await client.query('COMMIT');
 
     // Enqueue files for processing (parallel)
@@ -155,7 +182,8 @@ export async function createUploadBatch(
 
     logger.info('Upload batch created and files enqueued', {
       batchId,
-      jobCount: jobs.length
+      jobCount: jobs.length,
+      assessmentId
     });
 
     // Emit WebSocket event
