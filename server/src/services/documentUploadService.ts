@@ -83,10 +83,7 @@ export interface BatchStatusResponse {
 // SETUP
 // ============================================================================
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
-});
+// Use shared pool imported from ../database/connection (has correct Supabase SSL config)
 
 // Create Bull queue for document processing
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
