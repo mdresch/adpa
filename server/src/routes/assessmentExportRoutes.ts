@@ -58,7 +58,8 @@ router.get('/list', optionalAuth, async (req: Request, res: Response, next: Next
     const userId = (req as any).user.id;
     const isGuest = (req as any).user.isGuest;
 
-    logger.info('Fetching assessments list', { userId, isGuest });
+    // Removed noisy logging (was flooding console with polling requests)
+    // logger.info('Fetching assessments list', { userId, isGuest });
 
     // For guest users, get assessments from upload_batches (all guest uploads)
     // For authenticated users, get assessments from their projects
