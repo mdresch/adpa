@@ -96,9 +96,55 @@ router.post(
         });
       }
 
-      const { projectId, industryVertical } = req.body;
+      const { 
+        projectId, 
+        assessmentName, 
+        clientName, 
+        organizationName, 
+        assessmentPurpose,
+        industryVertical 
+      } = req.body;
+      
+      const userId = (req as any).user.id;
+      
+      // For onboarding assessments (potential clients), auto-create project if needed
+      let actualProjectId = projectId;
+      
+      if (!actualProjectId && assessmentName) {
+        // Create onboarding project automatically
+        const { v4: uuidv4 } = require('uuid');
+        const { pool } = require('../database/connection');
+        
+        const onboardingProjectId = uuidv4();
+        const projectQuery = `
+          INSERT INTO projects (
+            id, name, description, framework, priority, owner_id, created_by, 
+            start_date, end_date, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+          RETURNING id
+        `;
+        
+        await pool.query(projectQuery, [
+          onboardingProjectId,
+          assessmentName,
+          `Client onboarding: ${clientName || 'Prospective client'} - ${organizationName || ''}`.trim(),
+          'PMBOK',
+          'medium',
+          userId,
+          userId,
+          new Date().toISOString().split('T')[0],
+          new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+        ]);
+        
+        actualProjectId = onboardingProjectId;
+        logger.info('Auto-created onboarding project', { 
+          projectId: onboardingProjectId, 
+          assessmentName,
+          clientName 
+        });
+      }
 
-      if (!projectId) {
+      if (!actualProjectId) {
         return res.status(400).json({
           success: false,
           error: {
@@ -108,35 +154,45 @@ router.post(
         });
       }
 
-      // Verify user has access to project
-      const hasAccess = await verifyProjectAccess(req.user.id, projectId);
-      if (!hasAccess) {
-        return res.status(403).json({
-          success: false,
-          error: {
-            code: 'FORBIDDEN',
-            message: 'You do not have access to this project'
-          }
-        });
+      // Verify user has access to project (skip for auto-created onboarding projects)
+      if (projectId) {  // Only verify if user provided projectId
+        const hasAccess = await verifyProjectAccess(req.user.id, projectId);
+        if (!hasAccess) {
+          return res.status(403).json({
+            success: false,
+            error: {
+              code: 'FORBIDDEN',
+              message: 'You do not have access to this project'
+            }
+          });
+        }
       }
 
       logger.info('Bulk upload initiated', {
         userId: req.user.id,
-        projectId,
+        projectId: actualProjectId,
+        assessmentName,
+        clientName,
         fileCount: files.length,
         industryVertical
       });
 
-      // Create upload batch
+      // Create upload batch with client metadata
       const options: UploadBatchOptions = {
-        projectId,
+        projectId: actualProjectId,
         uploadedBy: req.user.id,
         files,
         industryVertical,
         metadata: {
           uploadMethod: 'web',
           userAgent: req.headers['user-agent'],
-          clientIP: req.ip
+          clientIP: req.ip,
+          // Client onboarding metadata
+          assessmentName,
+          clientName,
+          organizationName: organizationName || clientName,
+          assessmentPurpose: assessmentPurpose || 'Portfolio Maturity Assessment',
+          isOnboardingAssessment: !projectId  // Flag for potential client assessments
         }
       };
 

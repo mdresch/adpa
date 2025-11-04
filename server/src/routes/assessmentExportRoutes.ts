@@ -262,5 +262,60 @@ router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, 
   }
 });
 
+// ============================================================================
+// POST /api/assessment/project/quick-create
+// Quick create project for onboarding (no special permissions needed)
+// ============================================================================
+
+router.post('/project/quick-create', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { name, description } = req.body;
+    const userId = (req as any).user.id;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        error: 'Project name is required'
+      });
+    }
+
+    logger.info('Quick creating project for onboarding', { name, userId });
+
+    const projectId = require('uuid').v4();
+    
+    // Create project with minimal fields for onboarding
+    const query = `
+      INSERT INTO projects (
+        id, name, description, framework, priority, 
+        owner_id, created_by, start_date, end_date, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+      RETURNING *
+    `;
+
+    const result = await pool.query(query, [
+      projectId,
+      name.trim(),
+      description || '',
+      'PMBOK',  // Default framework for assessments
+      'medium', // Default priority
+      userId,
+      userId,
+      new Date().toISOString().split('T')[0], // Today
+      new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 90 days from now
+    ]);
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0]
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to quick create project', {
+      error: error.message
+    });
+    next(error);
+  }
+});
+
 export default router;
 

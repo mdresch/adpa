@@ -32,12 +32,6 @@ interface UploadedFile {
   documentId?: string;
 }
 
-interface Project {
-  id: string;
-  name: string;
-  description?: string;
-}
-
 export default function DocumentUploadPage() {
   const router = useRouter();
   const [files, setFiles] = useState<UploadedFile[]>([]);
@@ -46,62 +40,11 @@ export default function DocumentUploadPage() {
   const [batchId, setBatchId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
-  // Assessment metadata
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [selectedProject, setSelectedProject] = useState<string>('');
+  // Assessment metadata (simplified - no project database link)
+  const [assessmentName, setAssessmentName] = useState('');
   const [clientName, setClientName] = useState('');
   const [organizationName, setOrganizationName] = useState('');
-  const [assessmentPurpose, setAssessmentPurpose] = useState('');
-  const [showNewProjectForm, setShowNewProjectForm] = useState(false);
-  const [newProjectName, setNewProjectName] = useState('');
-  const [newProjectDescription, setNewProjectDescription] = useState('');
-  
-  // Load projects on mount
-  useEffect(() => {
-    loadProjects();
-  }, []);
-  
-  const loadProjects = async () => {
-    try {
-      const response = await fetch('/api/projects', {
-        credentials: 'include'
-      });
-      const data = await response.json();
-      if (data.success) {
-        setProjects(data.data || []);
-      }
-    } catch (error) {
-      console.error('Failed to load projects:', error);
-    }
-  };
-  
-  const createNewProject = async () => {
-    if (!newProjectName.trim()) return;
-    
-    try {
-      const response = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newProjectName,
-          description: newProjectDescription
-        }),
-        credentials: 'include'
-      });
-      
-      const data = await response.json();
-      if (data.success) {
-        setProjects(prev => [...prev, data.data]);
-        setSelectedProject(data.data.id);
-        setShowNewProjectForm(false);
-        setNewProjectName('');
-        setNewProjectDescription('');
-      }
-    } catch (error) {
-      console.error('Failed to create project:', error);
-      alert('Failed to create project');
-    }
-  };
+  const [assessmentPurpose, setAssessmentPurpose] = useState('Initial Onboarding');
 
   // Handle drag events
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -151,8 +94,8 @@ export default function DocumentUploadPage() {
   // Upload files
   const uploadFiles = async () => {
     // Validation
-    if (!selectedProject) {
-      alert('Please select or create a project first');
+    if (!assessmentName.trim()) {
+      alert('Please enter an assessment/project name');
       return;
     }
     
@@ -175,36 +118,79 @@ export default function DocumentUploadPage() {
         formData.append('files', fileObj.file);
       });
 
-      // Add project and assessment metadata
-      formData.append('projectId', selectedProject);
+      // Add assessment metadata (no project_id needed for potential clients)
+      formData.append('assessmentName', assessmentName);
       formData.append('clientName', clientName);
       formData.append('organizationName', organizationName || clientName);
-      formData.append('assessmentPurpose', assessmentPurpose || 'Portfolio Maturity Assessment');
+      formData.append('assessmentPurpose', assessmentPurpose);
 
       // Upload request
-      const response = await fetch('/api/upload/batch', {
+      const response = await fetch('/api/onboarding/upload', {
         method: 'POST',
         body: formData,
         credentials: 'include'
       });
 
       if (!response.ok) {
-        throw new Error('Upload failed');
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.error?.message || errorData.error || `Server error (${response.status})`;
+        const errorCode = errorData.error?.code || 'UPLOAD_FAILED';
+        
+        // Specific error messages based on error code
+        let userMessage = 'Upload failed. ';
+        
+        switch (errorCode) {
+          case 'NO_FILES':
+            userMessage += 'No files were selected. Please add files before uploading.';
+            break;
+          case 'FILE_TOO_LARGE':
+            userMessage += 'One or more files exceed the 10MB size limit. Please use smaller files.';
+            break;
+          case 'UNSUPPORTED_FILE_TYPE':
+            userMessage += 'Unsupported file type detected. Please use PDF, DOCX, TXT, or MD files only.';
+            break;
+          case 'MISSING_PROJECT_ID':
+            userMessage += 'Assessment name is required. Please fill in the assessment details.';
+            break;
+          case 'FORBIDDEN':
+            userMessage += 'Permission denied. Please contact support.';
+            break;
+          case 'AUTHENTICATION_REQUIRED':
+            userMessage += 'Your session has expired. Please log in again.';
+            break;
+          default:
+            userMessage += errorMessage;
+        }
+        
+        alert(userMessage);
+        throw new Error(errorMessage);
       }
 
       const result = await response.json();
-      setBatchId(result.data.batchId);
+      
+      if (!result.success || !result.data) {
+        throw new Error('Invalid response from server');
+      }
+      
+      setBatchId(result.data.batch_id || result.data.batchId);
 
       // Monitor progress via WebSocket
-      monitorUploadProgress(result.data.batchId);
+      monitorUploadProgress(result.data.batch_id || result.data.batchId);
 
     } catch (error: any) {
       console.error('Upload error:', error);
+      
+      // Update UI to show error state
       setFiles(prev => prev.map(f => ({
         ...f,
         status: 'error',
-        error: error.message
+        error: error.message || 'Failed to process file'
       })));
+      
+      // Show user-friendly error message if not already shown
+      if (!error.message?.includes('Permission') && !error.message?.includes('session')) {
+        alert(`Unable to start assessment.\n\nError: ${error.message}\n\nPlease check:\n• All required fields are filled\n• Files are valid (PDF, DOCX, TXT, MD)\n• File sizes are under 10MB\n• You're logged in\n\nIf the problem persists, please contact support.`);
+      }
     } finally {
       setIsUploading(false);
     }
@@ -212,11 +198,16 @@ export default function DocumentUploadPage() {
 
   // Monitor upload progress
   const monitorUploadProgress = (batchId: string) => {
+    // Show success message
+    alert(`✅ Upload started successfully!\n\n${files.length} documents are now being processed.\n\nYou'll be redirected to the results page when processing completes (typically 2-3 minutes).\n\nBatch ID: ${batchId.substring(0, 8)}...`);
+    
     // Connect to WebSocket for real-time progress
-    const ws = new WebSocket(`${process.env.NEXT_PUBLIC_WS_URL}/upload/progress`);
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000';
+    const ws = new WebSocket(`${wsUrl}/upload/progress`);
 
     ws.onopen = () => {
       ws.send(JSON.stringify({ type: 'subscribe', batchId }));
+      console.log('WebSocket connected, monitoring progress...');
     };
 
     ws.onmessage = (event) => {
@@ -224,15 +215,27 @@ export default function DocumentUploadPage() {
 
       if (data.type === 'file-progress') {
         updateFileProgress(data.filename, data.progress, data.status);
+      } else if (data.type === 'file-complete') {
+        updateFileProgress(data.filename, 100, 'complete');
+      } else if (data.type === 'file-error') {
+        updateFileProgress(data.filename, 0, 'error');
       } else if (data.type === 'batch-complete') {
         ws.close();
-        router.push(`/onboarding/assessment/${batchId}`);
+        alert('✅ Assessment Complete!\n\nAll documents have been processed.\n\nRedirecting to results...');
+        setTimeout(() => {
+          router.push(`/onboarding/assessment/${batchId}`);
+        }, 1000);
       }
     };
 
     ws.onerror = (error) => {
       console.error('WebSocket error:', error);
+      alert('⚠️ Real-time progress updates unavailable.\n\nProcessing is still happening in the background.\n\nPlease check the Assessments list in a few minutes.');
       ws.close();
+    };
+    
+    ws.onclose = () => {
+      console.log('WebSocket connection closed');
     };
   };
 
@@ -270,7 +273,7 @@ export default function DocumentUploadPage() {
     errors: files.filter(f => f.status === 'error').length
   };
 
-  const canUpload = selectedProject && clientName.trim() && files.length > 0;
+  const canUpload = assessmentName.trim() && clientName.trim() && files.length > 0;
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
@@ -286,67 +289,26 @@ export default function DocumentUploadPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Briefcase className="h-5 w-5" />
-            Assessment Details
+            Client Assessment Details
           </CardTitle>
           <CardDescription>
-            Provide client and project information for this assessment
+            For potential clients - no project setup required, just reference information
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Project Selection */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="project">Select Project *</Label>
-              {!showNewProjectForm ? (
-                <div className="flex gap-2">
-                  <Select value={selectedProject} onValueChange={setSelectedProject}>
-                    <SelectTrigger id="project">
-                      <SelectValue placeholder="Choose a project..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {projects.map(project => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setShowNewProjectForm(true)}
-                    title="Create new project"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-2 p-4 border rounded-lg">
-                  <Input
-                    placeholder="New project name"
-                    value={newProjectName}
-                    onChange={(e) => setNewProjectName(e.target.value)}
-                  />
-                  <Textarea
-                    placeholder="Project description (optional)"
-                    value={newProjectDescription}
-                    onChange={(e) => setNewProjectDescription(e.target.value)}
-                    rows={2}
-                  />
-                  <div className="flex gap-2">
-                    <Button onClick={createNewProject} size="sm">
-                      Create Project
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => setShowNewProjectForm(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
-                </div>
-              )}
+              <Label htmlFor="assessmentName">Assessment/Project Name *</Label>
+              <Input
+                id="assessmentName"
+                placeholder="e.g., ABC Corp PMO Assessment"
+                value={assessmentName}
+                onChange={(e) => setAssessmentName(e.target.value)}
+                className="font-medium"
+              />
+              <p className="text-xs text-muted-foreground">
+                A reference name for this assessment (not linked to existing projects)
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -390,11 +352,11 @@ export default function DocumentUploadPage() {
           </div>
 
           {/* Validation Alert */}
-          {(!selectedProject || !clientName.trim()) && (
+          {(!assessmentName.trim() || !clientName.trim()) && (
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                Please select a project and enter a client name before uploading documents.
+                Please enter an assessment name and client name to begin.
               </AlertDescription>
             </Alert>
           )}
@@ -562,6 +524,33 @@ export default function DocumentUploadPage() {
           This process typically takes 30-60 seconds per document.
         </AlertDescription>
       </Alert>
+
+      {/* Troubleshooting */}
+      {stats.errors > 0 && (
+        <Alert className="mt-4" variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>{stats.errors} upload{stats.errors > 1 ? 's' : ''} failed.</strong>
+            <br /><br />
+            <strong>Common issues:</strong>
+            <ul className="list-disc ml-4 mt-2">
+              <li>Not logged in - <a href="/auth/login" className="underline">Click here to login</a></li>
+              <li>Files too large - Maximum 10MB per file</li>
+              <li>Wrong file type - Only PDF, DOCX, TXT, MD allowed</li>
+              <li>Missing required fields - Check Assessment Name and Client Name are filled</li>
+              <li>Server issue - Check browser console (F12) for details</li>
+            </ul>
+            <br />
+            <strong>What to do:</strong>
+            <ol className="list-decimal ml-4 mt-2">
+              <li>Open browser console (press F12)</li>
+              <li>Look for red error messages</li>
+              <li>Share the error with support</li>
+              <li>Or try refreshing the page and logging in again</li>
+            </ol>
+          </AlertDescription>
+        </Alert>
+      )}
     </div>
   );
 }
