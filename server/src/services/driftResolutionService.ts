@@ -65,17 +65,6 @@ interface DriftRecord {
   ai_processing_metadata: any
 }
 
-interface ApplyResolutionResult {
-  changeRequestId?: string
-}
-
-interface DriftApplyResponse {
-  success: boolean
-  message: string
-  changeRequestCreated?: boolean
-  changeRequestId?: string
-}
-
 export class DriftResolutionService {
   /**
    * Resolve drift using AI
@@ -513,7 +502,7 @@ Generate a REVISED version of the document that resolves the drift:
 
     // Create change request as a document
     const changeRequestId = uuidv4()
-    const changeRequestName = `Change Request: Major Drift Changes - ${document.name || document.title || 'Document'}`
+    const changeRequestName = `Change Request: Major Drift Changes - ${document.name || document.title || 'Unnamed Document'}`
 
     await client.query(
       `INSERT INTO documents (
@@ -580,7 +569,7 @@ Generate a REVISED version of the document that resolves the drift:
     
     return `# Change Request: Major Drift Changes
 
-**Document**: ${document.name || document.title || 'Unknown Document'}
+**Document**: ${document.name || document.title || 'Unnamed Document'}
 **Project**: ${document.project_name || 'Unknown'}
 **Date**: ${new Date().toLocaleDateString()}
 **Status**: Pending Approval
