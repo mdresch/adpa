@@ -232,8 +232,17 @@ Error resolution, debugging guides, and common issues.
 ### 11. User Guides
 **Path:** `11-user-guides/`
 
-User-facing documentation, stakeholder communications, and announcements.
+User-facing documentation, training materials, stakeholder communications, and announcements.
 
+**Core Training Materials:**
+- `README.md` - User guides index and learning paths
+- `GETTING_STARTED_GUIDE.md` - Complete getting started guide for new users
+- `PORTFOLIO_PRIORITIZATION_MATRIX_GUIDE.md` - Portfolio prioritization training (TASK-334)
+- `QUICK_REFERENCE_GUIDE.md` - Quick reference cheat sheet
+- `ADMINISTRATOR_GUIDE.md` - System administrator guide
+- `UPLOAD_CHANGE_REQUESTS_GUIDE.md` - Change request upload guide
+
+**Stakeholder Communications:**
 - `STAKEHOLDER_ANNOUNCEMENT_v2.0.0.md` - v2.0.0 announcement
 - `STAKEHOLDER_DEMO_READY.md` - Demo preparation guide
 - `TEAMS_STAKEHOLDER_INVITATION.md` - Teams invitation template
