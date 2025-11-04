@@ -13,33 +13,91 @@ import { portfolioAssessmentService } from '../services/portfolioAssessmentServi
 
 const router = express.Router();
 
+// Optional auth middleware for guest access
+const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token) {
+      return authenticate(req, res, next);
+    }
+    
+    // For guest users, find or create system guest user
+    const guestEmail = 'onboarding-guest@system.local';
+    const guestResult = await pool.query(
+      'SELECT id, email, role FROM users WHERE email = $1',
+      [guestEmail]
+    );
+    
+    if (guestResult.rows.length === 0) {
+      // Create guest user if doesn't exist
+      const newGuestResult = await pool.query(
+        `INSERT INTO users (id, email, name, role, is_active, created_at) 
+         VALUES (gen_random_uuid(), $1, 'Guest User', 'guest', true, NOW())
+         RETURNING id, email, role`,
+        [guestEmail]
+      );
+      (req as any).user = newGuestResult.rows[0];
+    } else {
+      (req as any).user = guestResult.rows[0];
+    }
+    
+    (req as any).user.isGuest = true;
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ============================================================================
 // GET /api/assessment/list
-// Get all assessments for current user
+// Get all assessments for current user (authenticated or guest)
 // ============================================================================
 
-router.get('/list', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/list', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
+    const isGuest = (req as any).user.isGuest;
 
-    logger.info('Fetching assessments list', { userId });
+    logger.info('Fetching assessments list', { userId, isGuest });
 
-    // Get all assessments for user's projects
-    const query = `
-      SELECT 
-        a.*,
-        p.name as project_name,
-        ub.uploaded_by,
-        ub.batch_metadata
-      FROM assessments a
-      JOIN projects p ON a.project_id = p.id
-      LEFT JOIN upload_batches ub ON a.batch_id = ub.id
-      WHERE p.created_by = $1
-      ORDER BY a.created_at DESC
-      LIMIT 100
-    `;
+    // For guest users, get assessments from upload_batches (all guest uploads)
+    // For authenticated users, get assessments from their projects
+    let query: string;
+    let params: any[];
 
-    const result = await pool.query(query, [userId]);
+    if (isGuest) {
+      query = `
+        SELECT 
+          a.*,
+          p.name as project_name,
+          ub.uploaded_by,
+          ub.batch_metadata
+        FROM assessments a
+        JOIN projects p ON a.project_id = p.id
+        LEFT JOIN upload_batches ub ON a.batch_id = ub.id
+        WHERE ub.uploaded_by = $1
+        ORDER BY a.created_at DESC
+        LIMIT 100
+      `;
+      params = [userId];
+    } else {
+      query = `
+        SELECT 
+          a.*,
+          p.name as project_name,
+          ub.uploaded_by,
+          ub.batch_metadata
+        FROM assessments a
+        JOIN projects p ON a.project_id = p.id
+        LEFT JOIN upload_batches ub ON a.batch_id = ub.id
+        WHERE p.created_by = $1
+        ORDER BY a.created_at DESC
+        LIMIT 100
+      `;
+      params = [userId];
+    }
+
+    const result = await pool.query(query, params);
 
     res.json({
       success: true,

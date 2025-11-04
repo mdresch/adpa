@@ -200,47 +200,15 @@ export default function DocumentUploadPage() {
     }
   };
 
-  // Monitor upload progress
+  // Redirect to assessments after successful upload
   const monitorUploadProgress = (batchId: string) => {
     // Show success message
-    alert(`✅ Upload started successfully!\n\n${files.length} documents are now being processed.\n\nYou'll be redirected to the results page when processing completes (typically 2-3 minutes).\n\nBatch ID: ${batchId.substring(0, 8)}...`);
+    alert(`✅ Upload started successfully!\n\n${files.length} documents are being processed.\n\nYou'll be redirected to the Assessments page where you can track progress.\n\nProcessing typically takes 2-3 minutes.\n\nBatch ID: ${batchId.substring(0, 8)}...`);
     
-    // Connect to WebSocket for real-time progress
-    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000';
-    const ws = new WebSocket(`${wsUrl}/upload/progress`);
-
-    ws.onopen = () => {
-      ws.send(JSON.stringify({ type: 'subscribe', batchId }));
-      console.log('WebSocket connected, monitoring progress...');
-    };
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.type === 'file-progress') {
-        updateFileProgress(data.filename, data.progress, data.status);
-      } else if (data.type === 'file-complete') {
-        updateFileProgress(data.filename, 100, 'complete');
-      } else if (data.type === 'file-error') {
-        updateFileProgress(data.filename, 0, 'error');
-      } else if (data.type === 'batch-complete') {
-        ws.close();
-        alert('✅ Assessment Complete!\n\nAll documents have been processed.\n\nRedirecting to results...');
-        setTimeout(() => {
-          router.push(`/onboarding/assessment/${batchId}`);
-        }, 1000);
-      }
-    };
-
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      alert('⚠️ Real-time progress updates unavailable.\n\nProcessing is still happening in the background.\n\nPlease check the Assessments list in a few minutes.');
-      ws.close();
-    };
-    
-    ws.onclose = () => {
-      console.log('WebSocket connection closed');
-    };
+    // Redirect to assessments list immediately
+    setTimeout(() => {
+      router.push('/onboarding/assessments');
+    }, 1500);
   };
 
   // Update file progress
@@ -281,11 +249,20 @@ export default function DocumentUploadPage() {
 
   return (
     <div className="container mx-auto p-6 max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Client Onboarding Assessment</h1>
-        <p className="text-muted-foreground">
-          Upload client documents for AI-powered portfolio maturity assessment
-        </p>
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Client Onboarding Assessment</h1>
+          <p className="text-muted-foreground">
+            Upload client documents for AI-powered portfolio maturity assessment
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => router.push('/onboarding/assessments')}
+        >
+          <FileText className="mr-2 h-4 w-4" />
+          View Assessments
+        </Button>
       </div>
 
       {/* Assessment Setup */}

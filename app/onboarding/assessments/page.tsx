@@ -63,7 +63,6 @@ export default function AssessmentsListPage() {
 
   useEffect(() => {
     loadAssessments();
-    loadProjects();
   }, []);
 
   const loadAssessments = async () => {
@@ -72,29 +71,28 @@ export default function AssessmentsListPage() {
         credentials: 'include'
       });
 
-      const data = await response.json();
-      if (data.success) {
-        setAssessments(data.data || []);
+      if (!response.ok && response.status === 401) {
+        // Try without auth for guest access
+        const retryResponse = await fetch('/api/assessment/list');
+        const retryData = await retryResponse.json();
+        if (retryData.success) {
+          setAssessments(retryData.data || []);
+        }
+      } else {
+        const data = await response.json();
+        if (data.success) {
+          setAssessments(data.data || []);
+          // Extract unique projects from assessments for filter
+          const uniqueProjects = Array.from(
+            new Set(data.data?.map((a: Assessment) => a.projectName) || [])
+          ).map(name => ({ id: name, name }));
+          setProjects(uniqueProjects);
+        }
       }
     } catch (error) {
       console.error('Failed to load assessments:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const loadProjects = async () => {
-    try {
-      const response = await fetch('/api/projects', {
-        credentials: 'include'
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setProjects(data.data || []);
-      }
-    } catch (error) {
-      console.error('Failed to load projects:', error);
     }
   };
 
