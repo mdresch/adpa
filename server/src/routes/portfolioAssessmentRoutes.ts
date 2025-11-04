@@ -11,7 +11,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 import { portfolioAssessmentService } from '../services/portfolioAssessmentService';
-import { authenticate } from '../middleware/auth';
+import { authenticateToken as authenticate } from '../middleware/auth';
 
 const router = Router();
 
@@ -211,11 +211,12 @@ router.get(
  * }
  */
 router.get(
-  '/benchmarks/:industry/:documentType?',
+  '/benchmarks/:industry',
   authenticate,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { industry, documentType } = req.params;
+      const { industry } = req.params;
+      const documentType = req.query.documentType as string | undefined;
 
       const query = `
         SELECT * FROM industry_benchmarks

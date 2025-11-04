@@ -75,6 +75,8 @@ import driftRoutes from "./routes/drift"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
+import assessmentExportRoutes from "./routes/assessmentExportRoutes"
+import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -239,7 +241,9 @@ app.use("/api/drift", driftRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
-console.log("✅ All API routes registered")
+app.use("/api/assessment", assessmentExportRoutes)
+app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
+console.log("✅ All API routes registered (including assessment routes)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {

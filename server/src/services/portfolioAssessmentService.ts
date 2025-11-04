@@ -683,12 +683,59 @@ async function saveAssessment(client: any, data: any): Promise<string> {
 }
 
 // ============================================================================
+// ASSESSMENT RETRIEVAL
+// ============================================================================
+
+/**
+ * Get assessment by ID
+ */
+async function getAssessment(assessmentId: string, userId: string): Promise<any> {
+  const query = `
+    SELECT * FROM assessments
+    WHERE id = $1
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  
+  const result = await pool.query(query, [assessmentId]);
+  return result.rows[0] || null;
+}
+
+/**
+ * Get assessment by batch ID
+ */
+async function getAssessmentByBatchId(batchId: string, userId: string): Promise<any> {
+  const query = `
+    SELECT a.* FROM assessments a
+    JOIN upload_batches ub ON a.project_id = ub.project_id
+    WHERE ub.id = $1
+    ORDER BY a.created_at DESC
+    LIMIT 1
+  `;
+  
+  const result = await pool.query(query, [batchId]);
+  return result.rows[0] || null;
+}
+
+/**
+ * Generate new assessment
+ */
+async function generateAssessment(projectId: string, userId: string): Promise<any> {
+  return await assessProjectPortfolio(projectId, {
+    industry_vertical: 'technology'
+  });
+}
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 
 export const portfolioAssessmentService = {
   assessProjectPortfolio,
   calculateMaturityLevel,
-  getMaturityLabel
+  getMaturityLabel,
+  getAssessment,
+  getAssessmentByBatchId,
+  generateAssessment
 };
 
