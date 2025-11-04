@@ -187,7 +187,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
   ];
 
   useEffect(() => {
-    fetchRisks();
+    void fetchRisks();
   }, [programId]);
 
   // Handle form submission
@@ -389,7 +389,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
             </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={() => resetForm()}>
+                <Button onClick={() => { resetForm(); }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Add Risk
                 </Button>
@@ -407,7 +407,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, title: e.target.value }); }}
                       placeholder="Enter risk title"
                     />
                   </div>
@@ -416,7 +416,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Textarea
                       id="description"
                       value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, description: e.target.value }); }}
                       placeholder="Describe the risk in detail"
                       rows={3}
                     />
@@ -427,7 +427,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       <Input
                         id="category"
                         value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                        onChange={(e) => { setFormData({ ...formData, category: e.target.value }); }}
                         placeholder="e.g., Technical, Resource"
                       />
                     </div>
@@ -436,7 +436,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       <Input
                         id="owner"
                         value={formData.owner}
-                        onChange={(e) => setFormData({ ...formData, owner: e.target.value })}
+                        onChange={(e) => { setFormData({ ...formData, owner: e.target.value }); }}
                         placeholder="Enter owner name"
                       />
                     </div>
@@ -451,9 +451,9 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                         max="100"
                         step="5"
                         value={formData.probability}
-                        onChange={(e) =>
-                          setFormData({ ...formData, probability: parseInt(e.target.value) })
-                        }
+                        onChange={(e) => {
+                          setFormData({ ...formData, probability: parseInt(e.target.value) });
+                        }}
                       />
                     </div>
                     <div>
@@ -465,7 +465,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                         max="5"
                         step="1"
                         value={formData.impact}
-                        onChange={(e) => setFormData({ ...formData, impact: parseInt(e.target.value) })}
+                        onChange={(e) => { setFormData({ ...formData, impact: parseInt(e.target.value) }); }}
                       />
                     </div>
                   </div>
@@ -478,7 +478,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                   </div>
                   <div>
                     <Label htmlFor="status">Status</Label>
-                    <Select value={formData.status} onValueChange={(value: Risk['status']) => setFormData({ ...formData, status: value })}>
+                    <Select value={formData.status} onValueChange={(value: Risk['status']) => { setFormData({ ...formData, status: value }); }}>
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
@@ -496,14 +496,14 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <Textarea
                       id="mitigation"
                       value={formData.mitigation}
-                      onChange={(e) => setFormData({ ...formData, mitigation: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, mitigation: e.target.value }); }}
                       placeholder="Describe mitigation actions"
                       rows={3}
                     />
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  <Button variant="outline" onClick={() => { setDialogOpen(false); }}>
                     Cancel
                   </Button>
                   <Button onClick={handleSubmit} disabled={!formData.title || !formData.description}>
@@ -517,7 +517,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
         <CardContent>
           {/* Filters */}
           <div className="flex gap-4 mb-4">
-            <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+            <Select value={filterSeverity} onValueChange={(value) => { setFilterSeverity(value); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by severity" />
               </SelectTrigger>
@@ -529,7 +529,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                 <SelectItem value="low">Low</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
+            <Select value={filterStatus} onValueChange={(value) => { setFilterStatus(value); }}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />
               </SelectTrigger>
@@ -579,13 +579,13 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <TableCell>{risk.owner || '-'}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(risk)}>
+                        <Button variant="ghost" size="sm" onClick={() => { handleEdit(risk); }}>
                           <Pencil className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDelete(risk.id)}
+                          onClick={() => { handleDelete(risk.id); }}
                           className="text-red-600 hover:text-red-700"
                         >
                           <Trash2 className="h-4 w-4" />

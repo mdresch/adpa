@@ -204,7 +204,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
   ];
 
   useEffect(() => {
-    fetchReports();
+    void fetchReports();
   }, [programId]);
 
   // Handle report generation
@@ -366,7 +366,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                 <Card
                   key={template.type}
                   className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => handleQuickGenerate(template)}
+                  onClick={() => { handleQuickGenerate(template); }}
                 >
                   <CardContent className="pt-6">
                     <div className="flex flex-col items-center text-center space-y-2">
@@ -396,7 +396,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
             </div>
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button onClick={() => resetForm()}>
+                <Button onClick={() => { resetForm(); }}>
                   <Plus className="h-4 w-4 mr-2" />
                   Custom Report
                 </Button>
@@ -414,7 +414,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                     <Input
                       id="title"
                       value={formData.title}
-                      onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                      onChange={(e) => { setFormData({ ...formData, title: e.target.value }); }}
                       placeholder="Enter report title"
                     />
                   </div>
@@ -423,9 +423,9 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                       <Label htmlFor="type">Report Type</Label>
                       <Select
                         value={formData.type}
-                        onValueChange={(value: Report['type']) =>
-                          setFormData({ ...formData, type: value })
-                        }
+                        onValueChange={(value: Report['type']) => {
+                          setFormData({ ...formData, type: value });
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -443,9 +443,9 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                       <Label htmlFor="format">Format</Label>
                       <Select
                         value={formData.format}
-                        onValueChange={(value: Report['format']) =>
-                          setFormData({ ...formData, format: value })
-                        }
+                        onValueChange={(value: Report['format']) => {
+                          setFormData({ ...formData, format: value });
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -468,15 +468,15 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                             type="checkbox"
                             id={key}
                             checked={value}
-                            onChange={(e) =>
+                            onChange={(e) => {
                               setFormData({
                                 ...formData,
                                 includeSections: {
                                   ...formData.includeSections,
                                   [key]: e.target.checked,
                                 },
-                              })
-                            }
+                              });
+                            }}
                             className="rounded border-gray-300"
                           />
                           <Label htmlFor={key} className="font-normal capitalize">
@@ -488,7 +488,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  <Button variant="outline" onClick={() => { setDialogOpen(false); }}>
                     Cancel
                   </Button>
                   <Button onClick={handleGenerateReport} disabled={generating || !formData.title}>
@@ -555,7 +555,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handlePreview(report)}
+                                onClick={() => { handlePreview(report); }}
                                 title="Preview"
                               >
                                 <Eye className="h-4 w-4" />
@@ -563,7 +563,7 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => handleDownload(report)}
+                                onClick={() => { handleDownload(report); }}
                                 title="Download"
                               >
                                 <Download className="h-4 w-4" />
