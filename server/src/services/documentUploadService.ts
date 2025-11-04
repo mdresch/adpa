@@ -640,40 +640,50 @@ async function createDocumentRecord(
 ): Promise<string> {
   const documentId = uuidv4();
 
+  // Use actual documents table schema (from information_schema check)
   const query = `
     INSERT INTO documents (
-      id, project_id, title, content, source, format,
-      upload_batch_id, original_filename, original_format,
-      detected_type, detection_confidence, detection_metadata,
-      upload_metadata, created_by
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      id, project_id, name, title, content, source, framework,
+      metadata, created_by, created_at
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
     RETURNING id
   `;
 
-  const title = data.filename.replace(/\.[^/.]+$/, ''); // Remove extension
+  const documentName = data.filename.replace(/\.[^/.]+$/, ''); // Remove extension
+  const documentTitle = documentName.replace(/[-_]/g, ' '); // Make title readable
 
-  const uploadMetadata = {
-    ...data.conversionMetadata,
+  // Store all metadata in JSONB metadata column
+  const metadata = {
+    // Original file info
+    original_filename: data.filename,
+    original_format: data.originalFormat,
     file_hash: data.fileHash,
     file_size: data.fileSize,
+    
+    // Processing info
+    format: 'markdown',
+    detected_type: data.detectedType,
+    detection_confidence: data.detectionConfidence,
+    detection_metadata: data.detectionMetadata,
+    
+    // Conversion info
+    conversion_metadata: data.conversionMetadata,
+    
+    // Batch tracking
+    upload_batch_id: data.batchId,
     upload_date: new Date().toISOString()
   };
 
   await client.query(query, [
     documentId,
     data.projectId,
-    title,
-    data.markdown,
-    'uploaded',
-    'markdown',
-    data.batchId,
-    data.filename,
-    data.originalFormat,
-    data.detectedType,
-    data.detectionConfidence,
-    JSON.stringify(data.detectionMetadata),
-    JSON.stringify(uploadMetadata),
-    data.uploadedBy
+    documentName, // name
+    documentTitle, // title
+    data.markdown, // content (Markdown)
+    'upload', // source
+    data.detectedType || 'Unknown', // framework (document type)
+    JSON.stringify(metadata), // metadata (JSONB - all extra data)
+    data.uploadedBy // created_by
   ]);
 
   return documentId;
