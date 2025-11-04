@@ -72,6 +72,8 @@ import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
+import documentUploadRoutes from "./routes/documentUploadRoutes"
+import adminRoutes from "./routes/adminRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -154,6 +156,9 @@ app.use(requestIdMiddleware)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
+// Make pool available to all routes
+app.locals.pool = pool
+
 // Analytics tracking middleware (tracks all API requests automatically)
 import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
 // Enable analytics in all environments (database schema verified Oct 2025)
@@ -230,6 +235,8 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
+app.use("/api/admin", adminRoutes)
+app.use("/api/onboarding", documentUploadRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
@@ -423,6 +430,21 @@ async function startServer() {
         typeof queueError === "object" && queueError !== null && "message" in queueError
           ? (queueError as { message?: string }).message
           : queueError
+      )
+    }
+
+    // Initialize document conversion queue worker
+    try {
+      console.log("📄 Initializing document conversion worker...")
+      const { setupDocumentConversionWorker } = require('./jobs/documentConversionJob')
+      setupDocumentConversionWorker(pool)
+      console.log("✅ Document conversion worker initialized (5 concurrent workers)")
+    } catch (workerError) {
+      console.warn(
+        "⚠️  Document conversion worker initialization failed:",
+        typeof workerError === "object" && workerError !== null && "message" in workerError
+          ? (workerError as { message?: string }).message
+          : workerError
       )
     }
 
