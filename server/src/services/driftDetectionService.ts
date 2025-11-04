@@ -65,6 +65,34 @@ interface Baseline {
 }
 
 export class DriftDetectionService {
+  // Priority levels for comparison
+  private readonly PRIORITY_LEVELS = {
+    'low': 1,
+    'medium': 2,
+    'high': 3,
+    'critical': 4
+  } as const
+
+  // Fields to compare for each entity type
+  private readonly ENTITY_COMPARISON_FIELDS: Record<string, string[]> = {
+    'scope_item': ['description', 'inclusion_status', 'priority'],
+    'deliverable': ['description', 'status', 'type', 'acceptance_criteria'],
+    'requirement': ['description', 'status', 'priority', 'type'],
+    'milestone': ['description', 'status', 'due_date'],
+    'phase': ['description', 'status', 'start_date', 'end_date'],
+    'activity': ['description', 'duration', 'estimated_hours'],
+    'resource': ['description', 'type', 'allocation'],
+    'technology': ['category', 'version', 'purpose'],
+    'stakeholder': ['role', 'influence_level', 'interest_level', 'contact'],
+    'constraint': ['description', 'type', 'impact'],
+    'risk': ['description', 'probability', 'impact', 'mitigation_strategy'],
+    'success_criterion': ['description', 'target_value', 'measurement_method'],
+    'quality_standard': ['description', 'measurement_method', 'target_value'],
+    'best_practice': ['description', 'category', 'implementation_guidance'],
+    // Default fields for unknown types
+    'default': ['description', 'status', 'priority', 'type']
+  }
+
   /**
    * Check for drift after document update
    */
