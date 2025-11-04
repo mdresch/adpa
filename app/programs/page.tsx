@@ -238,7 +238,7 @@ export default function ProgramsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20 flex">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-cyan-900/20 flex">
       <Sidebar />
       <div className="flex-1 flex flex-col">
         <Header />
@@ -247,7 +247,7 @@ export default function ProgramsPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div className="space-y-2">
-                <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-600 bg-clip-text text-transparent">
                   Programs
                 </h1>
                 <p className="text-muted-foreground text-lg">
@@ -335,7 +335,7 @@ export default function ProgramsPage() {
                 )}
                 <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+                    <Button className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700">
                       <Plus className="h-5 w-5 mr-2" />
                       Create Program
                     </Button>
@@ -592,13 +592,13 @@ export default function ProgramsPage() {
                               )}
                               
                               {program.start_date && program.end_date && (
-                                <div className="flex items-center gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-100 dark:border-purple-900">
-                                  <div className="p-2 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                                    <Calendar className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                                <div className="flex items-center gap-3 p-3 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-100 dark:border-sky-900">
+                                  <div className="p-2 bg-sky-100 dark:bg-sky-900 rounded-lg">
+                                    <Calendar className="h-4 w-4 text-sky-600 dark:text-sky-400" />
                                   </div>
                                   <div className="flex-1">
                                     <p className="text-xs text-muted-foreground font-medium">Timeline</p>
-                                    <p className="text-xs font-semibold text-purple-600 dark:text-purple-400">
+                                    <p className="text-xs font-semibold text-sky-600 dark:text-sky-400">
                                       {new Date(program.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - {new Date(program.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                     </p>
                                   </div>
@@ -615,7 +615,7 @@ export default function ProgramsPage() {
                                 </div>
                                 {program.owner_name && (
                                   <div className="flex items-center gap-1">
-                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-purple-400 flex items-center justify-center text-white text-xs font-bold">
+                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-400 to-cyan-400 flex items-center justify-center text-white text-xs font-bold">
                                       {program.owner_name.charAt(0).toUpperCase()}
                                     </div>
                                     <span className="text-xs text-muted-foreground font-medium">{program.owner_name}</span>
@@ -630,13 +630,12 @@ export default function ProgramsPage() {
                   </div>
                 ))}
               </div>
-              </div>
-              </div>
+            </div>
             ) : searchTerm ? (
               <Card className="border-0 shadow-lg">
                 <CardContent className="py-20">
                   <div className="text-center">
-                    <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900 dark:to-purple-900 rounded-full flex items-center justify-center mb-6">
+                    <div className="mx-auto w-20 h-20 bg-gradient-to-br from-blue-100 to-cyan-100 dark:from-blue-900 dark:to-cyan-900 rounded-full flex items-center justify-center mb-6">
                       <Search className="h-10 w-10 text-blue-600 dark:text-blue-400" />
                     </div>
                     <h3 className="text-2xl font-bold mb-3">No programs found</h3>
@@ -650,13 +649,13 @@ export default function ProgramsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-purple-50 dark:from-blue-950 dark:to-purple-950">
+              <Card className="border-0 shadow-lg bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-950 dark:to-cyan-950">
                 <CardContent className="py-20">
                   <div className="text-center">
-                    <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center mb-6 shadow-lg">
+                    <div className="mx-auto w-24 h-24 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center mb-6 shadow-lg">
                       <FolderOpen className="h-12 w-12 text-white" />
                     </div>
-                    <h3 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                    <h3 className="text-3xl font-bold mb-3 bg-gradient-to-r from-blue-600 to-cyan-600 bg-clip-text text-transparent">
                       No programs yet
                     </h3>
                     <p className="text-muted-foreground text-lg mb-8 max-w-md mx-auto">
@@ -665,7 +664,7 @@ export default function ProgramsPage() {
                     <Button 
                       onClick={() => setCreateDialogOpen(true)}
                       size="lg"
-                      className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 h-12 px-8"
+                      className="shadow-lg hover:shadow-xl transition-all bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 h-12 px-8"
                     >
                       <Plus className="h-5 w-5 mr-2" />
                       Create Your First Program

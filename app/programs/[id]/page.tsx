@@ -301,7 +301,7 @@ export default function ProgramDetailPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-cyan-900/20">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
@@ -313,7 +313,7 @@ export default function ProgramDetailPage() {
                 {loading && !program ? (
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-600 bg-clip-text text-transparent">
                       Loading Program...
                     </h1>
                   </div>
@@ -321,7 +321,7 @@ export default function ProgramDetailPage() {
                   <>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-600 bg-clip-text text-transparent">
                           Program Overview - {program?.name || 'Unknown Program'}
                         </h1>
                         <p className="text-muted-foreground mt-2">

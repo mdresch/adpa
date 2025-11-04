@@ -76,7 +76,7 @@ const reportTypeConfig = {
   status: {
     label: 'Status Report',
     icon: BarChart3,
-    color: 'bg-purple-100 text-purple-800',
+    color: 'bg-indigo-100 text-indigo-800',
     description: 'Project status, RAG health, and progress updates',
   },
   risk: {

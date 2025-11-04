@@ -62,7 +62,7 @@ const severityConfig = {
 
 const statusConfig = {
   open: { label: 'Open', color: 'bg-blue-100 text-blue-800' },
-  mitigating: { label: 'Mitigating', color: 'bg-purple-100 text-purple-800' },
+  mitigating: { label: 'Mitigating', color: 'bg-sky-100 text-sky-800' },
   mitigated: { label: 'Mitigated', color: 'bg-green-100 text-green-800' },
   accepted: { label: 'Accepted', color: 'bg-gray-100 text-gray-800' },
   closed: { label: 'Closed', color: 'bg-slate-100 text-slate-800' },
@@ -373,7 +373,7 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                 <p className="text-sm text-muted-foreground">Avg Probability</p>
                 <p className="text-2xl font-bold">{riskStats.avgProbability}%</p>
               </div>
-              <TrendingUp className="h-8 w-8 text-purple-500" />
+              <TrendingUp className="h-8 w-8 text-sky-500" />
             </div>
           </CardContent>
         </Card>
