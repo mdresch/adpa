@@ -223,7 +223,7 @@ export default function AssessmentResultsPage() {
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold text-blue-600">
-              {assessment.averageQualityScore.toFixed(1)}
+              {assessment.averageQualityScore?.toFixed(1) || '0.0'}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Average across all documents
@@ -306,12 +306,12 @@ export default function AssessmentResultsPage() {
             <CardHeader>
               <CardTitle>Document Breakdown</CardTitle>
               <CardDescription>
-                {assessment.totalDocuments} documents assessed across {assessment.documentsByType.length} types
+                {assessment.totalDocuments} documents assessed across {assessment.documentsByType?.length || 0} types
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {assessment.documentsByType.map((doc, idx) => (
+                {assessment.documentsByType?.map((doc, idx) => (
                   <div key={idx} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex items-center gap-3">
                       <FileText className="h-5 w-5 text-blue-500" />
@@ -339,12 +339,12 @@ export default function AssessmentResultsPage() {
             <CardHeader>
               <CardTitle>Gap Analysis</CardTitle>
               <CardDescription>
-                {assessment.gaps.length} gaps identified requiring improvement
+                {assessment.gaps?.length || 0} gaps identified requiring improvement
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {assessment.gaps.map((gap, idx) => (
+                {assessment.gaps?.map((gap, idx) => (
                   <div key={idx} className="border rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -386,26 +386,26 @@ export default function AssessmentResultsPage() {
             <CardHeader>
               <CardTitle>Industry Benchmarks</CardTitle>
               <CardDescription>
-                You're in the {assessment.benchmarks.percentile}th percentile
+                You're in the {assessment.benchmarks?.percentile || 0}th percentile
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="text-center p-6 bg-blue-50 rounded-lg">
                   <div className="text-3xl font-bold text-blue-600">
-                    {assessment.benchmarks.yourScore.toFixed(1)}
+                    {assessment.benchmarks?.yourScore?.toFixed(1) || '0.0'}
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">Your Score</div>
                 </div>
                 <div className="text-center p-6 bg-gray-50 rounded-lg">
                   <div className="text-3xl font-bold text-gray-600">
-                    {assessment.benchmarks.industryAverage.toFixed(1)}
+                    {assessment.benchmarks?.industryAverage?.toFixed(1) || '0.0'}
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">Industry Average</div>
                 </div>
                 <div className="text-center p-6 bg-green-50 rounded-lg">
                   <div className="text-3xl font-bold text-green-600">
-                    {assessment.benchmarks.topPerformers.toFixed(1)}
+                    {assessment.benchmarks?.topPerformers?.toFixed(1) || '0.0'}
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">Top Performers</div>
                 </div>
@@ -427,25 +427,25 @@ export default function AssessmentResultsPage() {
               <div className="grid gap-4 md:grid-cols-4">
                 <div className="text-center p-6 border rounded-lg">
                   <div className="text-2xl font-bold text-green-600">
-                    ${assessment.roiMetrics.savings.toLocaleString()}
+                    ${assessment.roiMetrics?.savings?.toLocaleString() || '0'}
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">Potential Savings</div>
                 </div>
                 <div className="text-center p-6 border rounded-lg">
                   <div className="text-2xl font-bold text-blue-600">
-                    {assessment.roiMetrics.roi.toFixed(0)}%
+                    {assessment.roiMetrics?.roi?.toFixed(0) || '0'}%
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">ROI</div>
                 </div>
                 <div className="text-center p-6 border rounded-lg">
                   <div className="text-2xl font-bold text-purple-600">
-                    {assessment.roiMetrics.paybackPeriod}
+                    {assessment.roiMetrics?.paybackPeriod || 'Calculating...'}
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">Payback Period</div>
                 </div>
                 <div className="text-center p-6 border rounded-lg">
                   <div className="text-2xl font-bold text-orange-600">
-                    ${assessment.roiMetrics.improvedCost.toLocaleString()}
+                    ${assessment.roiMetrics?.improvedCost?.toLocaleString() || '0'}
                   </div>
                   <div className="text-sm text-muted-foreground mt-2">Target Cost</div>
                 </div>
