@@ -107,7 +107,7 @@ export class DriftResolutionService {
       const aiResponse = await aiService.generate({
         prompt,
         temperature: 0.2, // Low temp for consistent, accurate resolution
-        maxTokens: 8000
+        max_tokens: 8000
       })
 
       // 7. Parse resolved content
