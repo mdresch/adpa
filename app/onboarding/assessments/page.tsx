@@ -32,8 +32,10 @@ import {
   TrendingUp,
   Building2,
   Loader2,
-  Plus
+  Plus,
+  Clock
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
 
 interface Assessment {
   id: string;
@@ -50,6 +52,8 @@ interface Assessment {
   gapsCount: number;
   createdAt: string;
   status: 'processing' | 'complete' | 'failed';
+  progress?: number; // Processing progress percentage (0-100)
+  processedFiles?: number; // Number of files processed
 }
 
 export default function AssessmentsListPage() {
@@ -63,7 +67,18 @@ export default function AssessmentsListPage() {
 
   useEffect(() => {
     loadAssessments();
-  }, []);
+    
+    // Set up auto-refresh for processing assessments
+    const interval = setInterval(() => {
+      // Check if any assessments are still processing
+      const hasProcessing = assessments.some(a => a.status === 'processing');
+      if (hasProcessing) {
+        loadAssessments();
+      }
+    }, 5000); // Poll every 5 seconds
+    
+    return () => clearInterval(interval);
+  }, [assessments]);
 
   const loadAssessments = async () => {
     try {

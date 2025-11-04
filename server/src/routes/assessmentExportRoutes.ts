@@ -71,7 +71,12 @@ router.get('/list', optionalAuth, async (req: Request, res: Response, next: Next
           a.*,
           p.name as project_name,
           ub.uploaded_by,
-          ub.batch_metadata
+          ub.batch_metadata,
+          ub.total_files,
+          ub.processed_files,
+          ub.successful_files,
+          ub.failed_files,
+          ub.status as batch_status
         FROM assessments a
         JOIN projects p ON a.project_id = p.id
         LEFT JOIN upload_batches ub ON a.batch_id = ub.id
@@ -86,14 +91,19 @@ router.get('/list', optionalAuth, async (req: Request, res: Response, next: Next
           a.*,
           p.name as project_name,
           ub.uploaded_by,
-          ub.batch_metadata
+          ub.batch_metadata,
+          ub.total_files,
+          ub.processed_files,
+          ub.successful_files,
+          ub.failed_files,
+          ub.status as batch_status
         FROM assessments a
         JOIN projects p ON a.project_id = p.id
         LEFT JOIN upload_batches ub ON a.batch_id = ub.id
         WHERE p.created_by = $1
         ORDER BY a.created_at DESC
         LIMIT 100
-      `;
+`;
       params = [userId];
     }
 
@@ -101,22 +111,32 @@ router.get('/list', optionalAuth, async (req: Request, res: Response, next: Next
 
     res.json({
       success: true,
-      data: result.rows.map(row => ({
-        id: row.id,
-        batchId: row.batch_id,
-        projectId: row.project_id,
-        projectName: row.project_name,
-        clientName: row.batch_metadata?.clientName || 'Unknown Client',
-        organizationName: row.batch_metadata?.organizationName || row.project_name,
-        assessmentPurpose: row.batch_metadata?.assessmentPurpose || 'Assessment',
-        overallMaturityLevel: row.overall_maturity_level,
-        overallMaturityLabel: row.maturity_label,
-        averageQualityScore: parseFloat(row.avg_quality_score),
-        totalDocuments: parseInt(row.total_documents),
-        gapsCount: row.gaps_count || 0,
-        createdAt: row.created_at,
-        status: row.status || 'complete'
-      }))
+      data: result.rows.map(row => {
+        const totalFiles = parseInt(row.total_files) || 0;
+        const processedFiles = parseInt(row.processed_files) || 0;
+        const progress = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+        
+        return {
+          id: row.id,
+          batchId: row.batch_id,
+          projectId: row.project_id,
+          projectName: row.project_name,
+          clientName: row.batch_metadata?.clientName || 'Unknown Client',
+          organizationName: row.batch_metadata?.organizationName || row.project_name,
+          assessmentPurpose: row.batch_metadata?.assessmentPurpose || 'Assessment',
+          overallMaturityLevel: row.overall_maturity_level,
+          overallMaturityLabel: row.maturity_label,
+          averageQualityScore: parseFloat(row.avg_quality_score),
+          totalDocuments: totalFiles,
+          gapsCount: row.gaps_count || 0,
+          createdAt: row.created_at,
+          status: row.status || 'complete',
+          progress: progress,
+          processedFiles: processedFiles,
+          successfulFiles: parseInt(row.successful_files) || 0,
+          failedFiles: parseInt(row.failed_files) || 0
+        };
+      })
     });
 
   } catch (error: any) {
