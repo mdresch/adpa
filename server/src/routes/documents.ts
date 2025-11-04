@@ -1267,10 +1267,11 @@ router.put("/:id",
               `UPDATE baseline_drift_detection 
                SET status = 'resolved',
                    resolution_notes = 'Drift resolved via manual edit',
-                   resolved_at = CURRENT_TIMESTAMP
-               WHERE source_document_id = $1 
+                   resolved_at = CURRENT_TIMESTAMP,
+                   assigned_to = $1
+               WHERE source_document_id = $2 
                AND status = 'detected'`,
-              [id]
+              [req.user?.id, id]
             )
           }
           

@@ -380,12 +380,13 @@ export class DriftDetectionService {
       )
 
       if (!found) {
+        const description = baseline.description || 'Unknown risk'
         drift.push({
           entityType: 'risk',
           driftType: 'removed',
           baselineValue: baseline,
           currentValue: null,
-          description: `Risk removed: "${baseline.description?.substring(0, 50)}..."`,
+          description: `Risk removed: "${description.substring(0, 50)}..."`,
           requiresApproval: baseline.impact === 'high' || baseline.impact === 'critical'
         })
       }
@@ -398,12 +399,13 @@ export class DriftDetectionService {
       )
 
       if (!found) {
+        const description = current.description || 'Unknown risk'
         drift.push({
           entityType: 'risk',
           driftType: 'added',
           baselineValue: null,
           currentValue: current,
-          description: `New risk added: "${current.description?.substring(0, 50)}..."`,
+          description: `New risk added: "${description.substring(0, 50)}..."`,
           requiresApproval: current.impact === 'high' || current.impact === 'critical'
         })
       }
@@ -485,6 +487,23 @@ export class DriftDetectionService {
     baselineBudget: number,
     currentBudget: number
   ): DriftPoint | null {
+    // Guard against division by zero
+    if (baselineBudget === 0) {
+      if (currentBudget === 0) {
+        return null // No change
+      }
+      // Budget went from 0 to something - that's a major change
+      return {
+        entityType: 'budget',
+        driftType: 'modified',
+        baselineValue: baselineBudget,
+        currentValue: currentBudget,
+        variance: 100,
+        description: `Budget changed: $${baselineBudget} → $${currentBudget} (new budget added)`,
+        requiresApproval: true
+      }
+    }
+
     const variance = ((currentBudget - baselineBudget) / baselineBudget) * 100
 
     if (Math.abs(variance) < 1) {
