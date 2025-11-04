@@ -1,0 +1,106 @@
+/* Custom styles for react-diff-view */
+
+.diff-view-container {
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.diff-view-container .diff {
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  overflow: hidden;
+}
+
+.diff-view-container .diff-gutter {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  padding: 0 0.5rem;
+  user-select: none;
+  min-width: 3rem;
+  text-align: right;
+}
+
+.diff-view-container .diff-code {
+  padding: 0 0.75rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-view-container .diff-gutter-insert {
+  background-color: hsl(142 76% 96%);
+}
+
+.diff-view-container .diff-code-insert {
+  background-color: hsl(142 76% 96%);
+}
+
+.diff-view-container .diff-gutter-delete {
+  background-color: hsl(0 72% 96%);
+}
+
+.diff-view-container .diff-code-delete {
+  background-color: hsl(0 72% 96%);
+}
+
+.diff-view-container .diff-gutter-normal {
+  background-color: hsl(var(--muted));
+}
+
+.diff-view-container .diff-code-normal {
+  background-color: hsl(var(--background));
+}
+
+.diff-view-container .diff-line {
+  display: flex;
+  align-items: stretch;
+}
+
+.diff-view-container .diff-line:hover {
+  background-color: hsl(var(--accent));
+}
+
+/* Split view specific styles */
+.diff-view-container .diff-split-view {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.diff-view-container .diff-split-col {
+  min-width: 0;
+}
+
+/* Tokens (syntax highlighting) */
+.diff-view-container .diff-code-insert .token-insert {
+  background-color: hsl(142 76% 88%);
+}
+
+.diff-view-container .diff-code-delete .token-delete {
+  background-color: hsl(0 72% 88%);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .diff-view-container .diff-gutter-insert {
+    background-color: hsl(142 45% 20%);
+  }
+
+  .diff-view-container .diff-code-insert {
+    background-color: hsl(142 45% 20%);
+  }
+
+  .diff-view-container .diff-gutter-delete {
+    background-color: hsl(0 45% 20%);
+  }
+
+  .diff-view-container .diff-code-delete {
+    background-color: hsl(0 45% 20%);
+  }
+
+  .diff-view-container .diff-code-insert .token-insert {
+    background-color: hsl(142 45% 28%);
+  }
+
+  .diff-view-container .diff-code-delete .token-delete {
+    background-color: hsl(0 45% 28%);
+  }
+}
