@@ -565,13 +565,15 @@ Generate a REVISED version of the document that resolves the drift:
     driftRecordId: string,
     majorChanges: DriftPoint[]
   ): string {
-    const timestamp = new Date().toISOString()
+    const now = new Date()
+    const timestamp = now.toISOString()
+    const dateFormatted = now.toLocaleDateString()
     
     return `# Change Request: Major Drift Changes
 
 **Document**: ${document.name || document.title || 'Unnamed Document'}
 **Project**: ${document.project_name || 'Unknown'}
-**Date**: ${new Date().toLocaleDateString()}
+**Date**: ${dateFormatted}
 **Status**: Pending Approval
 **Type**: Drift Resolution - Major Changes
 
