@@ -78,9 +78,72 @@ const upload = multer({
  *   }
  * }
  */
+// Optional authentication middleware - uses system guest user if no token
+const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Try to authenticate, but don't fail if no token
+    const token = req.headers.authorization?.split(' ')[1];
+    
+    if (token) {
+      // Has token - authenticate normally
+      return authenticate(req, res, next);
+    } else {
+      // No token - use dedicated guest/onboarding system user
+      const { pool } = require('../database/connection');
+      
+      // Get or create the "onboarding-guest" system user
+      let guestUser = await pool.query(
+        `SELECT id, email FROM users WHERE email = $1`,
+        ['onboarding-guest@system.local']
+      );
+      
+      if (guestUser.rows.length === 0) {
+        // Create system guest user on first use
+        const { v4: uuidv4 } = require('uuid');
+        const bcrypt = require('bcryptjs');
+        const guestId = uuidv4();
+        
+        await pool.query(
+          `INSERT INTO users (id, email, password_hash, name, role, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+           ON CONFLICT (email) DO NOTHING
+           RETURNING id, email`,
+          [
+            guestId,
+            'onboarding-guest@system.local',
+            await bcrypt.hash('no-password-login-disabled', 10),
+            'Onboarding Guest User (System)',
+            'user'
+          ]
+        );
+        
+        guestUser = await pool.query(
+          `SELECT id, email FROM users WHERE email = $1`,
+          ['onboarding-guest@system.local']
+        );
+        
+        logger.info('Created system guest user for onboarding', { userId: guestUser.rows[0].id });
+      }
+      
+      (req as any).user = {
+        id: guestUser.rows[0].id,
+        email: guestUser.rows[0].email,
+        role: 'guest',
+        isGuest: true
+      };
+      
+      logger.info('Using guest session for onboarding', { userId: guestUser.rows[0].id });
+      next();
+    }
+  } catch (error) {
+    logger.error('Optional auth failed', { error: (error as Error).message });
+    next(error);
+  }
+};
+
 router.post(
   '/upload',
-  authenticate,
+  optionalAuth, // Allow public access for potential clients
   upload.array('files', 100), // Accept up to 100 files
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -106,9 +169,13 @@ router.post(
       } = req.body;
       
       const userId = (req as any).user.id;
+      const isGuest = (req as any).user.isGuest;
       
       // For onboarding assessments (potential clients), auto-create project if needed
       let actualProjectId = projectId;
+      
+      // Store guest email if provided for follow-up
+      const guestEmail = req.body.email || req.body.contactEmail;
       
       if (!actualProjectId && assessmentName) {
         // Create onboarding project automatically
@@ -154,8 +221,8 @@ router.post(
         });
       }
 
-      // Verify user has access to project (skip for auto-created onboarding projects)
-      if (projectId) {  // Only verify if user provided projectId
+      // Verify user has access to project (skip for guests and auto-created projects)
+      if (projectId && !isGuest) {
         const hasAccess = await verifyProjectAccess(req.user.id, projectId);
         if (!hasAccess) {
           return res.status(403).json({
@@ -192,7 +259,10 @@ router.post(
           clientName,
           organizationName: organizationName || clientName,
           assessmentPurpose: assessmentPurpose || 'Portfolio Maturity Assessment',
-          isOnboardingAssessment: !projectId  // Flag for potential client assessments
+          isOnboardingAssessment: !projectId,  // Flag for potential client assessments
+          isGuestUpload: isGuest,  // Flag for public/guest uploads
+          guestEmail: guestEmail || null,  // Capture guest email for follow-up
+          uploadDate: new Date().toISOString()
         }
       };
 

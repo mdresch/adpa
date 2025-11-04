@@ -75,7 +75,22 @@ router.get('/list', authenticate, async (req: Request, res: Response, next: Next
 // Get assessment data
 // ============================================================================
 
-router.get('/:assessmentId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+// Optional auth for viewing assessments (guests can view their own assessments)
+const optionalAuthForView = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (token) {
+      return authenticate(req, res, next);
+    }
+    // Allow guest access for viewing assessments (will be filtered by batch_id or guest_id)
+    (req as any).user = { id: 'guest', role: 'guest', isGuest: true };
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+router.get('/:assessmentId', optionalAuthForView, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;
     const userId = (req as any).user.id;
@@ -114,7 +129,7 @@ router.get('/:assessmentId', authenticate, async (req: Request, res: Response, n
 // Export assessment report
 // ============================================================================
 
-router.get('/:assessmentId/export', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:assessmentId/export', optionalAuthForView, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;
     const { format = 'pdf' } = req.query;

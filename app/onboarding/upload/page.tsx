@@ -44,6 +44,7 @@ export default function DocumentUploadPage() {
   const [assessmentName, setAssessmentName] = useState('');
   const [clientName, setClientName] = useState('');
   const [organizationName, setOrganizationName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
   const [assessmentPurpose, setAssessmentPurpose] = useState('Initial Onboarding');
 
   // Handle drag events
@@ -123,6 +124,9 @@ export default function DocumentUploadPage() {
       formData.append('clientName', clientName);
       formData.append('organizationName', organizationName || clientName);
       formData.append('assessmentPurpose', assessmentPurpose);
+      if (contactEmail) {
+        formData.append('email', contactEmail);
+      }
 
       // Upload request
       const response = await fetch('/api/onboarding/upload', {
@@ -334,21 +338,35 @@ export default function DocumentUploadPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="purpose">Assessment Purpose</Label>
-              <Select value={assessmentPurpose} onValueChange={setAssessmentPurpose}>
-                <SelectTrigger id="purpose">
-                  <SelectValue placeholder="Select purpose..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Initial Onboarding">Initial Client Onboarding</SelectItem>
-                  <SelectItem value="Annual Review">Annual Maturity Review</SelectItem>
-                  <SelectItem value="Pre-Engagement">Pre-Engagement Assessment</SelectItem>
-                  <SelectItem value="Compliance Audit">Compliance Audit</SelectItem>
-                  <SelectItem value="Gap Analysis">Gap Analysis</SelectItem>
-                  <SelectItem value="Other">Other</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label htmlFor="email">Contact Email (optional)</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="e.g., john@abccorp.com"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                We'll send your assessment results here
+              </p>
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="purpose">Assessment Purpose</Label>
+            <Select value={assessmentPurpose} onValueChange={setAssessmentPurpose}>
+              <SelectTrigger id="purpose">
+                <SelectValue placeholder="Select purpose..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Initial Onboarding">Initial Client Onboarding</SelectItem>
+                <SelectItem value="Annual Review">Annual Maturity Review</SelectItem>
+                <SelectItem value="Pre-Engagement">Pre-Engagement Assessment</SelectItem>
+                <SelectItem value="Compliance Audit">Compliance Audit</SelectItem>
+                <SelectItem value="Gap Analysis">Gap Analysis</SelectItem>
+                <SelectItem value="Other">Other</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Validation Alert */}
