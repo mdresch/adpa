@@ -31,6 +31,7 @@
     "fix:task-status": "tsx scripts/fix-task-status-constraint.ts",
     "check:admin": "tsx scripts/check-admin-user.ts",
     "show:admin": "tsx scripts/show-admin-credentials.ts"
+    "create-test-baseline": "tsx scripts/create-test-baseline.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
