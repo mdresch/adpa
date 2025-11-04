@@ -32,10 +32,12 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
   const files = useMemo(() => {
     try {
       // Parse the diff text into structured format
-      const diff = `--- ${filename}
-+++ ${filename}
-${diffText}`
-      return parseDiff(diff)
+      const diffHeader = [
+        `--- ${filename}`,
+        `+++ ${filename}`,
+        diffText
+      ].join('\n')
+      return parseDiff(diffHeader)
     } catch (error) {
       console.error('Error parsing diff:', error)
       return []
