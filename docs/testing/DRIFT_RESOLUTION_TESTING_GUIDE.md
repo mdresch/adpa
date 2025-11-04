@@ -43,7 +43,7 @@ npm run create-test-baseline 123e4567-e89b-12d3-a456-426614174000
 ```
 
 **What this script does:**
-- Creates a comprehensive baseline with all 13 entity types
+- Creates a comprehensive baseline with all 14 entity types
 - Includes 5 stakeholders, 4 risks, 6 milestones, 5 requirements, and more
 - Auto-approves the baseline for immediate testing
 - Outputs detailed summary of created baseline

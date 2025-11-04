@@ -11,7 +11,7 @@
  *   npm run create-test-baseline <projectId> --with-entities
  * 
  * Features:
- * - Creates a comprehensive baseline with all 13 entity types
+ * - Creates a comprehensive baseline with all 14 entity types
  * - Optionally creates extracted entities first (if --with-entities flag is used)
  * - Approves the baseline automatically for immediate testing
  * - Provides detailed output for verification
@@ -216,7 +216,7 @@ async function createTestBaseline(options: CreateBaselineOptions): Promise<void>
 }
 
 /**
- * Create comprehensive baseline data with all 13 entity types
+ * Create comprehensive baseline data with all 14 entity types
  */
 function createComprehensiveBaselineData(projectName: string) {
   return {

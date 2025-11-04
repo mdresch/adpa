@@ -248,7 +248,7 @@ This creates a comprehensive baseline with:
 - 6 milestones with dependencies
 - 5 requirements (approved and draft)
 - Budget, timeline, and success criteria
-- All 13 entity types for comprehensive testing
+- All 14 entity types for comprehensive testing (scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices)
 
 **For detailed testing instructions**, see [Drift Resolution Testing Guide](docs/testing/DRIFT_RESOLUTION_TESTING_GUIDE.md).
 
