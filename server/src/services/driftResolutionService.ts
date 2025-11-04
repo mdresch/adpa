@@ -9,6 +9,8 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { DriftPoint } from './driftDetectionService'
+import { v4 as uuidv4 } from 'uuid'
+import { PoolClient } from 'pg'
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -20,12 +22,25 @@ export interface ResolutionResult {
   previewHtml?: string
 }
 
+export interface ApplyResolutionResult {
+  changeRequestId?: string
+}
+
+export interface DriftApplyResponse {
+  success: boolean
+  message: string
+  changeRequestCreated?: boolean
+  changeRequestId?: string
+}
+
 interface Document {
   id: string
   title: string
+  name?: string
   content: string
   metadata: any
   project_id: string
+  project_name?: string
 }
 
 interface Baseline {
@@ -48,6 +63,17 @@ interface DriftRecord {
   drift_severity: string
   drift_description: string
   ai_processing_metadata: any
+}
+
+interface ApplyResolutionResult {
+  changeRequestId?: string
+}
+
+interface DriftApplyResponse {
+  success: boolean
+  message: string
+  changeRequestCreated?: boolean
+  changeRequestId?: string
 }
 
 export class DriftResolutionService {
@@ -367,7 +393,7 @@ Generate a REVISED version of the document that resolves the drift:
     driftRecordId: string,
     userId: string,
     majorChanges?: DriftPoint[]
-  ): Promise<{ changeRequestId?: string }> {
+  ): Promise<ApplyResolutionResult> {
     const client = await pool.connect()
 
     try {
@@ -457,14 +483,12 @@ Generate a REVISED version of the document that resolves the drift:
    * Create a change request document for major changes requiring approval
    */
   private async createChangeRequestForMajorChanges(
-    client: any,
+    client: PoolClient,
     documentId: string,
     driftRecordId: string,
     majorChanges: DriftPoint[],
     userId: string
   ): Promise<string> {
-    const { v4: uuidv4 } = await import('uuid')
-    
     // Get document and project info
     const docResult = await client.query(
       `SELECT d.*, p.name as project_name 
@@ -478,7 +502,7 @@ Generate a REVISED version of the document that resolves the drift:
       throw new Error(`Document not found: ${documentId}`)
     }
 
-    const document = docResult.rows[0]
+    const document = docResult.rows[0] as Document
 
     // Build change request content
     const changeRequestContent = this.buildChangeRequestContent(
@@ -489,7 +513,7 @@ Generate a REVISED version of the document that resolves the drift:
 
     // Create change request as a document
     const changeRequestId = uuidv4()
-    const changeRequestName = `Change Request: Major Drift Changes - ${document.name}`
+    const changeRequestName = `Change Request: Major Drift Changes - ${document.name || document.title || 'Document'}`
 
     await client.query(
       `INSERT INTO documents (
@@ -548,7 +572,7 @@ Generate a REVISED version of the document that resolves the drift:
    * Build change request document content
    */
   private buildChangeRequestContent(
-    document: any,
+    document: Document,
     driftRecordId: string,
     majorChanges: DriftPoint[]
   ): string {
@@ -556,7 +580,7 @@ Generate a REVISED version of the document that resolves the drift:
     
     return `# Change Request: Major Drift Changes
 
-**Document**: ${document.name}
+**Document**: ${document.name || document.title || 'Unknown Document'}
 **Project**: ${document.project_name || 'Unknown'}
 **Date**: ${new Date().toLocaleDateString()}
 **Status**: Pending Approval

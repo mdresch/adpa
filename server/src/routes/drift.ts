@@ -8,7 +8,7 @@ import Joi from 'joi'
 import { authenticateToken, requirePermission } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { driftDetectionService } from '../services/driftDetectionService'
-import { driftResolutionService } from '../services/driftResolutionService'
+import { driftResolutionService, DriftApplyResponse } from '../services/driftResolutionService'
 import { logger } from '../utils/logger'
 
 const router = express.Router()
@@ -147,7 +147,7 @@ router.post(
         majorChanges
       )
 
-      const response: any = {
+      const response: DriftApplyResponse = {
         success: true,
         message: 'Drift resolution applied successfully'
       }
