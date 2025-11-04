@@ -5,6 +5,9 @@
 
 export { MetricsDashboard } from './MetricsDashboard';
 export { default as FinancialDashboard } from './FinancialDashboard';
+export { ProgramProjectsTab } from './ProgramProjectsTab';
+export { ProgramRisksTab } from './ProgramRisksTab';
+export { ProgramReportsTab } from './ProgramReportsTab';
 export type { 
   ProgramMetrics, 
   BudgetMetrics, 
