@@ -23,9 +23,9 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
     const oldLines = oldContent.split('\n')
     const newLines = newContent.split('\n')
     
-    // Use unidiff to create a proper diff
+    // Use unidiff to create a proper diff with expanded context for better clarity
     return formatLines(diffLines(oldLines, newLines), {
-      context: 3
+      context: 5  // Increased from 3 to 5 for more context around changes
     })
   }, [oldContent, newContent])
 
