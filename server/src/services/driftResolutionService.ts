@@ -75,6 +75,8 @@ export class DriftResolutionService {
     userId: string,
     strategy: 'conservative' | 'balanced' | 'permissive' = 'balanced'
   ): Promise<ResolutionResult> {
+    const startTime = Date.now()
+    
     try {
       logger.info('[DRIFT-RESOLUTION] Starting AI-powered drift resolution', {
         documentId,
@@ -84,31 +86,46 @@ export class DriftResolutionService {
 
       // 1. Get drift record with all drift points
       const driftRecord = await this.getDriftRecord(driftRecordId)
+      logger.info(`[DRIFT-RESOLUTION] Drift record fetched in ${Date.now() - startTime}ms`)
 
       // 2. Get approved baseline
       const baseline = await this.getBaseline(driftRecord.baseline_id)
+      logger.info(`[DRIFT-RESOLUTION] Baseline fetched in ${Date.now() - startTime}ms`)
 
       // 3. Get current document content
       const document = await this.getDocument(documentId)
+      logger.info(`[DRIFT-RESOLUTION] Document fetched in ${Date.now() - startTime}ms`)
 
       // 4. Parse drift points from metadata
       const driftPoints = driftRecord.ai_processing_metadata?.drift_points || []
 
-      // 5. Build resolution prompt
+      // 5. Build optimized resolution prompt
+      const aiStartTime = Date.now()
       const prompt = this.buildResolutionPrompt(
         document,
         baseline,
         driftPoints,
         strategy
       )
+      logger.info(`[DRIFT-RESOLUTION] Prompt built in ${Date.now() - startTime}ms, length: ${prompt.length} chars`)
 
-      // 6. Call AI to generate resolved version
+      // 6. Call AI to generate resolved version with timeout and automatic fallback
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
-      const aiResponse = await aiService.generate({
-        prompt,
-        temperature: 0.2, // Low temp for consistent, accurate resolution
-        maxTokens: 8000
-      })
+      const aiResponse = await Promise.race([
+        aiService.generateWithFallback({
+          prompt,
+          provider: 'google', // Prefer fast provider (Gemini 2.5 Flash)
+          model: 'gemini-2.5-flash', // Optimized for speed
+          temperature: 0.2, // Low temp for consistent, accurate resolution
+          maxTokens: 8000
+        }, ['google', 'groq', 'mistral']), // Fallback to other fast providers
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('AI resolution timeout: exceeded 5 seconds')), 5000)
+        )
+      ])
+      
+      const aiElapsed = Date.now() - aiStartTime
+      logger.info(`[DRIFT-RESOLUTION] ⚡ AI generation completed in ${aiElapsed}ms`)
 
       // 7. Parse resolved content
       const resolvedContent = this.parseResolvedContent(aiResponse.content)
@@ -116,10 +133,14 @@ export class DriftResolutionService {
       // 8. Identify major changes (require approval)
       const majorChanges = this.identifyMajorChanges(driftPoints)
 
-      logger.info('[DRIFT-RESOLUTION] Resolution generated successfully', {
+      const totalElapsed = Date.now() - startTime
+      logger.info(`[DRIFT-RESOLUTION] ✅ Resolution generated successfully in ${totalElapsed}ms`, {
         documentId,
         driftRecordId,
-        majorChangesCount: majorChanges.length
+        majorChangesCount: majorChanges.length,
+        totalTimeMs: totalElapsed,
+        aiTimeMs: aiElapsed,
+        meetsPerformanceTarget: totalElapsed < 5000
       })
 
       // 9. Prepare result
@@ -133,7 +154,8 @@ export class DriftResolutionService {
         previewHtml: await this.generateDiffPreview(document.content, resolvedContent)
       }
     } catch (error) {
-      logger.error('[DRIFT-RESOLUTION] Resolution failed:', error)
+      const totalElapsed = Date.now() - startTime
+      logger.error(`[DRIFT-RESOLUTION] ❌ Resolution failed after ${totalElapsed}ms:`, error)
       throw error
     }
   }
@@ -202,7 +224,7 @@ export class DriftResolutionService {
   }
 
   /**
-   * Build AI prompt for drift resolution
+   * Build AI prompt for drift resolution (optimized for speed)
    */
   private buildResolutionPrompt(
     document: Document,
@@ -210,63 +232,56 @@ export class DriftResolutionService {
     driftPoints: DriftPoint[],
     strategy: string
   ): string {
-    return `You are a project management expert tasked with resolving baseline drift in a project document.
+    // Optimized prompt - reduce token count for faster processing
+    const strategyRules = strategy === 'conservative' 
+      ? 'Revert ALL changes to baseline exactly'
+      : strategy === 'permissive'
+      ? 'Keep most changes, revert only critical violations'
+      : 'Keep valid updates, revert unauthorized changes'
+    
+    // Only include affected baseline entities, not all baseline data
+    const affectedBaselineData = this.extractAffectedBaselineData(baseline, driftPoints)
+    
+    return `Resolve baseline drift in: ${document.title}
 
-## CONTEXT
+BASELINE (Version ${baseline.version}):
+${affectedBaselineData}
 
-**Document**: ${document.title}
-**Approved Baseline**: Version ${baseline.version}
-**Drift Detected**: ${driftPoints.length} drift points identified
+DRIFT POINTS (${driftPoints.length}):
+${driftPoints.map((d, i) => `${i+1}. ${d.driftType.toUpperCase()} ${d.entityType}: ${d.description}`).join('\n')}
 
-## BASELINE ENTITIES (APPROVED - AUTHORITATIVE)
+STRATEGY: ${strategyRules}
 
-${this.formatBaselineEntities(baseline)}
+TASK: Revise document to align with baseline. For major changes (budget >10%, key dates, scope), add: <!-- REQUIRES APPROVAL: [reason] -->
 
-## CURRENT DOCUMENT CONTENT (DRIFTED)
-
+CURRENT DOCUMENT:
 ${document.content}
 
-## DRIFT POINTS TO RESOLVE
-
-${driftPoints.map((drift, i) => `
-${i + 1}. ${drift.driftType.toUpperCase()}: ${drift.description}
-   - Entity Type: ${drift.entityType}
-   - Baseline: ${JSON.stringify(drift.baselineValue)}
-   - Current: ${JSON.stringify(drift.currentValue)}
-   - Requires Approval: ${drift.requiresApproval ? 'YES' : 'NO'}
-`).join('\n')}
-
-## RESOLUTION STRATEGY: ${strategy.toUpperCase()}
-
-**Conservative**: Revert ALL changes to match baseline exactly
-**Balanced**: Keep valid updates, revert unauthorized changes, flag major changes (RECOMMENDED)
-**Permissive**: Keep most changes, only revert critical baseline violations
-
-## YOUR TASK
-
-Generate a REVISED version of the document that resolves the drift:
-
-1. **For REMOVED baseline entities**: Re-add them to the document in appropriate sections
-2. **For ADDED non-baseline entities**: 
-   - Conservative: Remove them
-   - Balanced: Keep if minor/helpful, remove if major/unauthorized
-   - Permissive: Keep all, just note the addition
-3. **For MODIFIED entities**: Restore baseline values OR clearly mark as change request
-4. **For date changes**: Revert to baseline dates OR flag for approval
-5. **For budget changes >10%**: FLAG as requiring formal approval
-
-**Preserve**:
-- Document structure and formatting (Markdown)
-- Non-entity content (explanatory text, context, headers)
-- Section headings and organization
-- Overall document quality
-
-**Output**: Complete revised document in Markdown format that aligns with the approved baseline.
-
-**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions), include a comment: 
-<!-- REQUIRES APPROVAL: [reason] -->
-
-**IMPORTANT**: Return ONLY the revised document content, no explanations or metadata.`
+OUTPUT: Revised document (Markdown only, no explanations)`
+  }
+  
+  /**
+   * Extract only affected baseline entities to reduce prompt size
+   */
+  private extractAffectedBaselineData(baseline: Baseline, driftPoints: DriftPoint[]): string {
+    const affectedTypes = new Set(driftPoints.map(d => d.entityType))
+    const sections: string[] = []
+    
+    // Only include baseline sections for entity types that have drift
+    if (affectedTypes.has('stakeholder') && baseline.resource_baseline?.stakeholders) {
+      sections.push(`Stakeholders: ${baseline.resource_baseline.stakeholders.length} total`)
+    }
+    if (affectedTypes.has('risk') && baseline.scope_baseline?.risks) {
+      sections.push(`Risks: ${baseline.scope_baseline.risks.length} total`)
+    }
+    if (affectedTypes.has('milestone') && baseline.timeline_baseline?.milestones) {
+      sections.push(`Milestones: ${baseline.timeline_baseline.milestones.length} total`)
+    }
+    if (affectedTypes.has('budget') && baseline.cost_baseline?.total_budget) {
+      sections.push(`Budget: $${baseline.cost_baseline.total_budget}`)
+    }
+    
+    return sections.join('\n') || 'Baseline data available'
   }
 
   /**
