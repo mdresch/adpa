@@ -1188,70 +1188,95 @@ router.put("/:id",
         }
       }
 
-      // 🔥 NEW: Re-validate against baseline after manual edit
+      // ⭐ AUTOMATIC DRIFT DETECTION on document save
       let driftRevalidation = null
       
-      // Always run drift validation if document has project_id and content
-      if (result.rows[0]?.project_id && result.rows[0]?.content) {
+      // Always run drift validation if document has project_id and content was updated
+      if (content && result.rows[0]?.project_id && result.rows[0]?.content) {
         try {
-          const { baselineService } = await import('../services/baselineService')
+          const { driftDetectionService } = await import('../services/driftDetectionService')
           
-          log.info(`[Manual Edit] Re-validating document ${id} against baseline`, {
+          log.info(`[DRIFT] Auto-detecting drift after document update`, {
             projectId: result.rows[0].project_id,
-            documentName: result.rows[0].name,
-            contentLength: result.rows[0].content.length
+            documentId: id,
+            documentName: result.rows[0].name
           })
           
-          const drifts = await baselineService.validateDocumentAgainstBaseline(
+          // Check for drift using new drift detection service
+          const driftResult = await driftDetectionService.checkForDrift(
             result.rows[0].project_id,
-            id,
-            result.rows[0].content,  // Use content from database (just updated)
-            result.rows[0].name
+            id
           )
           
           driftRevalidation = {
-            driftCount: drifts.length,
-            drifts: drifts.map(d => ({
-              type: d.detection_type,
-              severity: d.drift_severity,
-              description: d.drift_description
-            }))
+            hasDrift: driftResult.hasDrift,
+            severity: driftResult.severity,
+            driftCount: driftResult.driftPoints.length,
+            summary: driftResult.summary
           }
           
-          if (drifts.length > 0) {
-            log.warn(`[Manual Edit] Detected ${drifts.length} drift(s) after edit`)
+          if (driftResult.hasDrift) {
+            log.warn(`[DRIFT] Detected drift after document update`, {
+              documentId: id,
+              severity: driftResult.severity,
+              driftCount: driftResult.driftPoints.length
+            })
             
-            // Emit drift alert to project room (if io is available)
-            try {
-              const { io } = await import('../server')
-              io.to(`project:${result.rows[0].project_id}`).emit("baseline:drift", {
+            // Get baseline ID for drift record
+            const baselineResult = await pool.query(
+              `SELECT id FROM project_baselines 
+               WHERE project_id = $1 
+               AND status IN ('approved', 'active')
+               ORDER BY approved_at DESC LIMIT 1`,
+              [result.rows[0].project_id]
+            )
+            
+            if (baselineResult.rows.length > 0) {
+              // Create drift record
+              const driftRecord = await driftDetectionService.createDriftRecord({
+                projectId: result.rows[0].project_id,
                 documentId: id,
-                documentName: result.rows[0].name,
-                driftCount: drifts.length,
-                drifts: driftRevalidation.drifts,
-                source: 'manual_edit'
+                baselineId: baselineResult.rows[0].id,
+                driftPoints: driftResult.driftPoints,
+                severity: driftResult.severity,
+                triggeredBy: 'document_update'
               })
-            } catch (ioError) {
-              log.debug('[Manual Edit] Socket.io not available for drift notification')
+              
+              // Add drift record ID to response
+              driftRevalidation.driftRecordId = driftRecord.id
+              
+              // Emit WebSocket event for drift detection
+              try {
+                const { io } = await import('../server')
+                io.to(`project:${result.rows[0].project_id}`).emit('drift:detected', {
+                  documentId: id,
+                  documentTitle: result.rows[0].name,
+                  driftRecordId: driftRecord.id,
+                  severity: driftResult.severity,
+                  driftCount: driftResult.driftPoints.length
+                })
+              } catch (ioError) {
+                log.debug('[DRIFT] Socket.io not available for drift notification')
+              }
             }
           } else {
-            log.info(`[Manual Edit] ✅ No drift detected - document aligns with baseline`)
+            log.info(`[DRIFT] ✅ No drift detected - document aligns with baseline`)
             
-            // Clear old drifts for this document
+            // Mark any existing drift as resolved
             await pool.query(
               `UPDATE baseline_drift_detection 
                SET status = 'resolved',
                    resolution_notes = 'Drift resolved via manual edit',
-                   resolved_by = $1,
-                   resolved_at = CURRENT_TIMESTAMP
+                   resolved_at = CURRENT_TIMESTAMP,
+                   assigned_to = $1
                WHERE source_document_id = $2 
-               AND status = 'active'`,
+               AND status = 'detected'`,
               [req.user?.id, id]
             )
           }
           
-        } catch (baselineErr: any) {
-          log.error('[Manual Edit] Drift validation failed:', baselineErr)
+        } catch (driftErr: any) {
+          log.error('[DRIFT] Drift validation failed:', driftErr)
           // Don't fail the update if drift validation fails
         }
       }
