@@ -123,31 +123,43 @@ router.post(
     Joi.object({
       documentId: Joi.string().uuid().required(),
       driftRecordId: Joi.string().uuid().required(),
-      resolvedContent: Joi.string().required()
+      resolvedContent: Joi.string().required(),
+      majorChanges: Joi.array().items(Joi.object()).optional()
     })
   ),
   async (req, res) => {
     try {
-      const { documentId, driftRecordId, resolvedContent } = req.body
+      const { documentId, driftRecordId, resolvedContent, majorChanges } = req.body
       const userId = req.user?.id
 
       logger.info('[DRIFT-API] Applying resolution', {
         documentId,
         driftRecordId,
-        userId
+        userId,
+        hasMajorChanges: !!majorChanges && majorChanges.length > 0
       })
 
-      await driftResolutionService.applyResolution(
+      const result = await driftResolutionService.applyResolution(
         documentId,
         resolvedContent,
         driftRecordId,
-        userId!
+        userId!,
+        majorChanges
       )
 
-      res.json({
+      const response: any = {
         success: true,
         message: 'Drift resolution applied successfully'
-      })
+      }
+
+      // Add change request info if one was created
+      if (result.changeRequestId) {
+        response.changeRequestCreated = true
+        response.changeRequestId = result.changeRequestId
+        response.message = 'Drift resolution applied successfully. Change request created for major changes requiring approval.'
+      }
+
+      res.json(response)
     } catch (error) {
       logger.error('[DRIFT-API] Error applying resolution:', error)
       res.status(500).json({

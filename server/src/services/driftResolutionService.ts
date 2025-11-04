@@ -365,8 +365,9 @@ Generate a REVISED version of the document that resolves the drift:
     documentId: string,
     resolvedContent: string,
     driftRecordId: string,
-    userId: string
-  ): Promise<void> {
+    userId: string,
+    majorChanges?: DriftPoint[]
+  ): Promise<{ changeRequestId?: string }> {
     const client = await pool.connect()
 
     try {
@@ -375,7 +376,8 @@ Generate a REVISED version of the document that resolves the drift:
       logger.info('[DRIFT-RESOLUTION] Applying resolution', {
         documentId,
         driftRecordId,
-        userId
+        userId,
+        hasMajorChanges: !!majorChanges && majorChanges.length > 0
       })
 
       // 1. Update document with resolved content
@@ -415,13 +417,33 @@ Generate a REVISED version of the document that resolves the drift:
         ]
       )
 
+      // 4. ⭐ Create change request for major changes requiring approval
+      let changeRequestId: string | undefined
+      if (majorChanges && majorChanges.length > 0) {
+        changeRequestId = await this.createChangeRequestForMajorChanges(
+          client,
+          documentId,
+          driftRecordId,
+          majorChanges,
+          userId
+        )
+
+        logger.info('[DRIFT-RESOLUTION] Change request created for major changes', {
+          changeRequestId,
+          majorChangesCount: majorChanges.length
+        })
+      }
+
       await client.query('COMMIT')
 
       logger.info('[DRIFT-RESOLUTION] Drift resolved successfully', {
         documentId,
         driftRecordId,
-        userId
+        userId,
+        changeRequestId
       })
+
+      return { changeRequestId }
     } catch (error) {
       await client.query('ROLLBACK')
       logger.error('[DRIFT-RESOLUTION] Error applying resolution:', error)
@@ -429,6 +451,180 @@ Generate a REVISED version of the document that resolves the drift:
     } finally {
       client.release()
     }
+  }
+
+  /**
+   * Create a change request document for major changes requiring approval
+   */
+  private async createChangeRequestForMajorChanges(
+    client: any,
+    documentId: string,
+    driftRecordId: string,
+    majorChanges: DriftPoint[],
+    userId: string
+  ): Promise<string> {
+    const { v4: uuidv4 } = await import('uuid')
+    
+    // Get document and project info
+    const docResult = await client.query(
+      `SELECT d.*, p.name as project_name 
+       FROM documents d 
+       LEFT JOIN projects p ON d.project_id = p.id
+       WHERE d.id = $1`,
+      [documentId]
+    )
+
+    if (docResult.rows.length === 0) {
+      throw new Error(`Document not found: ${documentId}`)
+    }
+
+    const document = docResult.rows[0]
+
+    // Build change request content
+    const changeRequestContent = this.buildChangeRequestContent(
+      document,
+      driftRecordId,
+      majorChanges
+    )
+
+    // Create change request as a document
+    const changeRequestId = uuidv4()
+    const changeRequestName = `Change Request: Major Drift Changes - ${document.name}`
+
+    await client.query(
+      `INSERT INTO documents (
+        id, project_id, name, content, status, type, created_by, updated_by,
+        metadata, word_count, character_count, version, semantic_version
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 1, '1.0.0')`,
+      [
+        changeRequestId,
+        document.project_id,
+        changeRequestName,
+        changeRequestContent,
+        'pending_approval',
+        'change_request',
+        userId,
+        JSON.stringify({
+          change_request_type: 'drift_resolution',
+          source_document_id: documentId,
+          drift_record_id: driftRecordId,
+          major_changes: majorChanges,
+          created_from: 'automatic_drift_resolution',
+          requires_approval: true
+        }),
+        changeRequestContent.split(/\s+/).filter(Boolean).length, // word count
+        changeRequestContent.length, // character count
+      ]
+    )
+
+    // Create entry in cr_document_updates table to track the update
+    const updateTaskId = uuidv4()
+    await client.query(
+      `INSERT INTO cr_document_updates (
+        id, change_request_id, target_document_id, status, 
+        assigned_to, created_by, update_description
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        updateTaskId,
+        changeRequestId,
+        documentId,
+        'pending',
+        userId,
+        userId,
+        `Drift resolution with ${majorChanges.length} major change(s) requiring approval`
+      ]
+    )
+
+    logger.info('[DRIFT-RESOLUTION] Change request document created', {
+      changeRequestId,
+      documentId,
+      majorChangesCount: majorChanges.length
+    })
+
+    return changeRequestId
+  }
+
+  /**
+   * Build change request document content
+   */
+  private buildChangeRequestContent(
+    document: any,
+    driftRecordId: string,
+    majorChanges: DriftPoint[]
+  ): string {
+    const timestamp = new Date().toISOString()
+    
+    return `# Change Request: Major Drift Changes
+
+**Document**: ${document.name}
+**Project**: ${document.project_name || 'Unknown'}
+**Date**: ${new Date().toLocaleDateString()}
+**Status**: Pending Approval
+**Type**: Drift Resolution - Major Changes
+
+---
+
+## Summary
+
+This change request was automatically created following AI-powered drift resolution. The drift resolution process identified **${majorChanges.length} major change(s)** that require stakeholder approval before they can be finalized.
+
+**Drift Record ID**: ${driftRecordId}
+**Source Document ID**: ${document.id}
+
+---
+
+## Major Changes Requiring Approval
+
+${majorChanges.map((change, index) => `
+### ${index + 1}. ${change.entityType.toUpperCase()}: ${change.driftType.toUpperCase()}
+
+**Description**: ${change.description}
+
+**Baseline Value**:
+\`\`\`
+${JSON.stringify(change.baselineValue, null, 2)}
+\`\`\`
+
+**Current/Proposed Value**:
+\`\`\`
+${JSON.stringify(change.currentValue, null, 2)}
+\`\`\`
+
+${change.variance ? `**Variance**: ${change.variance}%` : ''}
+
+**Impact**: This change ${change.requiresApproval ? 'requires formal approval' : 'may impact the baseline'}
+
+---
+`).join('\n')}
+
+## Approval Required
+
+These changes have been flagged as **major changes** based on the following criteria:
+
+- Budget changes exceeding 10%
+- Critical milestone additions/removals
+- High-influence stakeholder changes
+- Scope modifications requiring authorization
+
+## Recommended Actions
+
+1. **Review** the proposed changes above
+2. **Assess** the impact on project baseline and objectives
+3. **Approve** or **Reject** this change request
+4. **Document** the rationale for the decision
+
+## Metadata
+
+- **Created**: ${timestamp}
+- **Created By**: Automatic Drift Resolution System
+- **Drift Record**: ${driftRecordId}
+- **Source Document**: ${document.id}
+- **Change Type**: Major Drift Changes
+
+---
+
+*This change request was automatically generated by the ADPA Drift Resolution System*
+`
   }
 }
 
