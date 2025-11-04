@@ -30,6 +30,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
+import { ExecutiveDriftAlertsWidget } from "@/app/(dashboard)/components/ExecutiveDriftAlertsWidget"
 
 interface DashboardData {
   projects: {
@@ -893,6 +894,30 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
+                </CardContent>
+              </AnimatedCard>
+
+              {/* Executive Drift Alerts Dashboard - TASK-744 */}
+              <AnimatedCard
+                delay={0.5}
+                className="glass border-0 shadow-xl hover:shadow-2xl transition-all duration-300"
+              >
+                <CardHeader>
+                  <div className="flex items-center space-x-3">
+                    <motion.div
+                      whileHover={{ scale: 1.1 }}
+                      className="p-2 bg-gradient-to-br from-red-600 to-red-800 rounded-lg"
+                    >
+                      <AlertCircle className="h-6 w-6 text-white" />
+                    </motion.div>
+                    <div>
+                      <CardTitle className="text-xl">Executive Dashboard</CardTitle>
+                      <CardDescription>Drift alerts, budget overruns, and opportunities</CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ExecutiveDriftAlertsWidget />
                 </CardContent>
               </AnimatedCard>
 

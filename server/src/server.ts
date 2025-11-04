@@ -73,6 +73,7 @@ import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
 import driftRoutes from "./routes/drift"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
+import executiveDashboardRoutes from "./routes/executive-dashboard"
 
 const app = express()
 const server = createServer(app)
@@ -232,6 +233,7 @@ app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
+app.use("/api/executive-dashboard", executiveDashboardRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
