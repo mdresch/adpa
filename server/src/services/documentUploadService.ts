@@ -681,6 +681,7 @@ async function createDocumentRecord(
 
 /**
  * Update batch progress
+ * Only counts unique files, not retry attempts
  */
 async function updateBatchProgress(
   batchId: string,
@@ -689,10 +690,13 @@ async function updateBatchProgress(
 ): Promise<void> {
   const field = result === 'success' ? 'successful_files' : 'failed_files';
   
+  // Update counters and recalculate processed_files from successful + failed
+  // This ensures we only count unique files, not retry attempts
   const query = `
     UPDATE upload_batches
     SET ${field} = ${field} + 1,
-        processed_files = processed_files + 1,
+        processed_files = (successful_files + ${result === 'success' ? '1' : '0'}) + 
+                         (failed_files + ${result === 'failed' ? '1' : '0'}),
         updated_at = NOW()
     WHERE id = $1
     RETURNING total_files, processed_files, successful_files, failed_files
@@ -713,6 +717,14 @@ async function updateBatchProgress(
         SET status = $1, completed_at = NOW()
         WHERE id = $2
       `, [status, batchId]);
+      
+      logger.info('Upload batch completed', {
+        batchId,
+        status,
+        successful: row.successful_files,
+        failed: row.failed_files,
+        total: row.total_files
+      });
     }
   }
 }
