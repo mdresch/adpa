@@ -72,9 +72,17 @@ async function createTestBaseline(options: CreateBaselineOptions): Promise<void>
     // Create comprehensive baseline data
     const baselineData = createComprehensiveBaselineData(project.name)
 
-    // Get next version number
+    // Get next version number (with error handling for invalid version formats)
     const versionResult = await client.query(
-      `SELECT COALESCE(MAX(CAST(SPLIT_PART(version, '.', 1) AS INTEGER)), 0) + 1 as next_major
+      `SELECT COALESCE(
+         MAX(
+           CASE 
+             WHEN version ~ '^[0-9]+\\.[0-9]+$' 
+             THEN CAST(SPLIT_PART(version, '.', 1) AS INTEGER)
+             ELSE 0
+           END
+         ), 0
+       ) + 1 as next_major
        FROM project_baselines 
        WHERE project_id = $1`,
       [projectId]
@@ -339,7 +347,7 @@ function createComprehensiveBaselineData(projectName: string) {
 /**
  * Create baseline components for detailed tracking
  */
-async function createBaselineComponents(client: any, baselineId: string, baselineData: any): Promise<void> {
+async function createBaselineComponents(client: import('pg').PoolClient, baselineId: string, baselineData: ReturnType<typeof createComprehensiveBaselineData>): Promise<void> {
   const components = []
 
   // Add stakeholder components
@@ -391,11 +399,12 @@ async function createBaselineComponents(client: any, baselineId: string, baselin
 
 /**
  * Create test entities for baseline extraction
+ * Note: Currently not implemented as the baseline data is comprehensive enough
+ * without requiring pre-existing entities in the database.
  */
-async function createTestEntities(client: any, projectId: string, userId: string): Promise<void> {
-  // This would create stakeholders, risks, milestones, etc. in the database
-  // For now, we'll skip this as the baseline data is comprehensive enough
-  logger.info('Skipping entity creation - using comprehensive baseline data instead')
+async function createTestEntities(client: import('pg').PoolClient, projectId: string, userId: string): Promise<void> {
+  logger.warn('[createTestEntities] Not implemented - using comprehensive baseline data instead')
+  logger.warn('The --with-entities flag currently has no effect. Baseline data is created directly.')
 }
 
 // CLI execution
