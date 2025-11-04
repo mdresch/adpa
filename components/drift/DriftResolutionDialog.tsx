@@ -5,6 +5,7 @@
 
 'use client'
 
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,8 +14,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, Sparkles, SplitSquareHorizontal, AlignLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { SideBySideDiff } from './SideBySideDiff'
 
 interface DriftPoint {
   entityType: string
@@ -52,9 +54,11 @@ export function DriftResolutionDialog({
   onStrategyChange,
   selectedStrategy = 'balanced'
 }: DriftResolutionDialogProps) {
+  const [diffView, setDiffView] = useState<'unified' | 'split'>('split')
+
   if (!resolutionPreview) return null
 
-  const { driftPoints, majorChanges, requiresApproval, resolvedContent, previewHtml } = resolutionPreview
+  const { driftPoints, majorChanges, requiresApproval, resolvedContent, originalContent, previewHtml } = resolutionPreview
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -168,18 +172,50 @@ export function DriftResolutionDialog({
 
               <TabsContent value="preview" className="space-y-4">
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Changes Preview</h3>
-                  {previewHtml ? (
-                    <ScrollArea className="h-[400px]">
-                      <pre className="text-xs font-mono p-4 bg-muted rounded-md whitespace-pre-wrap">
-                        {previewHtml}
-                      </pre>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">Changes Preview</h3>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={diffView === 'split' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setDiffView('split')}
+                        className="h-8"
+                      >
+                        <SplitSquareHorizontal className="h-3 w-3 mr-2" />
+                        Side-by-Side
+                      </Button>
+                      <Button
+                        variant={diffView === 'unified' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setDiffView('unified')}
+                        className="h-8"
+                      >
+                        <AlignLeft className="h-3 w-3 mr-2" />
+                        Unified
+                      </Button>
+                    </div>
+                  </div>
+                  {diffView === 'split' ? (
+                    <ScrollArea className="h-[400px] border rounded-md">
+                      <SideBySideDiff
+                        oldContent={originalContent}
+                        newContent={resolvedContent}
+                        filename="document.md"
+                      />
                     </ScrollArea>
                   ) : (
-                    <div className="p-8 text-center text-muted-foreground">
-                      <p>Diff preview not available</p>
-                      <p className="text-xs mt-2">View the resolved content tab to see the full updated document</p>
-                    </div>
+                    <ScrollArea className="h-[400px]">
+                      {previewHtml ? (
+                        <pre className="text-xs font-mono p-4 bg-muted rounded-md whitespace-pre-wrap">
+                          {previewHtml}
+                        </pre>
+                      ) : (
+                        <div className="p-8 text-center text-muted-foreground">
+                          <p>Diff preview not available</p>
+                          <p className="text-xs mt-2">View the resolved content tab to see the full updated document</p>
+                        </div>
+                      )}
+                    </ScrollArea>
                   )}
                 </div>
               </TabsContent>
