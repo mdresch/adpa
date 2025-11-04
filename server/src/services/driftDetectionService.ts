@@ -725,6 +725,8 @@ export class DriftDetectionService {
    * Works for: scope_items, deliverables, requirements, phases, activities,
    * resources, technologies, constraints, success_criteria, quality_standards, best_practices
    * 
+   * Optimized with O(n) lookups using Map instead of O(n²) array.find()
+   * 
    * @param entityType - Type of entity (e.g., 'deliverable', 'requirement')
    * @param baselineEntities - Entities from baseline
    * @param currentEntities - Entities from current document
@@ -738,17 +740,28 @@ export class DriftDetectionService {
   ): DriftPoint[] {
     const drift: DriftPoint[] = []
 
-    // Check for removed entities
+    // Build Map of current entities for O(1) lookups - optimizes from O(n²) to O(n)
+    const currentEntitiesMap = new Map<string, any>()
+    for (const current of currentEntities) {
+      const currentName = current[nameField] || current.name || current.title
+      if (currentName) {
+        currentEntitiesMap.set(this.normalizeString(currentName), current)
+      }
+    }
+
+    // Build Map of baseline entities for O(1) lookups
+    const baselineEntitiesMap = new Map<string, any>()
     for (const baseline of baselineEntities) {
       const baselineName = baseline[nameField] || baseline.name || baseline.title
-      if (!baselineName) continue
+      if (baselineName) {
+        baselineEntitiesMap.set(this.normalizeString(baselineName), baseline)
+      }
+    }
 
-      const found = currentEntities.find(c => {
-        const currentName = c[nameField] || c.name || c.title
-        return this.normalizeString(currentName) === this.normalizeString(baselineName)
-      })
-
-      if (!found) {
+    // Check for removed entities
+    for (const [normalizedName, baseline] of baselineEntitiesMap) {
+      if (!currentEntitiesMap.has(normalizedName)) {
+        const baselineName = baseline[nameField] || baseline.name || baseline.title
         drift.push({
           entityType,
           driftType: 'removed',
@@ -761,16 +774,9 @@ export class DriftDetectionService {
     }
 
     // Check for added entities
-    for (const current of currentEntities) {
-      const currentName = current[nameField] || current.name || current.title
-      if (!currentName) continue
-
-      const found = baselineEntities.find(b => {
-        const baselineName = b[nameField] || b.name || b.title
-        return this.normalizeString(baselineName) === this.normalizeString(currentName)
-      })
-
-      if (!found) {
+    for (const [normalizedName, current] of currentEntitiesMap) {
+      if (!baselineEntitiesMap.has(normalizedName)) {
+        const currentName = current[nameField] || current.name || current.title
         drift.push({
           entityType,
           driftType: 'added',
@@ -783,16 +789,10 @@ export class DriftDetectionService {
     }
 
     // Check for modifications
-    for (const current of currentEntities) {
-      const currentName = current[nameField] || current.name || current.title
-      if (!currentName) continue
-
-      const baseline = baselineEntities.find(b => {
-        const baselineName = b[nameField] || b.name || b.title
-        return this.normalizeString(baselineName) === this.normalizeString(currentName)
-      })
-
-      if (baseline && this.hasEntityChanged(baseline, current)) {
+    for (const [normalizedName, current] of currentEntitiesMap) {
+      const baseline = baselineEntitiesMap.get(normalizedName)
+      if (baseline && this.hasEntityChanged(entityType, baseline, current)) {
+        const currentName = current[nameField] || current.name || current.title
         drift.push({
           entityType,
           driftType: 'modified',
@@ -808,12 +808,13 @@ export class DriftDetectionService {
   }
 
   /**
-   * Check if an entity has changed (generic comparison)
+   * Check if an entity has changed (uses entity-type specific field comparison)
    */
-  private hasEntityChanged(baseline: any, current: any): boolean {
-    // Compare key fields that commonly indicate changes
-    const fieldsToCompare = ['description', 'status', 'priority', 'type', 'target_value', 'category']
+  private hasEntityChanged(entityType: string, baseline: any, current: any): boolean {
+    // Get fields to compare for this entity type
+    const fieldsToCompare = this.ENTITY_COMPARISON_FIELDS[entityType] || this.ENTITY_COMPARISON_FIELDS['default']
     
+    // Compare each relevant field
     for (const field of fieldsToCompare) {
       if (baseline[field] !== undefined && current[field] !== undefined) {
         if (baseline[field] !== current[field]) {
@@ -864,10 +865,9 @@ export class DriftDetectionService {
     if (baseline.status === 'approved' && current.status !== 'approved') return true
     
     // Priority increases require approval
-    const priorityLevels = { 'low': 1, 'medium': 2, 'high': 3, 'critical': 4 }
     if (baseline.priority && current.priority) {
-      const baselinePriority = priorityLevels[baseline.priority] || 0
-      const currentPriority = priorityLevels[current.priority] || 0
+      const baselinePriority = this.PRIORITY_LEVELS[baseline.priority as keyof typeof this.PRIORITY_LEVELS] || 0
+      const currentPriority = this.PRIORITY_LEVELS[current.priority as keyof typeof this.PRIORITY_LEVELS] || 0
       if (currentPriority > baselinePriority) return true
     }
     
