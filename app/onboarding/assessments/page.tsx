@@ -373,11 +373,24 @@ export default function AssessmentsListPage() {
                     <TableCell className="text-sm text-muted-foreground">
                       {new Date(assessment.createdAt).toLocaleDateString()}
                     </TableCell>
-                    <TableCell>
+                  <TableCell>
+                    {assessment.status === 'processing' ? (
+                      <div className="space-y-2 min-w-[200px]">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
+                          <span className="text-sm font-medium text-blue-600">Processing...</span>
+                        </div>
+                        <Progress value={assessment.progress || 30} className="h-2" />
+                        <p className="text-xs text-muted-foreground">
+                          {assessment.processedFiles || 0} of {assessment.totalDocuments || 0} documents processed
+                        </p>
+                      </div>
+                    ) : (
                       <Badge className={getStatusColor(assessment.status)} variant="outline">
                         {assessment.status}
                       </Badge>
-                    </TableCell>
+                    )}
+                  </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <Button
