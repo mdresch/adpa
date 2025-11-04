@@ -1,501 +1,498 @@
 # ADPA Quick Reference Guide
-
-**Guide Version:** 1.0  
-**Date:** November 4, 2025  
-**Format:** Quick Reference / Cheat Sheet
-
----
-
-## Common Tasks - Quick Steps
-
-### 🚀 Create a New Project
-
-1. Sidebar → **Projects**
-2. Click **+ New Project**
-3. Fill: Name, Description, Status
-4. Click **Create**
-
-**Shortcut**: `Ctrl/Cmd + N`
+**Cheat Sheet for Common Tasks**  
+**Version:** 1.0.0  
+**Last Updated:** November 4, 2025
 
 ---
 
-### 📄 Generate a Document
+## 🚀 Quick Actions
 
-1. Go to **Project** → **Documents** tab
-2. Click **+ Generate Document**
-3. Select **Template**
-4. Fill **Context** fields
-5. Choose **AI Provider**
-6. Click **Generate**
+### Create New Project
+```
+1. Dashboard → Projects → [+ New Project]
+2. Fill in: Name, Description, Start/End Date
+3. Click "Create Project"
+```
 
-**Time**: 30-60 seconds  
-**Shortcut**: `Ctrl/Cmd + D`
+### Generate Document
+```
+1. Open Project → Documents Tab
+2. Click [+ Generate Document]
+3. Select Template
+4. Provide Context
+5. Click "Generate"
+```
 
----
-
-### 📤 Upload a Document
-
-1. Project → Documents → **Upload**
-2. Enter **Document Name**
-3. **Select File** (.md, .pdf, .docx)
-4. Choose **Template** (optional)
-5. Click **Upload**
-
-**Max Size**: 10MB
-
----
-
-### 💾 Export a Document
-
-1. Open **Document**
-2. Click **Export** button
-3. Choose format:
-   - **PDF** (print-ready)
-   - **DOCX** (editable)
-   - **Markdown** (source)
-4. Download
+### Create Template
+```
+1. Templates → [+ New Template]
+2. Add Name, Category, Framework
+3. Define Sections
+4. Write System Prompts
+5. Save Template
+```
 
 ---
 
-### 📊 Create a Baseline
+## 📝 Template Design Patterns
 
-1. Project → **Baselines** tab
-2. Click **+ Create Baseline**
-3. Enter: Name, Description, Type
-4. Select **Documents** to include
-5. Click **Create**
-6. **Submit for Approval**
+### Good System Prompt Structure
+```markdown
+You are a [ROLE].
 
----
+Generate a [DOCUMENT SECTION] that:
+- [REQUIREMENT 1]
+- [REQUIREMENT 2]
+- [REQUIREMENT 3]
 
-### 🎯 Prioritize Projects
+Use [FORMAT/STRUCTURE].
+Maintain [TONE/STYLE].
+```
 
-1. Programs → Select **Program**
-2. Click **Prioritize** tab
-3. Click **Score** next to project
-4. Rate on 5 criteria (1-5)
-5. Add **Justifications**
-6. Click **Submit Score**
-7. Repeat for all projects
-8. View **Rankings Table**
+### Example: Status Summary
+```markdown
+You are an experienced project manager.
 
----
+Generate an executive summary that:
+- Summarizes project health (Green/Yellow/Red)
+- Highlights 2-3 key accomplishments
+- Identifies critical issues
+- Provides outlook for next week
 
-### 🔗 Connect an Integration
-
-1. Sidebar → **Integrations**
-2. Select integration (Confluence/SharePoint/GitHub)
-3. Click **Connect**
-4. Follow **OAuth** flow
-5. Grant **Permissions**
-6. Click **Authorize**
-7. **Test Connection**
+Keep it concise (150-200 words).
+Use professional business language.
+```
 
 ---
 
-### 🤖 Add AI Provider (Admin)
+## 🔧 API Quick Reference
 
-1. Sidebar → **AI Providers**
-2. Click **+ Add Provider**
-3. Select **Provider Type**
-4. Enter **API Key**
-5. Configure **Settings**
-6. Click **Test Connection**
-7. Click **Save**
+### Authentication
+```bash
+# API Key (Header)
+Authorization: Bearer adpa_key_abc123xyz456
 
----
+# cURL Example
+curl -X GET https://adpa.com/api/v1/projects \
+  -H "Authorization: Bearer YOUR_API_KEY"
+```
 
-## Navigation Quick Keys
+### Common Endpoints
 
-### Sidebar Sections
+**Projects**
+```
+GET    /api/v1/projects              # List projects
+POST   /api/v1/projects              # Create project
+GET    /api/v1/projects/{id}         # Get project
+PATCH  /api/v1/projects/{id}         # Update project
+DELETE /api/v1/projects/{id}         # Delete project
+```
 
-- **🏠 Dashboard**: Overview
-- **📁 Projects**: All projects
-- **📊 Programs**: Portfolio view
-- **📄 Documents**: All documents
-- **🔍 Search**: Find anything
-- **🤖 AI Providers**: AI management
-- **🔗 Integrations**: External tools
-- **📈 Analytics**: Metrics
-- **⚙️ Settings**: Preferences
-- **👥 Users**: User management (admin)
+**Documents**
+```
+GET    /api/v1/documents             # List documents
+GET    /api/v1/documents/{id}        # Get document
+POST   /api/v1/generation            # Generate document
+GET    /api/v1/generation/{jobId}    # Check status
+```
 
-### Keyboard Shortcuts
+**Templates**
+```
+GET    /api/v1/templates             # List templates
+POST   /api/v1/templates             # Create template
+GET    /api/v1/templates/{id}        # Get template
+```
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl/Cmd + K` | Quick Search |
-| `Ctrl/Cmd + N` | New Project |
-| `Ctrl/Cmd + D` | Generate Document |
-| `Ctrl/Cmd + S` | Save |
-| `Ctrl/Cmd + /` | Show Shortcuts |
-| `F1` | Help |
-| `Esc` | Close Dialog |
+### Request Examples
 
----
+**Create Project**
+```javascript
+POST /api/v1/projects
+{
+  "name": "Customer Portal",
+  "description": "Migrate to React",
+  "startDate": "2025-01-01",
+  "endDate": "2025-12-31",
+  "budget": 500000,
+  "status": "active"
+}
+```
 
-## AI Provider Selection Guide
+**Generate Document**
+```javascript
+POST /api/v1/generation
+{
+  "projectId": "proj-123",
+  "templateId": "tmpl-456",
+  "documentName": "Status Report - Nov 4",
+  "customInstructions": "Focus on milestone X"
+}
+```
 
-| Provider | Best For | Speed | Cost | Quality |
-|----------|----------|-------|------|---------|
-| **OpenAI (GPT-4)** | General purpose, high quality | Medium | $$$ | ⭐⭐⭐⭐⭐ |
-| **Google AI (Gemini)** | Technical docs, code | Fast | $$ | ⭐⭐⭐⭐ |
-| **GitHub Copilot** | Code documentation | Fast | $ | ⭐⭐⭐ |
-| **Ollama** | Privacy-sensitive content | Slow | Free | ⭐⭐⭐ |
+**Check Generation Status**
+```javascript
+GET /api/v1/generation/{jobId}
 
-**Recommendation**: Use **OpenAI** for most documents, **Google AI** for technical content, **Ollama** for sensitive data.
-
----
-
-## Document Template Quick Guide
-
-### PMBOK Templates
-
-- **Project Charter**: Project initiation document
-- **Project Management Plan**: Comprehensive project plan
-- **Scope Statement**: Detailed scope definition
-- **WBS**: Work Breakdown Structure
-- **Risk Register**: Risk identification and tracking
-- **Change Request**: Change management
-- **Lessons Learned**: Post-project review
-
-### BABOK Templates
-
-- **Business Requirements**: High-level requirements
-- **Functional Requirements**: Detailed functional specs
-- **Use Case**: User interaction scenarios
-- **User Story**: Agile user stories
-- **Process Flow**: Business process diagrams
-
-### DMBOK Templates
-
-- **Data Dictionary**: Data definitions
-- **Data Model**: Entity-relationship diagrams
-- **Data Quality Plan**: Data quality management
-- **Data Governance**: Data governance framework
+Response:
+{
+  "state": "completed",
+  "document": {
+    "id": "doc-789",
+    "name": "Status Report - Nov 4",
+    "qualityScore": 87
+  }
+}
+```
 
 ---
 
-## Priority Scoring Quick Reference
-
-### Default Criteria (5-Criteria Model)
-
-| Criterion | Weight | What It Measures |
-|-----------|--------|------------------|
-| **Strategic Alignment** | 30% | Fit with corporate strategy |
-| **Value Contribution** | 25% | ROI, benefits, business value |
-| **Risk Level** | 15% | Project risk (inverted) |
-| **Resource Availability** | 20% | Staff and funding availability |
-| **Urgency** | 10% | Time sensitivity |
-
-### Scoring Scale
-
-- **5**: Excellent / Critical / Very High
-- **4**: Good / High
-- **3**: Moderate / Medium
-- **2**: Fair / Low
-- **1**: Poor / Very Low
-
-### Priority Tiers
-
-- 🔴 **Critical** (4.0+): Must do, highest priority
-- 🟠 **High** (3.0-3.9): Should do, important
-- 🟡 **Medium** (2.0-2.9): Could do, moderate
-- ⚪ **Low** (<2.0): Nice to have, defer
-
----
-
-## Baseline Management Quick Tips
-
-### Baseline Types
-
-- **Scope Baseline**: What we're building
-- **Schedule Baseline**: When we're delivering
-- **Cost Baseline**: How much we're spending
-- **Quality Baseline**: Standards and criteria
-
-### Drift Indicators
-
-- 🟢 **Low**: Within tolerance, no action
-- 🟠 **Medium**: Review recommended
-- 🔴 **High**: Action required
-- ⚫ **Critical**: Immediate attention
-
-### When to Create a Baseline
-
-✅ After project approval  
-✅ At phase gates  
-✅ Before major changes  
-✅ Quarterly for long projects
-
----
-
-## Troubleshooting - Quick Fixes
-
-### Login Issues
-
-1. Verify email/password
-2. Try "Forgot Password"
-3. Clear browser cache
-4. Contact administrator
-
-### Document Generation Fails
-
-1. Check AI provider health
-2. Fill all required fields
-3. Try different AI provider
-4. Check backend status
-
-### Upload Fails
-
-1. Check file size (<10MB)
-2. Use supported formats
-3. Check permissions
-4. Try different browser
-
-### Slow Performance
-
-1. Clear browser cache
-2. Close extra tabs
-3. Check internet speed
-4. Try different browser
-
----
-
-## File Format Guide
-
-### Supported Upload Formats
-
-| Format | Extension | Best For |
-|--------|-----------|----------|
-| Markdown | `.md` | Best integration, recommended |
-| PDF | `.pdf` | Final deliverables |
-| Word | `.docx` | Collaborative editing |
-| Text | `.txt` | Plain text |
-
-### Export Formats
-
-| Format | Use Case |
-|--------|----------|
-| **PDF** | Final deliverables, printing |
-| **DOCX** | Editing in Microsoft Word |
-| **Markdown** | Source format, version control |
-| **HTML** | Web publishing |
-
----
-
-## Status Indicators
-
-### Project Status
-
-- 🟢 **Active**: In progress
-- 🟡 **Planning**: Not started
-- 🔵 **On Hold**: Paused
-- ⚫ **Completed**: Finished
-- 🔴 **Cancelled**: Terminated
-
-### Document Status
-
-- ✅ **Final**: Approved, locked
-- 📝 **Draft**: Work in progress
-- 🔄 **Under Review**: Pending approval
-- ❌ **Rejected**: Not approved
-- 🗑️ **Archived**: Historical
-
-### AI Provider Health
-
-- 🟢 **Healthy**: Operating normally
-- 🟡 **Degraded**: Slower than usual
-- 🔴 **Down**: Not available
-- ⚪ **Unknown**: Status not checked
-
----
-
-## User Permissions Quick Reference
-
-### Standard Roles
-
-| Role | Can Do |
-|------|--------|
-| **Admin** | Everything (full access) |
-| **Manager** | Create projects, manage teams, approve baselines |
-| **User** | Create documents, view projects |
-| **Viewer** | Read-only access |
-
-### Permission Examples
-
-| Action | Admin | Manager | User | Viewer |
-|--------|-------|---------|------|--------|
-| Create Project | ✅ | ✅ | ❌ | ❌ |
-| Generate Document | ✅ | ✅ | ✅ | ❌ |
-| View Document | ✅ | ✅ | ✅ | ✅ |
-| Approve Baseline | ✅ | ✅ | ❌ | ❌ |
-| Manage Users | ✅ | ❌ | ❌ | ❌ |
-| Configure AI | ✅ | ❌ | ❌ | ❌ |
-
----
-
-## Integration Quick Setup
+## 🔌 Integration Quick Setup
 
 ### Confluence
-
-1. Integrations → **Confluence** → **Connect**
-2. Login to **Atlassian**
-3. Grant **Permissions** (read, write)
-4. Select **Space**
-5. **Test** connection
+```
+1. Settings → Integrations → Confluence
+2. Add Confluence URL
+3. Enter OAuth credentials
+4. Authorize
+5. Select default space
+```
 
 ### SharePoint
-
-1. Integrations → **SharePoint** → **Connect**
-2. Login to **Microsoft**
-3. Grant **Permissions** (Files.ReadWrite)
-4. Select **Site**
-5. **Test** connection
+```
+1. Settings → Integrations → SharePoint
+2. Add SharePoint URL
+3. Enter Azure AD app details
+4. Authorize with Microsoft
+5. Select document library
+```
 
 ### GitHub
-
-1. Integrations → **GitHub** → **Connect**
-2. Login to **GitHub**
-3. Grant **Permissions** (repo, issues)
-4. Select **Repositories**
-5. **Test** connection
-
----
-
-## Analytics Quick Metrics
-
-### Project Dashboard
-
-- **Total Documents**: Count of all documents
-- **AI Usage**: Number of AI generations
-- **Baseline Status**: Current drift level
-- **Recent Activity**: Last 30 days
-
-### Program Dashboard
-
-- **Project Count**: Number of projects
-- **Budget Utilization**: Spend vs budget
-- **Priority Distribution**: Projects by tier
-- **Health Score**: Overall program health
-
----
-
-## Best Practices - Quick Checklist
-
-### Before Starting
-
-- [ ] Understand the feature
-- [ ] Read documentation
-- [ ] Check permissions
-- [ ] Gather required information
-
-### During Work
-
-- [ ] Fill all required fields
-- [ ] Review AI output carefully
-- [ ] Add meaningful descriptions
-- [ ] Save progress frequently
-
-### After Completion
-
-- [ ] Verify results
-- [ ] Export if needed
-- [ ] Notify stakeholders
-- [ ] Document decisions
-
----
-
-## Support - Quick Contact
-
-### Get Help
-
-- **Documentation**: `/docs`
-- **Email**: support@adpa-framework.com
-- **Help Desk**: https://support.adpa-framework.com
-- **In-App Help**: Press `F1`
-
-### Report Issues
-
-- **Bug Reports**: Help → Report Bug
-- **Feature Requests**: Help → Feature Request
-- **General Feedback**: Feedback button (bottom right)
-
----
-
-## URLs Quick Reference
-
-### Main Pages
-
 ```
-Dashboard:         /
-Projects:          /projects
-Programs:          /programs
-Documents:         /documents
-AI Providers:      /ai-providers
-Integrations:      /integrations
-Analytics:         /analytics
-Settings:          /settings
-```
-
-### API Endpoints (Developers)
-
-```
-Health Check:      GET  /api/health
-Projects:          GET  /api/projects
-Generate Document: POST /api/documents/generate
-Upload Document:   POST /api/documents/upload
+1. Settings → Integrations → GitHub
+2. Enter organization name
+3. Add OAuth app credentials
+4. Authorize with GitHub
+5. Select repository
 ```
 
 ---
 
-## Quick Start Workflows
+## 🎯 AI Provider Configuration
 
-### New User (Day 1)
+### Add OpenAI
+```
+Settings → AI Providers → [+ Add Provider]
 
-1. ✅ Log in
-2. ✅ Explore dashboard
-3. ✅ Create first project
-4. ✅ Generate first document
-5. ✅ Export to PDF
+Provider: OpenAI
+API Key: sk-proj-xxxxxxxxxxxxx
+Model: GPT-4
+Priority: 1 (primary)
+Enable Failover: ☑
+```
 
-**Time**: 15 minutes
+### Add Google AI
+```
+Provider: Google AI
+API Key: AIzaSyxxxxxxxxxxxxxxx
+Model: Gemini Pro
+Priority: 2 (fallback)
+```
 
-### Project Setup (Day 1)
-
-1. ✅ Create project
-2. ✅ Add team members
-3. ✅ Generate project charter
-4. ✅ Create initial baseline
-5. ✅ Set up integration (optional)
-
-**Time**: 30 minutes
-
-### Portfolio Management (Week 1)
-
-1. ✅ Create program
-2. ✅ Add projects to program
-3. ✅ Score projects (prioritization)
-4. ✅ Review rankings
-5. ✅ Export results
-
-**Time**: 2 hours
+### Failover Strategy
+```
+Primary: OpenAI (GPT-4)
+  ↓ (if fails)
+Secondary: Google AI (Gemini Pro)
+  ↓ (if fails)
+Tertiary: Ollama (local)
+```
 
 ---
 
-## Version Information
+## 📊 Quality Score Interpretation
 
-**Guide Version**: 1.0  
-**ADPA Version**: 2.0.0  
-**Last Updated**: November 4, 2025  
-**Format**: Quick Reference
+```
+95-100  ⭐⭐⭐⭐⭐  Excellent
+85-94   ⭐⭐⭐⭐    Very Good
+75-84   ⭐⭐⭐      Good
+65-74   ⭐⭐        Needs Improvement
+<65     ⭐          Regenerate Recommended
+```
+
+### Quality Components
+- **Completeness**: All sections present, adequate length
+- **Accuracy**: Context properly used, data correct
+- **Compliance**: Standards followed, structure correct
+- **Readability**: Clear language, appropriate tone
 
 ---
 
-**💡 Tip**: Print this guide and keep it handy for quick reference!
+## ⚠️ Troubleshooting Quick Fixes
 
-**📚 More Details**: See the full **Getting Started Guide** for comprehensive instructions.
+### Generation Failed
+```
+1. Check AI provider status
+2. Verify template configuration
+3. Ensure context data available
+4. Retry with different AI provider
+5. Check error logs
+```
+
+### Integration Not Syncing
+```
+1. Settings → Integrations
+2. Check connection status
+3. Re-authenticate if needed
+4. Verify permissions
+5. Test connection
+```
+
+### Low Quality Score
+```
+1. Review quality report details
+2. Improve system prompts
+3. Add more context data
+4. Regenerate specific sections
+5. Edit manually if needed
+```
+
+### Slow Performance
+```
+1. Check system health dashboard
+2. Clear cache (Settings → Performance)
+3. Reduce concurrent jobs
+4. Optimize database queries
+5. Contact admin if persists
+```
 
 ---
 
-**Quick Reference Guide | ADPA Framework | © 2025**
+## 🔒 Security Checklist
+
+**For Users:**
+- [ ] Use strong password
+- [ ] Enable 2FA if available
+- [ ] Don't share credentials
+- [ ] Log out when finished
+- [ ] Review document permissions
+
+**For Administrators:**
+- [ ] Enforce HTTPS
+- [ ] Enable rate limiting
+- [ ] Regular security audits
+- [ ] Rotate API keys quarterly
+- [ ] Monitor audit logs
+- [ ] Keep backups current
+
+**For Developers:**
+- [ ] Store API keys in env variables
+- [ ] Never commit secrets to git
+- [ ] Verify webhook signatures
+- [ ] Implement retry logic
+- [ ] Handle errors gracefully
+- [ ] Use HTTPS for all calls
+
+---
+
+## 📈 Performance Tips
+
+### Template Optimization
+- Keep system prompts focused (< 500 words)
+- Only include necessary context
+- Use clear, specific instructions
+- Avoid overly complex logic
+
+### API Optimization
+- Implement request caching
+- Use pagination for large datasets
+- Batch requests when possible
+- Implement exponential backoff
+
+### Database Optimization
+- Add indexes for frequent queries
+- Archive old documents
+- Clean up failed jobs
+- Regular maintenance
+
+---
+
+## 🎨 Markdown Formatting Guide
+
+### Headers
+```markdown
+# Heading 1
+## Heading 2
+### Heading 3
+```
+
+### Lists
+```markdown
+- Bullet item
+- Another item
+  - Nested item
+
+1. Numbered item
+2. Another item
+```
+
+### Tables
+```markdown
+| Header 1 | Header 2 |
+|----------|----------|
+| Cell 1   | Cell 2   |
+| Cell 3   | Cell 4   |
+```
+
+### Emphasis
+```markdown
+**Bold text**
+*Italic text*
+`Code text`
+```
+
+### Links
+```markdown
+[Link text](https://example.com)
+```
+
+### Code Blocks
+````markdown
+```javascript
+const example = "code";
+```
+````
+
+---
+
+## 🔔 Webhook Events Reference
+
+```
+document.generated   → Document creation complete
+document.updated     → Document modified
+project.created      → New project added
+generation.failed    → Generation error occurred
+integration.synced   → Third-party sync complete
+```
+
+### Webhook Payload Example
+```json
+{
+  "event": "document.generated",
+  "timestamp": "2025-11-04T14:23:45Z",
+  "data": {
+    "documentId": "doc-789",
+    "documentName": "Status Report",
+    "projectId": "proj-123",
+    "qualityScore": 87
+  }
+}
+```
+
+---
+
+## 📞 Support Resources
+
+### In-App Help
+- 💬 Help button (bottom right)
+- 📧 Support ticket system
+- 📚 Knowledge base
+
+### Documentation
+- 📖 User Guide
+- 🔧 API Documentation
+- 👨‍💼 Admin Guide
+- 👨‍💻 Developer Guide
+
+### Community
+- 💬 User forum
+- 🐛 Bug reports
+- 💡 Feature requests
+- 📺 Video tutorials
+
+### Contact
+- **End Users**: support@adpa.example.com
+- **Administrators**: admin-support@adpa.example.com
+- **Developers**: dev-support@adpa.example.com
+
+---
+
+## 📋 Keyboard Shortcuts
+
+```
+Ctrl/Cmd + K         → Quick search
+Ctrl/Cmd + N         → New document
+Ctrl/Cmd + S         → Save
+Ctrl/Cmd + P         → Print/Export
+Esc                  → Close dialog
+```
+
+---
+
+## 🎓 Training Certification Levels
+
+### End User (2 hours)
+- Template usage
+- Document generation
+- Quality review
+
+### Administrator (4 hours)
+- System configuration
+- User management
+- Integration setup
+- Performance monitoring
+
+### Developer (3 hours)
+- API integration
+- Webhook handling
+- Custom context sources
+
+---
+
+## 📊 System Status Indicators
+
+```
+🟢 Green    → Operational
+🟡 Yellow   → Degraded performance
+🔴 Red      → Service disruption
+⚪ Gray     → Maintenance mode
+```
+
+---
+
+## 🗂️ File Format Support
+
+### Import Formats
+- Markdown (.md)
+- Word (.docx)
+- PDF (.pdf) - text extraction
+- Plain Text (.txt)
+
+### Export Formats
+- Markdown (.md)
+- PDF (.pdf)
+- Word (.docx)
+- HTML (.html)
+- JSON (.json)
+
+---
+
+## 💡 Pro Tips
+
+1. **Use Templates Consistently**: Create templates for recurring documents
+2. **Leverage Context**: More context = better quality
+3. **Review Before Publishing**: Always check generated content
+4. **Version Control**: Keep versions of important templates
+5. **Regular Backups**: Export critical documents periodically
+6. **Monitor Quality**: Track quality scores over time
+7. **Optimize Prompts**: Iterate on system prompts for better results
+8. **Use Webhooks**: Automate workflows with event notifications
+9. **Cache Data**: Reduce API calls with intelligent caching
+10. **Stay Updated**: Check release notes for new features
+
+---
+
+**Quick Reference Version:** 1.0.0  
+**Last Updated:** November 4, 2025  
+**Print-Friendly:** Yes - Designed for desk reference
+
+💡 **Tip**: Print this guide and keep it handy for quick lookups!

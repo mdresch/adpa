@@ -1,6 +1,6 @@
 # 📚 ADPA Documentation Index
 
-**Last Updated:** October 26, 2025  
+**Last Updated:** November 4, 2025  
 **Version:** 2.0.0
 
 ---
@@ -67,10 +67,14 @@
 - Production error guides
 - Quick fixes (permission grants, etc.)
 
-### **📖 User Guides**
+### **📖 User Guides & Training**
 → [`docs/11-user-guides/`](./11-user-guides/)
-- End-user documentation
-- Feature walkthroughs
+- **Training Materials Index** - Complete guide to all training resources
+- **End User Training** - 2-hour course for template authors (with certification)
+- **Administrator Training** - 4-hour course for system admins (with certification)
+- **Developer Training** - 3-hour course for API integrators (with certification)
+- **Quick Reference Guide** - Cheat sheets and common tasks
+- Feature walkthroughs and user documentation
 
 ### **🔐 Security**
 → [`docs/12-security/`](./12-security/)
