@@ -7,10 +7,68 @@
 import express, { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
 import { authenticateToken as authenticate } from '../middleware/auth';
+import { pool } from '../database/connection';
 import * as assessmentReportService from '../services/assessmentReportService';
 import { portfolioAssessmentService } from '../services/portfolioAssessmentService';
 
 const router = express.Router();
+
+// ============================================================================
+// GET /api/assessment/list
+// Get all assessments for current user
+// ============================================================================
+
+router.get('/list', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user.id;
+
+    logger.info('Fetching assessments list', { userId });
+
+    // Get all assessments for user's projects
+    const query = `
+      SELECT 
+        a.*,
+        p.name as project_name,
+        ub.uploaded_by,
+        ub.batch_metadata
+      FROM assessments a
+      JOIN projects p ON a.project_id = p.id
+      LEFT JOIN upload_batches ub ON a.batch_id = ub.id
+      WHERE p.created_by = $1
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    `;
+
+    const result = await pool.query(query, [userId]);
+
+    res.json({
+      success: true,
+      data: result.rows.map(row => ({
+        id: row.id,
+        batchId: row.batch_id,
+        projectId: row.project_id,
+        projectName: row.project_name,
+        clientName: row.batch_metadata?.clientName || 'Unknown Client',
+        organizationName: row.batch_metadata?.organizationName || row.project_name,
+        assessmentPurpose: row.batch_metadata?.assessmentPurpose || 'Assessment',
+        overallMaturityLevel: row.overall_maturity_level,
+        overallMaturityLabel: row.maturity_label,
+        averageQualityScore: parseFloat(row.avg_quality_score),
+        totalDocuments: parseInt(row.total_documents),
+        gapsCount: row.gaps_count || 0,
+        createdAt: row.created_at,
+        status: row.status || 'complete'
+      }))
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to fetch assessments list', {
+      error: error.message,
+      userId: (req as any).user?.id
+    });
+    next(error);
+  }
+});
 
 // ============================================================================
 // GET /api/assessment/:assessmentId
