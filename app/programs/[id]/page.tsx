@@ -11,6 +11,8 @@ import { MetricsDashboard } from '@/components/program/MetricsDashboard';
 import { ProgramProjectsTab } from '@/components/program/ProgramProjectsTab';
 import { ProgramMetrics } from '@/components/program/types';
 import FinancialDashboard from '@/components/program/FinancialDashboard';
+import { ProgramRisksTab } from '@/components/program/ProgramRisksTab';
+import { ProgramReportsTab } from '@/components/program/ProgramReportsTab';
 import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { toast } from 'sonner';
@@ -299,7 +301,7 @@ export default function ProgramDetailPage() {
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-purple-900/20">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-cyan-50/30 dark:from-slate-900 dark:via-blue-900/20 dark:to-cyan-900/20">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
@@ -311,7 +313,7 @@ export default function ProgramDetailPage() {
                 {loading && !program ? (
                   <div className="flex items-center gap-3">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                    <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-600 bg-clip-text text-transparent">
                       Loading Program...
                     </h1>
                   </div>
@@ -319,7 +321,7 @@ export default function ProgramDetailPage() {
                   <>
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-blue-600 to-cyan-600 bg-clip-text text-transparent">
+                        <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-sky-600 to-cyan-600 bg-clip-text text-transparent">
                           Program Overview - {program?.name || 'Unknown Program'}
                         </h1>
                         <p className="text-muted-foreground mt-2">
@@ -501,32 +503,26 @@ export default function ProgramDetailPage() {
                   )}
                 </TabsContent>
 
-                {/* Risks Tab - Placeholder */}
+                {/* Risks Tab - Full Implementation */}
                 <TabsContent value="risks" className="mt-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Risk Register</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground">
-                        Detailed risk register will be displayed here
-                      </p>
-                    </CardContent>
-                  </Card>
+                  {programId ? (
+                    <ProgramRisksTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
                 </TabsContent>
 
-                {/* Reports Tab - Placeholder */}
+                {/* Reports Tab - Full Implementation */}
                 <TabsContent value="reports" className="mt-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Program Reports</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-muted-foreground">
-                        Report generation and history will be displayed here
-                      </p>
-                    </CardContent>
-                  </Card>
+                  {programId ? (
+                    <ProgramReportsTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
                 </TabsContent>
               </Tabs>
             </PageTransition>
