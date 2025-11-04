@@ -111,26 +111,10 @@ export function ExecutiveDriftAlertsWidget() {
   const fetchExecutiveDashboardData = async () => {
     try {
       const [summaryData, alertsData, budgetData, opportunitiesData] = await Promise.all([
-        fetch('/api/executive-dashboard/summary', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }).then(r => r.json()),
-        fetch('/api/executive-dashboard/drift-alerts?severity=critical&limit=5', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }).then(r => r.json()),
-        fetch('/api/executive-dashboard/budget-alerts', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }).then(r => r.json()),
-        fetch('/api/executive-dashboard/positive-drift', {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        }).then(r => r.json())
+        apiClient.get('/executive-dashboard/summary'),
+        apiClient.get('/executive-dashboard/drift-alerts?severity=critical&limit=5'),
+        apiClient.get('/executive-dashboard/budget-alerts'),
+        apiClient.get('/executive-dashboard/positive-drift')
       ])
 
       setSummary(summaryData)

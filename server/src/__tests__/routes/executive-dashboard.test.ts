@@ -35,9 +35,9 @@ jest.mock('../../../src/utils/logger', () => ({
   })),
 }))
 
-import executiveDashboardRoutes from '../../../src/routes/executive-dashboard'
-import { pool } from '../../../src/database/connection'
-import { cache } from '../../../src/utils/redis'
+import executiveDashboardRoutes from '../../routes/executive-dashboard'
+import { pool } from '../../database/connection'
+import { cache } from '../../utils/redis'
 
 // Stub auth middleware to bypass token checks in tests
 const noopAuth = (req: any, res: any, next: any) => {

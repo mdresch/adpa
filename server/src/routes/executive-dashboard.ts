@@ -9,7 +9,7 @@
 import express from 'express'
 import Joi from 'joi'
 import { pool } from '../database/connection'
-import { authenticateToken, requirePermission } from '../middleware/auth'
+import { authenticateToken } from '../middleware/auth'
 import { validateQuery } from '../middleware/validation'
 import { logger, childLogger } from '../utils/logger'
 import { cache } from '../utils/redis'
@@ -125,7 +125,15 @@ router.get(
 
       const response = {
         alerts: result.rows,
-        statistics: statsResult.rows[0],
+        statistics: statsResult.rows[0] || {
+          critical_count: 0,
+          high_count: 0,
+          medium_count: 0,
+          low_count: 0,
+          unaddressed_count: 0,
+          last_24h_count: 0,
+          last_7d_count: 0
+        },
         generated_at: new Date().toISOString()
       }
 
@@ -337,9 +345,27 @@ router.get(
       `, [userId])
 
       const response = {
-        drift_statistics: driftStats.rows[0],
-        innovation_statistics: innovationStats.rows[0],
-        project_health: projectHealth.rows[0],
+        drift_statistics: driftStats.rows[0] || {
+          total_drift: 0,
+          critical_drift: 0,
+          high_drift: 0,
+          unaddressed_drift: 0,
+          budget_overruns: 0,
+          scope_creep: 0,
+          schedule_delays: 0
+        },
+        innovation_statistics: innovationStats.rows[0] || {
+          total_opportunities: 0,
+          patent_opportunities: 0,
+          efficiency_improvements: 0,
+          cost_savings: 0,
+          avg_novelty_score: 0
+        },
+        project_health: projectHealth.rows[0] || {
+          total_projects: 0,
+          active_projects: 0,
+          projects_at_risk: 0
+        },
         generated_at: new Date().toISOString()
       }
 
