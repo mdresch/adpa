@@ -41,6 +41,7 @@ interface DriftResolutionDialogProps {
   resolutionPreview: ResolutionPreview | null
   onApply: () => void
   isApplying?: boolean
+  isLoading?: boolean
   onStrategyChange?: (strategy: 'conservative' | 'balanced' | 'permissive') => void
   selectedStrategy?: 'conservative' | 'balanced' | 'permissive'
 }
@@ -51,14 +52,21 @@ export function DriftResolutionDialog({
   resolutionPreview,
   onApply,
   isApplying = false,
+  isLoading = false,
   onStrategyChange,
   selectedStrategy = 'balanced'
 }: DriftResolutionDialogProps) {
   const [diffView, setDiffView] = useState<'unified' | 'split'>('split')
 
-  if (!resolutionPreview) return null
+  // Show loading state if no preview yet but dialog is open and loading
+  const showLoadingState = !resolutionPreview && isLoading
 
-  const { driftPoints, majorChanges, requiresApproval, resolvedContent, originalContent, previewHtml } = resolutionPreview
+  const driftPoints = resolutionPreview?.driftPoints || []
+  const majorChanges = resolutionPreview?.majorChanges || []
+  const requiresApproval = resolutionPreview?.requiresApproval || false
+  const resolvedContent = resolutionPreview?.resolvedContent || ''
+  const originalContent = resolutionPreview?.originalContent || ''
+  const previewHtml = resolutionPreview?.previewHtml
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -74,14 +82,28 @@ export function DriftResolutionDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
-          <Tabs defaultValue="summary" className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="summary">Summary</TabsTrigger>
-              <TabsTrigger value="preview">Preview Changes</TabsTrigger>
-              <TabsTrigger value="resolved">Resolved Content</TabsTrigger>
-            </TabsList>
+          {showLoadingState ? (
+            <div className="flex flex-col items-center justify-center h-[400px] space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-semibold">Analyzing Drift and Preparing Resolution...</h3>
+                <p className="text-sm text-muted-foreground">
+                  AI is analyzing the document and baseline to generate a resolution preview.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This usually takes 3-10 seconds.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <Tabs defaultValue="summary" className="h-full flex flex-col">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="summary">Summary</TabsTrigger>
+                <TabsTrigger value="preview">Preview Changes</TabsTrigger>
+                <TabsTrigger value="resolved">Resolved Content</TabsTrigger>
+              </TabsList>
 
-            <ScrollArea className="flex-1 mt-4">
+              <ScrollArea className="flex-1 mt-4">
               <TabsContent value="summary" className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Drift Points Identified: {driftPoints.length}</h3>
@@ -232,6 +254,7 @@ export function DriftResolutionDialog({
               </TabsContent>
             </ScrollArea>
           </Tabs>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-4 border-t">
@@ -249,10 +272,10 @@ export function DriftResolutionDialog({
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} disabled={isApplying}>
+            <Button variant="outline" onClick={onClose} disabled={isApplying || isLoading}>
               Cancel
             </Button>
-            <Button onClick={onApply} disabled={isApplying}>
+            <Button onClick={onApply} disabled={isApplying || isLoading || !resolutionPreview}>
               {isApplying ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
