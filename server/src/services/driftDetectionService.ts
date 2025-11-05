@@ -7,6 +7,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { escalationService } from './escalationService'
 
 export interface DriftPoint {
   entityType: string // 'stakeholder', 'risk', 'milestone', etc.
@@ -26,18 +27,28 @@ export interface DriftDetectionResult {
 }
 
 interface ExtractedEntities {
-  stakeholders: any[]
-  risks: any[]
-  milestones: any[]
+  // Core 14 entity types from baseline
+  scope_items: any[]
   deliverables: any[]
+  requirements: any[]
+  milestones: any[]
+  phases: any[]
+  activities: any[]
+  resources: any[]
+  technologies: any[]
+  stakeholders: any[]
   constraints: any[]
+  risks: any[]
+  success_criteria: any[]
+  quality_standards: any[]
+  best_practices: any[]
+  
+  // Legacy fields for backward compatibility
   assumptions: any[]
   dependencies: any[]
-  resources: any[]
   budget: any
   timeline: any
   scope: any
-  success_criteria: any[]
   technical_requirements: any[]
 }
 
@@ -55,6 +66,34 @@ interface Baseline {
 }
 
 export class DriftDetectionService {
+  // Priority levels for comparison
+  private readonly PRIORITY_LEVELS = {
+    'low': 1,
+    'medium': 2,
+    'high': 3,
+    'critical': 4
+  } as const
+
+  // Fields to compare for each entity type
+  private readonly ENTITY_COMPARISON_FIELDS: Record<string, string[]> = {
+    'scope_item': ['description', 'inclusion_status', 'priority'],
+    'deliverable': ['description', 'status', 'type', 'acceptance_criteria'],
+    'requirement': ['description', 'status', 'priority', 'type'],
+    'milestone': ['description', 'status', 'due_date'],
+    'phase': ['description', 'status', 'start_date', 'end_date'],
+    'activity': ['description', 'duration', 'estimated_hours'],
+    'resource': ['description', 'type', 'allocation'],
+    'technology': ['category', 'version', 'purpose'],
+    'stakeholder': ['role', 'influence_level', 'interest_level', 'contact'],
+    'constraint': ['description', 'type', 'impact'],
+    'risk': ['description', 'probability', 'impact', 'mitigation_strategy'],
+    'success_criterion': ['description', 'target_value', 'measurement_method'],
+    'quality_standard': ['description', 'measurement_method', 'target_value'],
+    'best_practice': ['description', 'category', 'implementation_guidance'],
+    // Default fields for unknown types
+    'default': ['description', 'status', 'priority', 'type']
+  }
+
   /**
    * Check for drift after document update
    */
@@ -183,19 +222,30 @@ export class DriftDetectionService {
 
       // Parse metadata for extracted entities
       // IMPORTANT: Only use metadata, not text extraction, to avoid false positives
+      // Parse metadata for extracted entities - all 14 types
       const entities: ExtractedEntities = {
-        stakeholders: metadata?.stakeholders || [],
-        risks: metadata?.risks || [],
-        milestones: metadata?.milestones || [],
+        // Core 14 entity types
+        scope_items: metadata?.scope_items || [],
         deliverables: metadata?.deliverables || [],
+        requirements: metadata?.requirements || [],
+        milestones: metadata?.milestones || [],
+        phases: metadata?.phases || [],
+        activities: metadata?.activities || [],
+        resources: metadata?.resources || [],
+        technologies: metadata?.technologies || [],
+        stakeholders: metadata?.stakeholders || [],
         constraints: metadata?.constraints || [],
+        risks: metadata?.risks || [],
+        success_criteria: metadata?.success_criteria || [],
+        quality_standards: metadata?.quality_standards || [],
+        best_practices: metadata?.best_practices || [],
+        
+        // Legacy fields for backward compatibility
         assumptions: metadata?.assumptions || [],
         dependencies: metadata?.dependencies || [],
-        resources: metadata?.resources || [],
         budget: metadata?.budget || null,
         timeline: metadata?.timeline || null,
         scope: metadata?.scope || null,
-        success_criteria: metadata?.success_criteria || [],
         technical_requirements: metadata?.technical_requirements || []
       }
 
@@ -284,6 +334,9 @@ export class DriftDetectionService {
 
   /**
    * Compare current entities with baseline
+   * Checks all 14 entity types: scope_items, deliverables, requirements, milestones, 
+   * phases, activities, resources, technologies, stakeholders, constraints, risks, 
+   * success_criteria, quality_standards, best_practices
    */
   private compareWithBaseline(
     baseline: Baseline,
@@ -293,6 +346,102 @@ export class DriftDetectionService {
 
     // Check stakeholders - only if baseline actually has stakeholders
     if (baseline.resource_baseline?.stakeholders && Array.isArray(baseline.resource_baseline.stakeholders) && baseline.resource_baseline.stakeholders.length > 0) {
+    // 1. Check scope_items
+    if (baseline.scope_baseline?.in_scope_items || baseline.scope_baseline?.out_scope_items) {
+      const allBaselineScopeItems = [
+        ...(baseline.scope_baseline.in_scope_items || []),
+        ...(baseline.scope_baseline.out_scope_items || [])
+      ]
+      const scopeItemDrift = this.detectGenericEntityDrift(
+        'scope_item',
+        allBaselineScopeItems,
+        currentEntities.scope_items,
+        'name'
+      )
+      driftPoints.push(...scopeItemDrift)
+    }
+
+    // 2. Check deliverables
+    if (baseline.scope_baseline?.deliverables) {
+      const deliverableDrift = this.detectGenericEntityDrift(
+        'deliverable',
+        baseline.scope_baseline.deliverables,
+        currentEntities.deliverables,
+        'name'
+      )
+      driftPoints.push(...deliverableDrift)
+    }
+
+    // 3. Check requirements
+    if (baseline.scope_baseline?.requirements) {
+      const requirementDrift = this.detectGenericEntityDrift(
+        'requirement',
+        baseline.scope_baseline.requirements,
+        currentEntities.requirements,
+        'name'
+      )
+      driftPoints.push(...requirementDrift)
+    }
+
+    // 4. Check milestones
+    if (baseline.timeline_baseline?.milestones) {
+      const milestoneDrift = this.detectMilestoneDrift(
+        baseline.timeline_baseline.milestones,
+        currentEntities.milestones
+      )
+      driftPoints.push(...milestoneDrift)
+    }
+
+    // 5. Check phases
+    if (baseline.timeline_baseline?.phases) {
+      const phaseDrift = this.detectGenericEntityDrift(
+        'phase',
+        baseline.timeline_baseline.phases,
+        currentEntities.phases,
+        'name'
+      )
+      driftPoints.push(...phaseDrift)
+    }
+
+    // 6. Check activities
+    if (baseline.timeline_baseline?.activities) {
+      const activityDrift = this.detectGenericEntityDrift(
+        'activity',
+        baseline.timeline_baseline.activities,
+        currentEntities.activities,
+        'name'
+      )
+      driftPoints.push(...activityDrift)
+    }
+
+    // 7. Check resources
+    if (baseline.resource_baseline?.team_members || baseline.resource_baseline?.equipment) {
+      const allBaselineResources = [
+        ...(baseline.resource_baseline.team_members || []),
+        ...(baseline.resource_baseline.equipment || [])
+      ]
+      const resourceDrift = this.detectGenericEntityDrift(
+        'resource',
+        allBaselineResources,
+        currentEntities.resources,
+        'name'
+      )
+      driftPoints.push(...resourceDrift)
+    }
+
+    // 8. Check technologies
+    if (baseline.technical_baseline?.technology_stack) {
+      const technologyDrift = this.detectGenericEntityDrift(
+        'technology',
+        baseline.technical_baseline.technology_stack,
+        currentEntities.technologies,
+        'name'
+      )
+      driftPoints.push(...technologyDrift)
+    }
+
+    // 9. Check stakeholders
+    if (baseline.resource_baseline?.stakeholders) {
       const stakeholderDrift = this.detectStakeholderDrift(
         baseline.resource_baseline.stakeholders,
         currentEntities.stakeholders
@@ -302,8 +451,21 @@ export class DriftDetectionService {
 
     // Check risks - only if baseline actually has risks
     if (baseline.scope_baseline?.risks && Array.isArray(baseline.scope_baseline.risks) && baseline.scope_baseline.risks.length > 0) {
+    // 10. Check constraints
+    if (baseline.scope_baseline?.constraints) {
+      const constraintDrift = this.detectGenericEntityDrift(
+        'constraint',
+        baseline.scope_baseline.constraints,
+        currentEntities.constraints,
+        'name'
+      )
+      driftPoints.push(...constraintDrift)
+    }
+
+    // 11. Check risks
+    if (baseline.success_criteria?.risks) {
       const riskDrift = this.detectRiskDrift(
-        baseline.scope_baseline.risks,
+        baseline.success_criteria.risks,
         currentEntities.risks
       )
       driftPoints.push(...riskDrift)
@@ -314,11 +476,40 @@ export class DriftDetectionService {
       const milestoneDrift = this.detectMilestoneDrift(
         baseline.timeline_baseline.milestones,
         currentEntities.milestones
+    // 12. Check success_criteria
+    if (baseline.success_criteria?.kpis) {
+      const successCriteriaDrift = this.detectGenericEntityDrift(
+        'success_criterion',
+        baseline.success_criteria.kpis,
+        currentEntities.success_criteria,
+        'metric'
       )
-      driftPoints.push(...milestoneDrift)
+      driftPoints.push(...successCriteriaDrift)
     }
 
-    // Check budget
+    // 13. Check quality_standards
+    if (baseline.technical_baseline?.quality_standards) {
+      const qualityStandardDrift = this.detectGenericEntityDrift(
+        'quality_standard',
+        baseline.technical_baseline.quality_standards,
+        currentEntities.quality_standards,
+        'name'
+      )
+      driftPoints.push(...qualityStandardDrift)
+    }
+
+    // 14. Check best_practices
+    if (baseline.technical_baseline?.best_practices) {
+      const bestPracticeDrift = this.detectGenericEntityDrift(
+        'best_practice',
+        baseline.technical_baseline.best_practices,
+        currentEntities.best_practices,
+        'title'
+      )
+      driftPoints.push(...bestPracticeDrift)
+    }
+
+    // Check budget (legacy support)
     if (baseline.cost_baseline?.total_budget && currentEntities.budget) {
       const budgetDrift = this.detectBudgetDrift(
         baseline.cost_baseline.total_budget,
@@ -575,6 +766,168 @@ export class DriftDetectionService {
   }
 
   /**
+   * Generic entity drift detection
+   * Works for: scope_items, deliverables, requirements, phases, activities,
+   * resources, technologies, constraints, success_criteria, quality_standards, best_practices
+   * 
+   * Optimized with O(n) lookups using Map instead of O(n²) array.find()
+   * 
+   * @param entityType - Type of entity (e.g., 'deliverable', 'requirement')
+   * @param baselineEntities - Entities from baseline
+   * @param currentEntities - Entities from current document
+   * @param nameField - Field to use for matching (e.g., 'name', 'title', 'metric')
+   */
+  private detectGenericEntityDrift(
+    entityType: string,
+    baselineEntities: any[],
+    currentEntities: any[],
+    nameField: string = 'name'
+  ): DriftPoint[] {
+    const drift: DriftPoint[] = []
+
+    // Build Map of current entities for O(1) lookups - optimizes from O(n²) to O(n)
+    const currentEntitiesMap = new Map<string, any>()
+    for (const current of currentEntities) {
+      const currentName = current[nameField] || current.name || current.title
+      if (currentName) {
+        currentEntitiesMap.set(this.normalizeString(currentName), current)
+      }
+    }
+
+    // Build Map of baseline entities for O(1) lookups
+    const baselineEntitiesMap = new Map<string, any>()
+    for (const baseline of baselineEntities) {
+      const baselineName = baseline[nameField] || baseline.name || baseline.title
+      if (baselineName) {
+        baselineEntitiesMap.set(this.normalizeString(baselineName), baseline)
+      }
+    }
+
+    // Check for removed entities
+    for (const [normalizedName, baseline] of baselineEntitiesMap) {
+      if (!currentEntitiesMap.has(normalizedName)) {
+        const baselineName = baseline[nameField] || baseline.name || baseline.title
+        drift.push({
+          entityType,
+          driftType: 'removed',
+          baselineValue: baseline,
+          currentValue: null,
+          description: `${this.capitalize(entityType)} removed: "${baselineName}"`,
+          requiresApproval: this.requiresApprovalForRemoval(entityType, baseline)
+        })
+      }
+    }
+
+    // Check for added entities
+    for (const [normalizedName, current] of currentEntitiesMap) {
+      if (!baselineEntitiesMap.has(normalizedName)) {
+        const currentName = current[nameField] || current.name || current.title
+        drift.push({
+          entityType,
+          driftType: 'added',
+          baselineValue: null,
+          currentValue: current,
+          description: `New ${entityType} added: "${currentName}"`,
+          requiresApproval: this.requiresApprovalForAddition(entityType, current)
+        })
+      }
+    }
+
+    // Check for modifications
+    for (const [normalizedName, current] of currentEntitiesMap) {
+      const baseline = baselineEntitiesMap.get(normalizedName)
+      if (baseline && this.hasEntityChanged(entityType, baseline, current)) {
+        const currentName = current[nameField] || current.name || current.title
+        drift.push({
+          entityType,
+          driftType: 'modified',
+          baselineValue: baseline,
+          currentValue: current,
+          description: `${this.capitalize(entityType)} modified: "${currentName}"`,
+          requiresApproval: this.requiresApprovalForModification(entityType, baseline, current)
+        })
+      }
+    }
+
+    return drift
+  }
+
+  /**
+   * Check if an entity has changed (uses entity-type specific field comparison)
+   */
+  private hasEntityChanged(entityType: string, baseline: any, current: any): boolean {
+    // Get fields to compare for this entity type
+    const fieldsToCompare = this.ENTITY_COMPARISON_FIELDS[entityType] || this.ENTITY_COMPARISON_FIELDS['default']
+    
+    // Compare each relevant field
+    for (const field of fieldsToCompare) {
+      if (baseline[field] !== undefined && current[field] !== undefined) {
+        if (baseline[field] !== current[field]) {
+          return true
+        }
+      }
+    }
+    
+    return false
+  }
+
+  /**
+   * Determine if removal requires approval
+   */
+  private requiresApprovalForRemoval(entityType: string, entity: any): boolean {
+    // High-priority removals require approval
+    if (entity.priority === 'high' || entity.priority === 'critical') return true
+    
+    // Critical entity types always require approval for removal
+    const criticalTypes = ['milestone', 'deliverable', 'requirement', 'success_criterion']
+    if (criticalTypes.includes(entityType)) return true
+    
+    return false
+  }
+
+  /**
+   * Determine if addition requires approval
+   */
+  private requiresApprovalForAddition(entityType: string, entity: any): boolean {
+    // High-priority additions require approval
+    if (entity.priority === 'high' || entity.priority === 'critical') return true
+    
+    // High-impact additions require approval
+    if (entity.impact === 'high' || entity.impact === 'critical') return true
+    
+    // Critical entity types require approval for additions
+    const criticalTypes = ['deliverable', 'requirement']
+    if (criticalTypes.includes(entityType)) return true
+    
+    return false
+  }
+
+  /**
+   * Determine if modification requires approval
+   */
+  private requiresApprovalForModification(entityType: string, baseline: any, current: any): boolean {
+    // Status changes from 'approved' require approval
+    if (baseline.status === 'approved' && current.status !== 'approved') return true
+    
+    // Priority increases require approval
+    if (baseline.priority && current.priority) {
+      const baselinePriority = this.PRIORITY_LEVELS[baseline.priority as keyof typeof this.PRIORITY_LEVELS] || 0
+      const currentPriority = this.PRIORITY_LEVELS[current.priority as keyof typeof this.PRIORITY_LEVELS] || 0
+      if (currentPriority > baselinePriority) return true
+    }
+    
+    return false
+  }
+
+  /**
+   * Capitalize first letter of string
+   */
+  private capitalize(str: string): string {
+    if (!str) return ''
+    return str.charAt(0).toUpperCase() + str.slice(1)
+  }
+
+  /**
    * Calculate drift severity
    */
   private calculateDriftSeverity(driftPoints: DriftPoint[]): 'low' | 'medium' | 'high' | 'critical' {
@@ -664,6 +1017,140 @@ export class DriftDetectionService {
       logger.error('[DRIFT] Error creating drift record:', error)
       throw error
     }
+  }
+
+  /**
+   * Check if escalation is needed and trigger if required
+   * TASK-742: Escalation matrix based on severity
+   */
+  async checkAndTriggerEscalation(
+    driftRecord: any,
+    driftPoints: DriftPoint[]
+  ): Promise<void> {
+    try {
+      logger.info('[DRIFT] Checking escalation requirements', {
+        driftId: driftRecord.id,
+        severity: driftRecord.drift_severity
+      })
+
+      // Determine drift type based on detected drift points
+      const driftType = this.determineDriftType(driftPoints)
+      
+      // Build drift data for escalation evaluation
+      const driftData = this.buildDriftData(driftRecord, driftPoints)
+
+      // Evaluate against escalation matrix
+      const evaluation = await escalationService.evaluateDrift(
+        driftRecord.id,
+        driftRecord.project_id,
+        driftType,
+        driftRecord.drift_severity,
+        driftData
+      )
+
+      // If escalation is needed, create alert
+      if (evaluation.shouldEscalate && evaluation.matchedRule) {
+        logger.info('[DRIFT] Escalation required, creating alert', {
+          ruleName: evaluation.matchedRule.rule_name,
+          severity: evaluation.matchedRule.severity_level
+        })
+
+        await escalationService.createAlert(
+          driftRecord.id,
+          driftRecord.project_id,
+          evaluation.matchedRule,
+          evaluation.variancePercentage,
+          driftData
+        )
+      } else {
+        logger.info('[DRIFT] No escalation required', {
+          driftId: driftRecord.id
+        })
+      }
+    } catch (error) {
+      // Log error but don't fail the drift detection process
+      logger.error('[DRIFT] Error checking escalation:', error)
+    }
+  }
+
+  /**
+   * Determine drift type for escalation routing
+   */
+  private determineDriftType(driftPoints: DriftPoint[]): string {
+    // Check for budget-related drift
+    if (driftPoints.some(d => d.entityType === 'budget')) {
+      const budgetPoint = driftPoints.find(d => d.entityType === 'budget')
+      if (budgetPoint && budgetPoint.variance && budgetPoint.variance > 0) {
+        return 'budget_overrun'
+      }
+      return 'cost_drift'
+    }
+
+    // Check for scope-related drift
+    if (driftPoints.some(d => d.entityType === 'deliverable' || d.entityType === 'scope')) {
+      const addedDeliverables = driftPoints.filter(d => 
+        (d.entityType === 'deliverable' || d.entityType === 'scope') && d.driftType === 'added'
+      )
+      if (addedDeliverables.length > 0) {
+        return 'scope_creep'
+      }
+      return 'scope_drift'
+    }
+
+    // Check for timeline-related drift
+    if (driftPoints.some(d => d.entityType === 'milestone' || d.entityType === 'timeline')) {
+      return 'timeline_delay'
+    }
+
+    // Check for technical drift
+    if (driftPoints.some(d => d.entityType === 'technical_requirements')) {
+      return 'technical_drift'
+    }
+
+    // Check for resource drift
+    if (driftPoints.some(d => d.entityType === 'stakeholder' || d.entityType === 'resources')) {
+      return 'resource_drift'
+    }
+
+    // Default
+    return 'scope_drift'
+  }
+
+  /**
+   * Build drift data structure for escalation evaluation
+   */
+  private buildDriftData(driftRecord: any, driftPoints: DriftPoint[]): any {
+    const data: any = {
+      drift_record_id: driftRecord.id,
+      drift_severity: driftRecord.drift_severity,
+      drift_points_count: driftPoints.length,
+      timestamp: new Date().toISOString()
+    }
+
+    // Extract budget information
+    const budgetPoint = driftPoints.find(d => d.entityType === 'budget')
+    if (budgetPoint) {
+      data.approved_budget = budgetPoint.baselineValue
+      data.projected_cost = budgetPoint.currentValue
+      data.budget_variance = budgetPoint.variance
+    }
+
+    // Extract scope information
+    const deliverablePoints = driftPoints.filter(d => d.entityType === 'deliverable')
+    if (deliverablePoints.length > 0) {
+      const baselineCount = deliverablePoints.filter(d => d.baselineValue).length
+      const currentCount = deliverablePoints.filter(d => d.currentValue).length
+      data.baseline_scope_count = baselineCount
+      data.current_scope_count = currentCount
+    }
+
+    // Extract timeline information
+    const milestonePoints = driftPoints.filter(d => d.entityType === 'milestone')
+    if (milestonePoints.length > 0) {
+      data.milestone_drift_count = milestonePoints.length
+    }
+
+    return data
   }
 }
 
