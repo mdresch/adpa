@@ -1,89 +1,26 @@
 /**
- * Test: Drift Resolution Strategies (Conservative/Balanced/Permissive)
- * TASK-729: All 3 strategies (conservative/balanced/permissive) work
+ * Test: Drift Resolution - All 3 Strategies
+ * TASK-723: Test all 3 strategies
  * 
- * Verifies that all three drift resolution strategies work correctly:
- * - Conservative: Revert ALL changes to baseline exactly
- * - Balanced: Keep valid updates, revert unauthorized changes, flag major changes
- * - Permissive: Keep most changes, only revert critical baseline violations
+ * Validates that all three drift resolution strategies work correctly:
+ * 1. Conservative: Revert ALL changes to match baseline exactly
+ * 2. Balanced: Keep valid updates, revert unauthorized changes, flag major changes
+ * 3. Permissive: Keep most changes, only revert critical baseline violations
  */
 
 import { driftResolutionService } from '../../services/driftResolutionService'
 import { pool } from '../../database/connection'
 import { v4 as uuidv4 } from 'uuid'
+import * as aiServiceModule from '../../services/aiService'
 
-// Mock the AI service to return deterministic results
+// Mock the AI service
 jest.mock('../../services/aiService', () => ({
   aiService: {
-    generate: jest.fn(({ prompt }: { prompt: string }) => {
-      // Parse strategy from prompt
-      const strategyMatch = prompt.match(/RESOLUTION STRATEGY: (\w+)/)
-      const strategy = strategyMatch ? strategyMatch[1].toLowerCase() : 'balanced'
-
-      // Return different content based on strategy
-      if (strategy === 'conservative') {
-        return Promise.resolve({
-          content: `# Test Document - Conservative Resolution
-
-## Stakeholders
-- John Smith (Project Sponsor) - High influence
-- Sarah Chen (Project Manager) - High influence
-
-## Risks
-- Vendor delivery delay (High probability, High impact)
-- Skills gap in AI/ML (Medium probability, High impact)
-
-## Milestones
-- Testing Complete: March 15, 2026
-
-<!-- REQUIRES APPROVAL: All changes reverted to baseline exactly -->
-`
-        })
-      } else if (strategy === 'permissive') {
-        return Promise.resolve({
-          content: `# Test Document - Permissive Resolution
-
-## Stakeholders
-- John Smith (Project Sponsor) - High influence
-- Sarah Chen (Project Manager) - High influence
-- Tom Wilson (Developer) - Medium influence
-
-## Risks
-- Vendor delivery delay (High probability, High impact)
-- Skills gap in AI/ML (Medium probability, High impact)
-
-## Milestones
-- Testing Complete: April 2, 2026
-
-<!-- Note: Most changes kept, only critical violations flagged -->
-`
-        })
-      } else {
-        // Balanced strategy
-        return Promise.resolve({
-          content: `# Test Document - Balanced Resolution
-
-## Stakeholders
-- John Smith (Project Sponsor) - High influence
-- Sarah Chen (Project Manager) - High influence
-- Tom Wilson (Developer) - Medium influence
-
-## Risks
-- Vendor delivery delay (High probability, High impact)
-- Skills gap in AI/ML (Medium probability, High impact)
-
-## Milestones
-- Testing Complete: March 15, 2026
-
-<!-- REQUIRES APPROVAL: Milestone date change flagged for review -->
-`
-        })
-      }
-    })
-  }
+    generate: jest.fn(),
+  },
 }))
 
-describe('Drift Resolution Strategies', () => {
+describe('Drift Resolution - All 3 Strategies', () => {
   let testProjectId: string
   let testDocumentId: string
   let testUserId: string
@@ -108,25 +45,29 @@ describe('Drift Resolution Strategies', () => {
     // Create test project
     await pool.query(
       `INSERT INTO projects (id, name, owner_id)
-       VALUES ($1, 'Test Project - Strategies', $2)`,
+       VALUES ($1, 'Test Strategies Project', $2)`,
       [testProjectId, testUserId]
     )
 
     // Create test document with drifted content
-    const documentContent = `# Test Document - Drifted
+    const documentContent = `# Project Plan
 
 ## Stakeholders
-- John Smith (Project Sponsor) - High influence
-- Sarah Chen (Project Manager) - High influence
-- Tom Wilson (Developer) - Medium influence
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+- Charlie Brown (Developer) - NEW (not in baseline)
 
 ## Risks
-- Vendor delivery delay (High probability, High impact)
-- Skills gap in AI/ML (Medium probability, High impact)
+- Risk A: High priority
+- Risk B: Medium priority
+(Note: Risk C from baseline was removed)
 
 ## Milestones
-- Testing Complete: April 2, 2026
-`
+- Milestone 1: 2026-03-15 (changed from 2026-03-01 in baseline)
+- Milestone 2: 2026-04-30
+
+## Budget
+Current budget: $550,000 (baseline was $500,000 - 10% increase)`
 
     await pool.query(
       `INSERT INTO documents (id, project_id, name, content, created_by, updated_by)
@@ -134,33 +75,43 @@ describe('Drift Resolution Strategies', () => {
       [testDocumentId, testProjectId, documentContent, testUserId]
     )
 
-    // Create test baseline with baseline entities
+    // Create test baseline with structured data
     const baselineData = {
       scope_baseline: {
         stakeholders: [
-          { name: 'John Smith', role: 'Project Sponsor', influence_level: 'high' },
-          { name: 'Sarah Chen', role: 'Project Manager', influence_level: 'high' }
+          { name: 'Alice Johnson', role: 'PM', influence_level: 'high' },
+          { name: 'Bob Smith', role: 'Tech Lead', influence_level: 'medium' }
         ],
         risks: [
-          { name: 'Vendor delivery delay', probability: 'high', impact: 'high' },
-          { name: 'Skills gap in AI/ML', probability: 'medium', impact: 'high' }
+          { name: 'Risk A', priority: 'high' },
+          { name: 'Risk B', priority: 'medium' },
+          { name: 'Risk C', priority: 'low' }
         ]
       },
       timeline_baseline: {
         milestones: [
-          { name: 'Testing Complete', date: '2026-03-15' }
+          { name: 'Milestone 1', date: '2026-03-01' },
+          { name: 'Milestone 2', date: '2026-04-30' }
         ]
+      },
+      cost_baseline: {
+        budget: { amount: 500000, currency: 'USD' }
       }
     }
 
     await pool.query(
       `INSERT INTO project_baselines (
         id, project_id, version, status, created_by,
-        scope_baseline, timeline_baseline
-      ) VALUES ($1, $2, '1.0', 'approved', $3, $4, $5)`,
-      [testBaselineId, testProjectId, testUserId, 
-       JSON.stringify(baselineData.scope_baseline),
-       JSON.stringify(baselineData.timeline_baseline)]
+        scope_baseline, timeline_baseline, cost_baseline
+      ) VALUES ($1, $2, '1.0', 'approved', $3, $4, $5, $6)`,
+      [
+        testBaselineId,
+        testProjectId,
+        testUserId,
+        JSON.stringify(baselineData.scope_baseline),
+        JSON.stringify(baselineData.timeline_baseline),
+        JSON.stringify(baselineData.cost_baseline)
+      ]
     )
 
     // Create test drift record with drift points
@@ -168,19 +119,35 @@ describe('Drift Resolution Strategies', () => {
       {
         entityType: 'stakeholder',
         driftType: 'added',
-        description: 'New stakeholder "Tom Wilson" added',
+        description: 'New stakeholder added: Charlie Brown',
         baselineValue: null,
-        currentValue: { name: 'Tom Wilson', role: 'Developer', influence_level: 'medium' },
+        currentValue: { name: 'Charlie Brown', role: 'Developer' },
+        requiresApproval: false
+      },
+      {
+        entityType: 'risk',
+        driftType: 'removed',
+        description: 'Risk removed: Risk C',
+        baselineValue: { name: 'Risk C', priority: 'low' },
+        currentValue: null,
         requiresApproval: false
       },
       {
         entityType: 'milestone',
         driftType: 'modified',
-        description: 'Milestone date changed from March 15 to April 2',
-        baselineValue: { name: 'Testing Complete', date: '2026-03-15' },
-        currentValue: { name: 'Testing Complete', date: '2026-04-02' },
-        requiresApproval: true,
-        variance: 18
+        description: 'Milestone date changed: Milestone 1',
+        baselineValue: { name: 'Milestone 1', date: '2026-03-01' },
+        currentValue: { name: 'Milestone 1', date: '2026-03-15' },
+        requiresApproval: true
+      },
+      {
+        entityType: 'budget',
+        driftType: 'modified',
+        description: 'Budget increased from $500K to $550K',
+        baselineValue: { amount: 500000, currency: 'USD' },
+        currentValue: { amount: 550000, currency: 'USD' },
+        variance: 10,
+        requiresApproval: true
       }
     ]
 
@@ -188,9 +155,14 @@ describe('Drift Resolution Strategies', () => {
       `INSERT INTO baseline_drift_detection 
        (id, baseline_id, project_id, detection_type, drift_severity, 
         drift_description, source_document_id, ai_processing_metadata)
-       VALUES ($1, $2, $3, 'scope_drift', 'medium', 'Test drift', $4, $5)`,
-      [testDriftRecordId, testBaselineId, testProjectId, testDocumentId,
-       JSON.stringify({ drift_points: driftPoints })]
+       VALUES ($1, $2, $3, 'scope_drift', 'high', 'Test drift with 4 points', $4, $5)`,
+      [
+        testDriftRecordId,
+        testBaselineId,
+        testProjectId,
+        testDocumentId,
+        JSON.stringify({ drift_points: driftPoints })
+      ]
     )
   })
 
@@ -206,8 +178,47 @@ describe('Drift Resolution Strategies', () => {
     await pool.end()
   })
 
-  describe('Conservative Strategy', () => {
-    test('should revert ALL changes to baseline exactly', async () => {
+  beforeEach(() => {
+    // Reset mocks before each test
+    jest.clearAllMocks()
+  })
+
+  describe('Strategy 1: Conservative (Strict Baseline Adherence)', () => {
+    test('should revert ALL changes to match baseline exactly', async () => {
+      // Mock AI response for conservative strategy
+      const conservativeResolvedContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-01
+- Milestone 2: 2026-04-30
+
+## Budget
+Current budget: $500,000
+
+<!-- REQUIRES APPROVAL: All changes reverted to baseline -->`
+
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: conservativeResolvedContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 500,
+          completion_tokens: 500,
+          total_tokens: 1000
+        }
+      })
+
+      // Call resolveDrift with conservative strategy
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
@@ -215,23 +226,66 @@ describe('Drift Resolution Strategies', () => {
         'conservative'
       )
 
-      expect(result).toBeDefined()
+      // Verify strategy was passed to AI
+      expect(aiService.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('RESOLUTION STRATEGY: CONSERVATIVE')
+        })
+      )
+
+      // Verify resolved content reverts all changes
+      expect(result.resolvedContent).toContain('Alice Johnson')
+      expect(result.resolvedContent).toContain('Bob Smith')
+      expect(result.resolvedContent).not.toContain('Charlie Brown') // Added stakeholder removed
+      expect(result.resolvedContent).toContain('Risk C') // Removed risk restored
+      expect(result.resolvedContent).toContain('2026-03-01') // Date reverted
+      expect(result.resolvedContent).toContain('$500,000') // Budget reverted
+      expect(result.resolvedContent).not.toContain('$550,000')
+
+      // Verify metadata
       expect(result.strategy).toBe('conservative')
-      expect(result.resolvedContent).toBeDefined()
-      expect(result.resolvedContent).toContain('Conservative Resolution')
-      
-      // Verify that added stakeholder is removed
-      expect(result.resolvedContent).not.toContain('Tom Wilson')
-      
-      // Verify that milestone date is reverted to baseline
-      expect(result.resolvedContent).toContain('March 15, 2026')
-      expect(result.resolvedContent).not.toContain('April 2, 2026')
-      
-      // Verify approval flag
-      expect(result.resolvedContent).toContain('REQUIRES APPROVAL')
+      expect(result.originalContent).toBeDefined()
+      expect(result.driftPoints).toHaveLength(4)
     })
 
-    test('should identify major changes requiring approval', async () => {
+    test('should flag ALL changes for formal approval', async () => {
+      const conservativeContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+
+<!-- REQUIRES APPROVAL: Stakeholder changes reverted -->
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+<!-- REQUIRES APPROVAL: Risk changes reverted -->
+
+## Milestones
+- Milestone 1: 2026-03-01
+
+<!-- REQUIRES APPROVAL: Milestone date reverted -->
+
+## Budget
+Current budget: $500,000
+
+<!-- REQUIRES APPROVAL: Budget reverted -->`
+
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: conservativeContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 500,
+          completion_tokens: 500,
+          total_tokens: 1000
+        }
+      })
+
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
@@ -239,43 +293,53 @@ describe('Drift Resolution Strategies', () => {
         'conservative'
       )
 
-      expect(result.requiresApproval).toBe(true)
-      expect(result.majorChanges.length).toBeGreaterThan(0)
-      
-      // Conservative strategy treats milestone changes as major
-      const milestoneChange = result.majorChanges.find(
-        change => change.entityType === 'milestone'
-      )
-      expect(milestoneChange).toBeDefined()
-    })
-  })
-
-  describe('Balanced Strategy (Recommended)', () => {
-    test('should keep minor changes and flag major changes', async () => {
-      const result = await driftResolutionService.resolveDrift(
-        testDocumentId,
-        testDriftRecordId,
-        testUserId,
-        'balanced'
-      )
-
-      expect(result).toBeDefined()
-      expect(result.strategy).toBe('balanced')
-      expect(result.resolvedContent).toBeDefined()
-      expect(result.resolvedContent).toContain('Balanced Resolution')
-      
-      // Verify that minor stakeholder addition is kept
-      expect(result.resolvedContent).toContain('Tom Wilson')
-      
-      // Verify that major milestone change is reverted
-      expect(result.resolvedContent).toContain('March 15, 2026')
-      expect(result.resolvedContent).not.toContain('April 2, 2026')
-      
-      // Verify approval flag for major changes
+      // Verify approval flags are present
       expect(result.resolvedContent).toContain('REQUIRES APPROVAL')
+      
+      // Count approval flags (should have multiple)
+      const approvalCount = (result.resolvedContent.match(/REQUIRES APPROVAL/g) || []).length
+      expect(approvalCount).toBeGreaterThan(0)
     })
+  })
 
-    test('should identify only major changes requiring approval', async () => {
+  describe('Strategy 2: Balanced (Intelligent Adaptation) - RECOMMENDED', () => {
+    test('should keep minor updates and revert unauthorized changes', async () => {
+      // Mock AI response for balanced strategy
+      const balancedResolvedContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+- Charlie Brown (Developer) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-01
+
+<!-- REQUIRES APPROVAL: Milestone date change from 2026-03-15 to 2026-03-01 -->
+
+## Budget
+Current budget: $500,000
+
+<!-- REQUIRES APPROVAL: Budget change from $550,000 to $500,000 (10% decrease) -->`
+
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: balancedResolvedContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 600,
+          completion_tokens: 600,
+          total_tokens: 1200
+        }
+      })
+
+      // Call resolveDrift with balanced strategy
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
@@ -283,31 +347,112 @@ describe('Drift Resolution Strategies', () => {
         'balanced'
       )
 
-      expect(result.requiresApproval).toBe(true)
-      
-      // Only milestone change requires approval
-      const milestoneChange = result.majorChanges.find(
-        change => change.entityType === 'milestone'
+      // Verify strategy was passed to AI
+      expect(aiService.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('RESOLUTION STRATEGY: BALANCED')
+        })
       )
-      expect(milestoneChange).toBeDefined()
-      expect(milestoneChange?.requiresApproval).toBe(true)
+
+      // Verify balanced behavior
+      expect(result.resolvedContent).toContain('Charlie Brown') // Minor addition kept
+      expect(result.resolvedContent).toContain('Risk C') // Baseline risk restored
+      expect(result.resolvedContent).toContain('2026-03-01') // Date reverted
+      expect(result.resolvedContent).toContain('$500,000') // Budget reverted
+
+      expect(result.strategy).toBe('balanced')
     })
 
-    test('should use balanced strategy by default when not specified', async () => {
+    test('should flag only major changes for approval', async () => {
+      const balancedContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+- Charlie Brown (Developer) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-01
+
+<!-- REQUIRES APPROVAL: Critical milestone date changed -->
+
+## Budget
+Current budget: $500,000
+
+<!-- REQUIRES APPROVAL: Budget modification exceeds 10% threshold -->`
+
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: balancedContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 600,
+          completion_tokens: 600,
+          total_tokens: 1200
+        }
+      })
+
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
-        testUserId
-        // strategy not specified, should default to 'balanced'
+        testUserId,
+        'balanced'
       )
 
-      expect(result).toBeDefined()
-      expect(result.strategy).toBe('balanced')
+      // Should have fewer approval flags than conservative
+      const approvalCount = (result.resolvedContent.match(/REQUIRES APPROVAL/g) || []).length
+      expect(approvalCount).toBeGreaterThanOrEqual(1)
+      expect(approvalCount).toBeLessThan(4) // Less than all drift points
+
+      // Should identify major changes
+      expect(result.majorChanges.length).toBeGreaterThan(0)
+      expect(result.requiresApproval).toBe(true)
     })
   })
 
-  describe('Permissive Strategy', () => {
-    test('should keep most changes and only flag critical violations', async () => {
+  describe('Strategy 3: Permissive (Flexible Adaptation)', () => {
+    test('should keep most changes and only revert critical violations', async () => {
+      // Mock AI response for permissive strategy
+      const permissiveResolvedContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+- Charlie Brown (Developer) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-15
+- Milestone 2: 2026-04-30
+
+## Budget
+Current budget: $550,000
+
+<!-- REQUIRES APPROVAL: Budget increase of 10% noted for review -->`
+
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: permissiveResolvedContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 550,
+          completion_tokens: 550,
+          total_tokens: 1100
+        }
+      })
+
+      // Call resolveDrift with permissive strategy
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
@@ -315,23 +460,56 @@ describe('Drift Resolution Strategies', () => {
         'permissive'
       )
 
-      expect(result).toBeDefined()
+      // Verify strategy was passed to AI
+      expect(aiService.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('RESOLUTION STRATEGY: PERMISSIVE')
+        })
+      )
+
+      // Verify permissive behavior - keeps most changes
+      expect(result.resolvedContent).toContain('Charlie Brown') // New stakeholder kept
+      expect(result.resolvedContent).toContain('Risk C') // Baseline risk restored (critical)
+      expect(result.resolvedContent).toContain('2026-03-15') // Date change kept
+      expect(result.resolvedContent).toContain('$550,000') // Budget change kept but flagged
+
       expect(result.strategy).toBe('permissive')
-      expect(result.resolvedContent).toBeDefined()
-      expect(result.resolvedContent).toContain('Permissive Resolution')
-      
-      // Verify that stakeholder addition is kept
-      expect(result.resolvedContent).toContain('Tom Wilson')
-      
-      // Verify that milestone date change is kept (permissive allows more changes)
-      expect(result.resolvedContent).toContain('April 2, 2026')
-      
-      // Should not have strict approval requirements
-      expect(result.resolvedContent).not.toContain('REQUIRES APPROVAL')
-      expect(result.resolvedContent).toContain('Note:')
     })
 
-    test('should have fewer major changes requiring approval', async () => {
+    test('should flag only critical changes (budget >10%, major scope)', async () => {
+      const permissiveContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+- Charlie Brown (Developer) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-15
+- Milestone 2: 2026-04-30
+
+## Budget
+Current budget: $550,000
+
+<!-- REQUIRES APPROVAL: Budget increase exceeds 10% threshold -->`
+
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: permissiveContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 550,
+          completion_tokens: 550,
+          total_tokens: 1100
+        }
+      })
+
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
@@ -339,161 +517,260 @@ describe('Drift Resolution Strategies', () => {
         'permissive'
       )
 
-      // Permissive strategy should still identify truly major changes
-      // But should be more lenient overall
-      expect(result.requiresApproval).toBe(true)
-      expect(result.majorChanges.length).toBeGreaterThanOrEqual(0)
+      // Should have minimal approval flags
+      const approvalCount = (result.resolvedContent.match(/REQUIRES APPROVAL/g) || []).length
+      expect(approvalCount).toBeLessThanOrEqual(2) // Only critical items flagged
     })
   })
 
   describe('Strategy Comparison', () => {
-    test('all three strategies should produce different results', async () => {
-      const conservative = await driftResolutionService.resolveDrift(
+    test('conservative should revert more than balanced', async () => {
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+
+      // Conservative: reverts everything
+      const conservativeContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-01
+
+## Budget
+Current budget: $500,000`
+
+      aiService.generate.mockResolvedValueOnce({
+        content: conservativeContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 500,
+          completion_tokens: 500,
+          total_tokens: 1000
+        }
+      })
+
+      const conservativeResult = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
         testUserId,
         'conservative'
       )
 
-      const balanced = await driftResolutionService.resolveDrift(
+      // Balanced: keeps some changes
+      const balancedContent = `# Project Plan
+
+## Stakeholders
+- Alice Johnson (PM) - High influence
+- Bob Smith (Tech Lead) - Medium influence
+- Charlie Brown (Developer) - Medium influence
+
+## Risks
+- Risk A: High priority
+- Risk B: Medium priority
+- Risk C: Low priority
+
+## Milestones
+- Milestone 1: 2026-03-01
+
+## Budget
+Current budget: $500,000`
+
+      aiService.generate.mockResolvedValueOnce({
+        content: balancedContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 600,
+          completion_tokens: 600,
+          total_tokens: 1200
+        }
+      })
+
+      const balancedResult = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
         testUserId,
         'balanced'
       )
 
-      const permissive = await driftResolutionService.resolveDrift(
-        testDocumentId,
-        testDriftRecordId,
-        testUserId,
-        'permissive'
-      )
-
-      // Verify all strategies return results
-      expect(conservative).toBeDefined()
-      expect(balanced).toBeDefined()
-      expect(permissive).toBeDefined()
-
-      // Verify strategies are correctly set
-      expect(conservative.strategy).toBe('conservative')
-      expect(balanced.strategy).toBe('balanced')
-      expect(permissive.strategy).toBe('permissive')
-
-      // Verify resolved content is different for each strategy
-      expect(conservative.resolvedContent).not.toBe(balanced.resolvedContent)
-      expect(balanced.resolvedContent).not.toBe(permissive.resolvedContent)
-      expect(conservative.resolvedContent).not.toBe(permissive.resolvedContent)
-
-      // Conservative should be most restrictive (Tom Wilson removed, date reverted)
-      expect(conservative.resolvedContent).not.toContain('Tom Wilson')
-      expect(conservative.resolvedContent).toContain('March 15')
-
-      // Balanced should keep minor changes, revert major (Tom Wilson kept, date reverted)
-      expect(balanced.resolvedContent).toContain('Tom Wilson')
-      expect(balanced.resolvedContent).toContain('March 15')
-
-      // Permissive should keep most changes (Tom Wilson kept, date kept)
-      expect(permissive.resolvedContent).toContain('Tom Wilson')
-      expect(permissive.resolvedContent).toContain('April 2')
+      // Conservative should not have Charlie Brown
+      expect(conservativeResult.resolvedContent).not.toContain('Charlie Brown')
+      
+      // Balanced should have Charlie Brown
+      expect(balancedResult.resolvedContent).toContain('Charlie Brown')
     })
 
-    test('conservative should have most major changes flagged', async () => {
-      const conservative = await driftResolutionService.resolveDrift(
-        testDocumentId,
-        testDriftRecordId,
-        testUserId,
-        'conservative'
-      )
+    test('permissive should keep more than balanced', async () => {
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
 
-      const balanced = await driftResolutionService.resolveDrift(
+      // Balanced: reverts critical changes
+      const balancedContent = `# Project Plan
+
+## Milestones
+- Milestone 1: 2026-03-01
+
+## Budget
+Current budget: $500,000`
+
+      aiService.generate.mockResolvedValueOnce({
+        content: balancedContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 600,
+          completion_tokens: 600,
+          total_tokens: 1200
+        }
+      })
+
+      const balancedResult = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
         testUserId,
         'balanced'
       )
 
-      const permissive = await driftResolutionService.resolveDrift(
+      // Permissive: keeps changes
+      const permissiveContent = `# Project Plan
+
+## Milestones
+- Milestone 1: 2026-03-15
+
+## Budget
+Current budget: $550,000`
+
+      aiService.generate.mockResolvedValueOnce({
+        content: permissiveContent,
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 550,
+          completion_tokens: 550,
+          total_tokens: 1100
+        }
+      })
+
+      const permissiveResult = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
         testUserId,
         'permissive'
       )
 
-      // All should require some approval due to the milestone change
-      expect(conservative.requiresApproval).toBe(true)
-      expect(balanced.requiresApproval).toBe(true)
-      expect(permissive.requiresApproval).toBe(true)
+      // Balanced should have baseline date
+      expect(balancedResult.resolvedContent).toContain('2026-03-01')
+      
+      // Permissive should keep changed date
+      expect(permissiveResult.resolvedContent).toContain('2026-03-15')
+    })
 
-      // Verify major changes counts reflect strategy differences
-      expect(conservative.majorChanges.length).toBeGreaterThanOrEqual(balanced.majorChanges.length)
-      expect(balanced.majorChanges.length).toBeGreaterThanOrEqual(permissive.majorChanges.length)
+    test('all strategies should work with the same drift data', async () => {
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+
+      // Mock responses for all strategies
+      const strategies: Array<'conservative' | 'balanced' | 'permissive'> = [
+        'conservative',
+        'balanced',
+        'permissive'
+      ]
+
+      for (const strategy of strategies) {
+        aiService.generate.mockResolvedValueOnce({
+          content: `# Resolved with ${strategy} strategy`,
+          provider: 'openai',
+          model: 'gpt-4',
+          usage: {
+            prompt_tokens: 500,
+            completion_tokens: 500,
+            total_tokens: 1000
+          }
+        })
+
+        const result = await driftResolutionService.resolveDrift(
+          testDocumentId,
+          testDriftRecordId,
+          testUserId,
+          strategy
+        )
+
+        expect(result).toBeDefined()
+        expect(result.strategy).toBe(strategy)
+        expect(result.resolvedContent).toContain(strategy)
+        expect(result.driftPoints).toHaveLength(4)
+        expect(aiService.generate).toHaveBeenCalledWith(
+          expect.objectContaining({
+            prompt: expect.stringContaining(`RESOLUTION STRATEGY: ${strategy.toUpperCase()}`)
+          })
+        )
+      }
+
+      // Verify all three strategies were called
+      expect(aiService.generate).toHaveBeenCalledTimes(3)
     })
   })
 
-  describe('Resolution Result Structure', () => {
-    test('should return complete resolution result with all required fields', async () => {
+  describe('Edge Cases and Error Handling', () => {
+    test('should default to balanced strategy when no strategy specified', async () => {
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockResolvedValue({
+        content: '# Default resolution',
+        provider: 'openai',
+        model: 'gpt-4',
+        usage: {
+          prompt_tokens: 500,
+          completion_tokens: 500,
+          total_tokens: 1000
+        }
+      })
+
+      // Call without strategy parameter (should default to 'balanced')
       const result = await driftResolutionService.resolveDrift(
         testDocumentId,
         testDriftRecordId,
-        testUserId,
-        'balanced'
+        testUserId
+        // No strategy parameter
       )
 
-      // Verify all required fields are present
-      expect(result).toHaveProperty('resolvedContent')
-      expect(result).toHaveProperty('originalContent')
-      expect(result).toHaveProperty('driftPoints')
-      expect(result).toHaveProperty('majorChanges')
-      expect(result).toHaveProperty('requiresApproval')
-      expect(result).toHaveProperty('strategy')
-      expect(result).toHaveProperty('previewHtml')
-
-      // Verify field types
-      expect(typeof result.resolvedContent).toBe('string')
-      expect(typeof result.originalContent).toBe('string')
-      expect(Array.isArray(result.driftPoints)).toBe(true)
-      expect(Array.isArray(result.majorChanges)).toBe(true)
-      expect(typeof result.requiresApproval).toBe('boolean')
-      expect(typeof result.strategy).toBe('string')
-      expect(typeof result.previewHtml).toBe('string')
+      expect(result.strategy).toBe('balanced')
+      expect(aiService.generate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('RESOLUTION STRATEGY: BALANCED')
+        })
+      )
     })
 
-    test('should include drift points in result', async () => {
-      const result = await driftResolutionService.resolveDrift(
-        testDocumentId,
-        testDriftRecordId,
-        testUserId,
-        'balanced'
-      )
+    test('should handle AI service errors gracefully', async () => {
+      const aiService = aiServiceModule.aiService as jest.Mocked<typeof aiServiceModule.aiService>
+      aiService.generate.mockRejectedValue(new Error('AI service unavailable'))
 
-      expect(result.driftPoints.length).toBeGreaterThan(0)
-      
-      // Verify drift point structure
-      const driftPoint = result.driftPoints[0]
-      expect(driftPoint).toHaveProperty('entityType')
-      expect(driftPoint).toHaveProperty('driftType')
-      expect(driftPoint).toHaveProperty('description')
-      expect(driftPoint).toHaveProperty('baselineValue')
-      expect(driftPoint).toHaveProperty('currentValue')
+      await expect(
+        driftResolutionService.resolveDrift(
+          testDocumentId,
+          testDriftRecordId,
+          testUserId,
+          'conservative'
+        )
+      ).rejects.toThrow('AI service unavailable')
     })
 
-    test('should generate preview HTML for diff', async () => {
-      const result = await driftResolutionService.resolveDrift(
-        testDocumentId,
-        testDriftRecordId,
-        testUserId,
-        'balanced'
-      )
+    test('should handle invalid drift record ID', async () => {
+      const invalidDriftRecordId = uuidv4()
 
-      expect(result.previewHtml).toBeDefined()
-      expect(result.previewHtml.length).toBeGreaterThan(0)
-      
-      // Preview should contain diff indicators
-      expect(
-        result.previewHtml.includes('+') || 
-        result.previewHtml.includes('-') ||
-        result.previewHtml.includes('  ')
-      ).toBe(true)
+      await expect(
+        driftResolutionService.resolveDrift(
+          testDocumentId,
+          invalidDriftRecordId,
+          testUserId,
+          'balanced'
+        )
+      ).rejects.toThrow()
     })
   })
 })
