@@ -106,8 +106,10 @@ export class DriftResolutionService {
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiResponse = await aiService.generate({
         prompt,
+        provider: 'openai',
+        model: 'gpt-4-turbo-preview',
         temperature: 0.2, // Low temp for consistent, accurate resolution
-        maxTokens: 8000
+        max_tokens: 8000
       })
 
       // 7. Parse resolved content
