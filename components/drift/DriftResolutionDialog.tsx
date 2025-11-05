@@ -5,6 +5,7 @@
 
 'use client'
 
+import { useState } from 'react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -13,8 +14,9 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, AlertCircle, Loader2, Sparkles } from 'lucide-react'
+import { CheckCircle2, AlertCircle, Loader2, Sparkles, SplitSquareHorizontal, AlignLeft } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
+import { SideBySideDiff } from './SideBySideDiff'
 
 interface DriftPoint {
   entityType: string
@@ -39,6 +41,7 @@ interface DriftResolutionDialogProps {
   resolutionPreview: ResolutionPreview | null
   onApply: () => void
   isApplying?: boolean
+  isLoading?: boolean
   onStrategyChange?: (strategy: 'conservative' | 'balanced' | 'permissive') => void
   selectedStrategy?: 'conservative' | 'balanced' | 'permissive'
 }
@@ -49,12 +52,21 @@ export function DriftResolutionDialog({
   resolutionPreview,
   onApply,
   isApplying = false,
+  isLoading = false,
   onStrategyChange,
   selectedStrategy = 'balanced'
 }: DriftResolutionDialogProps) {
-  if (!resolutionPreview) return null
+  const [diffView, setDiffView] = useState<'unified' | 'split'>('split')
 
-  const { driftPoints, majorChanges, requiresApproval, resolvedContent, previewHtml } = resolutionPreview
+  // Show loading state if no preview yet but dialog is open and loading
+  const showLoadingState = !resolutionPreview && isLoading
+
+  const driftPoints = resolutionPreview?.driftPoints || []
+  const majorChanges = resolutionPreview?.majorChanges || []
+  const requiresApproval = resolutionPreview?.requiresApproval || false
+  const resolvedContent = resolutionPreview?.resolvedContent || ''
+  const originalContent = resolutionPreview?.originalContent || ''
+  const previewHtml = resolutionPreview?.previewHtml
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -70,14 +82,28 @@ export function DriftResolutionDialog({
         </DialogHeader>
 
         <div className="flex-1 overflow-hidden">
-          <Tabs defaultValue="summary" className="h-full flex flex-col">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="summary">Summary</TabsTrigger>
-              <TabsTrigger value="preview">Preview Changes</TabsTrigger>
-              <TabsTrigger value="resolved">Resolved Content</TabsTrigger>
-            </TabsList>
+          {showLoadingState ? (
+            <div className="flex flex-col items-center justify-center h-[400px] space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-purple-600" />
+              <div className="text-center space-y-2">
+                <h3 className="text-lg font-semibold">Analyzing Drift and Preparing Resolution...</h3>
+                <p className="text-sm text-muted-foreground">
+                  AI is analyzing the document and baseline to generate a resolution preview.
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  This usually takes 3-10 seconds.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <Tabs defaultValue="summary" className="h-full flex flex-col">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="summary">Summary</TabsTrigger>
+                <TabsTrigger value="preview">Preview Changes</TabsTrigger>
+                <TabsTrigger value="resolved">Resolved Content</TabsTrigger>
+              </TabsList>
 
-            <ScrollArea className="flex-1 mt-4">
+              <ScrollArea className="flex-1 mt-4">
               <TabsContent value="summary" className="space-y-4">
                 <div>
                   <h3 className="text-sm font-semibold mb-2">Drift Points Identified: {driftPoints.length}</h3>
@@ -168,18 +194,50 @@ export function DriftResolutionDialog({
 
               <TabsContent value="preview" className="space-y-4">
                 <div className="space-y-2">
-                  <h3 className="text-sm font-semibold">Changes Preview</h3>
-                  {previewHtml ? (
-                    <ScrollArea className="h-[400px]">
-                      <pre className="text-xs font-mono p-4 bg-muted rounded-md whitespace-pre-wrap">
-                        {previewHtml}
-                      </pre>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-semibold">Changes Preview</h3>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={diffView === 'split' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setDiffView('split')}
+                        className="h-8"
+                      >
+                        <SplitSquareHorizontal className="h-3 w-3 mr-2" />
+                        Side-by-Side
+                      </Button>
+                      <Button
+                        variant={diffView === 'unified' ? 'default' : 'outline'}
+                        size="sm"
+                        onClick={() => setDiffView('unified')}
+                        className="h-8"
+                      >
+                        <AlignLeft className="h-3 w-3 mr-2" />
+                        Unified
+                      </Button>
+                    </div>
+                  </div>
+                  {diffView === 'split' ? (
+                    <ScrollArea className="h-[400px] border rounded-md">
+                      <SideBySideDiff
+                        oldContent={originalContent}
+                        newContent={resolvedContent}
+                        filename="document.md"
+                      />
                     </ScrollArea>
                   ) : (
-                    <div className="p-8 text-center text-muted-foreground">
-                      <p>Diff preview not available</p>
-                      <p className="text-xs mt-2">View the resolved content tab to see the full updated document</p>
-                    </div>
+                    <ScrollArea className="h-[400px]">
+                      {previewHtml ? (
+                        <pre className="text-xs font-mono p-4 bg-muted rounded-md whitespace-pre-wrap">
+                          {previewHtml}
+                        </pre>
+                      ) : (
+                        <div className="p-8 text-center text-muted-foreground">
+                          <p>Diff preview not available</p>
+                          <p className="text-xs mt-2">View the resolved content tab to see the full updated document</p>
+                        </div>
+                      )}
+                    </ScrollArea>
                   )}
                 </div>
               </TabsContent>
@@ -196,6 +254,7 @@ export function DriftResolutionDialog({
               </TabsContent>
             </ScrollArea>
           </Tabs>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-4 border-t">
@@ -213,10 +272,10 @@ export function DriftResolutionDialog({
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose} disabled={isApplying}>
+            <Button variant="outline" onClick={onClose} disabled={isApplying || isLoading}>
               Cancel
             </Button>
-            <Button onClick={onApply} disabled={isApplying}>
+            <Button onClick={onApply} disabled={isApplying || isLoading || !resolutionPreview}>
               {isApplying ? (
                 <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />

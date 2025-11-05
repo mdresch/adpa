@@ -72,12 +72,16 @@ import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
 import driftRoutes from "./routes/drift"
+import emergencyMeetingsRoutes from "./routes/emergency-meetings"
+import baselineUpdatesRoutes from "./routes/baselineUpdates"
+import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
 import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
+import emailNotificationsRoutes from "./routes/emailNotifications"
 
 const app = express()
 const server = createServer(app)
@@ -239,13 +243,17 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
+app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
+app.use("/api/baseline-updates", baselineUpdatesRoutes)
+app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)
 app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
-console.log("✅ All API routes registered (including assessment and executive dashboard routes)")
+app.use("/api/email-notifications", emailNotificationsRoutes)
+console.log("✅ All API routes registered (including assessment, executive dashboard, and email notifications)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
