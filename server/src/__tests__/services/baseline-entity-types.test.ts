@@ -225,7 +225,9 @@ describe('Baseline Entity Types - All 14 Types', () => {
       expect(baselineExtractionResult.success_criteria).toBeDefined()
       
       // Verify entity breakdown in metadata
+      expect(baselineExtractionResult.ai_processing_metadata).toBeDefined()
       const entityBreakdown = baselineExtractionResult.ai_processing_metadata.entity_breakdown
+      expect(entityBreakdown).toBeDefined()
       expect(entityBreakdown.scope_items).toBeGreaterThan(0)
       expect(entityBreakdown.deliverables).toBeGreaterThan(0)
       expect(entityBreakdown.requirements).toBeGreaterThan(0)
