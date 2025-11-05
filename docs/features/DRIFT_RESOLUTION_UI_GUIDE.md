@@ -481,9 +481,13 @@ aria-label="Side-by-side code comparison"
 ### Caching Strategy
 
 - **Baseline Data**: Cache for 5 minutes
+  - *Rationale*: Baselines rarely change; 5-minute cache balances freshness with reduced database load
 - **Drift Analysis**: Cache for 1 minute
+  - *Rationale*: Documents may be edited frequently; short cache ensures recent drift is detected
 - **Resolution Preview**: No caching (always fresh)
+  - *Rationale*: Each resolution is unique to current document state; must always be regenerated
 - **Diff Calculation**: Memoized per content pair
+  - *Rationale*: Same content pair always produces same diff; memoization avoids redundant computation
 
 ---
 
@@ -555,7 +559,9 @@ Toast Notification:
 
 ### Getting Help
 
-**Documentation**: See [DRIFT_RESOLUTION_PREVIEW_FEATURE.md](./DRIFT_RESOLUTION_PREVIEW_FEATURE.md)
+**Documentation**: 
+- Implementation Guide: [DRIFT_RESOLUTION_PREVIEW_FEATURE.md](./DRIFT_RESOLUTION_PREVIEW_FEATURE.md)
+- UI/UX Guide: This document
 
 **Troubleshooting**: Check logs in `server/logs/combined.log`
 
