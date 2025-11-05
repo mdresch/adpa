@@ -344,8 +344,6 @@ export class DriftDetectionService {
   ): DriftPoint[] {
     const driftPoints: DriftPoint[] = []
 
-    // Check stakeholders - only if baseline actually has stakeholders
-    if (baseline.resource_baseline?.stakeholders && Array.isArray(baseline.resource_baseline.stakeholders) && baseline.resource_baseline.stakeholders.length > 0) {
     // 1. Check scope_items
     if (baseline.scope_baseline?.in_scope_items || baseline.scope_baseline?.out_scope_items) {
       const allBaselineScopeItems = [
@@ -449,8 +447,6 @@ export class DriftDetectionService {
       driftPoints.push(...stakeholderDrift)
     }
 
-    // Check risks - only if baseline actually has risks
-    if (baseline.scope_baseline?.risks && Array.isArray(baseline.scope_baseline.risks) && baseline.scope_baseline.risks.length > 0) {
     // 10. Check constraints
     if (baseline.scope_baseline?.constraints) {
       const constraintDrift = this.detectGenericEntityDrift(
@@ -471,11 +467,6 @@ export class DriftDetectionService {
       driftPoints.push(...riskDrift)
     }
 
-    // Check milestones - only if baseline actually has milestones
-    if (baseline.timeline_baseline?.milestones && Array.isArray(baseline.timeline_baseline.milestones) && baseline.timeline_baseline.milestones.length > 0) {
-      const milestoneDrift = this.detectMilestoneDrift(
-        baseline.timeline_baseline.milestones,
-        currentEntities.milestones
     // 12. Check success_criteria
     if (baseline.success_criteria?.kpis) {
       const successCriteriaDrift = this.detectGenericEntityDrift(
