@@ -77,6 +77,7 @@ import documentUploadRoutes from "./routes/documentUploadRoutes"
 import adminRoutes from "./routes/adminRoutes"
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
 import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
+import executiveDashboardRoutes from "./routes/executive-dashboard"
 
 const app = express()
 const server = createServer(app)
@@ -243,7 +244,8 @@ app.use("/api/admin", adminRoutes)
 app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)
 app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
-console.log("✅ All API routes registered (including assessment routes)")
+app.use("/api/executive-dashboard", executiveDashboardRoutes)
+console.log("✅ All API routes registered (including assessment and executive dashboard routes)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
