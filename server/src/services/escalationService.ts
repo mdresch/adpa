@@ -8,6 +8,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { emailNotificationService, BudgetOverrunEmailData, ScopeCreepEmailData } from './emailNotificationService'
 
 export interface EscalationRule {
   id: string
@@ -441,11 +442,109 @@ export class EscalationService {
   }
 
   /**
-   * Send email notification (placeholder - integrate with email service)
+   * Send email notification using email notification service
    */
   private async sendEmailNotification(alert: EscalationAlert, rule: EscalationRule): Promise<void> {
-    // TODO: Integrate with actual email service (SendGrid, AWS SES, etc.)
-    logger.info('[ESCALATION] Email notification would be sent to:', rule.escalate_to)
+    try {
+      // Get project details
+      const projectResult = await pool.query(
+        'SELECT name FROM projects WHERE id = $1',
+        [alert.project_id]
+      )
+      const projectName = projectResult.rows[0]?.name || 'Unknown Project'
+
+      // Determine notification type and send appropriate email
+      switch (rule.drift_type) {
+        case 'budget_overrun':
+          await this.sendBudgetOverrunEmail(alert, rule, projectName)
+          break
+
+        case 'scope_creep':
+          await this.sendScopeCreepEmail(alert, rule, projectName)
+          break
+
+        default:
+          // For other drift types, log for now
+          logger.info('[ESCALATION] Email notification type not implemented yet:', rule.drift_type)
+      }
+
+      // Log the notification
+      await pool.query(
+        `INSERT INTO email_notification_logs (
+          notification_type, severity, priority, recipient_roles, subject,
+          project_id, drift_detection_id, escalation_alert_id, metadata, status
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [
+          rule.drift_type,
+          rule.severity_level,
+          rule.severity_level === 'emergency' || rule.severity_level === 'critical' ? 'high' : 'normal',
+          rule.escalate_to,
+          `${rule.drift_type} - ${alert.alert_summary}`,
+          alert.project_id,
+          alert.drift_detection_id,
+          alert.id,
+          JSON.stringify({ rule_name: rule.rule_name }),
+          'sent'
+        ]
+      )
+    } catch (error) {
+      logger.error('[ESCALATION] Error in sendEmailNotification:', error)
+      throw error
+    }
+  }
+
+  /**
+   * Send budget overrun email
+   */
+  private async sendBudgetOverrunEmail(
+    alert: EscalationAlert,
+    rule: EscalationRule,
+    projectName: string
+  ): Promise<void> {
+    const details = alert.alert_details || {}
+    const variance = alert.variance_percentage || 0
+
+    const emailData: BudgetOverrunEmailData = {
+      projectId: alert.project_id,
+      projectName,
+      approvedBudget: details.approved_budget || 0,
+      projectedCost: details.projected_cost || 0,
+      overrunAmount: details.overrun_amount || 0,
+      overrunPercentage: variance,
+      severity: rule.severity_level,
+      deadline: alert.deadline,
+      changeRequestId: details.change_request_id,
+      rootCause: details.root_cause,
+      options: details.corrective_options
+    }
+
+    await emailNotificationService.sendBudgetOverrunAlert(emailData)
+  }
+
+  /**
+   * Send scope creep email
+   */
+  private async sendScopeCreepEmail(
+    alert: EscalationAlert,
+    rule: EscalationRule,
+    projectName: string
+  ): Promise<void> {
+    const details = alert.alert_details || {}
+    const variance = alert.variance_percentage || 0
+
+    const emailData: ScopeCreepEmailData = {
+      projectId: alert.project_id,
+      projectName,
+      baselineScope: details.baseline_scope || [],
+      currentScope: details.current_scope || [],
+      scopeIncrease: variance,
+      severity: rule.severity_level,
+      deadline: alert.deadline,
+      changeRequestId: details.change_request_id,
+      unapprovedFeatures: details.unapproved_features
+    }
+
+    await emailNotificationService.sendScopeCreepAlert(emailData)
   }
 
   /**

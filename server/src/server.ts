@@ -77,6 +77,7 @@ import baselineUpdatesRoutes from "./routes/baselineUpdates"
 import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
+import emailNotificationsRoutes from "./routes/emailNotifications"
 
 const app = express()
 const server = createServer(app)
@@ -240,6 +241,7 @@ app.use("/api/baseline-updates", baselineUpdatesRoutes)
 app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
+app.use("/api/email-notifications", emailNotificationsRoutes)
 console.log("✅ All API routes registered")
 
 // WebSocket connection handling
