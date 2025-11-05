@@ -318,12 +318,19 @@ export async function processUploadedFile(
 ): Promise<FileProcessingResult> {
   const { batchId, fileId, projectId, uploadedBy, filename, originalFormat, buffer, fileHash } = job.data;
 
+  // CRITICAL FIX: Bull serializes Buffers to Redis as plain objects {type: 'Buffer', data: [...]}
+  // We must convert them back to proper Buffer objects
+  const actualBuffer = Buffer.isBuffer(buffer) 
+    ? buffer 
+    : Buffer.from((buffer as any).data || buffer);
+
   logger.info('Processing uploaded file', {
     batchId,
     fileId,
     filename,
     format: originalFormat,
-    size: buffer.length
+    size: actualBuffer.length,
+    bufferType: Buffer.isBuffer(buffer) ? 'Buffer' : typeof buffer
   });
 
   const client = await pool.connect();
@@ -342,7 +349,7 @@ export async function processUploadedFile(
     };
 
     const conversionResult = await documentConversionService.convertToMarkdown(
-      buffer,
+      actualBuffer,
       conversionOptions
     );
 
@@ -383,7 +390,7 @@ export async function processUploadedFile(
       conversionMetadata: conversionResult.metadata,
       detectionMetadata: detectionResult.metadata,
       fileHash,
-      fileSize: buffer.length
+      fileSize: actualBuffer.length
     });
 
     logger.info('Document record created', {
