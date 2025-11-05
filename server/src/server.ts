@@ -72,6 +72,7 @@ import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
 import driftRoutes from "./routes/drift"
+import emergencyMeetingsRoutes from "./routes/emergency-meetings"
 import baselineUpdatesRoutes from "./routes/baselineUpdates"
 import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
@@ -235,6 +236,7 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
+app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)
 app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
