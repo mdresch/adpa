@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import {
   Download,
   TrendingUp,
@@ -15,7 +18,10 @@ import {
   FileText,
   BarChart3,
   Target,
-  Loader2
+  Loader2,
+  Upload,
+  RefreshCw,
+  Plus
 } from 'lucide-react';
 
 interface AssessmentData {
@@ -65,6 +71,11 @@ export default function AssessmentResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [addingDocuments, setAddingDocuments] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
 
   useEffect(() => {
     loadAssessment();
@@ -95,6 +106,85 @@ export default function AssessmentResultsPage() {
       if (retryCount === 0) {
         setLoading(false);
       }
+    }
+  };
+
+  const handleAddDocuments = () => {
+    setUploadDialogOpen(true);
+  };
+
+  const handleUploadAdditionalDocuments = async () => {
+    if (!selectedFiles || selectedFiles.length === 0) {
+      alert('Please select at least one file');
+      return;
+    }
+
+    try {
+      setUploading(true);
+
+      const formData = new FormData();
+      Array.from(selectedFiles).forEach((file) => {
+        formData.append('files', file);
+      });
+
+      const response = await fetch(`/api/onboarding/batch/${batchId}/add-documents`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload documents');
+      }
+
+      const result = await response.json();
+      
+      // Close dialog and show processing message
+      setUploadDialogOpen(false);
+      setSelectedFiles(null);
+      
+      alert(`${selectedFiles.length} document(s) uploaded successfully!\n\nProcessing will take 2-3 minutes.\n\nClick "Regenerate Assessment" when processing is complete.`);
+
+    } catch (err: any) {
+      console.error('Upload error:', err);
+      alert(`Failed to upload documents: ${err.message}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRegenerateAssessment = async () => {
+    if (!confirm('Regenerate assessment with all documents?\n\nThis will recalculate all metrics and may take a few minutes.')) {
+      return;
+    }
+
+    try {
+      setRegenerating(true);
+
+      const response = await fetch(`/api/assessment/batch/${batchId}/regenerate`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to regenerate assessment');
+      }
+
+      const result = await response.json();
+      
+      alert(`Assessment regenerated successfully!\n\nNow includes ${result.data.total_documents} documents.`);
+      
+      // Reload the assessment
+      await loadAssessment();
+
+    } catch (err: any) {
+      console.error('Regenerate error:', err);
+      alert(`Failed to regenerate assessment: ${err.message}`);
+    } finally {
+      setRegenerating(false);
     }
   };
 
@@ -251,6 +341,28 @@ export default function AssessmentResultsPage() {
           <p className="text-muted-foreground">{assessment.projectName}</p>
         </div>
         <div className="space-x-2">
+          <Button
+            variant="outline"
+            onClick={handleAddDocuments}
+            disabled={addingDocuments}
+            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            Add More Documents
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleRegenerateAssessment}
+            disabled={regenerating}
+            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+          >
+            {regenerating ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
+            Regenerate Assessment
+          </Button>
           <Button
             variant="outline"
             onClick={() => exportReport('csv')}
@@ -544,6 +656,79 @@ export default function AssessmentResultsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Add Documents Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Add More Documents to Assessment</DialogTitle>
+            <DialogDescription>
+              Upload additional documents to enhance your assessment. The system will process them and you can regenerate the assessment with all documents included.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="additional-files">Select Documents</Label>
+              <Input
+                id="additional-files"
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.txt,.md,.markdown"
+                onChange={(e) => setSelectedFiles(e.target.files)}
+                className="cursor-pointer"
+              />
+              <p className="text-xs text-muted-foreground">
+                Supported formats: PDF, DOC, DOCX, TXT, MD (up to 100 files, 10MB each)
+              </p>
+              {selectedFiles && selectedFiles.length > 0 && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-md border border-blue-200">
+                  <p className="text-sm font-medium text-blue-900 mb-2">
+                    {selectedFiles.length} file(s) selected:
+                  </p>
+                  <ul className="text-xs text-blue-700 space-y-1">
+                    {Array.from(selectedFiles).map((file, idx) => (
+                      <li key={idx} className="flex items-center gap-2">
+                        <FileText className="h-3 w-3" />
+                        {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setUploadDialogOpen(false);
+                setSelectedFiles(null);
+              }}
+              disabled={uploading}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUploadAdditionalDocuments}
+              disabled={uploading || !selectedFiles || selectedFiles.length === 0}
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Upload Documents
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

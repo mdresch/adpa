@@ -214,6 +214,96 @@ export async function createUploadBatch(
 }
 
 /**
+ * Add documents to existing batch
+ * Allows users to enhance their assessment with additional documents
+ */
+export async function addDocumentsToExistingBatch(
+  batchId: string,
+  files: Express.Multer.File[]
+): Promise<UploadBatchResult> {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+
+    // Get existing batch info
+    const batchResult = await client.query(
+      'SELECT * FROM upload_batches WHERE id = $1',
+      [batchId]
+    );
+
+    if (batchResult.rows.length === 0) {
+      throw new Error('Batch not found');
+    }
+
+    const batch = batchResult.rows[0];
+    const { project_id: projectId, uploaded_by: uploadedBy } = batch;
+
+    // Update batch with new file count
+    const newTotalFiles = batch.total_files + files.length;
+    await client.query(
+      `UPDATE upload_batches 
+       SET total_files = $1, 
+           status = 'processing',
+           updated_at = NOW()
+       WHERE id = $2`,
+      [newTotalFiles, batchId]
+    );
+
+    logger.info('Adding documents to existing batch', {
+      batchId,
+      existingFiles: batch.total_files,
+      newFiles: files.length,
+      newTotal: newTotalFiles
+    });
+
+    await client.query('COMMIT');
+
+    // Enqueue new files for processing
+    const jobs = await Promise.all(
+      files.map((file, index) => 
+        enqueueFileProcessing(
+          batchId, 
+          projectId, 
+          uploadedBy, 
+          file, 
+          batch.total_files + index // Continue numbering from existing
+        )
+      )
+    );
+
+    logger.info('Additional files enqueued', {
+      batchId,
+      newJobCount: jobs.length
+    });
+
+    // Emit WebSocket event
+    emitBatchProgress(batchId, projectId, {
+      totalFiles: newTotalFiles,
+      processedFiles: batch.successful_files + batch.failed_files,
+      status: 'processing'
+    });
+
+    return {
+      batchId,
+      totalFiles: newTotalFiles,
+      status: 'processing',
+      createdAt: batch.created_at
+    };
+
+  } catch (error: any) {
+    await client.query('ROLLBACK');
+    logger.error('Failed to add documents to batch', {
+      error: error.message,
+      batchId
+    });
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Create temporary tracking for batch files
  */
 async function createBatchFileTracking(

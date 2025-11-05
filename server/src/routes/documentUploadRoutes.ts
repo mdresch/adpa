@@ -593,6 +593,62 @@ router.use((error: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 // ============================================================================
+// ADD DOCUMENTS TO EXISTING BATCH
+// ============================================================================
+
+/**
+ * POST /api/onboarding/batch/:batchId/add-documents
+ * Add more documents to an existing assessment batch
+ * Allows customers to enhance their assessment with additional documents
+ */
+router.post(
+  '/batch/:batchId/add-documents',
+  optionalAuth,
+  upload.array('files', 100),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { batchId } = req.params;
+      const files = req.files as Express.Multer.File[];
+      
+      if (!files || files.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'NO_FILES',
+            message: 'No files provided. Please upload at least one document.'
+          }
+        });
+      }
+
+      logger.info('Adding documents to existing batch', {
+        batchId,
+        fileCount: files.length,
+        userId: (req as any).user.id
+      });
+
+      // Add documents to existing batch
+      const result = await documentUploadService.addDocumentsToExistingBatch(
+        batchId,
+        files
+      );
+
+      res.status(200).json({
+        success: true,
+        data: result,
+        message: `${files.length} document(s) added successfully. Processing will begin shortly.`
+      });
+
+    } catch (error: any) {
+      logger.error('Failed to add documents to batch', {
+        error: error.message,
+        batchId: req.params.batchId
+      });
+      next(error);
+    }
+  }
+);
+
+// ============================================================================
 // EXPORTS
 // ============================================================================
 

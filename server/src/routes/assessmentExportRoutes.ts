@@ -619,5 +619,129 @@ router.post('/project/quick-create', authenticate, async (req: Request, res: Res
   }
 });
 
+/**
+ * POST /api/assessment/batch/:batchId/add-documents
+ * Add more documents to an existing assessment batch
+ * This allows users to enhance their assessment with additional documents
+ */
+router.post('/batch/:batchId/add-documents', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { batchId } = req.params;
+    const userId = (req as any).user?.id;
+
+    // Verify batch exists and belongs to user (or is guest-created)
+    const batchResult = await pool.query(
+      `SELECT ub.*, p.created_by as project_owner
+       FROM upload_batches ub
+       JOIN projects p ON ub.project_id = p.id
+       WHERE ub.id = $1`,
+      [batchId]
+    );
+
+    if (batchResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Batch not found'
+      });
+    }
+
+    const batch = batchResult.rows[0];
+    
+    // Check permissions
+    const isGuestBatch = batch.project_owner === (await pool.query(
+      "SELECT id FROM users WHERE email = 'onboarding-guest@system.local'"
+    )).rows[0]?.id;
+    
+    if (!isGuestBatch && batch.uploaded_by !== userId) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied to this batch'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        batchId: batch.id,
+        projectId: batch.project_id,
+        status: batch.status,
+        currentDocuments: batch.successful_files,
+        message: 'Ready to accept additional documents. Use the document upload endpoint with this batchId.'
+      }
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to prepare batch for additional documents', {
+      error: error.message,
+      batchId: req.params.batchId
+    });
+    next(error);
+  }
+});
+
+/**
+ * POST /api/assessment/batch/:batchId/regenerate
+ * Regenerate assessment after adding new documents
+ * This recalculates all metrics with the updated document set
+ */
+router.post('/batch/:batchId/regenerate', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { batchId } = req.params;
+    const userId = (req as any).user?.id;
+
+    logger.info('Regenerating assessment for batch', { batchId, userId });
+
+    // Verify batch exists
+    const batchResult = await pool.query(
+      'SELECT * FROM upload_batches WHERE id = $1',
+      [batchId]
+    );
+
+    if (batchResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Batch not found'
+      });
+    }
+
+    const batch = batchResult.rows[0];
+
+    // Delete existing assessment to force regeneration
+    await pool.query(
+      'DELETE FROM assessments WHERE batch_id = $1',
+      [batchId]
+    );
+
+    logger.info('Deleted old assessment, generating new one', { batchId });
+
+    // Generate fresh assessment with all documents
+    const assessment = await portfolioAssessmentService.generateAssessment(
+      batchId,
+      batch.project_id,
+      userId
+    );
+
+    logger.info('Assessment regenerated successfully', { 
+      batchId, 
+      assessmentId: assessment.id,
+      totalDocuments: assessment.total_documents 
+    });
+
+    res.json({
+      success: true,
+      data: assessment,
+      message: `Assessment regenerated with ${assessment.total_documents} documents`
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to regenerate assessment', {
+      error: error.message,
+      stack: error.stack,
+      batchId: req.params.batchId
+    });
+    next(error);
+  }
+});
+
 export default router;
 
