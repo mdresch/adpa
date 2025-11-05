@@ -7,6 +7,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { escalationService } from './escalationService'
 
 export interface DriftPoint {
   entityType: string // 'stakeholder', 'risk', 'milestone', etc.
@@ -972,6 +973,140 @@ export class DriftDetectionService {
       logger.error('[DRIFT] Error creating drift record:', error)
       throw error
     }
+  }
+
+  /**
+   * Check if escalation is needed and trigger if required
+   * TASK-742: Escalation matrix based on severity
+   */
+  async checkAndTriggerEscalation(
+    driftRecord: any,
+    driftPoints: DriftPoint[]
+  ): Promise<void> {
+    try {
+      logger.info('[DRIFT] Checking escalation requirements', {
+        driftId: driftRecord.id,
+        severity: driftRecord.drift_severity
+      })
+
+      // Determine drift type based on detected drift points
+      const driftType = this.determineDriftType(driftPoints)
+      
+      // Build drift data for escalation evaluation
+      const driftData = this.buildDriftData(driftRecord, driftPoints)
+
+      // Evaluate against escalation matrix
+      const evaluation = await escalationService.evaluateDrift(
+        driftRecord.id,
+        driftRecord.project_id,
+        driftType,
+        driftRecord.drift_severity,
+        driftData
+      )
+
+      // If escalation is needed, create alert
+      if (evaluation.shouldEscalate && evaluation.matchedRule) {
+        logger.info('[DRIFT] Escalation required, creating alert', {
+          ruleName: evaluation.matchedRule.rule_name,
+          severity: evaluation.matchedRule.severity_level
+        })
+
+        await escalationService.createAlert(
+          driftRecord.id,
+          driftRecord.project_id,
+          evaluation.matchedRule,
+          evaluation.variancePercentage,
+          driftData
+        )
+      } else {
+        logger.info('[DRIFT] No escalation required', {
+          driftId: driftRecord.id
+        })
+      }
+    } catch (error) {
+      // Log error but don't fail the drift detection process
+      logger.error('[DRIFT] Error checking escalation:', error)
+    }
+  }
+
+  /**
+   * Determine drift type for escalation routing
+   */
+  private determineDriftType(driftPoints: DriftPoint[]): string {
+    // Check for budget-related drift
+    if (driftPoints.some(d => d.entityType === 'budget')) {
+      const budgetPoint = driftPoints.find(d => d.entityType === 'budget')
+      if (budgetPoint && budgetPoint.variance && budgetPoint.variance > 0) {
+        return 'budget_overrun'
+      }
+      return 'cost_drift'
+    }
+
+    // Check for scope-related drift
+    if (driftPoints.some(d => d.entityType === 'deliverable' || d.entityType === 'scope')) {
+      const addedDeliverables = driftPoints.filter(d => 
+        (d.entityType === 'deliverable' || d.entityType === 'scope') && d.driftType === 'added'
+      )
+      if (addedDeliverables.length > 0) {
+        return 'scope_creep'
+      }
+      return 'scope_drift'
+    }
+
+    // Check for timeline-related drift
+    if (driftPoints.some(d => d.entityType === 'milestone' || d.entityType === 'timeline')) {
+      return 'timeline_delay'
+    }
+
+    // Check for technical drift
+    if (driftPoints.some(d => d.entityType === 'technical_requirements')) {
+      return 'technical_drift'
+    }
+
+    // Check for resource drift
+    if (driftPoints.some(d => d.entityType === 'stakeholder' || d.entityType === 'resources')) {
+      return 'resource_drift'
+    }
+
+    // Default
+    return 'scope_drift'
+  }
+
+  /**
+   * Build drift data structure for escalation evaluation
+   */
+  private buildDriftData(driftRecord: any, driftPoints: DriftPoint[]): any {
+    const data: any = {
+      drift_record_id: driftRecord.id,
+      drift_severity: driftRecord.drift_severity,
+      drift_points_count: driftPoints.length,
+      timestamp: new Date().toISOString()
+    }
+
+    // Extract budget information
+    const budgetPoint = driftPoints.find(d => d.entityType === 'budget')
+    if (budgetPoint) {
+      data.approved_budget = budgetPoint.baselineValue
+      data.projected_cost = budgetPoint.currentValue
+      data.budget_variance = budgetPoint.variance
+    }
+
+    // Extract scope information
+    const deliverablePoints = driftPoints.filter(d => d.entityType === 'deliverable')
+    if (deliverablePoints.length > 0) {
+      const baselineCount = deliverablePoints.filter(d => d.baselineValue).length
+      const currentCount = deliverablePoints.filter(d => d.currentValue).length
+      data.baseline_scope_count = baselineCount
+      data.current_scope_count = currentCount
+    }
+
+    // Extract timeline information
+    const milestonePoints = driftPoints.filter(d => d.entityType === 'milestone')
+    if (milestonePoints.length > 0) {
+      data.milestone_drift_count = milestonePoints.length
+    }
+
+    return data
   }
 }
 
