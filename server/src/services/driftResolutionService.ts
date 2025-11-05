@@ -107,8 +107,10 @@ export class DriftResolutionService {
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiResponse = await aiService.generate({
         prompt,
+        provider: 'openai',
+        model: 'gpt-4-turbo-preview',
         temperature: 0.2, // Low temp for consistent, accurate resolution
-        maxTokens: 8000
+        max_tokens: 8000
       })
 
       // 7. Parse resolved content
@@ -204,6 +206,9 @@ export class DriftResolutionService {
 
   /**
    * Build AI prompt for drift resolution
+   * Handles all 14 entity types: scope_items, deliverables, requirements, milestones,
+   * phases, activities, resources, technologies, stakeholders, constraints, risks,
+   * success_criteria, quality_standards, best_practices
    */
   private buildResolutionPrompt(
     document: Document,
@@ -217,7 +222,14 @@ export class DriftResolutionService {
 
 **Document**: ${document.title}
 **Approved Baseline**: Version ${baseline.version}
-**Drift Detected**: ${driftPoints.length} drift points identified
+**Drift Detected**: ${driftPoints.length} drift points identified across entity types
+
+## ENTITY TYPES TRACKED
+The system tracks 14 entity types:
+- **Scope**: scope_items, deliverables, requirements, constraints
+- **Timeline**: milestones, phases, activities
+- **Resources**: resources, technologies, stakeholders
+- **Quality & Risk**: risks, success_criteria, quality_standards, best_practices
 
 ## BASELINE ENTITIES (APPROVED - AUTHORITATIVE)
 
@@ -248,13 +260,14 @@ ${i + 1}. ${drift.driftType.toUpperCase()}: ${drift.description}
 Generate a REVISED version of the document that resolves the drift:
 
 1. **For REMOVED baseline entities**: Re-add them to the document in appropriate sections
+   - Applies to: scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices
 2. **For ADDED non-baseline entities**: 
    - Conservative: Remove them
    - Balanced: Keep if minor/helpful, remove if major/unauthorized
    - Permissive: Keep all, just note the addition
 3. **For MODIFIED entities**: Restore baseline values OR clearly mark as change request
-4. **For date changes**: Revert to baseline dates OR flag for approval
-5. **For budget changes >10%**: FLAG as requiring formal approval
+4. **For critical changes** (milestones, deliverables, requirements): Revert to baseline OR flag for approval
+5. **For budget/resource changes >10%**: FLAG as requiring formal approval
 
 **Preserve**:
 - Document structure and formatting (Markdown)
@@ -264,7 +277,7 @@ Generate a REVISED version of the document that resolves the drift:
 
 **Output**: Complete revised document in Markdown format that aligns with the approved baseline.
 
-**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions), include a comment: 
+**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions, high-priority requirements/deliverables), include a comment: 
 <!-- REQUIRES APPROVAL: [reason] -->
 
 **IMPORTANT**: Return ONLY the revised document content, no explanations or metadata.`
