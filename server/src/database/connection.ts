@@ -37,7 +37,6 @@ const createPool = (host: string) => {
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
       // Force IPv4 to prevent IPv6 connection issues on Railway
-      // @ts-expect-error - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
       family: 4,
     })
   }
@@ -122,7 +121,6 @@ export async function connectDatabase() {
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
           // Force IPv4 even in fallback to prevent IPv6 connection attempts on Railway
-          // @ts-expect-error - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
           family: 4,
         }
         console.log(`🔧 Using parsed connection with SSL and IPv4 forcing (rejectUnauthorized: false) to: ${dbUrl.hostname}`)
@@ -131,7 +129,6 @@ export async function connectDatabase() {
         console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString with IPv4 forcing')
         poolConfig.connectionString = databaseUrl
         // Force IPv4 even in last resort fallback
-        // @ts-expect-error - 'family' is not present in PoolConfig typings but supported at runtime for forcing IPv4
         poolConfig.family = 4
       }
     }
