@@ -262,9 +262,9 @@ class QualityAuditService {
     })
 
     try {
-      const result = await aiService.generate({
-        provider: 'google',
-        model: 'gemini-2.5-flash', // Fast and cost-effective for analysis
+      // Use automatic failover system - tries providers in priority order from database
+      const result = await aiService.generateWithFallback({
+        provider: 'auto', // Let system choose based on database configuration
         prompt: analysisPrompt, // User prompt (required)
         system_prompt: systemPrompt, // System prompt (optional, snake_case)
         temperature: 0.3, // Lower temperature for consistent analysis

@@ -107,8 +107,9 @@ export default function AssessmentsListPage() {
     }
   };
 
-  const handleView = (assessmentId: string) => {
-    router.push(`/onboarding/assessment/${assessmentId}`);
+  const handleView = (assessment: Assessment) => {
+    // Use batch ID for the URL since the detail page expects batch ID
+    router.push(`/onboarding/assessment/${assessment.batchId}`);
   };
 
   const handleExport = async (assessmentId: string, format: 'pdf' | 'csv') => {
@@ -392,7 +393,7 @@ export default function AssessmentsListPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleView(assessment.id)}
+                          onClick={() => handleView(assessment)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>

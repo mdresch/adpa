@@ -70,9 +70,9 @@ export default function AssessmentResultsPage() {
     loadAssessment();
   }, [batchId]);
 
-  const loadAssessment = async () => {
+  const loadAssessment = async (retryCount = 0) => {
     try {
-      const response = await fetch(`/api/assessment/${batchId}`, {
+      const response = await fetch(`/api/assessment/batch/${batchId}`, {
         credentials: 'include'
       });
 
@@ -83,9 +83,18 @@ export default function AssessmentResultsPage() {
       const data = await response.json();
       setAssessment(data.data);
     } catch (err: any) {
+      // Retry up to 3 times if connection fails (backend might be restarting)
+      if (retryCount < 3 && (err.message.includes('fetch') || err.message.includes('network'))) {
+        console.log(`Retrying assessment load (attempt ${retryCount + 1}/3)...`);
+        setTimeout(() => loadAssessment(retryCount + 1), 2000);
+        return;
+      }
       setError(err.message);
-    } finally {
       setLoading(false);
+    } finally {
+      if (retryCount === 0) {
+        setLoading(false);
+      }
     }
   };
 
@@ -436,9 +445,9 @@ export default function AssessmentResultsPage() {
                       {gap.description}
                     </p>
                     <div className="text-xs text-muted-foreground">
-                      Estimated effort: {gap.estimatedEffort}
+                      Estimated effort: {gap.estimatedEffort || gap.estimated_improvement_points ? `${gap.estimated_improvement_points?.toFixed(1)} points` : 'Medium'}
                     </div>
-                    {gap.recommendations.length > 0 && (
+                    {gap.recommendations && gap.recommendations.length > 0 && (
                       <ul className="mt-2 text-sm space-y-1">
                         {gap.recommendations.map((rec, i) => (
                           <li key={i} className="flex items-start gap-2">
@@ -447,6 +456,12 @@ export default function AssessmentResultsPage() {
                           </li>
                         ))}
                       </ul>
+                    )}
+                    {gap.recommendation && !gap.recommendations && (
+                      <div className="mt-2 text-sm flex items-start gap-2">
+                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                        <span>{gap.recommendation}</span>
+                      </div>
                     )}
                   </div>
                 ))}

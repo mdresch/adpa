@@ -35,7 +35,8 @@
     "create-upload-table": "tsx scripts/create-upload-batches-table.ts",
     "migrate-assessments": "tsx scripts/run-missing-migrations.ts",
     "check-status": "tsx scripts/check-upload-status.ts",
-    "reset-batches": "tsx scripts/reset-failed-batches.ts"
+    "reset-batches": "tsx scripts/reset-failed-batches.ts",
+    "clear-jobs": "tsx scripts/clear-failed-jobs.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",

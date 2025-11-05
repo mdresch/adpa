@@ -338,11 +338,178 @@ router.post('/:assessmentId/regenerate', authenticate, async (req: Request, res:
 });
 
 // ============================================================================
+// POST /api/assessment/batch/:batchId/complete
+// Manually trigger assessment generation for a completed batch
+// ============================================================================
+
+router.post('/batch/:batchId/complete', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { batchId } = req.params;
+    const userId = (req as any).user.id;
+
+    logger.info('Manually completing assessment for batch', {
+      batchId,
+      userId
+    });
+
+    // Get batch info
+    const batchQuery = `
+      SELECT ub.id, ub.project_id, ub.uploaded_by, ub.status as batch_status,
+             ub.batch_metadata, ub.total_files, ub.successful_files, ub.failed_files
+      FROM upload_batches ub
+      WHERE ub.id = $1
+    `;
+    
+    const batchResult = await pool.query(batchQuery, [batchId]);
+    
+    if (batchResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Batch not found'
+      });
+    }
+
+    const batch = batchResult.rows[0];
+    
+    // Check if batch is complete
+    if (batch.batch_status !== 'complete') {
+      return res.status(400).json({
+        success: false,
+        error: `Batch is not complete (status: ${batch.batch_status}). Cannot generate assessment yet.`
+      });
+    }
+
+    // Check if assessment already exists and has complete data
+    const existingAssessmentQuery = `
+      SELECT id, status, gaps, assessment_data FROM assessments WHERE batch_id = $1
+    `;
+    const existingAssessment = await pool.query(existingAssessmentQuery, [batchId]);
+    
+    if (existingAssessment.rows.length > 0 && existingAssessment.rows[0].status === 'complete') {
+      // Check if assessment has actual data (not just empty objects)
+      const hasData = existingAssessment.rows[0].gaps && 
+                      existingAssessment.rows[0].gaps.length > 0 &&
+                      existingAssessment.rows[0].assessment_data &&
+                      Object.keys(existingAssessment.rows[0].assessment_data).length > 0;
+      
+      if (hasData) {
+        return res.json({
+          success: true,
+          message: 'Assessment already completed with full data',
+          assessmentId: existingAssessment.rows[0].id
+        });
+      } else {
+        logger.info('Assessment is marked complete but has no data, regenerating', {
+          assessmentId: existingAssessment.rows[0].id,
+          batchId
+        });
+      }
+    }
+
+    const projectId = batch.project_id;
+    const uploadedBy = batch.uploaded_by;
+    const industryVertical = batch.batch_metadata?.industryVertical || 'technology';
+
+    // Generate portfolio assessment
+    const assessmentResult = await portfolioAssessmentService.assessProjectPortfolio(
+      projectId,
+      industryVertical,
+      uploadedBy
+    );
+
+    // Prepare gaps array from gap analysis
+    const allGaps = [
+      ...(assessmentResult.gap_analysis?.critical_gaps || []).map((g: any) => ({ ...g, priority: 'critical' })),
+      ...(assessmentResult.gap_analysis?.high_priority_gaps || []).map((g: any) => ({ ...g, priority: 'high' })),
+      ...(assessmentResult.gap_analysis?.medium_priority_gaps || []).map((g: any) => ({ ...g, priority: 'medium' }))
+    ];
+
+    const gapsCount = allGaps.length;
+
+    // Prepare assessment data with all calculated metrics
+    const assessmentData = {
+      portfolio_summary: assessmentResult.portfolio_summary,
+      breakdown: assessmentResult.breakdown,
+      gap_analysis: assessmentResult.gap_analysis,
+      top_documents: assessmentResult.top_documents
+    };
+
+    const assessmentUpdateQuery = `
+      UPDATE assessments
+      SET 
+        overall_maturity_level = $1,
+        maturity_label = $2,
+        avg_quality_score = $3,
+        gaps_count = $4,
+        assessment_data = $5,
+        gaps = $6,
+        benchmarks = $7,
+        roi_metrics = $8,
+        status = 'complete',
+        completed_at = NOW(),
+        updated_at = NOW()
+      WHERE batch_id = $9
+      RETURNING id
+    `;
+
+    const assessmentUpdateResult = await pool.query(assessmentUpdateQuery, [
+      assessmentResult.portfolio_summary.maturity_level,
+      assessmentResult.portfolio_summary.maturity_label,
+      assessmentResult.portfolio_summary.avg_quality_score,
+      gapsCount,
+      JSON.stringify(assessmentData),
+      JSON.stringify(allGaps),
+      JSON.stringify({
+        industryAverage: assessmentResult.portfolio_summary.industry_benchmark || null,
+        topPerformers: null,
+        yourScore: assessmentResult.portfolio_summary.avg_quality_score,
+        percentile: null
+      }),
+      JSON.stringify(assessmentResult.roi_calculation || {}),
+      batchId
+    ]);
+
+    if (assessmentUpdateResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Assessment record not found for this batch'
+      });
+    }
+
+    logger.info('Assessment completed successfully', {
+      assessmentId: assessmentUpdateResult.rows[0].id,
+      batchId,
+      maturityLevel: assessmentResult.portfolio_summary.maturity_level,
+      avgScore: assessmentResult.portfolio_summary.avg_quality_score
+    });
+
+    res.json({
+      success: true,
+      data: {
+        assessmentId: assessmentUpdateResult.rows[0].id,
+        maturityLevel: assessmentResult.portfolio_summary.maturity_level,
+        maturityLabel: assessmentResult.portfolio_summary.maturity_label,
+        avgQualityScore: assessmentResult.portfolio_summary.avg_quality_score,
+        gapsCount
+      }
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to complete assessment for batch', {
+      error: error.message,
+      batchId: req.params.batchId,
+      stack: error.stack
+    });
+    next(error);
+  }
+});
+
+// ============================================================================
 // GET /api/assessment/batch/:batchId
 // Get assessment by batch ID
 // ============================================================================
 
-router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/batch/:batchId', optionalAuthForView, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { batchId } = req.params;
     const userId = (req as any).user.id;
@@ -362,9 +529,30 @@ router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, 
       });
     }
 
+    // Transform data to match frontend expectations
+    const transformedData = {
+      ...assessment,
+      // Map documentsByType from breakdown data
+      documentsByType: assessment.assessment_data?.breakdown?.by_document_type 
+        ? Object.entries(assessment.assessment_data.breakdown.by_document_type).map(([type, data]: [string, any]) => ({
+            type,
+            count: data.count || 0,
+            avgScore: data.avg_score || 0,
+            status: data.grade || 'Unknown'
+          }))
+        : [],
+      // Use existing fields with camelCase
+      overallMaturityLevel: assessment.overall_maturity_level,
+      overallMaturityLabel: assessment.maturity_label,
+      averageQualityScore: parseFloat(assessment.avg_quality_score),
+      totalDocuments: assessment.total_documents,
+      // Rename roi_metrics to roiMetrics for frontend
+      roiMetrics: assessment.roi_metrics
+    };
+
     res.json({
       success: true,
-      data: assessment
+      data: transformedData
     });
 
   } catch (error: any) {

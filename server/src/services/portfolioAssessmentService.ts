@@ -139,12 +139,19 @@ export async function assessProjectPortfolio(
     // Step 3: Generate breakdown by framework and document type
     const breakdown = generateBreakdown(auditData);
 
-    // Step 4: Get industry benchmark
+    // Step 4: Get industry benchmark (optional - skip if table doesn't exist)
     if (industryVertical) {
-      const benchmark = await getIndustryBenchmark(client, industryVertical);
-      if (benchmark) {
-        portfolioMetrics.industry_benchmark = benchmark.avg_quality_score;
-        portfolioMetrics.gap_percentage = portfolioMetrics.avg_quality_score - benchmark.avg_quality_score;
+      try {
+        const benchmark = await getIndustryBenchmark(client, industryVertical);
+        if (benchmark) {
+          portfolioMetrics.industry_benchmark = benchmark.avg_quality_score;
+          portfolioMetrics.gap_percentage = portfolioMetrics.avg_quality_score - benchmark.avg_quality_score;
+        }
+      } catch (benchmarkError: any) {
+        // Industry benchmarks table may not exist yet - skip gracefully
+        logger.warn('Industry benchmark lookup failed (table may not exist), skipping', {
+          error: benchmarkError.message
+        });
       }
     }
 
@@ -157,22 +164,44 @@ export async function assessProjectPortfolio(
     // Step 7: Calculate ROI
     const roiCalculation = calculateROI(portfolioMetrics, auditData.length);
 
-    // Step 8: Save assessment to database
-    const assessmentId = await saveAssessment(client, {
-      projectId,
-      portfolioMetrics,
-      breakdown,
-      gapAnalysis,
-      topDocuments,
-      roiCalculation,
-      industryVertical,
-      assessedBy
-    });
+    // Step 8: Save assessment to database (ONLY if portfolio_assessments table exists)
+    // For onboarding flow, we skip this and just return calculated metrics
+    let assessmentId: string | null = null;
+    
+    try {
+      // Check if portfolio_assessments table exists
+      const tableCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'portfolio_assessments'
+        )
+      `);
+      
+      if (tableCheck.rows[0].exists) {
+        assessmentId = await saveAssessment(client, {
+          projectId,
+          portfolioMetrics,
+          breakdown,
+          gapAnalysis,
+          topDocuments,
+          roiCalculation,
+          industryVertical,
+          assessedBy
+        });
+      } else {
+        logger.info('portfolio_assessments table does not exist, skipping save (using assessments table instead)');
+      }
+    } catch (saveError: any) {
+      logger.warn('Failed to save to portfolio_assessments table, continuing with calculated metrics', {
+        error: saveError.message
+      });
+    }
 
     await client.query('COMMIT');
 
     logger.info('Portfolio assessment completed', {
-      assessmentId,
+      assessmentId: assessmentId || 'not-saved',
       projectId,
       totalDocuments: auditData.length,
       avgScore: portfolioMetrics.avg_quality_score,
@@ -213,15 +242,21 @@ async function gatherAuditData(client: any, projectId: string): Promise<any[]> {
       qa.id as audit_id,
       qa.document_id,
       qa.overall_score,
-      qa.grade,
-      qa.framework_used,
-      qa.compliance_score,
-      qa.category_scores,
-      qa.gaps_identified,
+      qa.overall_grade as grade,
+      qa.quality_level,
+      qa.standards_compliance_score as compliance_score,
+      qa.completeness_score,
+      qa.consistency_score,
+      qa.professional_quality_score,
+      qa.accuracy_score,
+      qa.context_relevance_score,
+      qa.findings,
+      qa.issues as gaps_identified,
       qa.recommendations,
-      d.title as document_title,
-      d.detected_type as document_type,
-      d.source as document_source,
+      COALESCE(qa.ai_provider, d.framework) as framework_used,
+      COALESCE(d.title, d.name) as document_title,
+      COALESCE(d.framework, d.template_category, 'General') as document_type,
+      COALESCE(d.source, 'Manual Upload') as document_source,
       d.created_at as document_created_at
     FROM quality_audits qa
     JOIN documents d ON d.id = qa.document_id

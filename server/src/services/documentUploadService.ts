@@ -15,6 +15,7 @@ import { logger } from '../utils/logger';
 import { pool } from '../database/connection'; // Use shared pool with correct SSL config
 import { documentConversionService, ConversionOptions } from './documentConversionService';
 import { qualityAuditService } from './qualityAuditService';
+import { portfolioAssessmentService } from './portfolioAssessmentService';
 import { io } from '../server'; // WebSocket for real-time updates
 
 // ============================================================================
@@ -466,17 +467,10 @@ async function detectDocumentType(
   confidence: number;
   metadata: Record<string, any>;
 }> {
-  const { GoogleGenerativeAI } = require('@google/generative-ai');
+  // Use AI service with automatic failover instead of hardcoded Google AI
+  const { aiService } = await import('./aiService');
   
-  if (!process.env.GOOGLE_AI_API_KEY) {
-    // Fallback: simple keyword-based detection
-    return detectDocumentTypeKeywords(markdown, filename);
-  }
-
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
-
     const prompt = `Analyze this document and classify its type.
 
 Document filename: ${filename}
@@ -509,11 +503,16 @@ Respond in JSON format:
   "alternative_types": ["type2", "type3"]
 }`;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response.text();
+    // Use AI service with automatic failover
+    const result = await aiService.generateWithFallback({
+      provider: 'auto', // Automatically use highest priority active provider
+      prompt,
+      temperature: 0.3,
+      max_tokens: 500
+    });
     
     // Extract JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    const jsonMatch = result.content.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
       throw new Error('Failed to parse AI response');
     }
@@ -524,8 +523,8 @@ Respond in JSON format:
       type: parsed.type,
       confidence: parsed.confidence,
       metadata: {
-        aiProvider: 'google-gemini',
-        model: 'gemini-1.5-flash',
+        aiProvider: result.providerUsed,
+        model: result.model,
         reasoning: parsed.reasoning,
         alternativeTypes: parsed.alternative_types
       }
@@ -750,19 +749,140 @@ async function updateBatchProgress(
         const status = row.failed_files === 0 ? 'complete' : 
                        row.successful_files === 0 ? 'failed' : 'complete';
         
-        await pool.query(`
-          UPDATE upload_batches
-          SET status = $1, completed_at = NOW()
-          WHERE id = $2
-        `, [status, batchId]);
+        // Get batch info for assessment generation
+        const batchInfoQuery = `
+          SELECT project_id, uploaded_by, batch_metadata
+          FROM upload_batches
+          WHERE id = $1
+        `;
+        const batchInfoResult = await pool.query(batchInfoQuery, [batchId]);
         
-        logger.info('Upload batch completed', {
-          batchId,
-          status,
-          successful: row.successful_files,
-          failed: row.failed_files,
-          total: row.total_files
-        });
+        if (batchInfoResult.rows.length > 0) {
+          const batchInfo = batchInfoResult.rows[0];
+          const projectId = batchInfo.project_id;
+          const uploadedBy = batchInfo.uploaded_by;
+          const industryVertical = batchInfo.batch_metadata?.industryVertical || 'technology';
+          
+          // Update batch status
+          await pool.query(`
+            UPDATE upload_batches
+            SET status = $1, completed_at = NOW()
+            WHERE id = $2
+          `, [status, batchId]);
+          
+          logger.info('Upload batch completed', {
+            batchId,
+            status,
+            successful: row.successful_files,
+            failed: row.failed_files,
+            total: row.total_files
+          });
+          
+          // Generate assessment if batch completed successfully
+          if (status === 'complete' && row.successful_files > 0) {
+            try {
+              logger.info('Generating assessment for completed batch', {
+                batchId,
+                projectId,
+                uploadedBy
+              });
+              
+              // Generate portfolio assessment
+              const assessmentResult = await portfolioAssessmentService.assessProjectPortfolio(
+                projectId,
+                industryVertical,
+                uploadedBy
+              );
+              
+              // Prepare gaps array from gap analysis
+              const allGaps = [
+                ...(assessmentResult.gap_analysis?.critical_gaps || []).map((g: any) => ({ ...g, priority: 'critical' })),
+                ...(assessmentResult.gap_analysis?.high_priority_gaps || []).map((g: any) => ({ ...g, priority: 'high' })),
+                ...(assessmentResult.gap_analysis?.medium_priority_gaps || []).map((g: any) => ({ ...g, priority: 'medium' }))
+              ];
+
+              const gapsCount = allGaps.length;
+
+              // Prepare assessment data with all calculated metrics
+              const assessmentData = {
+                portfolio_summary: assessmentResult.portfolio_summary,
+                breakdown: assessmentResult.breakdown,
+                gap_analysis: assessmentResult.gap_analysis,
+                top_documents: assessmentResult.top_documents
+              };
+
+              // Update the assessments table record with calculated values
+              const assessmentUpdateQuery = `
+                UPDATE assessments
+                SET 
+                  overall_maturity_level = $1,
+                  maturity_label = $2,
+                  avg_quality_score = $3,
+                  gaps_count = $4,
+                  assessment_data = $5,
+                  gaps = $6,
+                  benchmarks = $7,
+                  roi_metrics = $8,
+                  status = 'complete',
+                  completed_at = NOW(),
+                  updated_at = NOW()
+                WHERE batch_id = $9
+                RETURNING id
+              `;
+              
+              const assessmentUpdateResult = await pool.query(assessmentUpdateQuery, [
+                assessmentResult.portfolio_summary.maturity_level,
+                assessmentResult.portfolio_summary.maturity_label,
+                assessmentResult.portfolio_summary.avg_quality_score,
+                gapsCount,
+                JSON.stringify(assessmentData),
+                JSON.stringify(allGaps),
+                JSON.stringify({
+                  industryAverage: assessmentResult.portfolio_summary.industry_benchmark || null,
+                  topPerformers: null,
+                  yourScore: assessmentResult.portfolio_summary.avg_quality_score,
+                  percentile: null
+                }),
+                JSON.stringify(assessmentResult.roi_calculation || {}),
+                batchId
+              ]);
+              
+              if (assessmentUpdateResult.rows.length > 0) {
+                logger.info('Assessment updated successfully', {
+                  assessmentId: assessmentUpdateResult.rows[0].id,
+                  batchId,
+                  maturityLevel: assessmentResult.portfolio_summary.maturity_level,
+                  avgScore: assessmentResult.portfolio_summary.avg_quality_score
+                });
+              }
+              
+            } catch (assessmentError: any) {
+              // Log error but don't fail the batch completion
+              logger.error('Failed to generate assessment after batch completion', {
+                batchId,
+                projectId,
+                error: assessmentError.message,
+                stack: assessmentError.stack
+              });
+              
+              // Update assessment status to 'failed' if generation failed
+              await pool.query(`
+                UPDATE assessments
+                SET status = 'failed',
+                    updated_at = NOW()
+                WHERE batch_id = $1
+              `, [batchId]);
+            }
+          } else if (status === 'failed') {
+            // Update assessment status to 'failed' if batch failed
+            await pool.query(`
+              UPDATE assessments
+              SET status = 'failed',
+                  updated_at = NOW()
+              WHERE batch_id = $1
+            `, [batchId]);
+          }
+        }
       }
     }
   } catch (error: any) {

@@ -33,7 +33,7 @@ async function resetBatches() {
       SET processed_files = successful_files + failed_files,
           status = CASE 
             WHEN failed_files >= total_files THEN 'failed'
-            WHEN successful_files >= total_files THEN 'completed'
+            WHEN successful_files >= total_files THEN 'complete'
             ELSE 'processing'
           END,
           updated_at = NOW()
