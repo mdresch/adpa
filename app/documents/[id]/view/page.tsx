@@ -1221,6 +1221,7 @@ ${doc.content}
         resolutionPreview={resolutionPreview}
         onApply={onApplyDriftResolution}
         isApplying={isApplying}
+        isLoading={isResolving}
       />
     </div>
   )
