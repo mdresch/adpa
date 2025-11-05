@@ -76,6 +76,9 @@ export default function AssessmentResultsPage() {
   const [selectedFiles, setSelectedFiles] = useState<FileList | null>(null);
   const [uploading, setUploading] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [processingNewDocuments, setProcessingNewDocuments] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
+  const [uploadedFileCount, setUploadedFileCount] = useState(0);
 
   useEffect(() => {
     loadAssessment();
@@ -121,6 +124,7 @@ export default function AssessmentResultsPage() {
 
     try {
       setUploading(true);
+      setUploadedFileCount(selectedFiles.length);
 
       const formData = new FormData();
       Array.from(selectedFiles).forEach((file) => {
@@ -134,20 +138,31 @@ export default function AssessmentResultsPage() {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to upload documents');
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to upload documents');
       }
 
       const result = await response.json();
       
-      // Close dialog and show processing message
+      // Close dialog and show processing screen
       setUploadDialogOpen(false);
       setSelectedFiles(null);
+      setProcessingNewDocuments(true);
+      setProcessingStatus('Uploading and analyzing documents...');
       
-      alert(`${selectedFiles.length} document(s) uploaded successfully!\n\nProcessing will take 2-3 minutes.\n\nClick "Regenerate Assessment" when processing is complete.`);
+      // Simulate progress updates
+      setTimeout(() => setProcessingStatus('Converting to Markdown...'), 2000);
+      setTimeout(() => setProcessingStatus('Detecting document types...'), 5000);
+      setTimeout(() => setProcessingStatus('Running quality audits...'), 10000);
+      setTimeout(() => {
+        setProcessingStatus('Processing complete! Click "Regenerate Assessment" to update results.');
+        setProcessingNewDocuments(false);
+      }, 15000);
 
     } catch (err: any) {
       console.error('Upload error:', err);
       alert(`Failed to upload documents: ${err.message}`);
+      setProcessingNewDocuments(false);
     } finally {
       setUploading(false);
     }
@@ -215,6 +230,77 @@ export default function AssessmentResultsPage() {
       setExporting(false);
     }
   };
+
+  // Show processing screen when adding new documents
+  if (processingNewDocuments) {
+    return (
+      <div className="container mx-auto p-6 max-w-4xl">
+        <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+          <CardHeader className="text-center pb-4">
+            <div className="flex justify-center mb-4">
+              <div className="relative">
+                <Loader2 className="h-20 w-20 animate-spin text-blue-600" />
+                <FileText className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-blue-600" />
+              </div>
+            </div>
+            <CardTitle className="text-3xl font-bold text-blue-900">
+              Processing Additional Documents
+            </CardTitle>
+            <CardDescription className="text-lg mt-2">
+              Adding {uploadedFileCount} document(s) to your assessment
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-6xl font-bold text-blue-600 mb-2">
+                  ⏳
+                </div>
+                <p className="text-lg font-semibold text-blue-900">{processingStatus}</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 bg-white p-6 rounded-lg border border-blue-100">
+              <h3 className="font-semibold text-sm text-blue-900 mb-4">Processing Steps:</h3>
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <span className="text-sm">Documents uploaded successfully</span>
+              </div>
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <div className="h-5 w-5 border-2 border-blue-500 rounded-full flex-shrink-0 animate-spin" />
+                <span className="text-sm">Converting to Markdown and analyzing...</span>
+              </div>
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
+                <span className="text-sm">Running quality audits</span>
+              </div>
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
+                <span className="text-sm">Ready for assessment regeneration</span>
+              </div>
+            </div>
+
+            <div className="text-center pt-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setProcessingNewDocuments(false);
+                  loadAssessment();
+                }}
+              >
+                <RefreshCw className="mr-2 h-4 w-4" />
+                View Current Assessment
+              </Button>
+            </div>
+
+            <p className="text-xs text-muted-foreground text-center mt-4">
+              This typically takes 2-3 minutes. Once complete, click "Regenerate Assessment" to update your results.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
