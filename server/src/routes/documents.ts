@@ -1191,15 +1191,21 @@ router.put("/:id",
       // ⭐ AUTOMATIC DRIFT DETECTION on document save
       let driftRevalidation = null
       
-      // Always run drift validation if document has project_id and content was updated
-      if (content && result.rows[0]?.project_id && result.rows[0]?.content) {
+      // Only run drift validation if content has ACTUALLY CHANGED
+      // This prevents false drift detection on every save
+      // Note: We check both contentString existence AND inequality to handle edge cases
+      const contentHasChanged = contentString !== undefined && doc.content !== contentString
+      
+      if (contentHasChanged && result.rows[0]?.project_id && result.rows[0]?.content) {
         try {
           const { driftDetectionService } = await import('../services/driftDetectionService')
           
-          log.info(`[DRIFT] Auto-detecting drift after document update`, {
+          log.info(`[DRIFT] Auto-detecting drift after document content change`, {
             projectId: result.rows[0].project_id,
             documentId: id,
-            documentName: result.rows[0].name
+            documentName: result.rows[0].name,
+            oldContentLength: doc.content?.length || 0,
+            newContentLength: contentString?.length || 0
           })
           
           // Check for drift using new drift detection service

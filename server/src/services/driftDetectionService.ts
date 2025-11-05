@@ -117,16 +117,28 @@ export class DriftDetectionService {
         }
       }
 
-      // 2. Extract current entities from document
+      // 2. Check if baseline has any entities to compare against
+      const hasBaselineEntities = this.hasAnyEntities(baseline)
+      if (!hasBaselineEntities) {
+        logger.info('[DRIFT] Baseline has no entities to compare', { projectId, baselineId: baseline.id })
+        return {
+          hasDrift: false,
+          severity: 'low',
+          driftPoints: [],
+          summary: 'Baseline has no entities for comparison'
+        }
+      }
+
+      // 3. Extract current entities from document
       const currentEntities = await this.extractEntitiesFromDocument(documentId)
 
-      // 3. Compare with baseline
+      // 4. Compare with baseline
       const driftPoints = this.compareWithBaseline(baseline, currentEntities)
 
-      // 4. Calculate severity
+      // 5. Calculate severity
       const severity = this.calculateDriftSeverity(driftPoints)
 
-      // 5. Generate summary
+      // 6. Generate summary
       const summary = this.generateDriftSummary(driftPoints)
 
       logger.info('[DRIFT] Detection complete', {
@@ -134,7 +146,8 @@ export class DriftDetectionService {
         documentId,
         hasDrift: driftPoints.length > 0,
         severity,
-        driftCount: driftPoints.length
+        driftCount: driftPoints.length,
+        driftTypes: driftPoints.map(d => `${d.entityType}:${d.driftType}`).join(', ')
       })
 
       return {
@@ -147,6 +160,26 @@ export class DriftDetectionService {
       logger.error('[DRIFT] Detection failed:', error)
       throw error
     }
+  }
+
+  /**
+   * Helper function to check if an array has elements
+   */
+  private hasNonEmptyArray(arr: any): boolean {
+    return arr && Array.isArray(arr) && arr.length > 0
+  }
+
+  /**
+   * Check if baseline has any entities to compare
+   */
+  private hasAnyEntities(baseline: Baseline): boolean {
+    const hasStakeholders = this.hasNonEmptyArray(baseline.resource_baseline?.stakeholders)
+    const hasRisks = this.hasNonEmptyArray(baseline.scope_baseline?.risks)
+    const hasMilestones = this.hasNonEmptyArray(baseline.timeline_baseline?.milestones)
+    const hasBudget = baseline.cost_baseline?.total_budget !== null && 
+                     baseline.cost_baseline?.total_budget !== undefined
+
+    return hasStakeholders || hasRisks || hasMilestones || hasBudget
   }
 
   /**
@@ -187,6 +220,8 @@ export class DriftDetectionService {
 
       const { content, metadata } = docResult.rows[0]
 
+      // Parse metadata for extracted entities
+      // IMPORTANT: Only use metadata, not text extraction, to avoid false positives
       // Parse metadata for extracted entities - all 14 types
       const entities: ExtractedEntities = {
         // Core 14 entity types
@@ -214,16 +249,16 @@ export class DriftDetectionService {
         technical_requirements: metadata?.technical_requirements || []
       }
 
-      // If entities not in metadata, do basic extraction from content
-      if (!metadata?.stakeholders && content) {
-        entities.stakeholders = this.extractStakeholdersFromText(content)
-      }
-      if (!metadata?.risks && content) {
-        entities.risks = this.extractRisksFromText(content)
-      }
-      if (!metadata?.milestones && content) {
-        entities.milestones = this.extractMilestonesFromText(content)
-      }
+      // NOTE: Text-based extraction is disabled to prevent false drift detection
+      // If metadata doesn't have entities, we treat the document as having no entities
+      // rather than trying to extract from text which is unreliable
+      logger.debug('[DRIFT] Extracted entities from metadata only', {
+        documentId,
+        stakeholdersCount: entities.stakeholders.length,
+        risksCount: entities.risks.length,
+        milestonesCount: entities.milestones.length,
+        hasMetadata: !!metadata
+      })
 
       return entities
     } catch (error) {
