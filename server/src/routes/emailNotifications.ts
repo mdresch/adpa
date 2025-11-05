@@ -5,7 +5,7 @@
 
 import express, { Request, Response, NextFunction } from 'express'
 import { emailNotificationService } from '../services/emailNotificationService'
-import { authenticate } from '../middleware/auth'
+import { authenticateToken } from '../middleware/auth'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 
@@ -15,7 +15,7 @@ const router = express.Router()
  * Test email configuration
  * POST /api/email-notifications/test
  */
-router.post('/test', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/test', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as any).user
 
@@ -44,7 +44,7 @@ router.post('/test', authenticate, async (req: Request, res: Response, next: Nex
  * Get user email notification preferences
  * GET /api/email-notifications/preferences
  */
-router.get('/preferences', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/preferences', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as any).user
 
@@ -81,7 +81,7 @@ router.get('/preferences', authenticate, async (req: Request, res: Response, nex
  * Update user email notification preferences
  * PUT /api/email-notifications/preferences
  */
-router.put('/preferences', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.put('/preferences', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as any).user
     const {
@@ -172,7 +172,7 @@ router.put('/preferences', authenticate, async (req: Request, res: Response, nex
  * Get email notification logs (admin only)
  * GET /api/email-notifications/logs
  */
-router.get('/logs', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/logs', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as any).user
 
@@ -253,7 +253,7 @@ router.get('/logs', authenticate, async (req: Request, res: Response, next: Next
  * Get email notification statistics (admin only)
  * GET /api/email-notifications/stats
  */
-router.get('/stats', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/stats', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = (req as any).user
 
