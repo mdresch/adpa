@@ -213,46 +213,42 @@ describe('Baseline Entity Types - All 14 Types', () => {
       }
       
       // Create baseline from extracted entities
-      const baseline = await createBaselineFromEntities(testProjectId, testUserId)
+      const baselineExtractionResult = await createBaselineFromEntities(testProjectId, testUserId)
       
-      // Verify baseline was created
-      expect(baseline).toBeDefined()
-      expect(baseline.id).toBeDefined()
+      // Verify baseline extraction result
+      expect(baselineExtractionResult).toBeDefined()
+      expect(baselineExtractionResult.scope_baseline).toBeDefined()
+      expect(baselineExtractionResult.technical_baseline).toBeDefined()
+      expect(baselineExtractionResult.timeline_baseline).toBeDefined()
+      expect(baselineExtractionResult.cost_baseline).toBeDefined()
+      expect(baselineExtractionResult.resource_baseline).toBeDefined()
+      expect(baselineExtractionResult.success_criteria).toBeDefined()
       
-      // Verify baseline has data from all entity types
-      const baselineResult = await pool.query(
-        'SELECT * FROM project_baselines WHERE id = $1',
-        [baseline.id]
-      )
-      
-      expect(baselineResult.rows.length).toBe(1)
-      const baselineData = baselineResult.rows[0]
-      
-      // Check that baseline contains references to various entity types
-      expect(baselineData.scope_baseline).toBeDefined()
-      expect(baselineData.technical_baseline).toBeDefined()
-      expect(baselineData.timeline_baseline).toBeDefined()
-      expect(baselineData.cost_baseline).toBeDefined()
-      expect(baselineData.resource_baseline).toBeDefined()
-      expect(baselineData.success_criteria).toBeDefined()
+      // Verify entity breakdown in metadata
+      const entityBreakdown = baselineExtractionResult.ai_processing_metadata.entity_breakdown
+      expect(entityBreakdown.scope_items).toBeGreaterThan(0)
+      expect(entityBreakdown.deliverables).toBeGreaterThan(0)
+      expect(entityBreakdown.requirements).toBeGreaterThan(0)
+      expect(entityBreakdown.milestones).toBeGreaterThan(0)
+      expect(entityBreakdown.phases).toBeGreaterThan(0)
+      expect(entityBreakdown.activities).toBeGreaterThan(0)
+      expect(entityBreakdown.resources).toBeGreaterThan(0)
+      expect(entityBreakdown.technologies).toBeGreaterThan(0)
+      expect(entityBreakdown.stakeholders).toBeGreaterThan(0)
+      expect(entityBreakdown.constraints).toBeGreaterThan(0)
+      expect(entityBreakdown.risks).toBeGreaterThan(0)
+      expect(entityBreakdown.success_criteria).toBeGreaterThan(0)
+      expect(entityBreakdown.quality_standards).toBeGreaterThan(0)
+      expect(entityBreakdown.best_practices).toBeGreaterThan(0)
     })
 
     test('should handle empty entity types gracefully', async () => {
       // Don't insert any entities - all types are empty
       
-      // Create baseline should still work
-      const baseline = await createBaselineFromEntities(testProjectId, testUserId)
-      
-      expect(baseline).toBeDefined()
-      expect(baseline.id).toBeDefined()
-      
-      // Baseline should still have structure even with empty entities
-      const baselineResult = await pool.query(
-        'SELECT * FROM project_baselines WHERE id = $1',
-        [baseline.id]
+      // Create baseline should throw an error when no entities exist
+      await expect(createBaselineFromEntities(testProjectId, testUserId)).rejects.toThrow(
+        'No extracted entities found for this project'
       )
-      
-      expect(baselineResult.rows.length).toBe(1)
     })
   })
 
