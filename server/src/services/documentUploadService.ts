@@ -1116,6 +1116,7 @@ function emitFileProgress(
 
 export const documentUploadService = {
   createUploadBatch,
+  addDocumentsToExistingBatch,
   processUploadedFile,
   getBatchStatus,
   getUploadedDocuments,
