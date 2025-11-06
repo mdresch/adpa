@@ -3,17 +3,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CheckCircle, Clock, ListTodo, UserX, TrendingUp } from "lucide-react"
 import { Task } from "@/hooks/use-tasks"
+import { parseHours } from "@/lib/utils/taskUtils"
 
 interface TaskMetricsProps {
   tasks: Task[]
-}
-
-// Utility function to safely parse and format hours
-function parseHours(value: number | string | undefined | null): number {
-  if (value === null || value === undefined) return 0
-  if (typeof value === 'number') return isNaN(value) ? 0 : value
-  const parsed = parseFloat(String(value).replace(/[^\d.-]/g, ''))
-  return isNaN(parsed) ? 0 : parsed
 }
 
 function formatHours(hours: number): string {

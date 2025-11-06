@@ -45,6 +45,12 @@ if (-not $env:GITHUB_TOKEN -and -not $Stats -and -not $Help) {
     Write-ColorOutput "`nTo set your GitHub token:" $InfoColor
     Write-ColorOutput '  $env:GITHUB_TOKEN = "ghp_your_token_here"' $InfoColor
     Write-ColorOutput "`nOr add it to your PowerShell profile for persistence" $InfoColor
+    Write-ColorOutput "`n⚠️  SECURITY WARNING:" $WarningColor
+    Write-ColorOutput "   Your GitHub token is sensitive. DO NOT:" $WarningColor
+    Write-ColorOutput "   • Share it with anyone" $ErrorColor
+    Write-ColorOutput "   • Include it in logs or screenshots" $ErrorColor
+    Write-ColorOutput "   • Commit it to version control" $ErrorColor
+    Write-ColorOutput "   Treat it like a password and store it securely." $WarningColor
     exit 1
 }
 

@@ -10,18 +10,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
+import { parseHours } from "@/lib/utils/taskUtils"
 
 interface TaskHoursViewProps {
   task: Task
   onUpdate: () => void
-}
-
-// Utility function to safely parse hours
-function parseHours(value: number | string | undefined | null): number {
-  if (value === null || value === undefined) return 0
-  if (typeof value === 'number') return isNaN(value) ? 0 : value
-  const parsed = parseFloat(String(value).replace(/[^\d.-]/g, ''))
-  return isNaN(parsed) ? 0 : parsed
 }
 
 function formatHours(hours: number): string {

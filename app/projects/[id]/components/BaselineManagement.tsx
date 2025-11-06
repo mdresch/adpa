@@ -1434,7 +1434,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
           </DialogHeader>
           
           <Tabs defaultValue="document" className="flex-1 overflow-hidden flex flex-col">
-            <TabsList>
+            <TabsList aria-label="Baseline document and gaps navigation">
               <TabsTrigger value="document">Baseline Document</TabsTrigger>
               <TabsTrigger value="gaps">
                 Missing Details

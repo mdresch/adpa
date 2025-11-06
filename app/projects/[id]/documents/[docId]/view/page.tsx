@@ -1970,7 +1970,7 @@ The ADPA system represents a significant advancement in document processing auto
               </div>
             ) : (
               <Tabs defaultValue={summaries[0]?.compression_level?.toString() || "0.2"} className="w-full">
-                <TabsList className="grid grid-cols-auto gap-2 mb-4">
+                <TabsList className="grid grid-cols-auto gap-2 mb-4" aria-label="Document summary compression levels">
                   {Array.from(new Set(summaries.map(s => s.compression_level)))
                     .sort((a, b) => a - b)
                     .map((level) => (

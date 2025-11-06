@@ -501,7 +501,7 @@ export default function DriftManagementPage() {
 
           {/* Recommended Actions - Main Feature */}
           <Tabs defaultValue="change_request" className="space-y-4">
-            <TabsList className="grid grid-cols-4 w-full">
+            <TabsList className="grid grid-cols-4 w-full" aria-label="Drift categorization and recommended actions">
               <TabsTrigger value="change_request" className="flex items-center gap-2">
                 <GitBranch className="h-4 w-4" />
                 Change Requests
