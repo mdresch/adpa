@@ -1265,7 +1265,7 @@ router.put("/:id",
                 baselineId: baselineResult.rows[0].id,
                 driftPoints: driftResult.driftPoints,
                 severity: driftResult.severity,
-                triggeredBy: 'document_update'
+                triggeredBy: 'manual' // Manual user edit
               })
               
               // Add drift record ID to response

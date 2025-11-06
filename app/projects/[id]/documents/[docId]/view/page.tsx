@@ -35,6 +35,7 @@ import {
   MessageSquare,
   Star,
   MoreHorizontal,
+  AlertTriangle,
 } from "@/components/ui/icons-shim"
 import { Award } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
@@ -51,6 +52,7 @@ import { RegenerateVersionModal } from "@/components/documents/RegenerateVersion
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { VersionViewerDialog } from "@/components/documents/VersionViewerDialog"
 import { VersionListDialog } from "@/components/documents/VersionListDialog"
+import { DriftHighlighter } from "@/components/documents/DriftHighlighter"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { Sparkles } from "@/components/ui/icons-shim"
 
@@ -127,6 +129,8 @@ export default function ProjectDocumentViewer() {
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
   const [selectedVersion, setSelectedVersion] = useState<VersionData | null>(null)
   const [showVersionDialog, setShowVersionDialog] = useState(false)
+  const [drifts, setDrifts] = useState<any[]>([])
+  const [showDriftHighlights, setShowDriftHighlights] = useState(true)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -335,11 +339,19 @@ The ADPA system represents a significant advancement in document processing auto
   const fetchDocument = async () => {
     setIsLoading(true)
     try {
-      // Fetch document from API
-      const [documentResponse, versionsResponse] = await Promise.all([
+      // Fetch document from API (including drift data)
+      const [documentResponse, versionsResponse, driftResponse] = await Promise.all([
         apiClient.get(`/projects/${projectId}/documents/${documentId}`),
-        apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
+        apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`),
+        apiClient.request<{ drifts: any[] }>(
+          `/projects/${projectId}/drift-detections?limit=100`,
+          { suppressNotFoundError: true } as Record<string, unknown>
+        ).catch(() => ({ drifts: [] }))
       ])
+      
+      // Filter drifts for this specific document
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId)
+      setDrifts(documentDrifts)
         
         const documentData = documentResponse
         const versionsData = versionsResponse || []
@@ -930,13 +942,88 @@ The ADPA system represents a significant advancement in document processing auto
 
                 <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
                   {/* Main Content */}
-                  <div className="lg:col-span-3">
+                  <div className="lg:col-span-3 space-y-4">
+                    {/* Drift Alerts Banner */}
+                    {drifts.length > 0 && showDriftHighlights && (
+                      <Card className="border-2 border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50">
+                        <CardContent className="pt-6">
+                          <div className="flex items-start gap-4">
+                            <AlertTriangle className="h-6 w-6 text-orange-600 mt-0.5 flex-shrink-0" />
+                            <div className="flex-1">
+                              <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-lg font-bold text-orange-900">
+                                  ⚠️ {drifts.length} Drift{drifts.length > 1 ? 's' : ''} Detected in This Document
+                                </h3>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => setShowDriftHighlights(false)}
+                                  className="text-orange-700 hover:text-orange-900"
+                                >
+                                  Hide
+                                </Button>
+                              </div>
+                              <p className="text-sm text-orange-800 mb-3">
+                                This document contains content that deviates from the approved baseline.
+                              </p>
+                              <div className="space-y-2">
+                                {drifts.slice(0, 3).map((drift: any) => (
+                                  <div key={drift.id} className="p-3 bg-white border border-orange-200 rounded-lg">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <Badge variant="outline" className="text-xs">
+                                        {drift.detection_type.replace(/_/g, ' ').toUpperCase()}
+                                      </Badge>
+                                      <Badge variant={drift.drift_severity === 'high' ? 'destructive' : 'secondary'}>
+                                        {drift.drift_severity}
+                                      </Badge>
+                                    </div>
+                                    <p className="text-sm font-medium text-orange-900">{drift.drift_description}</p>
+                                  </div>
+                                ))}
+                                {drifts.length > 3 && (
+                                  <p className="text-xs text-orange-700 text-center py-1">
+                                    + {drifts.length - 3} more drifts
+                                  </p>
+                                )}
+                              </div>
+                              <Button
+                                size="sm"
+                                onClick={() => router.push(`/projects/${projectId}/drift`)}
+                                className="mt-3 bg-orange-600 hover:bg-orange-700 text-white"
+                              >
+                                <ExternalLink className="h-4 w-4 mr-2" />
+                                View All in Drift Management Center
+                              </Button>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                    
+                    {drifts.length > 0 && !showDriftHighlights && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowDriftHighlights(true)}
+                        className="border-orange-300 text-orange-700"
+                      >
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        Show {drifts.length} Drift Alert{drifts.length > 1 ? 's' : ''}
+                      </Button>
+                    )}
+
                     <AnimatedCard>
                       <CardHeader>
                         <div className="flex items-center justify-between">
                           <CardTitle className="flex items-center space-x-2">
                             <FileText className="h-5 w-5" />
                             <span>Document Content</span>
+                            {drifts.length > 0 && (
+                              <Badge variant="secondary" className="ml-2">
+                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                {drifts.length} Drift{drifts.length > 1 ? 's' : ''}
+                              </Badge>
+                            )}
                           </CardTitle>
                           <div className="flex items-center space-x-2">
                             {!isEditing ? (
@@ -984,202 +1071,11 @@ The ADPA system represents a significant advancement in document processing auto
                       </CardHeader>
                       <CardContent className="p-8">
                         {!isEditing ? (
-                          <div className="prose prose-lg max-w-none dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-h1:text-4xl prose-h1:mb-6 prose-h1:mt-8 prose-h1:pb-2 prose-h1:border-b prose-h2:text-3xl prose-h2:mb-4 prose-h2:mt-6 prose-h3:text-2xl prose-h3:mb-3 prose-h3:mt-5 prose-p:mb-4 prose-p:leading-7 prose-a:text-blue-600 prose-a:no-underline hover:prose-a:underline prose-strong:font-semibold prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:bg-gray-100 dark:prose-code:bg-gray-800 prose-code:text-sm prose-pre:bg-gray-900 prose-pre:text-gray-100 prose-blockquote:border-l-4 prose-blockquote:border-blue-500 prose-blockquote:pl-4 prose-blockquote:italic prose-ul:my-4 prose-ol:my-4 prose-li:my-1">
-                            <ReactMarkdown
-                              remarkPlugins={[remarkGfm]}
-                              components={{
-                                h1({ children }) {
-                                  // Extract text content (handle arrays, nested elements)
-                                  const text = Array.isArray(children) 
-                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
-                                    : String(children)
-                                  const cleanText = text.replace(/\*/g, '').trim()
-                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-                                  return (
-                                    <h1 id={id} className="text-4xl font-bold mb-6 mt-8 pb-2 border-b border-gray-200 dark:border-gray-700 scroll-mt-24">
-                                      {children}
-                                    </h1>
-                                  );
-                                },
-                                h2({ children }) {
-                                  const text = Array.isArray(children) 
-                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
-                                    : String(children)
-                                  const cleanText = text.replace(/\*/g, '').trim()
-                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-                                  return (
-                                    <h2 id={id} className="text-3xl font-bold mb-4 mt-6 text-gray-900 dark:text-gray-100 scroll-mt-24">
-                                      {children}
-                                    </h2>
-                                  );
-                                },
-                                h3({ children }) {
-                                  const text = Array.isArray(children) 
-                                    ? children.map(c => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
-                                    : String(children)
-                                  const cleanText = text.replace(/\*/g, '').trim()
-                                  const id = `heading-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-                                  return (
-                                    <h3 id={id} className="text-2xl font-semibold mb-3 mt-5 text-gray-800 dark:text-gray-200 scroll-mt-24">
-                                      {children}
-                                    </h3>
-                                  );
-                                },
-                                h4({ children }) {
-                                  const text = String(children)
-                                  const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
-                                  return (
-                                    <h4 id={id} className="text-xl font-semibold mb-2 mt-4 text-gray-800 dark:text-gray-200 scroll-mt-24">
-                                      {children}
-                                    </h4>
-                                  );
-                                },
-                                p({ children }) {
-                                  return (
-                                    <p className="mb-4 leading-7 text-gray-700 dark:text-gray-300">
-                                      {children}
-                                    </p>
-                                  );
-                                },
-                                a({ href, children }) {
-                                  return (
-                                    <a 
-                                      href={href} 
-                                      className="text-blue-600 dark:text-blue-400 hover:underline font-medium"
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                    >
-                                      {children}
-                                    </a>
-                                  );
-                                },
-                                ul({ children }) {
-                                  return (
-                                    <ul className="my-4 ml-6 list-disc space-y-2">
-                                      {children}
-                                    </ul>
-                                  );
-                                },
-                                ol({ children }) {
-                                  return (
-                                    <ol className="my-4 ml-6 list-decimal space-y-2">
-                                      {children}
-                                    </ol>
-                                  );
-                                },
-                                li({ children }) {
-                                  return (
-                                    <li className="text-gray-700 dark:text-gray-300 leading-relaxed">
-                                      {children}
-                                    </li>
-                                  );
-                                },
-                                blockquote({ children }) {
-                                  return (
-                                    <blockquote className="border-l-4 border-blue-500 pl-4 py-2 my-4 italic bg-blue-50 dark:bg-blue-900/20 rounded-r">
-                                      {children}
-                                    </blockquote>
-                                  );
-                                },
-                                code({ node, inline, className, children, ...props }: any) {
-                                  const match = /language-(\w+)/.exec(className || '');
-                                  return !inline && match ? (
-                                    <SyntaxHighlighter
-                                      style={vscDarkPlus}
-                                      language={match[1]}
-                                      PreTag="div"
-                                      showLineNumbers={true}
-                                      customStyle={{ 
-                                        margin: '1.5rem 0', 
-                                        borderRadius: '8px',
-                                        padding: '1rem',
-                                        fontSize: '0.9rem'
-                                      }}
-                                      {...props}
-                                    >
-                                      {String(children).replace(/\n$/, '')}
-                                    </SyntaxHighlighter>
-                                  ) : (
-                                    <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono text-red-600 dark:text-red-400" {...props}>
-                                      {children}
-                                    </code>
-                                  );
-                                },
-                                pre({ children }) {
-                                  return (
-                                    <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg overflow-x-auto my-4">
-                                      {children}
-                                    </pre>
-                                  );
-                                },
-                                table({ children }) {
-                                  return (
-                                    <div className="overflow-x-auto my-8 rounded-xl border border-gray-200 dark:border-gray-700 shadow-md">
-                                      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                                        {children}
-                                      </table>
-                                    </div>
-                                  );
-                                },
-                                thead({ children }) {
-                                  return (
-                                    <thead className="bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-750">
-                                      {children}
-                                    </thead>
-                                  );
-                                },
-                                tbody({ children }) {
-                                  return (
-                                    <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-                                      {children}
-                                    </tbody>
-                                  );
-                                },
-                                tr({ children }) {
-                                  return (
-                                    <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors duration-150">
-                                      {children}
-                                    </tr>
-                                  );
-                                },
-                                th({ children }) {
-                                  return (
-                                    <th className="px-6 py-4 text-left text-xs font-bold text-gray-800 dark:text-gray-200 uppercase tracking-wider border-b-2 border-gray-300 dark:border-gray-600">
-                                      {children}
-                                    </th>
-                                  );
-                                },
-                                td({ children }) {
-                                  return (
-                                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300 align-top">
-                                      <div className="max-w-prose">
-                                        {children}
-                                      </div>
-                                    </td>
-                                  );
-                                },
-                                hr() {
-                                  return <hr className="my-8 border-gray-200 dark:border-gray-700" />;
-                                },
-                                strong({ children }) {
-                                  return (
-                                    <strong className="font-semibold text-gray-900 dark:text-gray-100">
-                                      {children}
-                                    </strong>
-                                  );
-                                },
-                                em({ children }) {
-                                  return (
-                                    <em className="italic text-gray-800 dark:text-gray-200">
-                                      {children}
-                                    </em>
-                                  );
-                                },
-                              }}
-                            >
-                              {typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2)}
-                            </ReactMarkdown>
-                          </div>
+                          <DriftHighlighter
+                            content={typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2)}
+                            drifts={drifts}
+                            showHighlights={showDriftHighlights}
+                          />
                         ) : (
                           <textarea
                             value={editedContent}

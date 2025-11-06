@@ -812,4 +812,71 @@ router.post("/:projectId/documents/:documentId/comments", authenticateToken, asy
   }
 })
 
+// Get drift detections for a project
+router.get("/:id/drift-detections", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: projectId } = req.params
+    const { severity, status, limit = 100 } = req.query
+
+    let query = `
+      SELECT 
+        bdd.id,
+        bdd.baseline_id,
+        bdd.project_id,
+        bdd.detection_type,
+        bdd.drift_severity,
+        bdd.drift_description,
+        bdd.drift_impact,
+        bdd.detection_date,
+        bdd.status,
+        bdd.source_document_id,
+        bdd.detected_by,
+        d.name as document_name
+      FROM baseline_drift_detection bdd
+      LEFT JOIN documents d ON bdd.source_document_id = d.id
+      WHERE bdd.project_id = $1
+    `
+
+    const params: any[] = [projectId]
+    let paramCount = 1
+
+    if (severity) {
+      paramCount++
+      query += ` AND bdd.drift_severity = $${paramCount}`
+      params.push(severity)
+    }
+
+    if (status) {
+      paramCount++
+      query += ` AND bdd.status = $${paramCount}`
+      params.push(status)
+    }
+
+    query += ` ORDER BY 
+      CASE bdd.drift_severity
+        WHEN 'critical' THEN 1
+        WHEN 'high' THEN 2
+        WHEN 'medium' THEN 3
+        WHEN 'low' THEN 4
+      END,
+      bdd.detection_date DESC
+      LIMIT $${paramCount + 1}
+    `
+    params.push(limit)
+
+    const result = await pool.query(query, params)
+
+    log.info(`Fetched ${result.rows.length} drift detections for project`, { projectId })
+
+    res.json({
+      drifts: result.rows,
+      total: result.rows.length
+    })
+  } catch (error) {
+    log.error("Error fetching drift detections:", error)
+    res.status(500).json({ error: "Failed to fetch drift detections" })
+  }
+})
+
 export default router

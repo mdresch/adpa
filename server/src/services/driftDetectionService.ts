@@ -117,7 +117,47 @@ export class DriftDetectionService {
         }
       }
 
-      // 2. Check if baseline has any entities to compare against
+      // 2. Check if this is a NEW document (not in baseline)
+      const docResult = await pool.query(
+        `SELECT name, created_at FROM documents WHERE id = $1`,
+        [documentId]
+      );
+      
+      if (docResult.rows.length === 0) {
+        throw new Error(`Document not found: ${documentId}`);
+      }
+      
+      const document = docResult.rows[0];
+      const documentCorpus = baseline.document_corpus || [];
+      const isNewDocument = !documentCorpus.includes(documentId);
+      
+      if (isNewDocument) {
+        logger.info('🆕 [DRIFT] New document detected (not in baseline)', {
+          documentId,
+          documentName: document.name,
+          baselineDocCount: documentCorpus.length
+        });
+        
+        // Create drift point for new document addition
+        const newDocDrift: DriftPoint = {
+          entityType: 'scope',
+          driftType: 'addition',
+          description: `New document "${document.name}" added to baselined project. This represents scope expansion beyond the approved baseline of ${documentCorpus.length} documents.`,
+          baselineValue: `${documentCorpus.length} documents`,
+          currentValue: `${documentCorpus.length + 1} documents (+ ${document.name})`,
+          impact: 'Addition of new strategic document may indicate scope expansion, new requirements, or strategic direction change requiring review and approval.',
+          severity: 'medium'
+        };
+        
+        return {
+          hasDrift: true,
+          severity: 'medium',
+          driftPoints: [newDocDrift],
+          summary: `New document added: ${document.name}`
+        };
+      }
+
+      // 3. Check if baseline has any entities to compare against
       const hasBaselineEntities = this.hasAnyEntities(baseline)
       if (!hasBaselineEntities) {
         logger.info('[DRIFT] Baseline has no entities to compare', { projectId, baselineId: baseline.id })
@@ -129,16 +169,16 @@ export class DriftDetectionService {
         }
       }
 
-      // 3. Extract current entities from document
+      // 4. Extract current entities from document
       const currentEntities = await this.extractEntitiesFromDocument(documentId)
 
-      // 4. Compare with baseline
+      // 5. Compare with baseline
       const driftPoints = this.compareWithBaseline(baseline, currentEntities)
 
-      // 5. Calculate severity
+      // 6. Calculate severity
       const severity = this.calculateDriftSeverity(driftPoints)
 
-      // 6. Generate summary
+      // 7. Generate summary
       const summary = this.generateDriftSummary(driftPoints)
 
       logger.info('[DRIFT] Detection complete', {
@@ -960,6 +1000,54 @@ export class DriftDetectionService {
   }
 
   /**
+   * Determine primary drift type from drift points
+   * Maps entity types to valid detection_type values from CHECK constraint
+   */
+  private determinePrimaryDriftType(driftPoints: DriftPoint[]): string {
+    // Valid types: scope_drift, technical_drift, timeline_drift, cost_drift, resource_drift, success_criteria_drift
+    
+    if (driftPoints.length === 0) return 'scope_drift';
+    
+    // Count drift points by category
+    const driftCounts: Record<string, number> = {};
+    
+    driftPoints.forEach(dp => {
+      const entityType = dp.entityType.toLowerCase();
+      
+      // Map entity types to detection types
+      if (entityType.includes('scope') || entityType.includes('deliverable') || entityType.includes('requirement')) {
+        driftCounts['scope_drift'] = (driftCounts['scope_drift'] || 0) + 1;
+      } else if (entityType.includes('tech') || entityType.includes('technology')) {
+        driftCounts['technical_drift'] = (driftCounts['technical_drift'] || 0) + 1;
+      } else if (entityType.includes('timeline') || entityType.includes('milestone') || entityType.includes('schedule') || entityType.includes('phase')) {
+        driftCounts['timeline_drift'] = (driftCounts['timeline_drift'] || 0) + 1;
+      } else if (entityType.includes('cost') || entityType.includes('budget')) {
+        driftCounts['cost_drift'] = (driftCounts['cost_drift'] || 0) + 1;
+      } else if (entityType.includes('resource') || entityType.includes('stakeholder')) {
+        driftCounts['resource_drift'] = (driftCounts['resource_drift'] || 0) + 1;
+      } else if (entityType.includes('success') || entityType.includes('criteria') || entityType.includes('quality')) {
+        driftCounts['success_criteria_drift'] = (driftCounts['success_criteria_drift'] || 0) + 1;
+      } else {
+        // Default to scope drift for unknown types
+        driftCounts['scope_drift'] = (driftCounts['scope_drift'] || 0) + 1;
+      }
+    });
+    
+    // Return the most common drift type
+    let maxCount = 0;
+    let primaryType = 'scope_drift';
+    
+    Object.entries(driftCounts).forEach(([type, count]) => {
+      if (count > maxCount) {
+        maxCount = count;
+        primaryType = type;
+      }
+    });
+    
+    return primaryType;
+  }
+
+  /**
    * Create drift record in database
    */
   async createDriftRecord(data: {
@@ -971,6 +1059,9 @@ export class DriftDetectionService {
     triggeredBy: string
   }): Promise<any> {
     try {
+      // Determine primary drift type from drift points
+      const primaryDriftType = this.determinePrimaryDriftType(data.driftPoints);
+      
       const result = await pool.query(
         `INSERT INTO baseline_drift_detection (
           baseline_id,
@@ -989,11 +1080,18 @@ export class DriftDetectionService {
           data.baselineId,
           data.projectId,
           data.documentId,
-          'document_update_drift',
+          primaryDriftType, // Use valid detection_type from CHECK constraint
           data.severity,
           this.generateDriftSummary(data.driftPoints),
-          JSON.stringify(data.driftPoints),
-          data.triggeredBy,
+          JSON.stringify(data.driftPoints.map(dp => ({
+            entityType: dp.entityType,
+            driftType: dp.driftType,
+            description: dp.description,
+            baselineValue: dp.baselineValue,
+            currentValue: dp.currentValue,
+            impact: dp.impact
+          }))),
+          data.triggeredBy || 'ai',
           'detected',
           JSON.stringify({
             drift_count: data.driftPoints.length,

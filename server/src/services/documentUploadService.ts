@@ -507,6 +507,93 @@ export async function processUploadedFile(
       grade: auditResult.overallGrade
     });
 
+    // Step 5: Trigger Drift Detection (if project has approved baseline)
+    try {
+      const { driftDetectionService } = await import('./driftDetectionService');
+      
+      logger.info('🚨 [DRIFT] Checking for approved baseline', { projectId, documentId });
+      
+      // Check if project has an approved baseline
+      const baselineCheck = await client.query(
+        `SELECT id, version, status FROM project_baselines 
+         WHERE project_id = $1 AND status = 'approved' 
+         ORDER BY approved_at DESC LIMIT 1`,
+        [projectId]
+      );
+      
+      if (baselineCheck.rows.length > 0) {
+        const baseline = baselineCheck.rows[0];
+        logger.info('🚨 [DRIFT] Approved baseline found - triggering drift detection', {
+          baselineId: baseline.id,
+          baselineVersion: baseline.version,
+          documentId,
+          filename
+        });
+        
+        // Trigger drift detection asynchronously (don't block the upload)
+        driftDetectionService.checkForDrift(projectId, documentId)
+          .then(async driftResult => {
+            if (driftResult.hasDrift) {
+              logger.info('🚨 [DRIFT] Drift detected in uploaded document!', {
+                documentId,
+                filename,
+                severity: driftResult.severity,
+                driftCount: driftResult.driftPoints.length
+              });
+              
+              // Save drift record to database
+              try {
+                const driftRecord = await driftDetectionService.createDriftRecord({
+                  projectId,
+                  documentId,
+                  baselineId: baseline.id,
+                  driftPoints: driftResult.driftPoints,
+                  severity: driftResult.severity,
+                  triggeredBy: uploadedBy
+                });
+                
+                logger.info('💾 [DRIFT] Drift record saved', {
+                  driftRecordId: driftRecord.id,
+                  severity: driftRecord.drift_severity,
+                  driftCount: driftResult.driftPoints.length
+                });
+                
+                // Check if escalation is needed (critical/high severity)
+                if (driftRecord.drift_severity === 'critical' || driftRecord.drift_severity === 'high') {
+                  await driftDetectionService.checkAndTriggerEscalation(driftRecord, driftResult.driftPoints);
+                }
+                
+              } catch (saveError: any) {
+                logger.error('❌ [DRIFT] Failed to save drift record', {
+                  documentId,
+                  error: saveError.message
+                });
+              }
+            } else {
+              logger.info('✅ [DRIFT] No drift detected - document aligns with baseline', {
+                documentId,
+                filename
+              });
+            }
+          })
+          .catch(driftError => {
+            logger.error('❌ [DRIFT] Drift detection failed', {
+              documentId,
+              filename,
+              error: driftError.message
+            });
+            // Don't fail the upload if drift detection fails
+          });
+      } else {
+        logger.info('ℹ️ [DRIFT] No approved baseline found - skipping drift detection', { projectId });
+      }
+    } catch (driftImportError: any) {
+      logger.error('❌ [DRIFT] Failed to import drift detection service', {
+        error: driftImportError.message
+      });
+      // Don't fail the upload if drift detection import fails
+    }
+
     await job.progress(100);
     emitFileProgress(batchId, projectId, filename, 100, 'Completed');
 
