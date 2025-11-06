@@ -487,10 +487,12 @@ async function verifyProjectAccess(userId: string, projectId: string): Promise<b
   const { Pool } = require('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Secure SSL configuration: validate certificates by default
-    ssl: process.env.DB_SSL === 'true' 
-      ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
-      : false
+    // SSL for Supabase: disable validation (PgBouncer pooling causes cert issues)
+    ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('azure')
+      ? { rejectUnauthorized: false } // Supabase/Azure: trusted provider
+      : (process.env.DB_SSL === 'true' 
+          ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
+          : false)
   });
 
   try {
@@ -527,10 +529,12 @@ async function cancelUploadBatch(batchId: string): Promise<void> {
   const { Pool } = require('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    // Secure SSL configuration: validate certificates by default
-    ssl: process.env.DB_SSL === 'true' 
-      ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
-      : false
+    // SSL for Supabase: disable validation (PgBouncer pooling causes cert issues)
+    ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('azure')
+      ? { rejectUnauthorized: false } // Supabase/Azure: trusted provider
+      : (process.env.DB_SSL === 'true' 
+          ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
+          : false)
   });
 
   try {

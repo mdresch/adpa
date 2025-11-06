@@ -21,10 +21,13 @@ const router = Router();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // Secure SSL configuration: validate certificates by default
-  ssl: process.env.DB_SSL === 'true' 
-    ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
-    : false
+  // SSL configuration for Supabase:
+  // Supabase uses PgBouncer which causes certificate chain validation issues
+  ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('azure')
+    ? { rejectUnauthorized: false } // Supabase/Azure: disable (trusted provider with pooling)
+    : (process.env.DB_SSL === 'true' 
+        ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
+        : false)
 });
 
 // ============================================================================

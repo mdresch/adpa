@@ -30,14 +30,15 @@ const createPool = (host: string) => {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: databaseUrl,
-      // Proper SSL configuration:
-      // - Supabase and Azure have valid certificates, use rejectUnauthorized: true for security
-      // - Allow disabling only in development via NODE_TLS_REJECT_UNAUTHORIZED env var
-      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-        ? { 
-            rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' // Default to true (secure)
-          }
-        : false,
+      // SSL configuration for Supabase/Azure:
+      // - Supabase uses PgBouncer (connection pooler) which causes cert chain issues
+      // - Disable cert validation for Supabase (trusted provider)
+      // - For custom databases, enable validation unless explicitly disabled
+      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure')
+        ? { rejectUnauthorized: false } // Supabase/Azure: disable validation (connection pooling)
+        : (process.env.DB_SSL === "true" 
+            ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Custom DB: validate by default
+            : false),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
@@ -57,9 +58,12 @@ const createPool = (host: string) => {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
     // SSL configuration for Supabase and other cloud providers
-    ssl: host.includes('supabase.co') || host.includes('azure') || process.env.DB_SSL === "true" 
-      ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
-      : false,
+    // Supabase/Azure: disable validation (PgBouncer connection pooling causes cert issues)
+    ssl: host.includes('supabase.co') || host.includes('azure')
+      ? { rejectUnauthorized: false } // Trusted provider with connection pooling
+      : (process.env.DB_SSL === "true" 
+          ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Custom DB: validate
+          : false),
   })
 }
 
@@ -76,9 +80,11 @@ export async function connectDatabase() {
     // Parse connection string to extract components
     // This allows us to force IPv4 by explicitly setting the family option
     let poolConfig: any = {
-      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-        ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
-        : false,
+      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure')
+        ? { rejectUnauthorized: false } // Supabase/Azure: disable (connection pooling)
+        : (process.env.DB_SSL === "true"
+            ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
+            : false),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000,
@@ -119,9 +125,11 @@ export async function connectDatabase() {
           database: dbUrl.pathname.slice(1).split('?')[0],
           user: dbUrl.username,
           password: dbUrl.password,
-          ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-            ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
-            : false,
+          ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure')
+            ? { rejectUnauthorized: false } // Supabase/Azure: disable (connection pooling)
+            : (process.env.DB_SSL === "true"
+                ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
+                : false),
           max: 20,
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
