@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -134,6 +134,14 @@ export default function ProjectDocumentViewer() {
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
+  
+  // Stable callback for drift marker ToC regeneration
+  const handleEnhancedContentReady = useCallback((enhancedContent: string) => {
+    // Re-extract ToC from enhanced content (includes drift markers)
+    if (showDriftHighlights && drifts.length > 0) {
+      extractTableOfContents(enhancedContent)
+    }
+  }, [showDriftHighlights, drifts])
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -474,13 +482,15 @@ The ADPA system represents a significant advancement in document processing auto
 
   // Extract table of contents from markdown
   const extractTableOfContents = (content: string) => {
-    const headings: Array<{ id: string; text: string; level: number }> = []
+    const headings: Array<{ id: string; text: string; level: number; isDrift?: boolean }> = []
     const lines = (typeof content === 'string' ? content : '').split('\n')
     
     lines.forEach((line) => {
       const h1Match = line.match(/^#\s+(.+)$/)
       const h2Match = line.match(/^##\s+(.+)$/)
       const h3Match = line.match(/^###\s+(.+)$/)
+      const h4Match = line.match(/^####\s+(.+)$/)
+      const h5Match = line.match(/^#####\s+(.+)$/)
       
       if (h1Match) {
         const text = h1Match[1].replace(/\*/g, '').trim() // Remove markdown formatting
@@ -494,6 +504,18 @@ The ADPA system represents a significant advancement in document processing auto
         const text = h3Match[1].replace(/\*/g, '').trim()
         const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
         headings.push({ id, text, level: 3 })
+      } else if (h4Match) {
+        const text = h4Match[1].replace(/\*/g, '').trim()
+        const isDrift = /[🔴🟠🟡🔵⚪]/.test(text) && text.includes('DRIFT')
+        const idPrefix = isDrift ? 'drift-' : 'heading-'
+        const id = `${idPrefix}${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        headings.push({ id, text, level: 4, isDrift })
+      } else if (h5Match) {
+        const text = h5Match[1].replace(/\*/g, '').trim()
+        const isDrift = /[🔴🟠🟡🔵⚪]/.test(text) && text.includes('DRIFT')
+        const idPrefix = isDrift ? 'drift-' : 'heading-'
+        const id = `${idPrefix}${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        headings.push({ id, text, level: 5, isDrift })
       }
     })
     
@@ -1075,6 +1097,7 @@ The ADPA system represents a significant advancement in document processing auto
                             content={typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2)}
                             drifts={drifts}
                             showHighlights={showDriftHighlights}
+                            onEnhancedContentReady={handleEnhancedContentReady}
                           />
                         ) : (
                           <textarea
@@ -1112,13 +1135,24 @@ The ADPA system represents a significant advancement in document processing auto
                                 className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
                                   activeSection === heading.id
                                     ? 'bg-primary text-primary-foreground font-medium'
+                                    : heading.isDrift
+                                    ? (heading.level === 4 
+                                        ? 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 border-l-4 border-red-500' 
+                                        : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100 border-l-4 border-yellow-400')
                                     : 'hover:bg-muted text-muted-foreground hover:text-foreground'
                                 } ${
-                                  heading.level === 1 ? 'font-semibold' :
-                                  heading.level === 2 ? 'ml-3' :
-                                  'ml-6 text-xs'
+                                  heading.isDrift
+                                    ? 'font-semibold ml-6'
+                                    : heading.level === 1 ? 'font-semibold' :
+                                      heading.level === 2 ? 'ml-3' :
+                                      heading.level === 3 ? 'ml-6 text-xs' :
+                                      heading.level === 4 ? 'ml-9 text-xs' :
+                                      'ml-12 text-xs'
                                 }`}
                               >
+                                {heading.isDrift && (
+                                  <AlertTriangle className="inline-block h-3 w-3 mr-1 -mt-0.5" />
+                                )}
                                 {heading.text}
                               </button>
                             ))}

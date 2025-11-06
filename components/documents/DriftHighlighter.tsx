@@ -23,9 +23,10 @@ interface DriftHighlighterProps {
   content: string
   drifts: DriftData[]
   showHighlights: boolean
+  onEnhancedContentReady?: (enhancedContent: string) => void
 }
 
-export function DriftHighlighter({ content, drifts, showHighlights }: DriftHighlighterProps) {
+export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedContentReady }: DriftHighlighterProps) {
   // Inject drift markers into content if highlighting is enabled
   const enhancedContent = React.useMemo(() => {
     if (!showHighlights || drifts.length === 0) return content
@@ -72,6 +73,17 @@ export function DriftHighlighter({ content, drifts, showHighlights }: DriftHighl
     
     return updatedContent
   }, [content, drifts, showHighlights])
+  
+  // Notify parent component when enhanced content is ready (for ToC regeneration)
+  // Use ref to prevent infinite loops
+  const lastEnhancedContentRef = React.useRef<string>('')
+  
+  React.useEffect(() => {
+    if (onEnhancedContentReady && enhancedContent !== lastEnhancedContentRef.current) {
+      lastEnhancedContentRef.current = enhancedContent
+      onEnhancedContentReady(enhancedContent)
+    }
+  }, [enhancedContent, onEnhancedContentReady])
   
   function getSeverityEmoji(severity: string): string {
     switch(severity) {
