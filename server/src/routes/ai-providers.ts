@@ -154,7 +154,7 @@ router.post('/', authenticateToken, requireAdmin, async (req, res) => {
  * POST /api/ai-providers/:name/configure
  * Configure/update an existing AI provider
  */
-router.post('/:name/configure', async (req, res) => {
+router.post('/:name/configure', authenticateToken, requireAdmin, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { name } = req.params
@@ -264,7 +264,7 @@ router.delete('/:name', authenticateToken, requireAdmin, async (req, res) => {
  * POST /api/ai-providers/:name/test
  * Test an AI provider
  */
-router.post('/:name/test', async (req, res) => {
+router.post('/:name/test', authenticateToken, requireAdmin, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { name } = req.params

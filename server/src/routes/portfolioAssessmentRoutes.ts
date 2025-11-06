@@ -12,6 +12,7 @@ import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 import { portfolioAssessmentService } from '../services/portfolioAssessmentService';
 import { authenticateToken as authenticate } from '../middleware/auth';
+import { buildSslConfig } from '../database/connection';
 
 const router = Router();
 
@@ -21,13 +22,7 @@ const router = Router();
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  // SSL configuration for Supabase:
-  // Supabase uses PgBouncer which causes certificate chain validation issues
-  ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('azure')
-    ? { rejectUnauthorized: false } // Supabase/Azure: disable (trusted provider with pooling)
-    : (process.env.DB_SSL === 'true' 
-        ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
-        : false)
+  ssl: buildSslConfig(process.env.DATABASE_URL),
 });
 
 // ============================================================================
@@ -202,6 +197,56 @@ router.get(
 );
 
 /**
+ * GET /api/onboarding/benchmarks/industries
+ * Get list of available industries with benchmarks
+ * 
+ * Response: {
+ *   success: true,
+ *   data: {
+ *     industries: [ { name, count, avg_score } ]
+ *   }
+ * }
+ */
+router.get(
+  '/benchmarks/industries',
+  authenticate,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const query = `
+        SELECT 
+          industry_vertical,
+          COUNT(*) as benchmark_count,
+          AVG(avg_quality_score) as avg_score
+        FROM industry_benchmarks
+        WHERE document_type IS NULL
+        GROUP BY industry_vertical
+        ORDER BY industry_vertical
+      `;
+
+      const result = await pool.query(query);
+
+      res.json({
+        success: true,
+        data: {
+          industries: result.rows.map(row => ({
+            name: row.industry_vertical,
+            benchmark_count: parseInt(row.benchmark_count),
+            avg_score: Math.round(row.avg_score * 100) / 100
+          }))
+        }
+      });
+
+    } catch (error: any) {
+      logger.error('Industries list endpoint error', {
+        error: error.message
+      });
+
+      next(error);
+    }
+  }
+);
+
+/**
  * GET /api/onboarding/benchmarks/:industry/:documentType?
  * Get industry benchmarks for comparison
  * 
@@ -263,56 +308,6 @@ router.get(
     } catch (error: any) {
       logger.error('Benchmarks endpoint error', {
         industry: req.params.industry,
-        error: error.message
-      });
-
-      next(error);
-    }
-  }
-);
-
-/**
- * GET /api/onboarding/benchmarks/industries
- * Get list of available industries with benchmarks
- * 
- * Response: {
- *   success: true,
- *   data: {
- *     industries: [ { name, count, avg_score } ]
- *   }
- * }
- */
-router.get(
-  '/benchmarks/industries',
-  authenticate,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const query = `
-        SELECT 
-          industry_vertical,
-          COUNT(*) as benchmark_count,
-          AVG(avg_quality_score) as avg_score
-        FROM industry_benchmarks
-        WHERE document_type IS NULL
-        GROUP BY industry_vertical
-        ORDER BY industry_vertical
-      `;
-
-      const result = await pool.query(query);
-
-      res.json({
-        success: true,
-        data: {
-          industries: result.rows.map(row => ({
-            name: row.industry_vertical,
-            benchmark_count: parseInt(row.benchmark_count),
-            avg_score: Math.round(row.avg_score * 100) / 100
-          }))
-        }
-      });
-
-    } catch (error: any) {
-      logger.error('Industries list endpoint error', {
         error: error.message
       });
 

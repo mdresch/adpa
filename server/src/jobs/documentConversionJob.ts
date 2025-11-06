@@ -278,4 +278,4 @@ export async function addBatchConversionJobs(
 // EXPORTS
 // ============================================================================
 
-export { documentUploadQueue, WORKER_CONCURRENCY, WORKER_NAME };
+export { WORKER_CONCURRENCY, WORKER_NAME };

@@ -123,7 +123,7 @@ export default function ProjectDocumentViewer() {
   const [summaries, setSummaries] = useState<any[]>([])
   const [loadingSummaries, setLoadingSummaries] = useState(false)
   const [newComment, setNewComment] = useState("")
-  const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number }>>([])
+  const [tableOfContents, setTableOfContents] = useState<Array<{ id: string; text: string; level: number; isDrift?: boolean }>>([])
   const [activeSection, setActiveSection] = useState<string>("")
   const [templateName, setTemplateName] = useState<string>("")
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
@@ -131,18 +131,12 @@ export default function ProjectDocumentViewer() {
   const [showVersionDialog, setShowVersionDialog] = useState(false)
   const [drifts, setDrifts] = useState<any[]>([])
   const [showDriftHighlights, setShowDriftHighlights] = useState(true)
+  const [baseContentSnapshot, setBaseContentSnapshot] = useState<string>("")
+  const [latestContentSnapshot, setLatestContentSnapshot] = useState<string>("")
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
   
-  // Stable callback for drift marker ToC regeneration
-  const handleEnhancedContentReady = useCallback((enhancedContent: string) => {
-    // Re-extract ToC from enhanced content (includes drift markers)
-    if (showDriftHighlights && drifts.length > 0) {
-      extractTableOfContents(enhancedContent)
-    }
-  }, [showDriftHighlights, drifts])
-
   // Mock data for demonstration
   const mockDocument: DocumentData = {
     id: documentId,
@@ -451,6 +445,8 @@ The ADPA system represents a significant advancement in document processing auto
         })
         setVersions(versionsData)
         setEditedContent(contentString)
+        setBaseContentSnapshot(contentString)
+        setLatestContentSnapshot(contentString)
         
         // Extract TOC from real document content
         if (contentString) {
@@ -463,6 +459,8 @@ The ADPA system represents a significant advancement in document processing auto
         setDocument(mockDocument)
         setVersions(mockVersions)
         setEditedContent(mockDocument.content)
+        setBaseContentSnapshot(mockDocument.content)
+        setLatestContentSnapshot(mockDocument.content)
         
         // Show error toast but don't break the UI
         toast.error("Failed to load document from API, showing demo data")
@@ -481,9 +479,10 @@ The ADPA system represents a significant advancement in document processing auto
   }, [projectId, documentId])
 
   // Extract table of contents from markdown
-  const extractTableOfContents = (content: string) => {
+  const extractTableOfContents = useCallback((content: string) => {
     const headings: Array<{ id: string; text: string; level: number; isDrift?: boolean }> = []
     const lines = (typeof content === 'string' ? content : '').split('\n')
+    const idCounts = new Map<string, number>() // Track duplicate IDs
     
     lines.forEach((line) => {
       const h1Match = line.match(/^#\s+(.+)$/)
@@ -494,33 +493,67 @@ The ADPA system represents a significant advancement in document processing auto
       
       if (h1Match) {
         const text = h1Match[1].replace(/\*/g, '').trim() // Remove markdown formatting
-        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        let baseId = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const count = idCounts.get(baseId) || 0
+        idCounts.set(baseId, count + 1)
+        const id = count > 0 ? `${baseId}-${count}` : baseId
         headings.push({ id, text, level: 1 })
       } else if (h2Match) {
         const text = h2Match[1].replace(/\*/g, '').trim()
-        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        let baseId = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const count = idCounts.get(baseId) || 0
+        idCounts.set(baseId, count + 1)
+        const id = count > 0 ? `${baseId}-${count}` : baseId
         headings.push({ id, text, level: 2 })
       } else if (h3Match) {
         const text = h3Match[1].replace(/\*/g, '').trim()
-        const id = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        let baseId = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const count = idCounts.get(baseId) || 0
+        idCounts.set(baseId, count + 1)
+        const id = count > 0 ? `${baseId}-${count}` : baseId
         headings.push({ id, text, level: 3 })
       } else if (h4Match) {
         const text = h4Match[1].replace(/\*/g, '').trim()
         const isDrift = /[🔴🟠🟡🔵⚪]/.test(text) && text.includes('DRIFT')
         const idPrefix = isDrift ? 'drift-' : 'heading-'
-        const id = `${idPrefix}${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        let baseId = `${idPrefix}${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const count = idCounts.get(baseId) || 0
+        idCounts.set(baseId, count + 1)
+        const id = count > 0 ? `${baseId}-${count}` : baseId
         headings.push({ id, text, level: 4, isDrift })
       } else if (h5Match) {
         const text = h5Match[1].replace(/\*/g, '').trim()
         const isDrift = /[🔴🟠🟡🔵⚪]/.test(text) && text.includes('DRIFT')
         const idPrefix = isDrift ? 'drift-' : 'heading-'
-        const id = `${idPrefix}${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        let baseId = `${idPrefix}${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+        const count = idCounts.get(baseId) || 0
+        idCounts.set(baseId, count + 1)
+        const id = count > 0 ? `${baseId}-${count}` : baseId
         headings.push({ id, text, level: 5, isDrift })
       }
     })
     
     setTableOfContents(headings)
-  }
+  }, [])
+
+  // Stable callback for drift marker ToC regeneration
+  const handleEnhancedContentReady = useCallback((enhancedContent: string) => {
+    if (!enhancedContent) return
+
+    if (showDriftHighlights && drifts.length > 0) {
+      setLatestContentSnapshot(enhancedContent)
+      extractTableOfContents(enhancedContent)
+    }
+  }, [showDriftHighlights, drifts, extractTableOfContents])
+
+  // Recompute table of contents when toggling highlights off
+  useEffect(() => {
+    if (!showDriftHighlights) {
+      if (baseContentSnapshot) {
+        extractTableOfContents(baseContentSnapshot)
+      }
+    }
+  }, [showDriftHighlights, baseContentSnapshot, extractTableOfContents])
 
   // Smooth scroll to section
   const scrollToSection = (sectionId: string) => {

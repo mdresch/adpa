@@ -15,6 +15,7 @@ import {
   UploadBatchOptions 
 } from '../services/documentUploadService';
 import { authenticateToken as authenticate } from '../middleware/auth';
+import { connectDatabase, getDatabasePool } from '../database/connection';
 
 const router = Router();
 
@@ -484,16 +485,9 @@ router.delete(
  * Verify user has access to project
  */
 async function verifyProjectAccess(userId: string, projectId: string): Promise<boolean> {
-  const { Pool } = require('pg');
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    // SSL for Supabase: disable validation (PgBouncer pooling causes cert issues)
-    ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('azure')
-      ? { rejectUnauthorized: false } // Supabase/Azure: trusted provider
-      : (process.env.DB_SSL === 'true' 
-          ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
-          : false)
-  });
+  await connectDatabase();
+  const sharedPool = getDatabasePool();
+  const client = await sharedPool.connect();
 
   try {
     const query = `
@@ -507,7 +501,7 @@ async function verifyProjectAccess(userId: string, projectId: string): Promise<b
       )
     `;
 
-    const result = await pool.query(query, [projectId, userId]);
+    const result = await client.query(query, [projectId, userId]);
     return result.rows.length > 0;
 
   } catch (error: any) {
@@ -518,7 +512,7 @@ async function verifyProjectAccess(userId: string, projectId: string): Promise<b
     });
     return false;
   } finally {
-    await pool.end();
+    client.release();
   }
 }
 
@@ -526,19 +520,12 @@ async function verifyProjectAccess(userId: string, projectId: string): Promise<b
  * Cancel upload batch
  */
 async function cancelUploadBatch(batchId: string): Promise<void> {
-  const { Pool } = require('pg');
-  const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    // SSL for Supabase: disable validation (PgBouncer pooling causes cert issues)
-    ssl: process.env.DATABASE_URL?.includes('supabase.co') || process.env.DATABASE_URL?.includes('azure')
-      ? { rejectUnauthorized: false } // Supabase/Azure: trusted provider
-      : (process.env.DB_SSL === 'true' 
-          ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' }
-          : false)
-  });
+  await connectDatabase();
+  const sharedPool = getDatabasePool();
+  const client = await sharedPool.connect();
 
   try {
-    await pool.query(`
+    await client.query(`
       UPDATE upload_batches
       SET status = 'cancelled', updated_at = NOW()
       WHERE id = $1
@@ -555,7 +542,7 @@ async function cancelUploadBatch(batchId: string): Promise<void> {
     }
 
   } finally {
-    await pool.end();
+    client.release();
   }
 }
 

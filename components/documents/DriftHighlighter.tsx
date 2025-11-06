@@ -27,6 +27,14 @@ interface DriftHighlighterProps {
 }
 
 export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedContentReady }: DriftHighlighterProps) {
+  // Track ID usage to ensure uniqueness
+  const idCountsRef = React.useRef(new Map<string, number>())
+  
+  // Reset ID counts when content changes
+  React.useEffect(() => {
+    idCountsRef.current = new Map<string, number>()
+  }, [content, showHighlights])
+  
   // Inject drift markers into content if highlighting is enabled
   const enhancedContent = React.useMemo(() => {
     if (!showHighlights || drifts.length === 0) return content
@@ -84,6 +92,13 @@ export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedCo
       onEnhancedContentReady(enhancedContent)
     }
   }, [enhancedContent, onEnhancedContentReady])
+  
+  // Generate unique ID (handles duplicates by adding suffix)
+  function generateUniqueId(baseId: string): string {
+    const count = idCountsRef.current.get(baseId) || 0
+    idCountsRef.current.set(baseId, count + 1)
+    return count > 0 ? `${baseId}-${count}` : baseId
+  }
   
   function getSeverityEmoji(severity: string): string {
     switch(severity) {
