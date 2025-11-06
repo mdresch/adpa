@@ -552,7 +552,7 @@ The ADPA system represents a significant advancement in document processing auto
     } else {
       console.warn('[TOC] ❌ Element not found with ID:', sectionId)
       console.log('[TOC] All element IDs on page:', 
-        Array.from(window.document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-'))
+        Array.from(window.document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-') || id.startsWith('drift-'))
       )
       
       // Fallback: Try to find by text content

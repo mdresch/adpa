@@ -214,10 +214,13 @@ export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedCo
               ? children.map((c: any) => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
               : String(children)
             const cleanText = text.replace(/\*/g, '').trim()
-            const id = `drift-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
             
             // Check if this is a drift marker (contains emoji and "DRIFT")
             const isDriftMarker = cleanText.includes('DRIFT') && /[🔴🟠🟡🔵⚪]/.test(cleanText)
+            
+            // Use drift- prefix ONLY for drift markers, otherwise use heading- prefix
+            const idPrefix = isDriftMarker ? 'drift-' : 'heading-'
+            const id = `${idPrefix}${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
             
             if (isDriftMarker) {
               // High severity drift marker (Critical/High)
@@ -242,10 +245,13 @@ export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedCo
               ? children.map((c: any) => typeof c === 'string' ? c : (c as any)?.props?.children || '').join(' ')
               : String(children)
             const cleanText = text.replace(/\*/g, '').trim()
-            const id = `drift-${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
             
             // Check if this is a drift marker
             const isDriftMarker = cleanText.includes('DRIFT') && /[🔴🟠🟡🔵⚪]/.test(cleanText)
+            
+            // Use drift- prefix ONLY for drift markers, otherwise use heading- prefix
+            const idPrefix = isDriftMarker ? 'drift-' : 'heading-'
+            const id = `${idPrefix}${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
             
             if (isDriftMarker) {
               // Medium/Low severity drift marker
