@@ -30,8 +30,13 @@ const createPool = (host: string) => {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: databaseUrl,
+      // Proper SSL configuration:
+      // - Supabase and Azure have valid certificates, use rejectUnauthorized: true for security
+      // - Allow disabling only in development via NODE_TLS_REJECT_UNAUTHORIZED env var
       ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-        ? { rejectUnauthorized: false }
+        ? { 
+            rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' // Default to true (secure)
+          }
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
@@ -53,7 +58,7 @@ const createPool = (host: string) => {
     connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
     // SSL configuration for Supabase and other cloud providers
     ssl: host.includes('supabase.co') || host.includes('azure') || process.env.DB_SSL === "true" 
-      ? { rejectUnauthorized: false } 
+      ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
       : false,
   })
 }
@@ -72,7 +77,7 @@ export async function connectDatabase() {
     // This allows us to force IPv4 by explicitly setting the family option
     let poolConfig: any = {
       ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-        ? { rejectUnauthorized: false }
+        ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
         : false,
       max: 20,
       idleTimeoutMillis: 30000,
@@ -115,7 +120,7 @@ export async function connectDatabase() {
           user: dbUrl.username,
           password: dbUrl.password,
           ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-            ? { rejectUnauthorized: false }
+            ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
             : false,
           max: 20,
           idleTimeoutMillis: 30000,

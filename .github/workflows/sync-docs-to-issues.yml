@@ -37,7 +37,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v2
+        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.0.0 (pinned to commit SHA for security)
         with:
           version: 10
 
@@ -48,8 +48,10 @@ jobs:
 
       - name: Detect Changed Briefing Documents
         id: detect-changes
+        env:
+          FORCE_SYNC: ${{ github.event.inputs.force_sync }}  # Sanitize input via environment variable
         run: |
-          if [ "${{ github.event.inputs.force_sync }}" = "true" ]; then
+          if [ "$FORCE_SYNC" = "true" ]; then
             echo "Force sync enabled - processing all briefing docs"
             FILES=$(find . -type f \( -name "BRIEFING*.md" -o -name "AGENT*.md" \) -not -path "*/node_modules/*" -not -path "*/.git/*")
           else

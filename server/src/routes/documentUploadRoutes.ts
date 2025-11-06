@@ -487,7 +487,10 @@ async function verifyProjectAccess(userId: string, projectId: string): Promise<b
   const { Pool } = require('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+    // Secure SSL configuration: validate certificates by default
+    ssl: process.env.DB_SSL === 'true' 
+      ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
+      : false
   });
 
   try {
@@ -524,7 +527,10 @@ async function cancelUploadBatch(batchId: string): Promise<void> {
   const { Pool } = require('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false
+    // Secure SSL configuration: validate certificates by default
+    ssl: process.env.DB_SSL === 'true' 
+      ? { rejectUnauthorized: process.env.NODE_TLS_REJECT_UNAUTHORIZED !== '0' } // Default to true (secure)
+      : false
   });
 
   try {
