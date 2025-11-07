@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express'
 import { pool } from "../database/connection"
 import { authenticateToken } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
-import { initializeNotificationService, getNotificationService } from "../services/notificationService"
+import { initializeNotificationService, getNotificationService } from "../services/multiChannelNotificationService"
 import { body, param, query, validationResult } from 'express-validator'
 
 const router = express.Router()

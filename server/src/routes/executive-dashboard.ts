@@ -113,7 +113,7 @@ router.get(
           COUNT(*) FILTER (WHERE drift_severity = 'high') as high_count,
           COUNT(*) FILTER (WHERE drift_severity = 'medium') as medium_count,
           COUNT(*) FILTER (WHERE drift_severity = 'low') as low_count,
-    COUNT(*) FILTER (WHERE bdd.status = 'detected') as unaddressed_count,
+          COUNT(*) FILTER (WHERE bdd.status = 'detected') as unaddressed_count,
           COUNT(*) FILTER (WHERE detection_date >= NOW() - INTERVAL '24 hours') as last_24h_count,
           COUNT(*) FILTER (WHERE detection_date >= NOW() - INTERVAL '7 days') as last_7d_count
         FROM baseline_drift_detection bdd
