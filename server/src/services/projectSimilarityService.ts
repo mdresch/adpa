@@ -132,7 +132,13 @@ export class ProjectSimilarityService {
         throw new Error('One or both projects not found')
       }
 
-      const [project1, project2] = result.rows
+      // Ensure correct project assignment by ID
+      const project1 = result.rows.find(p => p.id === projectId1)
+      const project2 = result.rows.find(p => p.id === projectId2)
+      
+      if (!project1 || !project2) {
+        throw new Error('Error loading project data')
+      }
       let score = 0
       let factors = 0
 
@@ -243,47 +249,71 @@ export class ProjectSimilarityService {
 
       const similarities: ProjectSimilarity[] = []
 
-      // Calculate similarity with each project
-      for (const row of result.rows) {
-        const otherProjectId = row.id
-        const score = await this.calculateSimilarity(projectId, otherProjectId)
+      // Calculate similarity with each project in parallel batches
+      const batchSize = 10
+      const otherProjectIds = result.rows.map(row => row.id)
+      
+      for (let i = 0; i < otherProjectIds.length; i += batchSize) {
+        const batch = otherProjectIds.slice(i, i + batchSize)
+        const batchPromises = batch.map(otherProjectId => 
+          this.calculateSimilarity(projectId, otherProjectId)
+            .then(score => ({ otherProjectId, score }))
+            .catch(error => {
+              logger.error('[PROJECT_SIMILARITY] Error in batch calculation', { 
+                projectId, 
+                otherProjectId, 
+                error 
+              })
+              return null
+            })
+        )
+        
+        const batchResults = await Promise.all(batchPromises)
+        
+        for (const result of batchResults) {
+          if (!result) continue
+          const { otherProjectId, score } = result
 
-        if (score >= minSimilarityScore) {
-          // Get project details for similarity factors
-          const projectData = await pool.query(
-            `SELECT framework, budget, status FROM projects WHERE id IN ($1, $2)`,
-            [projectId, otherProjectId]
-          )
+          if (score >= minSimilarityScore) {
+            // Get project details for similarity factors
+            const projectData = await pool.query(
+              `SELECT id, framework, budget, status FROM projects WHERE id IN ($1, $2)`,
+              [projectId, otherProjectId]
+            )
 
-          const [project, similarProject] = projectData.rows
+            const project = projectData.rows.find(p => p.id === projectId)
+            const similarProject = projectData.rows.find(p => p.id === otherProjectId)
+            
+            if (!project || !similarProject) continue
 
-          // Store similarity
-          const insertResult = await pool.query(
-            `INSERT INTO project_similarity (
-              project_id, similar_project_id, similarity_score,
-              framework_match, budget_range_match,
-              detected_by, ai_confidence, status
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-            ON CONFLICT (project_id, similar_project_id) 
-            DO UPDATE SET 
-              similarity_score = EXCLUDED.similarity_score,
-              framework_match = EXCLUDED.framework_match,
-              budget_range_match = EXCLUDED.budget_range_match,
-              updated_at = NOW()
-            RETURNING *`,
-            [
-              projectId,
-              otherProjectId,
-              score,
-              project.framework === similarProject.framework,
-              this.isBudgetSimilar(project.budget, similarProject.budget),
-              'ai',
-              score, // Use similarity score as AI confidence
-              'active'
-            ]
-          )
+            // Store similarity
+            const insertResult = await pool.query(
+              `INSERT INTO project_similarity (
+                project_id, similar_project_id, similarity_score,
+                framework_match, budget_range_match,
+                detected_by, ai_confidence, status
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+              ON CONFLICT (project_id, similar_project_id) 
+              DO UPDATE SET 
+                similarity_score = EXCLUDED.similarity_score,
+                framework_match = EXCLUDED.framework_match,
+                budget_range_match = EXCLUDED.budget_range_match,
+                updated_at = NOW()
+              RETURNING *`,
+              [
+                projectId,
+                otherProjectId,
+                score,
+                project.framework === similarProject.framework,
+                this.isBudgetSimilar(project.budget, similarProject.budget),
+                'ai',
+                score, // Use similarity score as AI confidence
+                'active'
+              ]
+            )
 
-          similarities.push(insertResult.rows[0])
+            similarities.push(insertResult.rows[0])
+          }
         }
       }
 
