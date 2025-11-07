@@ -5,12 +5,12 @@
 
 import { Router } from 'express'
 import { knowledgeBaseController } from './controller'
-import { authenticate } from '../../middleware/auth'
+import { authenticateToken } from '../../middleware/auth'
 
 const router = Router()
 
 // All routes require authentication
-router.use(authenticate)
+router.use(authenticateToken)
 
 // Knowledge Base Entries
 router.post('/entries', (req, res) => knowledgeBaseController.createEntry(req, res))

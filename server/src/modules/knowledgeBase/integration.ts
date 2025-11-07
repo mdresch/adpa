@@ -260,36 +260,36 @@ function extractKeywords(text: string): string[] {
  */
 function parseValueFromString(valueString: string): ValueMetrics | undefined {
   const metrics: ValueMetrics = {}
-  
-  // Try to extract cost savings (e.g., "$50K", "$50,000", "50000")
-  const costMatch = valueString.match(/\$?([\d,]+)(?:K|k)?\s*(?:savings?|saved?|reduction?)/i)
+  const text = valueString.trim()
+
+  // Cost savings patterns (allow optional words between amount and keyword)
+  // Examples: "$50K savings", "$50,000 annual savings", "100k per year saved"
+  const costRegex = /\$?([\d,]+)\s*(K|k)?(?:\s+\w+){0,3}?\s*(savings?|saved?|reduction)/i
+  const costMatch = text.match(costRegex)
   if (costMatch) {
     let amount = parseFloat(costMatch[1].replace(/,/g, ''))
-    if (valueString.toLowerCase().includes('k')) {
+    if (costMatch[2]) {
       amount *= 1000
     }
     metrics.cost_savings = amount
   }
-  
-  // Try to extract time saved (e.g., "5 days", "2 weeks", "3 months")
-  const timeMatch = valueString.match(/([\d.]+)\s*(day|week|month|hour)s?/i)
+
+  // Time saved (convert to hours for consistency)
+  const timeMatch = text.match(/([\d.]+)\s*(day|week|month|hour)s?/i)
   if (timeMatch) {
     let time = parseFloat(timeMatch[1])
     const unit = timeMatch[2].toLowerCase()
-    
-    // Convert to hours
     if (unit === 'day') time *= 8
     else if (unit === 'week') time *= 40
     else if (unit === 'month') time *= 160
-    
     metrics.time_saved = time
   }
-  
-  // Try to extract percentage improvements
-  const percentMatch = valueString.match(/([\d.]+)%\s*(?:improvement|increase|gain)/i)
+
+  // Percentage improvements
+  const percentMatch = text.match(/([\d.]+)%\s*(improvement|increase|gain)/i)
   if (percentMatch) {
     metrics.efficiency_gain = parseFloat(percentMatch[1])
   }
-  
+
   return Object.keys(metrics).length > 0 ? metrics : undefined
 }
