@@ -205,10 +205,17 @@ if (process.env.ENABLE_RAG_CONTEXT_RETRIEVAL === 'true' && this.retrieval) {
     'variable resolution examples and guidance'
   ]
   
+  // Ensure project_id is available before searching
+  if (!templateMetadata?.project_id) {
+    logger.warn('No project_id available for RAG context retrieval', { templateId })
+    // Fall back to non-RAG context gathering
+    return
+  }
+  
   const ragChunks = []
   for (const q of queries) {
     const found = await this.retrieval.searchChunks({
-      projectId: templateMetadata?.project_id || '',
+      projectId: templateMetadata.project_id,
       query: q,
       topK: 8
     })
@@ -925,5 +932,5 @@ try {
 ---
 
 **Document Version:** 1.0.0  
-**Last Updated:** November 7, 2025  
+**Last Updated:** November 7, 2024  
 **Maintained By:** ADPA Development Team
