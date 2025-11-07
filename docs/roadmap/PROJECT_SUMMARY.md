@@ -40,26 +40,43 @@ A complete task extraction system that:
    - Sprint planning recommendations
    - Success metrics and timelines
 
-### Documentation Files (2)
-4. **GITHUB_ISSUES_GENERATION_GUIDE.md** (3 KB)
+### Documentation Files (5)
+4. **PROGRAMMATIC_IMPORT_GUIDE.md** ⭐ (15 KB)
+   - Complete guide for TypeScript importer
+   - Filtering, batching, and assignment
+   - Cross-platform instructions
+   - Troubleshooting and best practices
+
+5. **QUICK_REFERENCE_IMPORT.md** (4 KB)
+   - Quick command reference
+   - Common patterns and examples
+   - One-page cheat sheet
+
+6. **GITHUB_ISSUES_GENERATION_GUIDE.md** (3 KB)
    - Instructions for creating GitHub issues from tasks
    - Batch script usage guide
    - GitHub CLI integration
 
-5. **IMPORT_GUIDE.md** (11 KB)
+7. **IMPORT_GUIDE.md** (11 KB)
    - Comprehensive quick start guide
-   - 3 import options explained (CSV, CLI, manual)
+   - 4 import options explained (Programmatic, CSV, CLI, manual)
    - FAQ and troubleshooting
    - Sprint planning templates
 
-### Automation Scripts (5)
-6. **create-critical-high-issues.sh** - 50 critical/high priority tasks
-7. **create-sprint-1-issues.sh** - 30 core feature tasks (PDF/DOCX export, templates)
-8. **create-entity-type-issues.sh** - 40 PMBOK entity development tasks
-9. **create-portfolio-issues.sh** - 50 portfolio & program management tasks
-10. **create-ai-search-issues.sh** - 30 AI and semantic search tasks
+8. **README_GITHUB_IMPORTER.md** (3 KB)
+   - Quick overview of programmatic importer
+   - Located in scripts/ directory
 
-All scripts are executable and use GitHub CLI for batch issue creation.
+### Automation Scripts (7)
+6. **import-github-issues.ts** ⭐ - Programmatic TypeScript importer (1,606 tasks)
+7. **import-github-issues.ps1** - PowerShell wrapper for Windows
+8. **create-critical-high-issues.sh** - 50 critical/high priority tasks
+9. **create-sprint-1-issues.sh** - 30 core feature tasks (PDF/DOCX export, templates)
+10. **create-entity-type-issues.sh** - 40 PMBOK entity development tasks
+11. **create-portfolio-issues.sh** - 50 portfolio & program management tasks
+12. **create-ai-search-issues.sh** - 30 AI and semantic search tasks
+
+All scripts are executable. TypeScript importer uses GitHub REST API (recommended). Shell scripts use GitHub CLI.
 
 ### Sample Templates (3)
 11. **github-issues/issue-task-123.md** - Performance Actuals entity example
@@ -107,16 +124,60 @@ All scripts are executable and use GitHub CLI for batch issue creation.
 
 ## How to Use
 
-### Quick Start (3 Options)
+### Quick Start (4 Options)
 
-#### Option 1: Import CSV (Easiest)
+#### Option 1: Programmatic Import (Recommended ⭐)
+**Fastest, most flexible, cross-platform solution using TypeScript + GitHub API**
+
+```bash
+# 1. Set GitHub token
+export GITHUB_TOKEN=ghp_your_token_here
+
+# 2. Install dependencies
+npm install
+
+# 3. View statistics
+npm run import-issues:stats
+
+# 4. Dry run (preview)
+npm run import-issues:dry-run -- --batch sprint-1
+
+# 5. Import
+npm run import-issues -- --batch sprint-1
+
+# Advanced: Filter by priority and assign to milestone
+npm run import-issues -- --priority high --status planned --limit 50 --milestone 1
+```
+
+**Windows PowerShell**:
+```powershell
+$env:GITHUB_TOKEN = "ghp_your_token_here"
+.\scripts\import-github-issues.ps1 -Batch "sprint-1" -DryRun
+.\scripts\import-github-issues.ps1 -Batch "sprint-1"
+```
+
+**Features**:
+- ✅ Cross-platform (Windows/Mac/Linux)
+- ✅ Flexible filtering (priority, status, labels)
+- ✅ Batch processing with rate limiting
+- ✅ Dry run mode for safety
+- ✅ Progress tracking
+- ✅ Automatic milestone/assignee support
+
+**Documentation**: [PROGRAMMATIC_IMPORT_GUIDE.md](./PROGRAMMATIC_IMPORT_GUIDE.md) | [Quick Reference](./QUICK_REFERENCE_IMPORT.md)
+
+---
+
+#### Option 2: Import CSV (GitHub Projects)
 1. Navigate to GitHub Projects
 2. Create or open "ADPA Roadmap" project
 3. Import `docs/roadmap/ROADMAP_TASKS_IMPORT.csv`
 4. Map fields as prompted
 5. All 1,606 tasks imported instantly
 
-#### Option 2: Create Issues via CLI
+---
+
+#### Option 3: Shell Scripts (Linux/Mac)
 ```bash
 # Install GitHub CLI: https://cli.github.com/
 gh auth login
@@ -130,7 +191,9 @@ bash docs/roadmap/create-sprint-1-issues.sh
 # ... continue with other scripts
 ```
 
-#### Option 3: Review First (Recommended)
+---
+
+#### Option 4: Review First (Strategic Planning)
 ```bash
 # Read the comprehensive summary
 cat docs/roadmap/ROADMAP_TASKS_SUMMARY.md
