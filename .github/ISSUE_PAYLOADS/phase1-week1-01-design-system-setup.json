@@ -1,0 +1,6 @@
+{
+  "title": "Design System Setup",
+  "body": "See `.github/ISSUES/phase1-week1-01-design-system-setup.md` for full context and acceptance criteria.\n\nThis issue covers color tokens, typography, a minimal token file `lib/theme/maturity-portal-theme.ts`, and seed components (Button/Card/Badge) + Storybook stories.",
+  "labels": ["phase:1","week:1","area:design","type:task","priority:high"],
+  "assignees": []
+}

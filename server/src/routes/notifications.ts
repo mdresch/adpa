@@ -2,17 +2,18 @@ import express, { Request, Response } from 'express'
 import { pool } from "../database/connection"
 import { authenticateToken } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
-import { initializeNotificationService, getNotificationService } from "../services/multiChannelNotificationService"
+// TODO: Re-enable multi-channel notifications after fixing encoding issues
+// import { initializeNotificationService, getNotificationService } from "../services/multiChannelNotificationService"
 import { body, param, query, validationResult } from 'express-validator'
 
 const router = express.Router()
 
-// Initialize service
-try {
-  initializeNotificationService(pool)
-} catch (e) {
-  logger.warn('NotificationService init skipped:', (e as any)?.message || e)
-}
+// Initialize service - temporarily disabled due to file encoding issues
+// try {
+//   initializeNotificationService(pool)
+// } catch (e) {
+//   logger.warn('NotificationService init skipped:', (e as any)?.message || e)
+// }
 
 const validate = (req: Request, res: Response, next: Function) => {
   const errors = validationResult(req)
@@ -36,14 +37,19 @@ router.post(
     validate,
     async (req: Request, res: Response) => {
         const log = childLogger({ requestId: (req as any).requestId })
-        try {
-            const notificationService = getNotificationService()
-            const results = await notificationService.sendNotification(req.body)
-            res.json({ success: true, results })
-        } catch (error) {
-            log.error('Send notification failed:', error)
-            res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' })
-        }
+        // TODO: Re-enable after fixing multiChannelNotificationService
+        res.status(503).json({ 
+            success: false, 
+            error: 'Multi-channel notifications temporarily disabled' 
+        })
+        // try {
+        //     const notificationService = getNotificationService()
+        //     const results = await notificationService.sendNotification(req.body)
+        //     res.json({ success: true, results })
+        // } catch (error) {
+        //     log.error('Send notification failed:', error)
+        //     res.status(500).json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' })
+        // }
     }
 )
 
@@ -51,13 +57,14 @@ router.post(
 router.get('/channels/status', authenticateToken, async (req: Request, res: Response) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    const svc = getNotificationService()
-    const channelStatus = svc.getChannelStatus()
+    // TODO: Re-enable after fixing multiChannelNotificationService
+    // const svc = getNotificationService()
+    // const channelStatus = svc.getChannelStatus()
 
     const q = `SELECT id, name, display_name, is_enabled FROM notification_channels ORDER BY created_at`
     const result = await pool.query(q)
 
-    const channels = result.rows.map((c: any) => ({ ...c, is_configured: !!channelStatus[c.name] }))
+    const channels = result.rows.map((c: any) => ({ ...c, is_configured: false }))
     res.json({ success: true, channels })
   } catch (error) {
     log.error('Get channels status error:', error)

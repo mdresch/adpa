@@ -2,10 +2,16 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { toast } from 'sonner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { MaturityCard } from '@/components/onboarding/MaturityCard';
+import { MaturityJourneyIntro } from '@/components/onboarding/MaturityJourneyIntro';
+import { UploadZone } from '@/components/onboarding/UploadZone';
+import { maturityTheme } from '@/lib/theme/maturity-portal-theme';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,12 +22,10 @@ import {
   CheckCircle,
   XCircle,
   Loader2,
-  Download,
   AlertCircle,
-  Plus,
-  Building2,
-  Briefcase
-} from 'lucide-react';
+  Building,
+  Sparkles
+} from '@/components/ui/icons-shim';
 
 interface UploadedFile {
   file: File;
@@ -38,7 +42,8 @@ export default function DocumentUploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [batchId, setBatchId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showIntro, setShowIntro] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   
   // Assessment metadata (simplified - no project database link)
   const [assessmentName, setAssessmentName] = useState('');
@@ -46,6 +51,14 @@ export default function DocumentUploadPage() {
   const [organizationName, setOrganizationName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [assessmentPurpose, setAssessmentPurpose] = useState('Initial Onboarding');
+
+  // Check if first visit
+  useEffect(() => {
+    const hasSeenIntro = localStorage.getItem('maturity_journey_intro_seen');
+    if (!hasSeenIntro) {
+      setShowIntro(true);
+    }
+  }, []);
 
   // Handle drag events
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -247,35 +260,96 @@ export default function DocumentUploadPage() {
 
   const canUpload = assessmentName.trim() && clientName.trim() && files.length > 0;
 
-  return (
-    <div className="container mx-auto p-6 max-w-6xl">
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold mb-2">Client Onboarding Assessment</h1>
-          <p className="text-muted-foreground">
-            Upload client documents for AI-powered portfolio maturity assessment
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() => router.push('/onboarding/assessments')}
-        >
-          <FileText className="mr-2 h-4 w-4" />
-          View Assessments
-        </Button>
-      </div>
+  const handleIntroComplete = () => {
+    setShowIntro(false);
+    localStorage.setItem('maturity_journey_intro_seen', 'true');
+  };
 
-      {/* Assessment Setup */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Briefcase className="h-5 w-5" />
-            Client Assessment Details
-          </CardTitle>
-          <CardDescription>
-            For potential clients - no project setup required, just reference information
-          </CardDescription>
-        </CardHeader>
+  return (
+    <>
+      {/* Educational Journey Modal */}
+      {showIntro && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl max-h-[90vh] overflow-auto">
+            <MaturityJourneyIntro onComplete={handleIntroComplete} />
+          </div>
+        </div>
+      )}
+
+      <div 
+        className="min-h-screen"
+        style={{ 
+          background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+        }}
+      >
+        <div className="container mx-auto p-6 max-w-6xl">
+          {/* Hero Header */}
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="mb-8 text-center"
+          >
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Sparkles className="h-8 w-8" style={{ color: maturityTheme.colors.info.text }} />
+              <h1 
+                className="text-4xl font-bold"
+                style={{ color: maturityTheme.colors.text.primary }}
+              >
+                Client Onboarding Assessment
+              </h1>
+            </div>
+            <p 
+              className="text-lg max-w-2xl mx-auto"
+              style={{ color: maturityTheme.colors.text.secondary }}
+            >
+              Upload client documents for AI-powered portfolio maturity assessment. 
+              Get instant insights into PM maturity levels, quality scores, and actionable recommendations.
+            </p>
+            
+            <div className="flex gap-3 justify-center mt-6">
+              <Button
+                variant="outline"
+                onClick={() => setShowIntro(true)}
+                size="lg"
+                className="shadow-lg"
+                style={{
+                  backgroundColor: maturityTheme.colors.info.bg,
+                  borderColor: maturityTheme.colors.info.border,
+                  color: maturityTheme.colors.info.text,
+                }}
+              >
+                <Sparkles className="mr-2 h-5 w-5" />
+                How It Works
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => router.push('/onboarding/assessments')}
+                size="lg"
+                className="shadow-lg"
+              >
+                <FileText className="mr-2 h-5 w-5" />
+                View Assessments
+              </Button>
+            </div>
+          </motion.div>
+
+        {/* Assessment Setup */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <MaturityCard variant="elevated" className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
+                <Building className="h-5 w-5" />
+                Client Assessment Details
+              </CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                For potential clients - no project setup required, just reference information
+              </CardDescription>
+            </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -284,7 +358,7 @@ export default function DocumentUploadPage() {
                 id="assessmentName"
                 placeholder="e.g., ABC Corp PMO Assessment"
                 value={assessmentName}
-                onChange={(e) => setAssessmentName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAssessmentName(e.target.value)}
                 className="font-medium"
               />
               <p className="text-xs text-muted-foreground">
@@ -298,7 +372,7 @@ export default function DocumentUploadPage() {
                 id="clientName"
                 placeholder="e.g., John Smith or ABC Corp"
                 value={clientName}
-                onChange={(e) => setClientName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClientName(e.target.value)}
               />
             </div>
           </div>
@@ -310,7 +384,7 @@ export default function DocumentUploadPage() {
                 id="organization"
                 placeholder="e.g., ABC Corporation"
                 value={organizationName}
-                onChange={(e) => setOrganizationName(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setOrganizationName(e.target.value)}
               />
             </div>
 
@@ -319,9 +393,9 @@ export default function DocumentUploadPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="e.g., john@abccorp.com"
+                placeholder="e.g., contact@example.com"
                 value={contactEmail}
-                onChange={(e) => setContactEmail(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setContactEmail(e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
                 We'll send your assessment results here
@@ -356,16 +430,22 @@ export default function DocumentUploadPage() {
             </Alert>
           )}
         </CardContent>
-      </Card>
+          </MaturityCard>
+        </motion.div>
 
-      {/* Upload Area */}
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Upload Documents</CardTitle>
-          <CardDescription>
-            Drag and drop files or click to browse. Supports PDF, DOCX, TXT, MD (max 100 files, 10MB each)
-          </CardDescription>
-        </CardHeader>
+        {/* Upload Area */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <MaturityCard variant="info" glow className="mb-6">
+            <CardHeader>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Upload Documents</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                Drag and drop files or click to browse. Supports PDF, DOCX, TXT, MD (max 100 files, 10MB each)
+              </CardDescription>
+            </CardHeader>
         <CardContent>
           <div
             className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
@@ -425,14 +505,22 @@ export default function DocumentUploadPage() {
             </div>
           )}
         </CardContent>
-      </Card>
+          </MaturityCard>
+        </motion.div>
 
-      {/* File List */}
-      {files.length > 0 && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Files ({files.length})</CardTitle>
+        {/* File List */}
+        {files.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+          >
+            <MaturityCard variant="success" hover>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>
+                    Files ({files.length})
+                  </CardTitle>
               <div className="space-x-2">
                 <Button
                   variant="outline"
@@ -508,11 +596,12 @@ export default function DocumentUploadPage() {
               ))}
             </div>
           </CardContent>
-        </Card>
-      )}
+            </MaturityCard>
+          </motion.div>
+        )}
 
-      {/* Info Alert */}
-      <Alert className="mt-6">
+        {/* Info Alert */}
+        <Alert className="mt-6">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
           Your documents will be converted to Markdown, classified by AI, and assessed for quality.
@@ -546,7 +635,9 @@ export default function DocumentUploadPage() {
           </AlertDescription>
         </Alert>
       )}
-    </div>
+        </div>
+      </div>
+    </>
   );
 }
 
