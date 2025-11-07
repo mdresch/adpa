@@ -12,6 +12,7 @@ import { DriftPoint } from './driftDetectionService'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { emergencyMeetingService } from './emergencyMeetingService'
+import { approvalWorkflowService } from './approvalWorkflowService'
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -25,6 +26,7 @@ export interface ResolutionResult {
 
 export interface ApplyResolutionResult {
   changeRequestId?: string
+  approvalRequestId?: string
 }
 
 export interface DriftApplyResponse {
@@ -448,6 +450,7 @@ Generate a REVISED version of the document that resolves the drift:
 
       // 4. ⭐ Create change request for major changes requiring approval
       let changeRequestId: string | undefined
+      let approvalRequestId: string | undefined
       if (majorChanges && majorChanges.length > 0) {
         changeRequestId = await this.createChangeRequestForMajorChanges(
           client,
@@ -460,6 +463,21 @@ Generate a REVISED version of the document that resolves the drift:
         logger.info('[DRIFT-RESOLUTION] Change request created for major changes', {
           changeRequestId,
           majorChangesCount: majorChanges.length
+        })
+
+        // 4a. ⭐ Create approval workflow for the change request
+        approvalRequestId = await this.createApprovalWorkflow(
+          client,
+          changeRequestId,
+          driftRecordId,
+          documentId,
+          majorChanges,
+          userId
+        )
+
+        logger.info('[DRIFT-RESOLUTION] Approval workflow created', {
+          changeRequestId,
+          approvalRequestId
         })
 
         // 5. ⭐ Auto-schedule emergency meeting for critical budget overruns
@@ -478,10 +496,11 @@ Generate a REVISED version of the document that resolves the drift:
         documentId,
         driftRecordId,
         userId,
-        changeRequestId
+        changeRequestId,
+        approvalRequestId
       })
 
-      return { changeRequestId }
+      return { changeRequestId, approvalRequestId }
     } catch (error) {
       await client.query('ROLLBACK')
       logger.error('[DRIFT-RESOLUTION] Error applying resolution:', error)
@@ -764,6 +783,125 @@ These changes have been flagged as **major changes** based on the following crit
     } catch (error) {
       // Don't fail the whole transaction if meeting scheduling fails
       logger.error('[DRIFT-RESOLUTION] Failed to schedule emergency meeting:', error)
+    }
+  }
+
+  /**
+   * Create approval workflow for change request
+   */
+  private async createApprovalWorkflow(
+    client: PoolClient,
+    changeRequestId: string,
+    driftRecordId: string,
+    documentId: string,
+    majorChanges: DriftPoint[],
+    userId: string
+  ): Promise<string> {
+    try {
+      // Get drift record details to determine workflow type
+      const driftResult = await client.query(
+        `SELECT * FROM baseline_drift_detection WHERE id = $1`,
+        [driftRecordId]
+      )
+
+      if (driftResult.rows.length === 0) {
+        throw new Error(`Drift record not found: ${driftRecordId}`)
+      }
+
+      const driftRecord = driftResult.rows[0]
+
+      // Get document details
+      const docResult = await client.query(
+        `SELECT d.*, p.name as project_name 
+         FROM documents d 
+         LEFT JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1`,
+        [documentId]
+      )
+
+      const document = docResult.rows[0]
+
+      // Determine request type and priority based on drift severity and changes
+      let requestType = 'negative_drift'
+      let priority: 'low' | 'medium' | 'high' | 'critical' | 'emergency' = 'medium'
+      let severity: 'low' | 'medium' | 'high' | 'critical' = driftRecord.drift_severity || 'medium'
+
+      // Check for budget overrun
+      const hasBudgetOverrun = majorChanges.some(
+        change => change.entityType === 'budget' && change.variance && Math.abs(change.variance) > 10
+      )
+
+      if (hasBudgetOverrun) {
+        requestType = 'budget_overrun'
+        const maxBudgetVariance = Math.max(
+          ...majorChanges
+            .filter(c => c.entityType === 'budget' && c.variance)
+            .map(c => Math.abs(c.variance || 0))
+        )
+
+        if (maxBudgetVariance >= 25) {
+          priority = 'emergency'
+          severity = 'critical'
+        } else if (maxBudgetVariance >= 10) {
+          priority = 'critical'
+          severity = 'high'
+        } else {
+          priority = 'high'
+          severity = 'medium'
+        }
+      } else if (driftRecord.drift_severity === 'critical') {
+        priority = 'critical'
+      } else if (driftRecord.drift_severity === 'high') {
+        priority = 'high'
+      }
+
+      // Build impact summary
+      const impactSummary = {
+        drift_severity: driftRecord.drift_severity,
+        major_changes_count: majorChanges.length,
+        entity_types_affected: [...new Set(majorChanges.map(c => c.entityType))],
+        budget_impact: majorChanges
+          .filter(c => c.entityType === 'budget' && c.variance)
+          .map(c => ({ variance: c.variance, description: c.description })),
+        requires_approval: true
+      }
+
+      // Create approval request through the approval workflow service
+      // Note: We need to commit the current transaction first, then create approval in new transaction
+      await client.query('COMMIT')
+      
+      const approvalRequest = await approvalWorkflowService.createApprovalRequest({
+        request_type: requestType,
+        change_request_id: changeRequestId,
+        drift_record_id: driftRecordId,
+        project_id: document.project_id,
+        title: `Approval Required: ${document.name || document.title}`,
+        description: `${majorChanges.length} major change(s) detected requiring approval`,
+        impact_summary: impactSummary,
+        priority,
+        severity,
+        requested_by: userId,
+        metadata: {
+          source: 'automatic_drift_resolution',
+          drift_severity: driftRecord.drift_severity,
+          major_changes: majorChanges
+        }
+      })
+
+      // Start a new transaction for the rest of the operations
+      await client.query('BEGIN')
+
+      logger.info('[DRIFT-RESOLUTION] Approval workflow created', {
+        approval_request_id: approvalRequest.id,
+        change_request_id: changeRequestId,
+        priority,
+        request_type: requestType
+      })
+
+      return approvalRequest.id
+    } catch (error) {
+      logger.error('[DRIFT-RESOLUTION] Error creating approval workflow:', error)
+      throw error
     }
   }
 }
