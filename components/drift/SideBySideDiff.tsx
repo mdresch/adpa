@@ -44,32 +44,30 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
     }
   }, [diffText, filename])
 
-  // Calculate change statistics for better clarity
+  // Calculate change statistics from the parsed diff for accuracy
   const stats = useMemo(() => {
-    const oldLines = oldContent.split('\n')
-    const newLines = newContent.split('\n')
+    if (files.length === 0) {
+      return { additions: 0, deletions: 0, modifications: 0 }
+    }
     
     let additions = 0
     let deletions = 0
-    let modifications = 0
     
-    // Simple heuristic: count different lines
-    const maxLines = Math.max(oldLines.length, newLines.length)
-    for (let i = 0; i < maxLines; i++) {
-      const oldLine = oldLines[i] || ''
-      const newLine = newLines[i] || ''
-      
-      if (!oldLine && newLine) {
-        additions++
-      } else if (oldLine && !newLine) {
-        deletions++
-      } else if (oldLine !== newLine) {
-        modifications++
-      }
-    }
+    // Count changes from the actual diff hunks
+    files.forEach(file => {
+      file.hunks.forEach((hunk: any) => {
+        hunk.changes.forEach((change: any) => {
+          if (change.type === 'insert') {
+            additions++
+          } else if (change.type === 'delete') {
+            deletions++
+          }
+        })
+      })
+    })
     
-    return { additions, deletions, modifications }
-  }, [oldContent, newContent])
+    return { additions, deletions, modifications: 0 }
+  }, [files])
 
   const renderFile = (file: any) => {
     const tokens = useMemo(() => {
@@ -110,7 +108,7 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
   return (
     <div className="diff-view-container">
       {/* Add change summary for clarity */}
-      {(stats.additions > 0 || stats.deletions > 0 || stats.modifications > 0) && (
+      {stats.additions + stats.deletions > 0 && (
         <div className="diff-stats-summary">
           <span className="diff-stat-label">Changes:</span>
           {stats.additions > 0 && (
@@ -118,9 +116,6 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
           )}
           {stats.deletions > 0 && (
             <span className="diff-stat-deletions">-{stats.deletions} lines removed</span>
-          )}
-          {stats.modifications > 0 && (
-            <span className="diff-stat-modifications">~{stats.modifications} lines modified</span>
           )}
         </div>
       )}
