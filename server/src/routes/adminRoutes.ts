@@ -1,0 +1,348 @@
+/**
+ * Admin API Routes
+ * Endpoints for admin-only functionality including quality trends, SLA monitoring, and notifications
+ */
+
+import express, { Request, Response, NextFunction } from 'express'
+import { authenticateToken } from '../middleware/auth'
+import { logger } from '../utils/logger'
+import { pool } from '../database/connection'
+import { Parser } from 'json2csv'
+
+const router = express.Router()
+
+/**
+ * Middleware to check if user is admin
+ */
+const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).user?.id
+
+    const userResult = await pool.query(
+      'SELECT role FROM users WHERE id = $1',
+      [userId]
+    )
+
+    if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        error: 'Admin access required'
+      })
+    }
+
+    next()
+  } catch (error) {
+    logger.error('[ADMIN-ROUTES] Admin check failed', { error })
+    next(error)
+  }
+}
+
+/**
+ * GET /api/admin/quality-trends
+ * Get quality trends data for dashboard
+ */
+router.get(
+  '/quality-trends',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const period = req.query.period as string || '30days'
+
+      // Parse period to days
+      let days = 30
+      if (period === '7days') days = 7
+      else if (period === '90days') days = 90
+      else if (period === '1year') days = 365
+
+      // Get summary stats
+      const summaryResult = await pool.query(`
+        SELECT 
+          ROUND(AVG(overall_score)) as overall_avg_quality,
+          COUNT(*) as total_audits,
+          COUNT(DISTINCT d.template_id) as templates_analyzed,
+          COUNT(DISTINCT CASE WHEN overall_score < 70 THEN d.template_id END) as templates_with_issues
+        FROM quality_audits qa
+        JOIN documents d ON qa.document_id = d.id
+        WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+      `, [days])
+
+      // Calculate SLA compliance (% of audits >= 85%)
+      const slaResult = await pool.query(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN overall_score >= 85 THEN 1 END) as compliant
+        FROM quality_audits
+        WHERE audited_at > NOW() - ($1 * INTERVAL '1 day')
+      `, [days])
+
+      const slaCompliance = slaResult.rows[0].total > 0
+        ? Math.round((slaResult.rows[0].compliant / slaResult.rows[0].total) * 100)
+        : 100
+
+      const summary = {
+        overall_avg_quality: summaryResult.rows[0].overall_avg_quality || 0,
+        total_audits: parseInt(summaryResult.rows[0].total_audits) || 0,
+        templates_with_issues: parseInt(summaryResult.rows[0].templates_with_issues) || 0,
+        sla_compliance: slaCompliance
+      }
+
+      // Get quality trends over time
+      const trendsResult = await pool.query(`
+        SELECT 
+          DATE(qa.audited_at) as date,
+          ROUND(AVG(qa.overall_score)) as avg_quality,
+          COUNT(*) as document_count,
+          COUNT(DISTINCT d.template_id) as templates_analyzed
+        FROM quality_audits qa
+        JOIN documents d ON qa.document_id = d.id
+        WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+        GROUP BY DATE(qa.audited_at)
+        ORDER BY date ASC
+      `, [days])
+
+      // Get template performance with trends
+      const templateResult = await pool.query(`
+        WITH recent_quality AS (
+          SELECT 
+            d.template_id,
+            t.name as template_name,
+            t.framework,
+            ROUND(AVG(qa.overall_score)) as avg_quality,
+            COUNT(*) as document_count,
+            ROUND(AVG(CASE 
+              WHEN qa.audited_at > NOW() - INTERVAL '7 days' 
+              THEN qa.overall_score 
+            END)) as recent_quality,
+            ROUND(AVG(CASE 
+              WHEN qa.audited_at BETWEEN NOW() - INTERVAL '14 days' AND NOW() - INTERVAL '7 days'
+              THEN qa.overall_score 
+            END)) as previous_quality
+          FROM quality_audits qa
+          JOIN documents d ON qa.document_id = d.id
+          JOIN templates t ON d.template_id = t.id
+          WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+          GROUP BY d.template_id, t.name, t.framework
+        )
+        SELECT 
+          template_id,
+          template_name,
+          framework,
+          avg_quality,
+          document_count,
+          CASE 
+            WHEN recent_quality > previous_quality + 5 THEN 'up'
+            WHEN recent_quality < previous_quality - 5 THEN 'down'
+            ELSE 'stable'
+          END as trend,
+          ROUND(recent_quality - previous_quality) as trend_percentage
+        FROM recent_quality
+        ORDER BY avg_quality DESC
+      `, [days])
+
+      // Get AI provider performance
+      const providerResult = await pool.query(`
+        SELECT 
+          qa.ai_provider as provider,
+          qa.ai_model as model,
+          ROUND(AVG(qa.overall_score)) as avg_quality,
+          COUNT(*) as document_count,
+          AVG(qa.analysis_cost) as avg_cost
+        FROM quality_audits qa
+        WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+        AND qa.ai_provider IS NOT NULL
+        GROUP BY qa.ai_provider, qa.ai_model
+        ORDER BY avg_quality DESC
+      `, [days])
+
+      res.json({
+        success: true,
+        summary,
+        by_time: trendsResult.rows,
+        by_template: templateResult.rows,
+        by_provider: providerResult.rows
+      })
+
+    } catch (error: unknown) {
+      logger.error('[ADMIN-ROUTES] Failed to get quality trends', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/admin/quality-trends/export
+ * Export quality trends data to CSV
+ */
+router.get(
+  '/quality-trends/export',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const period = req.query.period as string || '30days'
+      const format = req.query.format as string || 'csv'
+
+      // Parse period to days
+      let days = 30
+      if (period === '7days') days = 7
+      else if (period === '90days') days = 90
+      else if (period === '1year') days = 365
+
+      // Get detailed audit data for export
+      const exportResult = await pool.query(`
+        SELECT 
+          qa.id as audit_id,
+          qa.audited_at,
+          d.id as document_id,
+          d.title as document_title,
+          t.id as template_id,
+          t.name as template_name,
+          t.framework,
+          qa.overall_score,
+          qa.overall_grade,
+          qa.completeness_score,
+          qa.consistency_score,
+          qa.professional_quality_score,
+          qa.standards_compliance_score,
+          qa.accuracy_score,
+          qa.context_relevance_score,
+          qa.ai_provider,
+          qa.ai_model,
+          qa.analysis_tokens,
+          qa.analysis_cost
+        FROM quality_audits qa
+        JOIN documents d ON qa.document_id = d.id
+        JOIN templates t ON d.template_id = t.id
+        WHERE qa.audited_at > NOW() - ($1 * INTERVAL '1 day')
+        ORDER BY qa.audited_at DESC
+      `, [days])
+
+      if (format === 'csv') {
+        const fields = [
+          'audit_id',
+          'audited_at',
+          'document_id',
+          'document_title',
+          'template_id',
+          'template_name',
+          'framework',
+          'overall_score',
+          'overall_grade',
+          'completeness_score',
+          'consistency_score',
+          'professional_quality_score',
+          'standards_compliance_score',
+          'accuracy_score',
+          'context_relevance_score',
+          'ai_provider',
+          'ai_model',
+          'analysis_tokens',
+          'analysis_cost'
+        ]
+
+        const json2csvParser = new Parser({ fields })
+        const csv = json2csvParser.parse(exportResult.rows)
+
+        res.setHeader('Content-Type', 'text/csv')
+        res.setHeader('Content-Disposition', `attachment; filename=quality-trends-${period}-${new Date().toISOString().split('T')[0]}.csv`)
+        res.send(csv)
+      } else {
+        res.json({
+          success: true,
+          data: exportResult.rows
+        })
+      }
+
+    } catch (error: unknown) {
+      logger.error('[ADMIN-ROUTES] Failed to export quality trends', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/admin/sla-status
+ * Get SLA compliance status
+ */
+router.get(
+  '/sla-status',
+  authenticateToken,
+  requireAdmin,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // SLA Thresholds
+      const thresholds = {
+        critical: 85,  // Must be above 85%
+        warning: 75    // Warning if below 75%
+      }
+
+      // Get overall compliance (last 30 days)
+      const overallResult = await pool.query(`
+        SELECT 
+          COUNT(*) as total,
+          COUNT(CASE WHEN overall_score >= $1 THEN 1 END) as compliant
+        FROM quality_audits
+        WHERE audited_at > NOW() - INTERVAL '30 days'
+      `, [thresholds.critical])
+
+      const overallCompliance = overallResult.rows[0].total > 0
+        ? Math.round((overallResult.rows[0].compliant / overallResult.rows[0].total) * 100)
+        : 100
+
+      // Get violations by template
+      const violationsResult = await pool.query(`
+        SELECT 
+          t.id as template_id,
+          t.name as template_name,
+          t.framework,
+          ROUND(AVG(qa.overall_score)) as current_quality,
+          COUNT(*) as violation_count,
+          MAX(qa.audited_at) as last_violation
+        FROM quality_audits qa
+        JOIN documents d ON qa.document_id = d.id
+        JOIN templates t ON d.template_id = t.id
+        WHERE qa.audited_at > NOW() - INTERVAL '30 days'
+        AND qa.overall_score < $1
+        GROUP BY t.id, t.name, t.framework
+        ORDER BY violation_count DESC, current_quality ASC
+      `, [thresholds.critical])
+
+      // Get SLA trend (last 7 days)
+      const trendResult = await pool.query(`
+        SELECT 
+          DATE(audited_at) as date,
+          COUNT(*) as total,
+          COUNT(CASE WHEN overall_score >= $1 THEN 1 END) as compliant,
+          ROUND((COUNT(CASE WHEN overall_score >= $1 THEN 1 END)::numeric / COUNT(*)::numeric) * 100) as compliance_rate
+        FROM quality_audits
+        WHERE audited_at > NOW() - INTERVAL '7 days'
+        GROUP BY DATE(audited_at)
+        ORDER BY date ASC
+      `, [thresholds.critical])
+
+      res.json({
+        success: true,
+        overall_compliance: overallCompliance,
+        thresholds,
+        violations: violationsResult.rows,
+        trend: trendResult.rows,
+        status: overallCompliance >= thresholds.critical ? 'compliant' : 
+                overallCompliance >= thresholds.warning ? 'warning' : 'critical'
+      })
+
+    } catch (error: unknown) {
+      logger.error('[ADMIN-ROUTES] Failed to get SLA status', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      next(error)
+    }
+  }
+)
+
+export default router
+
