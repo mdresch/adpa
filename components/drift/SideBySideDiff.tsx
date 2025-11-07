@@ -44,6 +44,33 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
     }
   }, [diffText, filename])
 
+  // Calculate change statistics for better clarity
+  const stats = useMemo(() => {
+    const oldLines = oldContent.split('\n')
+    const newLines = newContent.split('\n')
+    
+    let additions = 0
+    let deletions = 0
+    let modifications = 0
+    
+    // Simple heuristic: count different lines
+    const maxLines = Math.max(oldLines.length, newLines.length)
+    for (let i = 0; i < maxLines; i++) {
+      const oldLine = oldLines[i] || ''
+      const newLine = newLines[i] || ''
+      
+      if (!oldLine && newLine) {
+        additions++
+      } else if (oldLine && !newLine) {
+        deletions++
+      } else if (oldLine !== newLine) {
+        modifications++
+      }
+    }
+    
+    return { additions, deletions, modifications }
+  }, [oldContent, newContent])
+
   const renderFile = (file: any) => {
     const tokens = useMemo(() => {
       try {
@@ -82,6 +109,27 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
 
   return (
     <div className="diff-view-container">
+      {/* Add change summary for clarity */}
+      {(stats.additions > 0 || stats.deletions > 0 || stats.modifications > 0) && (
+        <div className="diff-stats-summary">
+          <span className="diff-stat-label">Changes:</span>
+          {stats.additions > 0 && (
+            <span className="diff-stat-additions">+{stats.additions} lines added</span>
+          )}
+          {stats.deletions > 0 && (
+            <span className="diff-stat-deletions">-{stats.deletions} lines removed</span>
+          )}
+          {stats.modifications > 0 && (
+            <span className="diff-stat-modifications">~{stats.modifications} lines modified</span>
+          )}
+        </div>
+      )}
+      
+      {/* Add headers for split view columns */}
+      <div className="diff-split-header">
+        <div className="diff-split-header-col">Original Content</div>
+        <div className="diff-split-header-col">Resolved Content (After AI)</div>
+      </div>
       {files.map(renderFile)}
     </div>
   )

@@ -6,6 +6,38 @@
   font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 }
 
+/* Change statistics summary */
+.diff-stats-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: hsl(var(--muted) / 0.5);
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.diff-stat-label {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.diff-stat-additions {
+  color: hsl(142 76% 35%);
+  font-weight: 600;
+}
+
+.diff-stat-deletions {
+  color: hsl(0 72% 45%);
+  font-weight: 600;
+}
+
+.diff-stat-modifications {
+  color: hsl(45 93% 35%);
+  font-weight: 600;
+}
+
 .diff-view-container .diff {
   border: 1px solid hsl(var(--border));
   border-radius: 0.5rem;
@@ -112,6 +144,22 @@
 
 /* Dark mode support - Enhanced for clarity */
 @media (prefers-color-scheme: dark) {
+  .diff-stats-summary {
+    background-color: hsl(var(--muted) / 0.3);
+  }
+
+  .diff-stat-additions {
+    color: hsl(142 76% 55%);
+  }
+
+  .diff-stat-deletions {
+    color: hsl(0 72% 60%);
+  }
+
+  .diff-stat-modifications {
+    color: hsl(45 93% 60%);
+  }
+
   .diff-view-container .diff-gutter-insert {
     background-color: hsl(142 45% 15%);
     border-left: 3px solid hsl(142 65% 45%);
