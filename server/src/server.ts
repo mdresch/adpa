@@ -72,9 +72,20 @@ import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
 import baselinesRoutes from "./routes/baselines"
 import driftRoutes from "./routes/drift"
+import emergencyMeetingsRoutes from "./routes/emergency-meetings"
+import baselineUpdatesRoutes from "./routes/baselineUpdates"
+import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
+import documentUploadRoutes from "./routes/documentUploadRoutes"
+import adminRoutes from "./routes/adminRoutes"
+import assessmentExportRoutes from "./routes/assessmentExportRoutes"
+import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
 import projectSimilarityRoutes from "./routes/projectSimilarity"
+import notificationsRoutes from "./routes/notifications"
+import emailNotificationsRoutes from "./routes/emailNotifications"
+import { knowledgeBaseRoutes } from "./modules/knowledgeBase"
+import approvalsRoutes from "./routes/approvals"
 
 const app = express()
 const server = createServer(app)
@@ -157,6 +168,9 @@ app.use(requestIdMiddleware)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
+// Make pool available to all routes
+app.locals.pool = pool
+
 // Analytics tracking middleware (tracks all API requests automatically)
 import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
 // Enable analytics in all environments (database schema verified Oct 2025)
@@ -233,10 +247,22 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
+app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
+app.use("/api/baseline-updates", baselineUpdatesRoutes)
+app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
+app.use("/api/admin", adminRoutes)
+app.use("/api/onboarding", documentUploadRoutes)
+app.use("/api/assessment", assessmentExportRoutes)
+app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
 console.log("✅ All API routes registered")
+app.use("/api/notifications", notificationsRoutes)
+app.use("/api/email-notifications", emailNotificationsRoutes)
+app.use("/api/knowledge-base", knowledgeBaseRoutes)
+app.use("/api/approvals", approvalsRoutes)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, and executive dashboard)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
@@ -429,6 +455,21 @@ async function startServer() {
         typeof queueError === "object" && queueError !== null && "message" in queueError
           ? (queueError as { message?: string }).message
           : queueError
+      )
+    }
+
+    // Initialize document conversion queue worker
+    try {
+      console.log("📄 Initializing document conversion worker...")
+      const { setupDocumentConversionWorker } = require('./jobs/documentConversionJob')
+      setupDocumentConversionWorker(pool)
+      console.log("✅ Document conversion worker initialized (5 concurrent workers)")
+    } catch (workerError) {
+      console.warn(
+        "⚠️  Document conversion worker initialization failed:",
+        typeof workerError === "object" && workerError !== null && "message" in workerError
+          ? (workerError as { message?: string }).message
+          : workerError
       )
     }
 

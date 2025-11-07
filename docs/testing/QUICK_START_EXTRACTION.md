@@ -220,7 +220,7 @@ Could add UI for:
 
 ## Ready to Test!
 
-Your ADPA project has **9 documents** ready for extraction. Running the extraction will populate all 13 entity tables automatically!
+Your ADPA project has **9 documents** ready for extraction. Running the extraction will populate all 14 entity tables automatically!
 
 **Estimated output for ADPA project**:
 - 5-10 stakeholders
