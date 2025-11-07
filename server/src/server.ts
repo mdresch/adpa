@@ -81,6 +81,7 @@ import adminRoutes from "./routes/adminRoutes"
 import assessmentExportRoutes from "./routes/assessmentExportRoutes"
 import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
+import projectSimilarityRoutes from "./routes/projectSimilarity"
 import notificationsRoutes from "./routes/notifications"
 import emailNotificationsRoutes from "./routes/emailNotifications"
 import { knowledgeBaseRoutes } from "./modules/knowledgeBase"
@@ -255,6 +256,8 @@ app.use("/api/onboarding", documentUploadRoutes)
 app.use("/api/assessment", assessmentExportRoutes)
 app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
+app.use("/api/projects", projectSimilarityRoutes)
+console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)
 app.use("/api/knowledge-base", knowledgeBaseRoutes)
