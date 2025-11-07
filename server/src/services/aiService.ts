@@ -69,6 +69,31 @@ class AIService {
     logger.info("AI Service initialized - will fetch AI Gateway key from database")
   }
 
+  private normalizeUsage(usage: any) {
+    const inputTokens =
+      usage?.inputTokens ??
+      usage?.prompt_tokens ??
+      usage?.promptTokens ??
+      0
+    const outputTokens =
+      usage?.outputTokens ??
+      usage?.completion_tokens ??
+      usage?.completionTokens ??
+      0
+    const explicitTotal =
+      usage?.totalTokens ??
+      usage?.total_tokens ??
+      usage?.totalTokens ??
+      0
+    const totalTokens = explicitTotal || inputTokens + outputTokens
+
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens,
+    }
+  }
+
   async initializeProviders() {
     try {
       // With AI Gateway, we don't need to initialize individual provider clients
@@ -407,20 +432,22 @@ class AIService {
             maxOutputTokens: request.max_tokens
           })
           
-          logger.info(`[AI] ✓ DeepSeek/${modelName} - ${deepseekResult.usage?.total_tokens || 0} tokens - ${Date.now() - startTime}ms`)
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(deepseekResult.usage)
+          
+          logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
           
           // Update usage stats
           await this.updateUsageStats(request.provider, {
-            total_tokens: deepseekResult.usage?.total_tokens || 0,
+            total_tokens: totalTokens,
           })
           
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: deepseekResult.usage?.prompt_tokens || 0,
-              completion_tokens: deepseekResult.usage?.completion_tokens || 0,
-              total_tokens: deepseekResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
@@ -429,9 +456,9 @@ class AIService {
             provider: request.provider,
             model: modelName,
             usage: {
-              prompt_tokens: deepseekResult.usage?.prompt_tokens || 0,
-              completion_tokens: deepseekResult.usage?.completion_tokens || 0,
-              total_tokens: deepseekResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             },
           }
         }
@@ -521,20 +548,22 @@ class AIService {
             maxOutputTokens: request.max_tokens
           })
           
-          logger.info(`[AI] ✓ xAI/${modelName} - ${xaiResult.usage?.total_tokens || 0} tokens - ${Date.now() - startTime}ms`)
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(xaiResult.usage)
+          
+          logger.info(`[AI] ✓ xAI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
           
           // Update usage stats
           await this.updateUsageStats(request.provider, {
-            total_tokens: xaiResult.usage?.total_tokens || 0,
+            total_tokens: totalTokens,
           })
           
           // Track detailed AI usage for analytics
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: xaiResult.usage?.prompt_tokens || 0,
-              completion_tokens: xaiResult.usage?.completion_tokens || 0,
-              total_tokens: xaiResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
@@ -543,9 +572,9 @@ class AIService {
             provider: request.provider,
             model: modelName,
             usage: {
-              prompt_tokens: xaiResult.usage?.prompt_tokens || 0,
-              completion_tokens: xaiResult.usage?.completion_tokens || 0,
-              total_tokens: xaiResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             },
           }
         }
@@ -770,31 +799,33 @@ class AIService {
           
           logger.debug('[AI-SERVICE] Mistral AI successful:', { contentLength: mistralResult.text.length })
           
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(mistralResult.usage)
+          
           // Update usage stats
           await this.updateUsageStats(request.provider, {
-            total_tokens: mistralResult.usage?.total_tokens || 0,
+            total_tokens: totalTokens,
           })
           
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: mistralResult.usage?.prompt_tokens || 0,
-              completion_tokens: mistralResult.usage?.completion_tokens || 0,
-              total_tokens: mistralResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
-          logger.info(`[AI] ✓ Mistral AI/${modelName} - ${mistralResult.usage?.total_tokens || 0} tokens - ${Date.now() - startTime}ms`)
+          logger.info(`[AI] ✓ Mistral AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: mistralResult.text,
             provider: request.provider,
             model: modelName,
             usage: {
-              prompt_tokens: mistralResult.usage?.prompt_tokens || 0,
-              completion_tokens: mistralResult.usage?.completion_tokens || 0,
-              total_tokens: mistralResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             },
           }
         }
@@ -834,31 +865,33 @@ class AIService {
           
           logger.debug('[AI-SERVICE] DeepSeek successful:', { contentLength: deepseekResult.text.length })
           
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(deepseekResult.usage)
+          
           // Update usage stats
           await this.updateUsageStats(request.provider, {
-            total_tokens: deepseekResult.usage?.total_tokens || 0,
+            total_tokens: totalTokens,
           })
           
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: deepseekResult.usage?.prompt_tokens || 0,
-              completion_tokens: deepseekResult.usage?.completion_tokens || 0,
-              total_tokens: deepseekResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
-          logger.info(`[AI] ✓ DeepSeek/${modelName} - ${deepseekResult.usage?.total_tokens || 0} tokens - ${Date.now() - startTime}ms`)
+          logger.info(`[AI] ✓ DeepSeek/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: deepseekResult.text,
             provider: request.provider,
             model: modelName,
             usage: {
-              prompt_tokens: deepseekResult.usage?.prompt_tokens || 0,
-              completion_tokens: deepseekResult.usage?.completion_tokens || 0,
-              total_tokens: deepseekResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             },
           }
         }
@@ -898,31 +931,33 @@ class AIService {
           
           logger.debug('[AI-SERVICE] Moonshot AI successful:', { contentLength: moonshotResult.text.length })
           
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(moonshotResult.usage)
+          
           // Update usage stats
           await this.updateUsageStats(request.provider, {
-            total_tokens: moonshotResult.usage?.total_tokens || 0,
+            total_tokens: totalTokens,
           })
           
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
             this.trackAIUsageAsync(request.provider, modelName, {
-              prompt_tokens: moonshotResult.usage?.prompt_tokens || 0,
-              completion_tokens: moonshotResult.usage?.completion_tokens || 0,
-              total_tokens: moonshotResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
-          logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${moonshotResult.usage?.total_tokens || 0} tokens - ${Date.now() - startTime}ms`)
+          logger.info(`[AI] ✓ Moonshot AI/${modelName} - ${totalTokens} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: moonshotResult.text,
             provider: request.provider,
             model: modelName,
             usage: {
-              prompt_tokens: moonshotResult.usage?.prompt_tokens || 0,
-              completion_tokens: moonshotResult.usage?.completion_tokens || 0,
-              total_tokens: moonshotResult.usage?.total_tokens || 0,
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
             },
           }
         }
@@ -968,7 +1003,7 @@ class AIService {
               throw new Error(`Ollama API error (${ollamaResponse.status}): ${errorText}`)
             }
             
-            const ollamaData = await ollamaResponse.json()
+            const ollamaData = await ollamaResponse.json() as any
             const generatedText = ollamaData.message?.content || ollamaData.response || ''
             
             logger.debug('[AI-SERVICE] Ollama successful:', { 
