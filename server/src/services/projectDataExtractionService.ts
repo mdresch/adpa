@@ -2385,12 +2385,29 @@ Requirements:
       }
       const mappedStatus = statusMap[(d.status || 'not_started').toLowerCase()] || 'not_started'
       
+      // Validate and parse due_date
+      let parsedDueDate = null
+      if (d.due_date) {
+        // Check if it's a valid date format
+        if (isValidDate(d.due_date)) {
+          parsedDueDate = d.due_date
+        } else {
+          // Try quarter date conversion (YYYY-Q1, etc.)
+          const quarterDate = convertQuarterDate(d.due_date)
+          if (quarterDate) {
+            parsedDueDate = quarterDate
+          } else {
+            logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid due_date: ${d.due_date}, setting to null`)
+          }
+        }
+      }
+
       values.push(
         projectId,
         d.name,
         d.description,
         d.type,
-        d.due_date || null,
+        parsedDueDate,
         mappedStatus,  // Use mapped status value
         d.owner || null,
         userId
