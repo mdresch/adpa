@@ -279,9 +279,19 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
   try {
     const { projectId } = req.params
 
-    // Check if user has access to project
+    // Check if user has access to project (including onboarding/guest-created projects)
+    // Allow access if: owner, creator, team member, OR project created by guest
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+      `SELECT p.id, p.created_by, u.email as creator_email
+       FROM projects p
+       LEFT JOIN users u ON p.created_by = u.id
+       WHERE p.id = $1 
+       AND (
+         p.owner_id = $2 
+         OR p.created_by = $2 
+         OR p.team_members ? $2::text
+         OR u.email = 'onboarding-guest@system.local'
+       )`,
       [projectId, req.user?.id]
     )
 
@@ -397,9 +407,19 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const { projectId } = req.params
     const { page = 1, limit = 10, status, search } = req.query
 
-    // Check if user has access to project
+    // Check if user has access to project (including onboarding/guest-created projects)
+    // Allow access if: owner, creator, team member, OR project created by guest (for admins/users to view onboarding assessments)
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+      `SELECT p.id, p.created_by, u.email as creator_email, u.role as creator_role
+       FROM projects p
+       LEFT JOIN users u ON p.created_by = u.id
+       WHERE p.id = $1 
+       AND (
+         p.owner_id = $2 
+         OR p.created_by = $2 
+         OR p.team_members ? $2::text
+         OR u.email = 'onboarding-guest@system.local'
+       )`,
       [projectId, req.user?.id]
     )
 
@@ -1245,7 +1265,7 @@ router.put("/:id",
                 baselineId: baselineResult.rows[0].id,
                 driftPoints: driftResult.driftPoints,
                 severity: driftResult.severity,
-                triggeredBy: 'document_update'
+                triggeredBy: 'manual' // Manual user edit
               })
               
               // Add drift record ID to response

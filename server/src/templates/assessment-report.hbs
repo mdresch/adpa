@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Portfolio Maturity Assessment Report</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #1F2937;
+    }
+    
+    .header {
+      background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+      color: white;
+      padding: 40px;
+      text-align: center;
+      margin-bottom: 30px;
+    }
+    
+    .header h1 {
+      font-size: 28pt;
+      margin-bottom: 10px;
+    }
+    
+    .header .subtitle {
+      font-size: 14pt;
+      opacity: 0.9;
+    }
+    
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 20px;
+    }
+    
+    .section {
+      margin-bottom: 40px;
+      page-break-inside: avoid;
+    }
+    
+    .section-title {
+      font-size: 18pt;
+      color: #1F2937;
+      border-bottom: 3px solid #3B82F6;
+      padding-bottom: 10px;
+      margin-bottom: 20px;
+    }
+    
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    
+    .summary-card {
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+    }
+    
+    .summary-card .value {
+      font-size: 32pt;
+      font-weight: bold;
+      color: #3B82F6;
+      margin-bottom: 5px;
+    }
+    
+    .summary-card .label {
+      font-size: 10pt;
+      color: #6B7280;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    
+    .maturity-level {
+      background: #F9FAFB;
+      border-left: 4px solid {{maturityColor overallMaturityLevel}};
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    
+    .maturity-level .level {
+      font-size: 48pt;
+      font-weight: bold;
+      color: {{maturityColor overallMaturityLevel}};
+      display: inline-block;
+      margin-right: 20px;
+    }
+    
+    .maturity-level .description {
+      display: inline-block;
+      vertical-align: middle;
+      max-width: 700px;
+    }
+    
+    .progress-bar {
+      width: 100%;
+      height: 30px;
+      background: #E5E7EB;
+      border-radius: 15px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3B82F6, #8B5CF6);
+      width: {{progressPercentage}}%;
+      transition: width 0.3s ease;
+    }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #E5E7EB;
+    }
+    
+    th {
+      background: #F9FAFB;
+      font-weight: 600;
+      color: #374151;
+      text-transform: uppercase;
+      font-size: 9pt;
+      letter-spacing: 0.5px;
+    }
+    
+    .priority-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 9pt;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: white;
+    }
+    
+    .priority-critical {
+      background: #DC2626;
+    }
+    
+    .priority-high {
+      background: #EA580C;
+    }
+    
+    .priority-medium {
+      background: #F59E0B;
+    }
+    
+    .priority-low {
+      background: #10B981;
+    }
+    
+    .recommendation-card {
+      background: white;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 15px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    
+    .recommendation-card h4 {
+      color: #1F2937;
+      margin-bottom: 10px;
+      font-size: 12pt;
+    }
+    
+    .recommendation-card p {
+      color: #6B7280;
+      font-size: 10pt;
+      line-height: 1.5;
+    }
+    
+    .benchmark-comparison {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-top: 20px;
+    }
+    
+    .benchmark-item {
+      text-align: center;
+      padding: 15px;
+      background: #F9FAFB;
+      border-radius: 8px;
+    }
+    
+    .benchmark-item .score {
+      font-size: 32pt;
+      font-weight: bold;
+      color: #3B82F6;
+    }
+    
+    .benchmark-item .label {
+      font-size: 10pt;
+      color: #6B7280;
+      margin-top: 5px;
+    }
+    
+    .footer {
+      margin-top: 60px;
+      padding-top: 20px;
+      border-top: 1px solid #E5E7EB;
+      text-align: center;
+      color: #6B7280;
+      font-size: 9pt;
+    }
+    
+    @media print {
+      .page-break {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>Portfolio Maturity Assessment</h1>
+    <div class="subtitle">{{projectName}} • {{organizationName}}</div>
+    <div class="subtitle">{{assessmentDateFormatted}}</div>
+  </div>
+
+  <div class="container">
+    <!-- Executive Summary -->
+    <div class="section">
+      <h2 class="section-title">Executive Summary</h2>
+      
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="value">{{overallMaturityLevel}}</div>
+          <div class="label">Maturity Level</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">{{formatNumber averageQualityScore}}</div>
+          <div class="label">Avg Quality Score</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">{{totalDocuments}}</div>
+          <div class="label">Documents Assessed</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">{{gapStats.total}}</div>
+          <div class="label">Gaps Identified</div>
+        </div>
+      </div>
+
+      <div class="maturity-level">
+        <span class="level">Level {{overallMaturityLevel}}</span>
+        <div class="description">
+          <strong>{{overallMaturityLabel}}</strong>
+          <p>{{maturityDescription}}</p>
+        </div>
+        <div class="progress-bar">
+          <div class="progress-fill"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Document Breakdown -->
+    <div class="section">
+      <h2 class="section-title">Document Assessment Breakdown</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Document Type</th>
+            <th>Count</th>
+            <th>Average Score</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each documentsByType}}
+          <tr>
+            <td>{{this.type}}</td>
+            <td>{{this.count}}</td>
+            <td>{{formatNumber this.avgScore}}</td>
+            <td>{{this.status}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Gap Analysis -->
+    <div class="section page-break">
+      <h2 class="section-title">Gap Analysis</h2>
+      <p style="margin-bottom: 20px; color: #6B7280;">
+        Identified {{gapStats.total}} gaps requiring attention: 
+        {{gapStats.critical}} critical, {{gapStats.high}} high, 
+        {{gapStats.medium}} medium, {{gapStats.low}} low priority.
+      </p>
+      
+      <table>
+        <thead>
+          <tr>
+            <th>Priority</th>
+            <th>Document Type</th>
+            <th>Current</th>
+            <th>Target</th>
+            <th>Description</th>
+            <th>Effort</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#each gaps}}
+          <tr>
+            <td>
+              <span class="priority-badge priority-{{this.priority}}">
+                {{this.priority}}
+              </span>
+            </td>
+            <td>{{this.documentType}}</td>
+            <td>Level {{this.currentLevel}}</td>
+            <td>Level {{this.targetLevel}}</td>
+            <td>{{this.description}}</td>
+            <td>{{this.estimatedEffort}}</td>
+          </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Recommendations -->
+    {{#if options.includeRecommendations}}
+    <div class="section">
+      <h2 class="section-title">Recommendations</h2>
+      {{#each recommendations}}
+      <div class="recommendation-card">
+        <h4>{{this.title}}</h4>
+        <p><strong>Category:</strong> {{this.category}} | <strong>Impact:</strong> {{this.impact}} | <strong>Effort:</strong> {{this.effort}}</p>
+        <p>{{this.description}}</p>
+      </div>
+      {{/each}}
+    </div>
+    {{/if}}
+
+    <!-- Industry Benchmarks -->
+    {{#if options.includeBenchmarks}}
+    <div class="section page-break">
+      <h2 class="section-title">Industry Benchmarks</h2>
+      <p style="margin-bottom: 20px; color: #6B7280;">
+        Your organization scores in the {{benchmarks.percentile}}th percentile compared to industry peers.
+      </p>
+      
+      <div class="benchmark-comparison">
+        <div class="benchmark-item">
+          <div class="score">{{formatNumber benchmarks.yourScore}}</div>
+          <div class="label">Your Score</div>
+        </div>
+        <div class="benchmark-item">
+          <div class="score">{{formatNumber benchmarks.industryAverage}}</div>
+          <div class="label">Industry Average</div>
+        </div>
+        <div class="benchmark-item">
+          <div class="score">{{formatNumber benchmarks.topPerformers}}</div>
+          <div class="label">Top Performers</div>
+        </div>
+      </div>
+    </div>
+    {{/if}}
+
+    <!-- ROI Metrics -->
+    <div class="section">
+      <h2 class="section-title">Return on Investment</h2>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="value">{{formatCurrency roiMetrics.savings}}</div>
+          <div class="label">Potential Savings</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">{{formatPercent roiMetrics.roi}}</div>
+          <div class="label">ROI</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">{{roiMetrics.paybackPeriod}}</div>
+          <div class="label">Payback Period</div>
+        </div>
+        <div class="summary-card">
+          <div class="value">{{formatCurrency roiMetrics.improvedCost}}</div>
+          <div class="label">Target Cost</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>Generated by ADPA Assessment Platform v{{reportVersion}}</p>
+      <p>Report ID: {{assessmentId}} | Generated: {{generatedAt}}</p>
+      <p>© 2025 ADPA. All rights reserved.</p>
+    </div>
+  </div>
+</body>
+</html>
+

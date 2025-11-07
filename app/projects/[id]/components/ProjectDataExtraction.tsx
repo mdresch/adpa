@@ -27,6 +27,7 @@ interface EntityCounts {
   bestPractices: number
   phases: number
   resources: number
+  technologies: number
   qualityStandards: number
   deliverables: number
   scopeItems: number
@@ -404,6 +405,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     { key: 'bestPractices', label: 'Best Practices', icon: Lightbulb, color: 'text-yellow-500' },
     { key: 'phases', label: 'Phases', icon: Calendar, color: 'text-indigo-500' },
     { key: 'resources', label: 'Resources', icon: DollarSign, color: 'text-emerald-500' },
+    { key: 'technologies', label: 'Technologies', icon: Database, color: 'text-gray-500' },
     { key: 'qualityStandards', label: 'Quality Standards', icon: CheckCircle, color: 'text-cyan-500' },
     { key: 'deliverables', label: 'Deliverables', icon: Archive, color: 'text-pink-500' },
     { key: 'scopeItems', label: 'Scope Items', icon: ListOrdered, color: 'text-violet-500' },

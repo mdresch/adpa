@@ -76,6 +76,10 @@ import emergencyMeetingsRoutes from "./routes/emergency-meetings"
 import baselineUpdatesRoutes from "./routes/baselineUpdates"
 import escalationRoutes from "./routes/escalation"
 import qualityAuditRoutes from "./routes/qualityAuditRoutes"
+import documentUploadRoutes from "./routes/documentUploadRoutes"
+import adminRoutes from "./routes/adminRoutes"
+import assessmentExportRoutes from "./routes/assessmentExportRoutes"
+import portfolioAssessmentRoutes from "./routes/portfolioAssessmentRoutes"
 import executiveDashboardRoutes from "./routes/executive-dashboard"
 import emailNotificationsRoutes from "./routes/emailNotifications"
 
@@ -160,6 +164,9 @@ app.use(requestIdMiddleware)
 app.use(express.json({ limit: "10mb" }))
 app.use(express.urlencoded({ extended: true, limit: "10mb" }))
 
+// Make pool available to all routes
+app.locals.pool = pool
+
 // Analytics tracking middleware (tracks all API requests automatically)
 import { analyticsMiddleware } from "./middleware/analyticsMiddleware"
 // Enable analytics in all environments (database schema verified Oct 2025)
@@ -240,9 +247,13 @@ app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)
 app.use("/api/escalation", escalationRoutes)
 app.use("/api/quality-audits", qualityAuditRoutes)
+app.use("/api/admin", adminRoutes)
+app.use("/api/onboarding", documentUploadRoutes)
+app.use("/api/assessment", assessmentExportRoutes)
+app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)
-console.log("✅ All API routes registered")
+console.log("✅ All API routes registered (including assessment, executive dashboard, and email notifications)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
@@ -435,6 +446,21 @@ async function startServer() {
         typeof queueError === "object" && queueError !== null && "message" in queueError
           ? (queueError as { message?: string }).message
           : queueError
+      )
+    }
+
+    // Initialize document conversion queue worker
+    try {
+      console.log("📄 Initializing document conversion worker...")
+      const { setupDocumentConversionWorker } = require('./jobs/documentConversionJob')
+      setupDocumentConversionWorker(pool)
+      console.log("✅ Document conversion worker initialized (5 concurrent workers)")
+    } catch (workerError) {
+      console.warn(
+        "⚠️  Document conversion worker initialization failed:",
+        typeof workerError === "object" && workerError !== null && "message" in workerError
+          ? (workerError as { message?: string }).message
+          : workerError
       )
     }
 

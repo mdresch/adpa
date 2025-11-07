@@ -5,6 +5,7 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 import { Pool } from "pg"
+import type { PoolConfig } from "pg"
 import { logger } from "../utils/logger"
 import dns from "dns"
 import { promisify } from "util"
@@ -24,20 +25,41 @@ const connectionMethods = [
   { host: "172.19.0.3", description: "PostgreSQL IP address (Docker)" }
 ]
 
+const isTrustedPoolingProvider = (target?: string) =>
+  !!target && (target.includes("supabase.co") || target.includes("azure"))
+
+const shouldRejectUnauthorized = () => {
+  // Default to strict TLS unless explicitly disabled for custom databases
+  return process.env.ADPA_ALLOW_INSECURE_TLS === "true" ? false : true
+}
+
+export function buildSslConfig(target?: string) {
+  if (isTrustedPoolingProvider(target)) {
+    // Supabase/Azure with PgBouncer: certificate chain cannot be validated in dev environments
+    return { rejectUnauthorized: false }
+  }
+
+  if (process.env.DB_SSL === "true") {
+    return { rejectUnauthorized: shouldRejectUnauthorized() }
+  }
+
+  return false
+}
+
 const createPool = (host: string) => {
   // If DATABASE_URL is provided, use it directly
   if (databaseUrl && host === connectionMethods[0].host) {
     console.log('Using DATABASE_URL connection string')
     return new Pool({
       connectionString: databaseUrl,
-      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-        ? { rejectUnauthorized: false }
-        : false,
+      // SSL configuration for Supabase/Azure:
+      // - Supabase uses PgBouncer (connection pooler) which causes cert chain issues
+      // - Disable cert validation for Supabase (trusted provider)
+      // - For custom databases, enable validation unless explicitly disabled
+      ssl: buildSslConfig(databaseUrl),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
-      // Force IPv4 to prevent IPv6 connection issues on Railway
-      family: 4 as any,
     })
   }
   
@@ -52,13 +74,19 @@ const createPool = (host: string) => {
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
     // SSL configuration for Supabase and other cloud providers
-    ssl: host.includes('supabase.co') || host.includes('azure') || process.env.DB_SSL === "true" 
-      ? { rejectUnauthorized: false } 
-      : false,
+    // Supabase/Azure: disable validation (PgBouncer connection pooling causes cert issues)
+    ssl: buildSslConfig(host),
   })
 }
 
 let pool: Pool | null = null // Initialize lazily to prevent hanging on module load
+
+export function getDatabasePool(): Pool {
+  if (!pool) {
+    throw new Error("Database pool not initialized. Call connectDatabase() before accessing the pool.")
+  }
+  return pool
+}
 
 export async function connectDatabase() {
   const maxRetriesPerMethod = 1 // Reduced retries for Railway timeout
@@ -70,10 +98,8 @@ export async function connectDatabase() {
     
     // Parse connection string to extract components
     // This allows us to force IPv4 by explicitly setting the family option
-    let poolConfig: any = {
-      ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-        ? { rejectUnauthorized: false }
-        : false,
+    let poolConfig: PoolConfig & { family?: number } = {
+      ssl: buildSslConfig(databaseUrl),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000,
@@ -114,22 +140,16 @@ export async function connectDatabase() {
           database: dbUrl.pathname.slice(1).split('?')[0],
           user: dbUrl.username,
           password: dbUrl.password,
-          ssl: databaseUrl.includes('supabase.co') || databaseUrl.includes('azure') || process.env.DB_SSL === "true"
-            ? { rejectUnauthorized: false }
-            : false,
+          ssl: buildSslConfig(databaseUrl),
           max: 20,
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
-          // Force IPv4 even in fallback to prevent IPv6 connection attempts on Railway
-          family: 4 as any,
         }
         console.log(`🔧 Using parsed connection with SSL and IPv4 forcing (rejectUnauthorized: false) to: ${dbUrl.hostname}`)
       } catch (parseError) {
         // Last resort: use connectionString as-is with IPv4 forcing
         console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString with IPv4 forcing')
         poolConfig.connectionString = databaseUrl
-        // Force IPv4 even in last resort fallback
-        poolConfig.family = 4 as any
       }
     }
     
