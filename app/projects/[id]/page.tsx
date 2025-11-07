@@ -51,6 +51,7 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   MoreHorizontal,
   Eye,
   Loader2,
@@ -2045,6 +2046,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Link href={`/projects/${projectId}/documents`}>
                     <FileText className="h-4 w-4 mr-2" />
                     Document Library
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href={`/projects/${projectId}/drift`}>
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Drift Management
                   </Link>
                 </Button>
                 <Dialog open={createDialogOpen} onOpenChange={(open: boolean) => {

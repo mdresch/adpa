@@ -113,7 +113,7 @@ router.get(
           COUNT(*) FILTER (WHERE drift_severity = 'high') as high_count,
           COUNT(*) FILTER (WHERE drift_severity = 'medium') as medium_count,
           COUNT(*) FILTER (WHERE drift_severity = 'low') as low_count,
-          COUNT(*) FILTER (WHERE status = 'detected') as unaddressed_count,
+    COUNT(*) FILTER (WHERE bdd.status = 'detected') as unaddressed_count,
           COUNT(*) FILTER (WHERE detection_date >= NOW() - INTERVAL '24 hours') as last_24h_count,
           COUNT(*) FILTER (WHERE detection_date >= NOW() - INTERVAL '7 days') as last_7d_count
         FROM baseline_drift_detection bdd
@@ -305,7 +305,7 @@ router.get(
           COUNT(*) as total_drift,
           COUNT(*) FILTER (WHERE drift_severity = 'critical') as critical_drift,
           COUNT(*) FILTER (WHERE drift_severity = 'high') as high_drift,
-          COUNT(*) FILTER (WHERE status = 'detected') as unaddressed_drift,
+          COUNT(*) FILTER (WHERE bdd.status = 'detected') as unaddressed_drift,
           COUNT(*) FILTER (WHERE detection_type = 'cost_drift') as budget_overruns,
           COUNT(*) FILTER (WHERE detection_type = 'scope_drift') as scope_creep,
           COUNT(*) FILTER (WHERE detection_type = 'timeline_drift') as schedule_delays
