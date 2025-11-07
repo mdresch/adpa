@@ -3,11 +3,11 @@
  * Provides a single interface for all AI providers using the AI SDK
  */
 
-// import { generateText, generateObject } from 'ai' // Temporarily disabled
-// import { openai } from '@ai-sdk/openai' // Temporarily disabled
-// import { google } from '@ai-sdk/google' // Temporarily disabled
-// import { mistral } from '@ai-sdk/mistral' // Removed due to Zod import issues
-// import { azure } from '@ai-sdk/azure' // Temporarily disabled
+import { generateText, generateObject } from 'ai'
+import { openai } from '@ai-sdk/openai'
+// import { google } from '@ai-sdk/google' // Package not installed
+import { mistral } from '@ai-sdk/mistral'
+// import { azure } from '@ai-sdk/azure' // Package not installed
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 
@@ -177,7 +177,7 @@ class UnifiedAIService {
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
         })),
-        maxTokens: request.max_tokens || 1000,
+        maxOutputTokens: request.max_tokens || 1000,
         temperature: request.temperature || 0.7,
       })
 
@@ -188,8 +188,8 @@ class UnifiedAIService {
         provider: provider.name,
         model: model,
         usage: response.usage ? {
-          prompt_tokens: response.usage.promptTokens || 0,
-          completion_tokens: response.usage.completionTokens || 0,
+          prompt_tokens: response.usage.prompt_tokens || 0,
+          completion_tokens: response.usage.completion_tokens || 0,
           total_tokens: response.usage.totalTokens || 0,
         } : undefined,
         metadata: {
@@ -288,7 +288,7 @@ class UnifiedAIService {
       await generateText({
         model: client(defaultModel),
         messages: [{ role: 'user', content: 'Hello' }],
-        maxTokens: 1,
+        maxOutputTokens: 1,
       })
     } catch (error: any) {
       throw new Error(`API key validation failed: ${error.message}`)
@@ -354,7 +354,7 @@ class UnifiedAIService {
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
         })),
-        maxTokens: request.max_tokens || 1000,
+        maxOutputTokens: request.max_tokens || 1000,
         temperature: request.temperature || 0.7,
       })
 

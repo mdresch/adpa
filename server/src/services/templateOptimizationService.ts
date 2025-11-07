@@ -42,6 +42,8 @@ interface TemplateOptimizationSuggestion {
     content_changes: string[]
     key_improvements: string[]
   }
+  tokens?: number
+  cost?: number
 }
 
 export class TemplateOptimizationService {
