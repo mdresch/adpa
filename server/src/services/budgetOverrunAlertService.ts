@@ -349,9 +349,11 @@ This is an automated alert from the ADPA Drift Detection System.
     escalatedTo: string[],
     createdBy: string
   ): Promise<any> {
-    // Get user IDs for escalation targets (simplified - in production, query user roles)
+    // Get user IDs for escalation targets
+    // In production, query the users table to get actual email addresses based on roles
+    const emailDomain = process.env.COMPANY_EMAIL_DOMAIN || 'company.com'
     const attendees = escalatedTo.map(role => ({
-      email: `${role.toLowerCase().replace('_', '.')}@company.com`, // Placeholder
+      email: `${role.toLowerCase().replace('_', '.')}@${emailDomain}`,
       name: role.replace('_', ' '),
       role: role.includes('CEO') || role.includes('CFO') || role.includes('Sponsor') 
         ? 'decision_maker' as const
@@ -392,8 +394,12 @@ This is an automated alert from the ADPA Drift Detection System.
       : ['email', 'slack', 'dashboard']
     
     // Send to each escalation target
+    const emailDomain = process.env.COMPANY_EMAIL_DOMAIN || 'company.com'
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000'
+    
     for (const role of escalatedTo) {
-      const email = `${role.toLowerCase().replace('_', '.')}@company.com` // Placeholder
+      const email = `${role.toLowerCase().replace('_', '.')}@${emailDomain}`
+      const alertUrl = `${frontendUrl}/projects/${detection.projectId}/alerts/${alert.id}`
       
       const emailBody = `
 ${alert.title}
@@ -418,7 +424,7 @@ REQUIRED ACTION:
 3. Review corrective options
 4. Approve the auto-generated Change Request
 
-View in ADPA: [Link to Alert]
+View in ADPA: ${alertUrl}
 
 This is an automated alert from ADPA Baseline & Drift Detection System.
       `.trim()

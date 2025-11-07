@@ -53,7 +53,14 @@ router.post(
   ),
   async (req, res) => {
     try {
-      const userId = req.user?.id!
+      if (!req.user?.id) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        })
+      }
+      
+      const userId = req.user.id
       
       logger.info('[MEETINGS-API] Scheduling meeting', {
         projectId: req.body.projectId,
@@ -195,7 +202,14 @@ router.patch(
   ),
   async (req, res) => {
     try {
-      const userId = req.user?.id!
+      if (!req.user?.id) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        })
+      }
+      
+      const userId = req.user.id
       
       await meetingSchedulerService.cancelMeeting(
         req.params.id,
@@ -242,7 +256,14 @@ router.post(
   ),
   async (req, res) => {
     try {
-      const userId = req.user?.id!
+      if (!req.user?.id) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        })
+      }
+      
+      const userId = req.user.id
       
       const detection = {
         ...req.body,
@@ -351,7 +372,14 @@ router.patch(
   authenticateToken,
   async (req, res) => {
     try {
-      const userId = req.user?.id!
+      if (!req.user?.id) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        })
+      }
+      
+      const userId = req.user.id
       
       await budgetOverrunAlertService.acknowledgeAlert(
         req.params.alertId,
@@ -387,7 +415,14 @@ router.patch(
   ),
   async (req, res) => {
     try {
-      const userId = req.user?.id!
+      if (!req.user?.id) {
+        return res.status(401).json({
+          success: false,
+          error: 'User not authenticated'
+        })
+      }
+      
+      const userId = req.user.id
       
       await budgetOverrunAlertService.resolveAlert(
         req.params.alertId,

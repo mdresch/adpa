@@ -7,6 +7,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { PoolClient } from 'pg'
 
 export interface MeetingScheduleRequest {
   projectId: string
@@ -275,9 +276,9 @@ export class MeetingSchedulerService {
    * Queue notifications for meeting attendees
    */
   private async queueMeetingNotifications(
-    client: any,
+    client: PoolClient,
     meetingId: string,
-    attendees: any[],
+    attendees: Array<{ user_id?: string; email?: string; name?: string }>,
     severity: string
   ): Promise<void> {
     for (const attendee of attendees) {
