@@ -137,10 +137,10 @@ router.post("/generate",
 
       log.info(`Generating document for project ${projectId}`)
 
-      // Check user has access to project
+      // Check user has access to project (including onboarding/guest-created projects)
       const projectCheck = await pool.query(
         `SELECT id, name FROM projects 
-         WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)`,
+         WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)`,
         [projectId, req.user?.id]
       )
 

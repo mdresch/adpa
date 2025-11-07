@@ -11,6 +11,8 @@ import { aiService } from './aiService'
 import { DriftPoint } from './driftDetectionService'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
+import { emergencyMeetingService } from './emergencyMeetingService'
+import { approvalWorkflowService } from './approvalWorkflowService'
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -24,6 +26,7 @@ export interface ResolutionResult {
 
 export interface ApplyResolutionResult {
   changeRequestId?: string
+  approvalRequestId?: string
 }
 
 export interface DriftApplyResponse {
@@ -106,6 +109,8 @@ export class DriftResolutionService {
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiResponse = await aiService.generate({
         prompt,
+        provider: 'openai',
+        model: 'gpt-4-turbo-preview',
         temperature: 0.2, // Low temp for consistent, accurate resolution
         max_tokens: 8000
       })
@@ -203,6 +208,9 @@ export class DriftResolutionService {
 
   /**
    * Build AI prompt for drift resolution
+   * Handles all 14 entity types: scope_items, deliverables, requirements, milestones,
+   * phases, activities, resources, technologies, stakeholders, constraints, risks,
+   * success_criteria, quality_standards, best_practices
    */
   private buildResolutionPrompt(
     document: Document,
@@ -216,7 +224,14 @@ export class DriftResolutionService {
 
 **Document**: ${document.title}
 **Approved Baseline**: Version ${baseline.version}
-**Drift Detected**: ${driftPoints.length} drift points identified
+**Drift Detected**: ${driftPoints.length} drift points identified across entity types
+
+## ENTITY TYPES TRACKED
+The system tracks 14 entity types:
+- **Scope**: scope_items, deliverables, requirements, constraints
+- **Timeline**: milestones, phases, activities
+- **Resources**: resources, technologies, stakeholders
+- **Quality & Risk**: risks, success_criteria, quality_standards, best_practices
 
 ## BASELINE ENTITIES (APPROVED - AUTHORITATIVE)
 
@@ -247,13 +262,14 @@ ${i + 1}. ${drift.driftType.toUpperCase()}: ${drift.description}
 Generate a REVISED version of the document that resolves the drift:
 
 1. **For REMOVED baseline entities**: Re-add them to the document in appropriate sections
+   - Applies to: scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices
 2. **For ADDED non-baseline entities**: 
    - Conservative: Remove them
    - Balanced: Keep if minor/helpful, remove if major/unauthorized
    - Permissive: Keep all, just note the addition
 3. **For MODIFIED entities**: Restore baseline values OR clearly mark as change request
-4. **For date changes**: Revert to baseline dates OR flag for approval
-5. **For budget changes >10%**: FLAG as requiring formal approval
+4. **For critical changes** (milestones, deliverables, requirements): Revert to baseline OR flag for approval
+5. **For budget/resource changes >10%**: FLAG as requiring formal approval
 
 **Preserve**:
 - Document structure and formatting (Markdown)
@@ -263,7 +279,7 @@ Generate a REVISED version of the document that resolves the drift:
 
 **Output**: Complete revised document in Markdown format that aligns with the approved baseline.
 
-**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions), include a comment: 
+**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions, high-priority requirements/deliverables), include a comment: 
 <!-- REQUIRES APPROVAL: [reason] -->
 
 **IMPORTANT**: Return ONLY the revised document content, no explanations or metadata.`
@@ -434,6 +450,7 @@ Generate a REVISED version of the document that resolves the drift:
 
       // 4. ⭐ Create change request for major changes requiring approval
       let changeRequestId: string | undefined
+      let approvalRequestId: string | undefined
       if (majorChanges && majorChanges.length > 0) {
         changeRequestId = await this.createChangeRequestForMajorChanges(
           client,
@@ -447,6 +464,30 @@ Generate a REVISED version of the document that resolves the drift:
           changeRequestId,
           majorChangesCount: majorChanges.length
         })
+
+        // 4a. ⭐ Create approval workflow for the change request
+        approvalRequestId = await this.createApprovalWorkflow(
+          client,
+          changeRequestId,
+          driftRecordId,
+          documentId,
+          majorChanges,
+          userId
+        )
+
+        logger.info('[DRIFT-RESOLUTION] Approval workflow created', {
+          changeRequestId,
+          approvalRequestId
+        })
+
+        // 5. ⭐ Auto-schedule emergency meeting for critical budget overruns
+        await this.checkAndScheduleEmergencyMeeting(
+          client,
+          driftRecordId,
+          majorChanges,
+          changeRequestId,
+          userId
+        )
       }
 
       await client.query('COMMIT')
@@ -455,10 +496,11 @@ Generate a REVISED version of the document that resolves the drift:
         documentId,
         driftRecordId,
         userId,
-        changeRequestId
+        changeRequestId,
+        approvalRequestId
       })
 
-      return { changeRequestId }
+      return { changeRequestId, approvalRequestId }
     } catch (error) {
       await client.query('ROLLBACK')
       logger.error('[DRIFT-RESOLUTION] Error applying resolution:', error)
@@ -640,6 +682,224 @@ These changes have been flagged as **major changes** based on the following crit
 
 *This change request was automatically generated by the ADPA Drift Resolution System*
 `
+  }
+
+  /**
+   * Check if emergency meeting should be scheduled for budget overrun
+   */
+  private async checkAndScheduleEmergencyMeeting(
+    client: PoolClient,
+    driftRecordId: string,
+    majorChanges: DriftPoint[],
+    changeRequestId: string,
+    userId: string
+  ): Promise<void> {
+    try {
+      // Check if any major changes involve budget overrun
+      const budgetChanges = majorChanges.filter(change => 
+        change.entityType === 'budget' && change.variance !== undefined
+      )
+
+      if (budgetChanges.length === 0) {
+        logger.info('[DRIFT-RESOLUTION] No budget changes detected, skipping emergency meeting')
+        return
+      }
+
+      // Get the largest budget variance
+      const maxVariance = Math.max(...budgetChanges.map(c => Math.abs(c.variance || 0)))
+
+      // Only schedule meeting if overrun is >= 10% (critical or emergency)
+      if (maxVariance < 10) {
+        logger.info('[DRIFT-RESOLUTION] Budget variance below threshold', {
+          variance: maxVariance,
+          threshold: 10
+        })
+        return
+      }
+
+      // Get drift record details
+      const driftResult = await client.query(
+        `SELECT 
+          bdd.*, 
+          p.id as project_id,
+          p.name as project_name,
+          pb.cost_baseline
+         FROM baseline_drift_detection bdd
+         JOIN projects p ON bdd.project_id = p.id
+         LEFT JOIN project_baselines pb ON bdd.baseline_id = pb.id
+         WHERE bdd.id = $1`,
+        [driftRecordId]
+      )
+
+      if (driftResult.rows.length === 0) {
+        logger.warn('[DRIFT-RESOLUTION] Drift record not found', { driftRecordId })
+        return
+      }
+
+      const drift = driftResult.rows[0]
+      const costBaseline = drift.cost_baseline || {}
+      
+      // Extract budget information from baseline and changes
+      const approvedBudget = costBaseline.total_budget || costBaseline.budget || 0
+      
+      if (!approvedBudget || approvedBudget === 0) {
+        logger.warn('[DRIFT-RESOLUTION] No approved budget in baseline', { driftRecordId })
+        return
+      }
+
+      // Calculate projected cost based on variance
+      const projectedCost = approvedBudget * (1 + maxVariance / 100)
+      const overrunAmount = projectedCost - approvedBudget
+      const overrunPercentage = maxVariance
+
+      logger.info('[DRIFT-RESOLUTION] Budget overrun detected, scheduling emergency meeting', {
+        approvedBudget,
+        projectedCost,
+        overrunAmount,
+        overrunPercentage
+      })
+
+      // Schedule emergency meeting
+      const meetingResult = await emergencyMeetingService.scheduleBudgetOverrunMeeting(
+        {
+          projectId: drift.project_id,
+          projectName: drift.project_name,
+          driftRecordId,
+          approvedBudget,
+          projectedCost,
+          overrunAmount,
+          overrunPercentage,
+          rootCause: drift.drift_description,
+          changeRequestId
+        },
+        userId
+      )
+
+      logger.info('[DRIFT-RESOLUTION] Emergency meeting scheduled successfully', {
+        meetingId: meetingResult.meeting.meetingId,
+        severity: meetingResult.meeting.severity,
+        scheduledDate: meetingResult.meeting.scheduledDate
+      })
+    } catch (error) {
+      // Don't fail the whole transaction if meeting scheduling fails
+      logger.error('[DRIFT-RESOLUTION] Failed to schedule emergency meeting:', error)
+    }
+  }
+
+  /**
+   * Create approval workflow for change request
+   */
+  private async createApprovalWorkflow(
+    client: PoolClient,
+    changeRequestId: string,
+    driftRecordId: string,
+    documentId: string,
+    majorChanges: DriftPoint[],
+    userId: string
+  ): Promise<string> {
+    try {
+      // Get drift record details to determine workflow type
+      const driftResult = await client.query(
+        `SELECT * FROM baseline_drift_detection WHERE id = $1`,
+        [driftRecordId]
+      )
+
+      if (driftResult.rows.length === 0) {
+        throw new Error(`Drift record not found: ${driftRecordId}`)
+      }
+
+      const driftRecord = driftResult.rows[0]
+
+      // Get document details
+      const docResult = await client.query(
+        `SELECT d.*, p.name as project_name 
+         FROM documents d 
+         LEFT JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1`,
+        [documentId]
+      )
+
+      const document = docResult.rows[0]
+
+      // Determine request type and priority based on drift severity and changes
+      let requestType = 'negative_drift'
+      let priority: 'low' | 'medium' | 'high' | 'critical' | 'emergency' = 'medium'
+      let severity: 'low' | 'medium' | 'high' | 'critical' = driftRecord.drift_severity || 'medium'
+
+      // Check for budget overrun
+      const hasBudgetOverrun = majorChanges.some(
+        change => change.entityType === 'budget' && change.variance && Math.abs(change.variance) > 10
+      )
+
+      if (hasBudgetOverrun) {
+        requestType = 'budget_overrun'
+        const maxBudgetVariance = Math.max(
+          ...majorChanges
+            .filter(c => c.entityType === 'budget' && c.variance)
+            .map(c => Math.abs(c.variance || 0))
+        )
+
+        if (maxBudgetVariance >= 25) {
+          priority = 'emergency'
+          severity = 'critical'
+        } else if (maxBudgetVariance >= 10) {
+          priority = 'critical'
+          severity = 'high'
+        } else {
+          priority = 'high'
+          severity = 'medium'
+        }
+      } else if (driftRecord.drift_severity === 'critical') {
+        priority = 'critical'
+      } else if (driftRecord.drift_severity === 'high') {
+        priority = 'high'
+      }
+
+      // Build impact summary
+      const impactSummary = {
+        drift_severity: driftRecord.drift_severity,
+        major_changes_count: majorChanges.length,
+        entity_types_affected: [...new Set(majorChanges.map(c => c.entityType))],
+        budget_impact: majorChanges
+          .filter(c => c.entityType === 'budget' && c.variance)
+          .map(c => ({ variance: c.variance, description: c.description })),
+        requires_approval: true
+      }
+
+      // Create approval request through the approval workflow service
+      // Note: Approval workflow service manages its own transaction
+      const approvalRequest = await approvalWorkflowService.createApprovalRequest({
+        request_type: requestType,
+        change_request_id: changeRequestId,
+        drift_record_id: driftRecordId,
+        project_id: document.project_id,
+        title: `Approval Required: ${document.name || document.title}`,
+        description: `${majorChanges.length} major change(s) detected requiring approval`,
+        impact_summary: impactSummary,
+        priority,
+        severity,
+        requested_by: userId,
+        metadata: {
+          source: 'automatic_drift_resolution',
+          drift_severity: driftRecord.drift_severity,
+          major_changes: majorChanges
+        }
+      })
+
+      logger.info('[DRIFT-RESOLUTION] Approval workflow created', {
+        approval_request_id: approvalRequest.id,
+        change_request_id: changeRequestId,
+        priority,
+        request_type: requestType
+      })
+
+      return approvalRequest.id
+    } catch (error) {
+      logger.error('[DRIFT-RESOLUTION] Error creating approval workflow:', error)
+      // If approval workflow creation fails, log but don't fail the transaction
+      // The change request will still exist and can be manually routed for approval
+      return ''
+    }
   }
 }
 
