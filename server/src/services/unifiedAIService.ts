@@ -126,12 +126,13 @@ class UnifiedAIService {
       case 'openai':
         return openai(config)
       case 'google':
-        return google(config)
+        throw new Error('Google AI SDK not installed. Install @ai-sdk/google to use this provider.')
+        // return google(config)
       case 'mistral':
-        throw new Error('Mistral AI SDK temporarily disabled due to Zod import issues')
-        // return mistral(config)
+        return mistral(config)
       case 'azure':
-        return azure(config)
+        throw new Error('Azure AI SDK not installed. Install @ai-sdk/azure to use this provider.')
+        // return azure(config)
       default:
         throw new Error(`Unsupported provider type: ${provider.type}`)
     }
@@ -187,14 +188,9 @@ class UnifiedAIService {
         content: response.text,
         provider: provider.name,
         model: model,
-        usage: response.usage ? {
-          prompt_tokens: response.usage.prompt_tokens || 0,
-          completion_tokens: response.usage.completion_tokens || 0,
-          total_tokens: response.usage.totalTokens || 0,
-        } : undefined,
+        usage: response.usage as any, // AI SDK v5 usage structure
         metadata: {
           finishReason: response.finishReason,
-          model: response.model,
         }
       }
 
