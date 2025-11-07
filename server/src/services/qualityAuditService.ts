@@ -262,9 +262,9 @@ class QualityAuditService {
     })
 
     try {
-      const result = await aiService.generate({
-        provider: 'google',
-        model: 'gemini-2.5-flash', // Fast and cost-effective for analysis
+      // Use automatic failover system - tries providers in priority order from database
+      const result = await aiService.generateWithFallback({
+        provider: 'auto', // Let system choose based on database configuration
         prompt: analysisPrompt, // User prompt (required)
         system_prompt: systemPrompt, // System prompt (optional, snake_case)
         temperature: 0.3, // Lower temperature for consistent analysis
@@ -796,7 +796,95 @@ Remember: Your audit helps improve future document generation, so be detailed an
       ]
     )
 
-    return result.rows[0].id
+    const auditId = result.rows[0].id
+
+    // Trigger low-quality notification if score below 70%
+    if (auditData.overallScore < 70) {
+      this.triggerLowQualityNotification(auditData.documentId, auditData.overallScore, auditData.issues).catch(err => {
+        logger.error('[QUALITY-AUDIT] Failed to trigger low-quality notification', {
+          documentId: auditData.documentId,
+          error: err instanceof Error ? err.message : String(err)
+        })
+        // Don't fail the audit if notification fails
+      })
+    }
+
+    return auditId
+  }
+
+  /**
+   * Trigger low-quality notification
+   */
+  private async triggerLowQualityNotification(documentId: string, qualityScore: number, issues: QualityIssue[]) {
+    try {
+      // Get document details
+      const docResult = await pool.query(`
+        SELECT 
+          d.id,
+          d.title,
+          p.name as project_name,
+          t.name as template_name
+        FROM documents d
+        JOIN projects p ON d.project_id = p.id
+        LEFT JOIN templates t ON d.template_id = t.id
+        WHERE d.id = $1
+      `, [documentId])
+
+      if (docResult.rows.length === 0) {
+        logger.warn('[QUALITY-AUDIT] Document not found for notification', { documentId })
+        return
+      }
+
+      const doc = docResult.rows[0]
+
+      // Get project members to notify
+      const membersResult = await pool.query(`
+        SELECT DISTINCT u.email, u.name
+        FROM users u
+        WHERE u.id IN (
+          SELECT created_by FROM projects WHERE id = (SELECT project_id FROM documents WHERE id = $1)
+          UNION
+          SELECT owner_id FROM projects WHERE id = (SELECT project_id FROM documents WHERE id = $1)
+        )
+        AND u.email IS NOT NULL
+      `, [documentId])
+
+      if (membersResult.rows.length === 0) {
+        logger.info('[QUALITY-AUDIT] No users to notify for document', { documentId })
+        return
+      }
+
+      const recipients = membersResult.rows.map(row => ({
+        email: row.email,
+        name: row.name || row.email
+      }))
+
+      // Import and use notification service
+      const { notificationService } = await import('./notificationService')
+      
+      await notificationService.sendLowQualityAlert({
+        documentId: doc.id,
+        documentTitle: doc.title,
+        projectName: doc.project_name,
+        qualityScore,
+        templateName: doc.template_name || 'Unknown',
+        auditedAt: new Date(),
+        issues
+      }, recipients)
+
+      logger.info('[QUALITY-AUDIT] Low-quality notification sent', {
+        documentId,
+        qualityScore,
+        recipientCount: recipients.length
+      })
+
+    } catch (error) {
+      logger.error('[QUALITY-AUDIT] Failed to send low-quality notification', {
+        documentId,
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
   }
 
   /**

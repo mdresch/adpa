@@ -21,13 +21,17 @@
     "select-provider": "cd scripts && npm install && npm run select-provider",
     "ai-config": "tsx scripts/ai-provider-selector.ts",
     "test:ai-cli": "tsx scripts/test-cli.ts",
-    "test:ai-env": "tsx scripts/test-env-update.ts"
+    "test:ai-env": "tsx scripts/test-env-update.ts",
+    "import-issues": "tsx scripts/import-github-issues.ts",
+    "import-issues:stats": "tsx scripts/import-github-issues.ts --stats",
+    "import-issues:dry-run": "tsx scripts/import-github-issues.ts --dry-run"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",
     "@emotion/is-prop-valid": "latest",
     "@google/generative-ai": "latest",
     "@neondatabase/serverless": "^1.0.1",
+    "@octokit/rest": "^20.1.2",
     "@radix-ui/react-accordion": "latest",
     "@radix-ui/react-alert-dialog": "latest",
     "@radix-ui/react-aspect-ratio": "latest",

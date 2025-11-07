@@ -2809,7 +2809,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             </div>
 
             <Tabs defaultValue="documents" className="space-y-4">
-              <TabsList>
+              <TabsList aria-label="Project management sections">
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="extraction">
