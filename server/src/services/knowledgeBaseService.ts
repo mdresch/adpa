@@ -37,6 +37,9 @@ export interface KnowledgeBaseEntry {
   prerequisites?: string[]
   tags?: string[]
   keywords?: string[]
+  ai_generated?: boolean
+  ai_confidence?: number
+  ai_processing_metadata?: any
   created_by?: string
 }
 

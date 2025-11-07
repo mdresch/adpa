@@ -5,6 +5,7 @@
 
 import express, { Request, Response } from 'express'
 import { knowledgeBaseService } from '../services/knowledgeBaseService'
+import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { authenticate } from '../middleware/auth'
 
@@ -305,25 +306,43 @@ router.put('/applications/:id/outcome', async (req: Request, res: Response) => {
  */
 router.get('/stats', async (req: Request, res: Response) => {
   try {
-    const result = await knowledgeBaseService.search({
-      limit: 0,
-      offset: 0
+    // Get total count
+    const totalResult = await pool.query(
+      'SELECT COUNT(*) as total FROM knowledge_base_entries WHERE archived = FALSE'
+    )
+
+    // Get category distribution using aggregation
+    const categoryResult = await pool.query(
+      `SELECT category, COUNT(*) as count 
+       FROM knowledge_base_entries 
+       WHERE archived = FALSE 
+       GROUP BY category 
+       ORDER BY count DESC`
+    )
+
+    // Get type distribution using aggregation
+    const typeResult = await pool.query(
+      `SELECT entry_type, COUNT(*) as count 
+       FROM knowledge_base_entries 
+       WHERE archived = FALSE 
+       GROUP BY entry_type 
+       ORDER BY count DESC`
+    )
+
+    const categoryDistribution: Record<string, number> = {}
+    categoryResult.rows.forEach(row => {
+      categoryDistribution[row.category] = parseInt(row.count)
     })
 
-    // Get category distribution
-    const categoryStats = await knowledgeBaseService.search({ limit: 1000 })
-    const categoryDistribution: Record<string, number> = {}
     const typeDistribution: Record<string, number> = {}
-
-    categoryStats.entries.forEach(entry => {
-      categoryDistribution[entry.category] = (categoryDistribution[entry.category] || 0) + 1
-      typeDistribution[entry.entry_type] = (typeDistribution[entry.entry_type] || 0) + 1
+    typeResult.rows.forEach(row => {
+      typeDistribution[row.entry_type] = parseInt(row.count)
     })
 
     res.json({
       success: true,
       data: {
-        total_entries: result.total,
+        total_entries: parseInt(totalResult.rows[0].total),
         category_distribution: categoryDistribution,
         type_distribution: typeDistribution
       }
