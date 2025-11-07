@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
+import { toast } from 'sonner';
+import { MaturityCard } from '@/components/onboarding/MaturityCard';
+import { MaturityScore } from '@/components/onboarding/MaturityScore';
+import { maturityTheme, getMaturityColor } from '@/lib/theme/maturity-portal-theme';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,11 +35,14 @@ import {
   Eye,
   Calendar,
   TrendingUp,
-  Building2,
+  Building,
   Loader2,
   Plus,
-  Clock
-} from 'lucide-react';
+  Clock,
+  Sparkles,
+  CheckCircle,
+  AlertCircle
+} from '@/components/ui/icons-shim';
 import { Progress } from '@/components/ui/progress';
 
 interface Assessment {
@@ -96,12 +104,13 @@ export default function AssessmentsListPage() {
           // Extract unique projects from assessments for filter
           const uniqueProjects = Array.from(
             new Set(data.data?.map((a: Assessment) => a.projectName) || [])
-          ).map(name => ({ id: name, name }));
+          ).map(name => ({ id: String(name), name: String(name) }));
           setProjects(uniqueProjects);
         }
       }
     } catch (error) {
       console.error('Failed to load assessments:', error);
+      toast.error('Failed to load assessments');
     } finally {
       setLoading(false);
     }
@@ -207,7 +216,7 @@ export default function AssessmentsListPage() {
                 <Input
                   placeholder="Search client, project, organization..."
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                   className="pl-10"
                 />
               </div>
@@ -248,51 +257,94 @@ export default function AssessmentsListPage() {
         </CardContent>
       </Card>
 
-      {/* Statistics */}
+      {/* Statistics - Enhanced with Dark Blue Theme */}
       <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Total Assessments</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold">{assessments.length}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Complete</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {assessments.filter(a => a.status === 'complete').length}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0 }}
+        >
+          <MaturityCard variant="elevated">
+            <div className="p-6">
+              <div className="text-sm font-medium flex items-center gap-2 mb-3">
+                <FileText className="h-4 w-4" style={{ color: maturityTheme.colors.primary[400] }} />
+                <span style={{ color: maturityTheme.colors.text.secondary }}>Total Assessments</span>
+              </div>
+              <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.primary[300] }}>
+                {assessments.length}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </MaturityCard>
+        </motion.div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Processing</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-yellow-600">
-              {assessments.filter(a => a.status === 'processing').length}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.1 }}
+        >
+          <MaturityCard variant="success">
+            <div className="p-6">
+              <div className="text-sm font-medium flex items-center gap-2 mb-3">
+                <CheckCircle className="h-4 w-4" style={{ color: maturityTheme.colors.success.text }} />
+                <span style={{ color: maturityTheme.colors.text.secondary }}>Complete</span>
+              </div>
+              <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.success.text }}>
+                {assessments.filter(a => a.status === 'complete').length}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </MaturityCard>
+        </motion.div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Avg Maturity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-3xl font-bold text-blue-600">
-              {assessments.length > 0
-                ? (assessments.reduce((sum, a) => sum + a.overallMaturityLevel, 0) / assessments.length).toFixed(1)
-                : '—'}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.2 }}
+        >
+          <MaturityCard variant="warning">
+            <div className="p-6">
+              <div className="text-sm font-medium flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4" style={{ color: maturityTheme.colors.warning.text }} />
+                <span style={{ color: maturityTheme.colors.text.secondary }}>Processing</span>
+              </div>
+              <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.warning.text }}>
+                {assessments.filter(a => a.status === 'processing').length}
+              </div>
             </div>
-          </CardContent>
-        </Card>
+          </MaturityCard>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, delay: 0.3 }}
+        >
+          <MaturityCard variant="info">
+            <div className="p-6">
+              <div className="text-sm font-medium flex items-center gap-2 mb-3">
+                <TrendingUp className="h-4 w-4" style={{ color: maturityTheme.colors.info.text }} />
+                <span style={{ color: maturityTheme.colors.text.secondary }}>Avg Maturity</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.primary[400] }}>
+                  {assessments.length > 0
+                    ? (assessments.reduce((sum, a) => sum + a.overallMaturityLevel, 0) / assessments.length).toFixed(1)
+                    : '—'}
+                </div>
+                {assessments.length > 0 && (() => {
+                  const avgLevel = Math.max(1, Math.min(5, Math.round(assessments.reduce((sum, a) => sum + a.overallMaturityLevel, 0) / assessments.length))) as 1 | 2 | 3 | 4 | 5;
+                  const labels: Record<number, string> = { 1: 'Initial', 2: 'Repeatable', 3: 'Defined', 4: 'Managed', 5: 'Optimizing' };
+                  return (
+                    <MaturityScore 
+                      level={avgLevel}
+                      label={labels[avgLevel]}
+                      size="sm"
+                    />
+                  );
+                })()}
+              </div>
+            </div>
+          </MaturityCard>
+        </motion.div>
       </div>
 
       {/* Assessments Table */}
@@ -345,7 +397,7 @@ export default function AssessmentsListPage() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <Building className="h-4 w-4 text-muted-foreground" />
                         {assessment.projectName}
                       </div>
                     </TableCell>

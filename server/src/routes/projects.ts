@@ -366,6 +366,31 @@ router.put("/:id", authenticateToken, requirePermission("projects.update"), asyn
   }
 })
 
+// Replicate project configuration/documents to similar projects
+router.post("/:id/replicate", authenticateToken, requirePermission("projects.replicate"), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+    const { targetProjectIds, matchBy = 'framework', includeDocuments = false } = req.body
+    const userId = req.user?.id
+
+    const result = await projectService.replicateToProjects(id, { targetProjectIds, matchBy, includeDocuments }, userId)
+
+    log.info(`Replication requested for project ${id} by ${req.user?.email}`, { matchBy, includeDocuments, targets: result.targets?.length })
+
+    res.json(result)
+  } catch (error) {
+    log.error('Project replication error', error)
+    if ((error as any).code === 'PROJECT_NOT_FOUND') {
+      return res.status(404).json({ error: 'Project not found' })
+    }
+    if ((error as any).code === 'INVALID_OPTIONS') {
+      return res.status(400).json({ error: 'Invalid options' })
+    }
+    res.status(500).json({ error: 'Internal server error' })
+  }
+})
+
 // Delete project
 router.delete("/:id", authenticateToken, requirePermission("projects.delete"), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })

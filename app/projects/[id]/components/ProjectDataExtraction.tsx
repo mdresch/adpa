@@ -626,7 +626,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               Extract Project Data with AI
             </DialogTitle>
             <DialogDescription>
-              AI will analyze your project documents and extract 13 types of structured entities.
+              AI will analyze your project documents and extract 14 types of structured entities.
             </DialogDescription>
           </DialogHeader>
 
