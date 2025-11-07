@@ -867,9 +867,7 @@ These changes have been flagged as **major changes** based on the following crit
       }
 
       // Create approval request through the approval workflow service
-      // Note: We need to commit the current transaction first, then create approval in new transaction
-      await client.query('COMMIT')
-      
+      // Note: Approval workflow service manages its own transaction
       const approvalRequest = await approvalWorkflowService.createApprovalRequest({
         request_type: requestType,
         change_request_id: changeRequestId,
@@ -888,9 +886,6 @@ These changes have been flagged as **major changes** based on the following crit
         }
       })
 
-      // Start a new transaction for the rest of the operations
-      await client.query('BEGIN')
-
       logger.info('[DRIFT-RESOLUTION] Approval workflow created', {
         approval_request_id: approvalRequest.id,
         change_request_id: changeRequestId,
@@ -901,7 +896,9 @@ These changes have been flagged as **major changes** based on the following crit
       return approvalRequest.id
     } catch (error) {
       logger.error('[DRIFT-RESOLUTION] Error creating approval workflow:', error)
-      throw error
+      // If approval workflow creation fails, log but don't fail the transaction
+      // The change request will still exist and can be manually routed for approval
+      return ''
     }
   }
 }

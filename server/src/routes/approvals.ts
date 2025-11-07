@@ -9,6 +9,7 @@ import express from 'express'
 import { logger } from '../utils/logger'
 import { approvalWorkflowService } from '../services/approvalWorkflowService'
 import { authenticateToken } from '../middleware/auth'
+import { pool } from '../database/connection'
 
 const router = express.Router()
 
@@ -252,7 +253,6 @@ router.get('/project/:projectId', async (req, res) => {
 
     const params = status ? [projectId, status] : [projectId]
 
-    const { pool } = await import('../database/connection')
     const result = await pool.query(query, params)
 
     res.json({
@@ -283,7 +283,6 @@ router.get('/stats/user', async (req, res) => {
 
     logger.info('[APPROVAL-API] Fetching user approval stats', { userId })
 
-    const { pool } = await import('../database/connection')
     const result = await pool.query(
       `SELECT 
         COUNT(*) FILTER (WHERE astep.status = 'pending') as pending,

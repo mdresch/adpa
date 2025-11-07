@@ -264,7 +264,7 @@ export class ApprovalWorkflowService {
           params.decision === 'approved' ? 'approved' : 'rejected',
           params.decision,
           params.decision_notes,
-          params.conditions ? `{${params.conditions.join(',')}}` : null,
+          params.conditions || null,
           params.approval_step_id
         ]
       )
@@ -513,9 +513,9 @@ export class ApprovalWorkflowService {
     requestParams: CreateApprovalRequestParams
   ): Promise<void> {
     for (const stage of stages) {
-      // Find users with the required role
+      // Find users with the required role, ordered by created date for consistency
       const userResult = await client.query(
-        `SELECT id FROM users WHERE role = $1 LIMIT 1`,
+        `SELECT id FROM users WHERE role = $1 ORDER BY created_at ASC LIMIT 1`,
         [stage.role]
       )
 
