@@ -22,7 +22,8 @@
     "seed:baselines": "tsx scripts/seed-baseline-data.ts",
     "drift:recompute": "tsx scripts/recompute-drift.ts",
     "clear-extraction-cache": "tsx scripts/clear-extraction-cache.ts",
-    "create-test-baseline": "tsx scripts/create-test-baseline.ts"
+    "create-test-baseline": "tsx scripts/create-test-baseline.ts",
+    "demo:emergency-meetings": "node scripts/demo-emergency-meeting-scheduling.js"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
