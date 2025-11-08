@@ -1253,6 +1253,40 @@ export class DriftDetectionService {
   }
 
   /**
+   * Get or create system user for automated operations
+   */
+  private async getSystemUserId(): Promise<string> {
+    try {
+      // Try to find existing system user
+      const result = await pool.query(
+        `SELECT id FROM users WHERE email = 'system@adpa.internal' LIMIT 1`
+      )
+
+      if (result.rows.length > 0) {
+        return result.rows[0].id
+      }
+
+      // Create system user if it doesn't exist
+      const createResult = await pool.query(
+        `INSERT INTO users (email, password_hash, role, first_name, last_name)
+         VALUES ('system@adpa.internal', 'n/a', 'admin', 'System', 'Automation')
+         ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+         RETURNING id`
+      )
+
+      logger.info('[DRIFT] Created system user for automated operations')
+      return createResult.rows[0].id
+    } catch (error) {
+      logger.error('[DRIFT] Error getting system user, using fallback:', error)
+      // Fallback to any admin user
+      const fallbackResult = await pool.query(
+        `SELECT id FROM users WHERE role = 'admin' LIMIT 1`
+      )
+      return fallbackResult.rows[0]?.id || 'system'
+    }
+  }
+
+  /**
    * Auto-analyze drift for positive indicators and create opportunity CR
    * This runs asynchronously after drift detection
    */
@@ -1300,8 +1334,8 @@ export class DriftDetectionService {
 
       const driftRecordId = driftRecordResult.rows[0].id
 
-      // Use system user ID for auto-generated CRs
-      const systemUserId = 'system' // Or fetch from a system user account
+      // Get or create system user for auto-generated CRs
+      const systemUserId = await this.getSystemUserId()
 
       // Auto-generate opportunity change request
       const crResult = await positiveDriftChangeRequestService.generateOpportunityCR(
