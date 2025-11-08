@@ -9,6 +9,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { driftDetectionService } from '../services/driftDetectionService'
 import { driftResolutionService, DriftApplyResponse } from '../services/driftResolutionService'
+import { positiveDriftChangeRequestService } from '../services/positiveDriftChangeRequestService'
 import { logger } from '../utils/logger'
 
 const router = express.Router()
@@ -52,6 +53,72 @@ router.post(
       res.status(500).json({
         success: false,
         error: 'Failed to check for drift'
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/drift/analyze-positive
+ * Analyze drift points for positive drift and auto-generate opportunity CR
+ */
+router.post(
+  '/analyze-positive',
+  authenticateToken,
+  requirePermission('documents.update'),
+  validate(
+    Joi.object({
+      projectId: Joi.string().uuid().required(),
+      documentId: Joi.string().uuid().required(),
+      driftRecordId: Joi.string().uuid().required(),
+      driftPoints: Joi.array().items(Joi.object()).required()
+    })
+  ),
+  async (req, res) => {
+    try {
+      const { projectId, documentId, driftRecordId, driftPoints } = req.body
+      const userId = req.user?.id
+
+      logger.info('[DRIFT-API] Analyzing for positive drift', {
+        projectId,
+        documentId,
+        driftRecordId,
+        driftPointsCount: driftPoints.length
+      })
+
+      // Analyze drift for positive indicators
+      const positiveDrift = positiveDriftChangeRequestService.analyzePositiveDrift(driftPoints)
+
+      if (!positiveDrift.isPositive) {
+        return res.json({
+          success: true,
+          isPositiveDrift: false,
+          message: 'No positive drift detected'
+        })
+      }
+
+      // Auto-generate opportunity change request
+      const crResult = await positiveDriftChangeRequestService.generateOpportunityCR(
+        projectId,
+        documentId,
+        driftRecordId,
+        driftPoints,
+        positiveDrift,
+        userId!
+      )
+
+      res.json({
+        success: true,
+        isPositiveDrift: true,
+        positiveDrift,
+        changeRequest: crResult,
+        message: 'Positive drift detected and opportunity change request created'
+      })
+    } catch (error) {
+      logger.error('[DRIFT-API] Error analyzing positive drift:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to analyze positive drift'
       })
     }
   }

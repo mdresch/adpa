@@ -30,9 +30,13 @@ export class TemplateQualityEngine {
             assessment_details: 'Template structure is well-organized and logical',
             recommendations: [
               {
-                recommendation: 'Add more detailed sections',
+                recommendation_id: `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                recommendation_type: 'structure_improvement',
+                recommendation_title: 'Add more detailed sections',
+                recommendation_description: 'Consider adding more detailed sections to improve clarity',
                 priority: 'medium',
-                effort: 'low'
+                implementation: 'Add subsections with specific details',
+                expected_impact: 0.1
               }
             ]
           }
@@ -72,15 +76,15 @@ export class TemplateQualityEngine {
             field: 'content',
             warning_code: 'CONTENT_LENGTH_WARNING',
             message: 'Template content could be more detailed',
-            severity: 'warning'
+            impact: 'May affect template completeness'
           }
         ],
         suggestions: [
           {
             field: 'variables',
-            suggestion_code: 'ADD_VARIABLES',
-            message: 'Consider adding template variables for dynamic content',
-            severity: 'info'
+            suggestion: 'Consider adding template variables for dynamic content',
+            reason: 'Variables improve template flexibility and reusability',
+            impact: 'Increases template adaptability'
           }
         ]
       }
