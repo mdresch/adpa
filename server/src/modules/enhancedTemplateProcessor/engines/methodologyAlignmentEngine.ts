@@ -18,14 +18,10 @@ export class MethodologyAlignmentEngine {
           framework: framework,
           enhancement_type: 'structure_alignment',
           enhancement_description: `Aligned template structure with ${framework} methodology`,
-          enhancement_impact: 0.8,
-          enhancement_confidence: 0.9,
-          applied_at: new Date(),
-          metadata: {
-            template_id: template.id,
-            framework_version: '1.0.0',
-            alignment_score: 0.85
-          }
+          original_content: template.content,
+          enhanced_content: template.content,
+          compliance_score: 0.85,
+          best_practices_applied: ['standardized_structure', 'methodology_alignment']
         }
       ]
 
