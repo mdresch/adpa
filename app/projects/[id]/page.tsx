@@ -51,6 +51,7 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  AlertTriangle,
   MoreHorizontal,
   Eye,
   Loader2,
@@ -1818,10 +1819,22 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       }
     }
 
+    const handleDriftDetected = (data: any) => {
+      try {
+        // Refresh documents and project data when drift is detected
+        fetchDocuments()
+        fetchProjectData()
+      } catch (err) {
+        console.warn('Error handling drift:detected event', err)
+      }
+    }
+
     on("document:created", handleDocumentCreated)
+    on("drift:detected", handleDriftDetected)
 
     return () => {
       off("document:created", handleDocumentCreated)
+      off("drift:detected", handleDriftDetected)
       leaveRoom(room)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2045,6 +2058,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Link href={`/projects/${projectId}/documents`}>
                     <FileText className="h-4 w-4 mr-2" />
                     Document Library
+                  </Link>
+                </Button>
+                <Button variant="outline" asChild>
+                  <Link href={`/projects/${projectId}/drift`}>
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Drift Management
                   </Link>
                 </Button>
                 <Dialog open={createDialogOpen} onOpenChange={(open: boolean) => {
@@ -2809,7 +2828,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             </div>
 
             <Tabs defaultValue="documents" className="space-y-4">
-              <TabsList>
+              <TabsList aria-label="Project management sections">
                 <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="extraction">

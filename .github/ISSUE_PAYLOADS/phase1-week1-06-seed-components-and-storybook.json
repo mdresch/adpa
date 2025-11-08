@@ -1,0 +1,6 @@
+{
+  "title": "Seed Components & Storybook",
+  "body": "See `.github/ISSUES/phase1-week1-06-seed-components-and-storybook.md`.\n\nDeliverable: seed components in `components/ui/` and Storybook stories/config.",
+  "labels": ["phase:1","week:1","area:design","type:task","priority:high"],
+  "assignees": []
+}

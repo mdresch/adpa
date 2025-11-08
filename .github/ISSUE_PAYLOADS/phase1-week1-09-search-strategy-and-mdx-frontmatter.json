@@ -1,0 +1,6 @@
+{
+  "title": "Search Strategy & MDX Frontmatter Spec",
+  "body": "See `.github/ISSUES/phase1-week1-09-search-strategy-and-mdx-frontmatter.md`.\n\nDeliverable: `docs/mdx-frontmatter-spec.md` and `docs/search-strategy-week1.md`.",
+  "labels": ["phase:1","week:1","area:content","type:task","priority:medium"],
+  "assignees": []
+}
