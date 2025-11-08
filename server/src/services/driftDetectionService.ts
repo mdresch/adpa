@@ -3,11 +3,13 @@
  * CR-2026-001: Automatic Drift Detection & Resolution
  * 
  * Detects when documents drift from approved baselines
+ * Automatically analyzes for positive drift and generates opportunity CRs
  */
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { escalationService } from './escalationService'
+import { positiveDriftChangeRequestService } from './positiveDriftChangeRequestService'
 
 export interface DriftPoint {
   entityType: string // 'stakeholder', 'risk', 'milestone', etc.
@@ -180,6 +182,14 @@ export class DriftDetectionService {
 
       // 7. Generate summary
       const summary = this.generateDriftSummary(driftPoints)
+
+      // 8. Auto-analyze for positive drift and generate opportunity CR if detected
+      if (driftPoints.length > 0) {
+        this.autoAnalyzePositiveDrift(projectId, documentId, driftPoints).catch(err => {
+          // Don't fail drift detection if positive drift analysis fails
+          logger.error('[DRIFT] Error in positive drift auto-analysis:', err)
+        })
+      }
 
       logger.info('[DRIFT] Detection complete', {
         projectId,
@@ -1240,6 +1250,83 @@ export class DriftDetectionService {
     }
 
     return data
+  }
+
+  /**
+   * Auto-analyze drift for positive indicators and create opportunity CR
+   * This runs asynchronously after drift detection
+   */
+  private async autoAnalyzePositiveDrift(
+    projectId: string,
+    documentId: string,
+    driftPoints: DriftPoint[]
+  ): Promise<void> {
+    try {
+      logger.info('[DRIFT] Auto-analyzing for positive drift', {
+        projectId,
+        documentId,
+        driftPointsCount: driftPoints.length
+      })
+
+      // Analyze drift for positive indicators
+      const positiveDrift = positiveDriftChangeRequestService.analyzePositiveDrift(driftPoints)
+
+      if (!positiveDrift.isPositive) {
+        logger.info('[DRIFT] No positive drift detected', { projectId, documentId })
+        return
+      }
+
+      logger.info('[DRIFT] ✨ Positive drift detected!', {
+        projectId,
+        documentId,
+        category: positiveDrift.driftCategory,
+        costSavings: positiveDrift.metrics.costSavings,
+        timeAcceleration: positiveDrift.metrics.timeAcceleration
+      })
+
+      // Get drift record ID for linking
+      const driftRecordResult = await pool.query(
+        `SELECT id FROM baseline_drift_detection
+         WHERE project_id = $1 AND source_document_id = $2
+         ORDER BY detection_date DESC
+         LIMIT 1`,
+        [projectId, documentId]
+      )
+
+      if (driftRecordResult.rows.length === 0) {
+        logger.warn('[DRIFT] No drift record found for positive drift CR generation')
+        return
+      }
+
+      const driftRecordId = driftRecordResult.rows[0].id
+
+      // Use system user ID for auto-generated CRs
+      const systemUserId = 'system' // Or fetch from a system user account
+
+      // Auto-generate opportunity change request
+      const crResult = await positiveDriftChangeRequestService.generateOpportunityCR(
+        projectId,
+        documentId,
+        driftRecordId,
+        driftPoints,
+        positiveDrift,
+        systemUserId
+      )
+
+      logger.info('[DRIFT] ✅ Opportunity CR auto-generated', {
+        projectId,
+        documentId,
+        changeRequestId: crResult.changeRequestId,
+        estimatedValue: crResult.estimatedValue,
+        category: positiveDrift.driftCategory
+      })
+
+      // TODO: Send notification to sponsor about the opportunity
+      // This would integrate with the notification service
+    } catch (error) {
+      logger.error('[DRIFT] Error in positive drift auto-analysis:', error)
+      // Don't throw - this is a background process
+    }
   }
 }
 
