@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { emergencyMeetingService } from './emergencyMeetingService'
 import { approvalWorkflowService } from './approvalWorkflowService'
+import { createKnowledgeBaseFromDrift } from '../modules/knowledgeBase/integration'
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -499,6 +500,36 @@ Generate a REVISED version of the document that resolves the drift:
         changeRequestId,
         approvalRequestId
       })
+
+      // Create a knowledge-base entry from the drift detection asynchronously.
+      // Do this after the DB transaction commits so KB creation doesn't affect the primary flow.
+      try {
+        const driftRes = await pool.query('SELECT * FROM baseline_drift_detection WHERE id = $1', [driftRecordId])
+        if (driftRes.rows.length > 0) {
+          const driftRow = driftRes.rows[0]
+          // Call KB integration but do not fail the main flow if it errors.
+          createKnowledgeBaseFromDrift(
+            {
+              id: driftRow.id,
+              project_id: driftRow.project_id,
+              baseline_id: driftRow.baseline_id,
+              detection_type: driftRow.detection_type || driftRow.drift_type || 'unknown',
+              drift_description: driftRow.drift_description || driftRow.description || '',
+              drift_impact: driftRow.drift_impact || null,
+              ai_confidence: driftRow.ai_confidence || 0,
+              ai_processing_metadata: driftRow.ai_processing_metadata || driftRow.ai_processing || null
+            },
+            userId,
+            {
+              similar_project_ids: []
+            }
+          ).catch((kbErr) => {
+            logger.error('[DRIFT-RESOLUTION] Failed to create knowledge base entry from drift:', kbErr)
+          })
+        }
+      } catch (kbQueryErr) {
+        logger.error('[DRIFT-RESOLUTION] Error querying drift record for KB integration:', kbQueryErr)
+      }
 
       return { changeRequestId, approvalRequestId }
     } catch (error) {

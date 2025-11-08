@@ -58,7 +58,7 @@ export async function handlePositiveDriftDetection(
       try {
         const replication = await projectSimilarityService.createReplication({
           sourceProjectId: projectId,
-          targetProjectId: similarity.similar_project_id,
+          targetProjectId: similarity.similarProjectId,
           improvementType: improvementDetails.type,
           improvementTitle: improvementDetails.title,
           improvementDescription: improvementDetails.description,
@@ -70,19 +70,19 @@ export async function handlePositiveDriftDetection(
 
         logger.info('[DRIFT_INTEGRATION] Created replication', {
           sourceProjectId: projectId,
-          targetProjectId: similarity.similar_project_id,
+          targetProjectId: similarity.similarProjectId,
           replicationId: replication.id
         })
       } catch (error: any) {
         // Skip if replication already exists (duplicate constraint)
         if (error.code === '23505') {
           logger.debug('[DRIFT_INTEGRATION] Replication already exists', {
-            targetProjectId: similarity.similar_project_id
+            targetProjectId: similarity.similarProjectId
           })
         } else {
           logger.error('[DRIFT_INTEGRATION] Error creating replication', {
             error,
-            targetProjectId: similarity.similar_project_id
+            targetProjectId: similarity.similarProjectId
           })
         }
       }
