@@ -6,7 +6,7 @@
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
 import { MultiModelAIGenerationService } from './multiModelAIGenerationService'
-import type { AIGenerationRequest } from './aiService'
+import type { AIGenerateRequest } from './aiService'
 
 export interface RefinementConfig {
   enable_iterative_refinement: boolean
@@ -486,7 +486,7 @@ export class DocumentRefinementEngine {
   ): Promise<StrategyResult> {
     const prompt = this.buildContentEnhancementPrompt(request, strategy)
     
-    const aiRequest: AIGenerationRequest = {
+    const aiRequest: AIGenerateRequest = {
       prompt: prompt,
       provider: 'openai',
       model: 'gpt-4',
@@ -519,7 +519,7 @@ export class DocumentRefinementEngine {
   ): Promise<StrategyResult> {
     const prompt = this.buildReadabilityPrompt(request, strategy)
     
-    const aiRequest: AIGenerationRequest = {
+    const aiRequest: AIGenerateRequest = {
       prompt: prompt,
       provider: 'openai',
       model: 'gpt-4',
@@ -552,7 +552,7 @@ export class DocumentRefinementEngine {
   ): Promise<StrategyResult> {
     const prompt = this.buildMethodologyCompliancePrompt(request, strategy)
     
-    const aiRequest: AIGenerationRequest = {
+    const aiRequest: AIGenerateRequest = {
       prompt: prompt,
       provider: 'openai',
       model: 'gpt-4',
@@ -585,7 +585,7 @@ export class DocumentRefinementEngine {
   ): Promise<StrategyResult> {
     const prompt = this.buildTechnicalAccuracyPrompt(request, strategy)
     
-    const aiRequest: AIGenerationRequest = {
+    const aiRequest: AIGenerateRequest = {
       prompt: prompt,
       provider: 'openai',
       model: 'gpt-4',
@@ -618,7 +618,7 @@ export class DocumentRefinementEngine {
   ): Promise<StrategyResult> {
     const prompt = this.buildStructureImprovementPrompt(request, strategy)
     
-    const aiRequest: AIGenerationRequest = {
+    const aiRequest: AIGenerateRequest = {
       prompt: prompt,
       provider: 'openai',
       model: 'gpt-4',
@@ -651,7 +651,7 @@ export class DocumentRefinementEngine {
   ): Promise<StrategyResult> {
     const prompt = this.buildClarityImprovementPrompt(request, strategy)
     
-    const aiRequest: AIGenerationRequest = {
+    const aiRequest: AIGenerateRequest = {
       prompt: prompt,
       provider: 'openai',
       model: 'gpt-4',

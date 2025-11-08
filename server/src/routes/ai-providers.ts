@@ -2,6 +2,8 @@
  * Simple AI Provider Management Routes
  * 
  * Minimal, working AI provider management without complex dependencies
+ * 
+ * SECURITY: Admin-only access - AI providers are system-wide configuration
  */
 
 import express from 'express'
@@ -9,12 +11,32 @@ import { pool } from '../database/connection'
 import { logger, childLogger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
 import { aiService } from '../services/aiService'
+import { authenticateToken } from '../middleware/auth'
 
 const router = express.Router()
+
+// Middleware to require admin role
+const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  const user = (req as any).user;
+  
+  if (!user) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  
+  if (user.role !== 'admin') {
+    return res.status(403).json({ 
+      error: 'Admin access required',
+      message: 'AI provider configuration is admin-only. Guest users cannot modify system-wide AI settings.'
+    });
+  }
+  
+  next();
+}
 
 /**
  * GET /api/ai-providers
  * Get all AI providers
+ * PUBLIC: Anyone can view configured providers (API keys are masked)
  */
 router.get('/', async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
@@ -58,11 +80,19 @@ router.get('/', async (req, res) => {
 /**
  * POST /api/ai-providers
  * Create a new AI provider
+ * ADMIN ONLY: System-wide configuration
  */
-router.post('/', async (req, res) => {
+router.post('/', authenticateToken, requireAdmin, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { name, provider_type, api_key, configuration } = req.body
+
+    // Log admin action
+    log.info('Admin creating AI provider', {
+      adminId: (req as any).user.id,
+      providerName: name,
+      providerType: provider_type
+    });
 
     // Validate required fields
     if (!name || !provider_type || !api_key) {
@@ -72,7 +102,7 @@ router.post('/', async (req, res) => {
     }
 
     // Validate provider type
-    const validTypes = ['openai', 'google', 'azure', 'anthropic', 'cohere', 'huggingface', 'deepseek', 'moonshot', 'xai', 'ollama']
+    const validTypes = ['openai', 'google', 'azure', 'anthropic', 'cohere', 'huggingface', 'deepseek', 'moonshot', 'xai', 'ollama', 'mistral', 'groq']
     if (!validTypes.includes(provider_type)) {
       return res.status(400).json({
         error: `Invalid provider type. Must be one of: ${validTypes.join(', ')}`
@@ -124,7 +154,7 @@ router.post('/', async (req, res) => {
  * POST /api/ai-providers/:name/configure
  * Configure/update an existing AI provider
  */
-router.post('/:name/configure', async (req, res) => {
+router.post('/:name/configure', authenticateToken, requireAdmin, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { name } = req.params
@@ -205,8 +235,9 @@ router.post('/:name/configure', async (req, res) => {
 /**
  * DELETE /api/ai-providers/:name
  * Delete an AI provider
+ * ADMIN ONLY: System-wide configuration
  */
-router.delete('/:name', async (req, res) => {
+router.delete('/:name', authenticateToken, requireAdmin, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { name } = req.params
@@ -233,7 +264,7 @@ router.delete('/:name', async (req, res) => {
  * POST /api/ai-providers/:name/test
  * Test an AI provider
  */
-router.post('/:name/test', async (req, res) => {
+router.post('/:name/test', authenticateToken, requireAdmin, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { name } = req.params
