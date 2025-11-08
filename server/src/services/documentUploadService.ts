@@ -558,9 +558,17 @@ export async function processUploadedFile(
                   driftCount: driftResult.driftPoints.length
                 });
                 
-                // Check if escalation is needed (critical/high severity)
-                if (driftRecord.drift_severity === 'critical' || driftRecord.drift_severity === 'high') {
+                // Trigger escalation check (TASK-742: Escalation matrix)
+                // Always check escalation regardless of severity - the matrix rules decide if escalation is needed
+                try {
                   await driftDetectionService.checkAndTriggerEscalation(driftRecord, driftResult.driftPoints);
+                  logger.info('✅ [DRIFT] Escalation check completed', { driftRecordId: driftRecord.id });
+                } catch (escalationError: any) {
+                  logger.error('❌ [DRIFT] Error triggering escalation:', {
+                    driftRecordId: driftRecord.id,
+                    error: escalationError.message
+                  });
+                  // Don't fail the drift detection if escalation fails
                 }
                 
               } catch (saveError: any) {
