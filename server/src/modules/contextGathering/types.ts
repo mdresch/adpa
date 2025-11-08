@@ -3,6 +3,97 @@
  * Defines TypeScript interfaces for comprehensive context gathering
  */
 
+// Placeholder types for detailed data structures
+// These should be properly defined based on actual data models
+export type UserProfileData = Record<string, any>
+export type UserPreferenceData = Record<string, any>
+export type UserExpertiseData = Record<string, any>
+export type UserWritingStyleData = Record<string, any>
+export type UserDomainKnowledgeData = Record<string, any>
+export type UserCollaborationPreferenceData = Record<string, any>
+export type UserPerformanceHistoryData = Record<string, any>
+export type UserLearningPreferenceData = Record<string, any>
+export type UserAccessPatternData = Record<string, any>
+export type UserFeedbackHistoryData = Record<string, any>
+export type UserSatisfactionScoreData = Record<string, any>
+export type UserCommunicationStyleData = Record<string, any>
+export type UserDeadlinePreferenceData = Record<string, any>
+export type UserQualityPreferenceData = Record<string, any>
+export type UserToolPreferenceData = Record<string, any>
+export type UserWorkflowPreferenceData = Record<string, any>
+export type UserSecurityPreferenceData = Record<string, any>
+export type UserPrivacyPreferenceData = Record<string, any>
+export type DocumentHistoryData = Record<string, any>
+export type UsagePatternData = Record<string, any>
+export type QualityTrendData = Record<string, any>
+export type TemplateUsageData = Record<string, any>
+export type GenerationPatternData = Record<string, any>
+export type UserInteractionData = Record<string, any>
+export type FeedbackHistoryData = Record<string, any>
+export type RevisionHistoryData = Record<string, any>
+export type CollaborationPatternData = Record<string, any>
+export type DocumentPerformanceMetrics = Record<string, any>
+export type DocumentQualityMetrics = Record<string, any>
+export type ComplianceHistoryData = Record<string, any>
+export type ContextConflictData = Record<string, any>
+export type ContextGapData = Record<string, any>
+export type ContextOverlapData = Record<string, any>
+export type ContextQualityScoreData = Record<string, any>
+export type ContextFreshnessScoreData = Record<string, any>
+export type ContextRelevanceScoreData = Record<string, any>
+export type ContextConfidenceScoreData = Record<string, any>
+export type IntegratedInsightData = Record<string, any>
+export type IntegratedRecommendationData = Record<string, any>
+export type OptimizedSourceData = Record<string, any>
+export type ContextPriorityData = Record<string, any>
+export type ContextWeightData = Record<string, any>
+export type ContextFilterData = Record<string, any>
+export type ContextAggregationData = Record<string, any>
+export type ContextSummaryData = Record<string, any>
+export type ContextHighlightData = Record<string, any>
+export type ContextKeyPointData = Record<string, any>
+export type ContextActionItemData = Record<string, any>
+export type ContextRiskData = Record<string, any>
+export type ContextOpportunityData = Record<string, any>
+export type ContextDecisionData = Record<string, any>
+export type ContextAssumptionData = Record<string, any>
+export type ContextConstraintData = Record<string, any>
+export type ContextSuccessFactorData = Record<string, any>
+export type FeedbackData = Record<string, any>
+export type SatisfactionScoreData = Record<string, any>
+export type ChangeHistoryData = Record<string, any>
+export type PerformanceMetricData = Record<string, any>
+export type BudgetCategoryData = Record<string, any>
+export type BudgetTimelineData = Record<string, any>
+export type BudgetForecastData = Record<string, any>
+export type TimelineMilestoneData = Record<string, any>
+export type CommunicationChannelData = Record<string, any>
+export type TechnologyData = Record<string, any>
+export type PerformanceBenchmarkData = Record<string, any>
+export type PerformanceTrendData = Record<string, any>
+export type PerformanceComparisonData = Record<string, any>
+export type ApprovalPatternData = Record<string, any>
+export type DistributionPatternData = Record<string, any>
+export type AccessPatternData = Record<string, any>
+export type ExternalSourceData = Record<string, any>
+export type ApiResponseData = Record<string, any>
+export type FileContentData = Record<string, any>
+export type DatabaseResultData = Record<string, any>
+export type WebScrapingResultData = Record<string, any>
+export type IntegrationData = Record<string, any>
+export type ThirdPartyData = Record<string, any>
+export type MarketData = Record<string, any>
+export type IndustryStandardData = Record<string, any>
+export type RegulatoryRequirementData = Record<string, any>
+export type CompetitorAnalysisData = Record<string, any>
+export type TechnologyTrendData = Record<string, any>
+export type BestPracticeData = Record<string, any>
+export type CaseStudyData = Record<string, any>
+export type ResearchData = Record<string, any>
+export type TemplateVariableData = Record<string, any>
+export type TemplateStructureData = Record<string, any>
+export type TemplateMetadataData = Record<string, any>
+
 export interface IContextGatheringStage {
   // Main execution method
   execute(request: ContextGatheringRequest): Promise<ContextGatheringResult>

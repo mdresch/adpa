@@ -1,8 +1,41 @@
-/* Custom styles for react-diff-view */
+/* Custom styles for react-diff-view - Enhanced for clarity */
 
 .diff-view-container {
   font-size: 0.875rem;
-  line-height: 1.5;
+  line-height: 1.6; /* Increased for better readability */
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* Change statistics summary */
+.diff-stats-summary {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background-color: hsl(var(--muted) / 0.5);
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.diff-stat-label {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+
+.diff-stat-additions {
+  color: hsl(142 76% 35%);
+  font-weight: 600;
+}
+
+.diff-stat-deletions {
+  color: hsl(0 72% 45%);
+  font-weight: 600;
+}
+
+.diff-stat-modifications {
+  color: hsl(45 93% 35%);
+  font-weight: 600;
 }
 
 .diff-view-container .diff {
@@ -27,19 +60,23 @@
 }
 
 .diff-view-container .diff-gutter-insert {
-  background-color: hsl(142 76% 96%);
+  background-color: hsl(142 76% 94%);
+  border-left: 3px solid hsl(142 76% 45%); /* Added clear indicator */
 }
 
 .diff-view-container .diff-code-insert {
-  background-color: hsl(142 76% 96%);
+  background-color: hsl(142 76% 94%);
+  border-left: 3px solid hsl(142 76% 45%); /* Added clear indicator */
 }
 
 .diff-view-container .diff-gutter-delete {
-  background-color: hsl(0 72% 96%);
+  background-color: hsl(0 72% 94%);
+  border-left: 3px solid hsl(0 72% 45%); /* Added clear indicator */
 }
 
 .diff-view-container .diff-code-delete {
-  background-color: hsl(0 72% 96%);
+  background-color: hsl(0 72% 94%);
+  border-left: 3px solid hsl(0 72% 45%); /* Added clear indicator */
 }
 
 .diff-view-container .diff-gutter-normal {
@@ -59,48 +96,98 @@
   background-color: hsl(var(--accent));
 }
 
-/* Split view specific styles */
+/* Split view specific styles - Enhanced for clarity */
 .diff-view-container .diff-split-view {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  gap: 1px; /* Add a small gap between columns */
+  background-color: hsl(var(--border)); /* Creates a visible separator */
 }
 
 .diff-view-container .diff-split-col {
   min-width: 0;
+  background-color: hsl(var(--background)); /* Ensure columns have background */
 }
 
-/* Tokens (syntax highlighting) */
+/* Column headers for split view */
+.diff-view-container .diff-split-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background-color: hsl(var(--border));
+  font-weight: 600;
+  font-size: 0.8125rem;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.diff-view-container .diff-split-header-col {
+  padding: 0.5rem 0.75rem;
+  background-color: hsl(var(--muted));
+  color: hsl(var(--foreground));
+  text-align: center;
+  border-bottom: 2px solid hsl(var(--border));
+}
+
+/* Tokens (syntax highlighting) - Enhanced visibility */
 .diff-view-container .diff-code-insert .token-insert {
-  background-color: hsl(142 76% 88%);
+  background-color: hsl(142 76% 80%);
+  font-weight: 600; /* Make inserted tokens bold for clarity */
 }
 
 .diff-view-container .diff-code-delete .token-delete {
-  background-color: hsl(0 72% 88%);
+  background-color: hsl(0 72% 80%);
+  font-weight: 600; /* Make deleted tokens bold for clarity */
+  text-decoration: line-through;
 }
 
-/* Dark mode support */
+/* Dark mode support - Enhanced for clarity */
 @media (prefers-color-scheme: dark) {
+  .diff-stats-summary {
+    background-color: hsl(var(--muted) / 0.3);
+  }
+
+  .diff-stat-additions {
+    color: hsl(142 76% 55%);
+  }
+
+  .diff-stat-deletions {
+    color: hsl(0 72% 60%);
+  }
+
+  .diff-stat-modifications {
+    color: hsl(45 93% 60%);
+  }
+
   .diff-view-container .diff-gutter-insert {
-    background-color: hsl(142 45% 20%);
+    background-color: hsl(142 45% 15%);
+    border-left: 3px solid hsl(142 65% 45%);
   }
 
   .diff-view-container .diff-code-insert {
-    background-color: hsl(142 45% 20%);
+    background-color: hsl(142 45% 15%);
+    border-left: 3px solid hsl(142 65% 45%);
   }
 
   .diff-view-container .diff-gutter-delete {
-    background-color: hsl(0 45% 20%);
+    background-color: hsl(0 45% 15%);
+    border-left: 3px solid hsl(0 65% 45%);
   }
 
   .diff-view-container .diff-code-delete {
-    background-color: hsl(0 45% 20%);
+    background-color: hsl(0 45% 15%);
+    border-left: 3px solid hsl(0 65% 45%);
   }
 
   .diff-view-container .diff-code-insert .token-insert {
-    background-color: hsl(142 45% 28%);
+    background-color: hsl(142 45% 25%);
+    font-weight: 600;
   }
 
   .diff-view-container .diff-code-delete .token-delete {
-    background-color: hsl(0 45% 28%);
+    background-color: hsl(0 45% 25%);
+    font-weight: 600;
+    text-decoration: line-through;
   }
 }
