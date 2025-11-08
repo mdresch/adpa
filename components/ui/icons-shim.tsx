@@ -220,6 +220,7 @@ export const Target = LucideIcons.Target
 export const PieChart = LucideIcons.PieChart
 export const Grid = LucideIcons.Grid
 export const Lightbulb = LucideIcons.Lightbulb
+export const Award = LucideIcons.Award
 
 // Default export with all icons
 export default {
@@ -350,6 +351,11 @@ export default {
   Sync,
   TestTube,
   Crosshair,
+  Target,
+  PieChart,
+  Grid,
+  Lightbulb,
+  Award
 }
 
 // All icons are now properly exported above

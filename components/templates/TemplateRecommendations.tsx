@@ -432,18 +432,22 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                         <div key={idx} className="p-3 bg-purple-50 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800 rounded-lg">
                           <div className="flex items-start gap-2 mb-2">
                             <Badge variant="outline" className="text-xs bg-white">
-                              {improvement.change_type || 'improvement'}
+                              {String(improvement.change_type || 'improvement')}
                             </Badge>
                             <p className="text-sm font-medium flex-1">
-                              {improvement.issue_addressed || improvement.title || `Improvement #${idx + 1}`}
+                              {String(improvement.issue_addressed || improvement.title || `Improvement #${idx + 1}`)}
                             </p>
                           </div>
                           <p className="text-xs text-muted-foreground mb-2">
-                            {improvement.proposed_change || improvement.description}
+                            {typeof improvement.proposed_change === 'string' 
+                              ? improvement.proposed_change 
+                              : typeof improvement.description === 'string'
+                              ? improvement.description
+                              : JSON.stringify(improvement.proposed_change || improvement.description || 'No description')}
                           </p>
                           {improvement.section && (
                             <Badge variant="secondary" className="text-xs">
-                              Section: {improvement.section}
+                              Section: {String(improvement.section)}
                             </Badge>
                           )}
                         </div>
@@ -489,13 +493,17 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                     <div>
                       <Badge variant="outline" className="mb-2">Current (v2)</Badge>
                       <pre className="text-xs bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto max-h-64">
-                        {selectedOptimization.suggested_improvements[0].system_prompt || 'No system prompt'}
+                        {typeof selectedOptimization.suggested_improvements[0].system_prompt === 'string'
+                          ? selectedOptimization.suggested_improvements[0].system_prompt
+                          : JSON.stringify(selectedOptimization.suggested_improvements[0].system_prompt || 'No system prompt', null, 2)}
                       </pre>
                     </div>
                     <div>
                       <Badge className="mb-2 bg-green-600">Suggested (v3)</Badge>
                       <pre className="text-xs bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto max-h-64">
-                        {selectedOptimization.suggested_improvements[0].system_prompt || 'No changes'}
+                        {typeof selectedOptimization.suggested_improvements[0].system_prompt === 'string' 
+                          ? selectedOptimization.suggested_improvements[0].system_prompt 
+                          : JSON.stringify(selectedOptimization.suggested_improvements[0].system_prompt || 'No changes', null, 2)}
                       </pre>
                     </div>
                   </div>
@@ -513,15 +521,21 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                     <div>
                       <Badge variant="outline" className="mb-2">Current (v2)</Badge>
                       <pre className="text-xs bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto max-h-96">
-                        {selectedOptimization.suggested_improvements[0].template_content?.substring(0, 2000) || 'No content'}
-                        {selectedOptimization.suggested_improvements[0].template_content?.length > 2000 && '\n\n... (truncated)'}
+                        {(() => {
+                          const content = selectedOptimization.suggested_improvements[0].template_content
+                          const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2)
+                          return contentStr.substring(0, 2000) + (contentStr.length > 2000 ? '\n\n... (truncated)' : '')
+                        })()}
                       </pre>
                     </div>
                     <div>
                       <Badge className="mb-2 bg-green-600">Suggested (v3)</Badge>
                       <pre className="text-xs bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto max-h-96">
-                        {selectedOptimization.suggested_improvements[0].template_content?.substring(0, 2000) || 'No changes'}
-                        {selectedOptimization.suggested_improvements[0].template_content?.length > 2000 && '\n\n... (truncated)'}
+                        {(() => {
+                          const content = selectedOptimization.suggested_improvements[0].template_content
+                          const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2)
+                          return contentStr.substring(0, 2000) + (contentStr.length > 2000 ? '\n\n... (truncated)' : '')
+                        })()}
                       </pre>
                     </div>
                   </div>
@@ -535,9 +549,11 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                   </CardHeader>
                   <CardContent>
                     <p className="text-sm whitespace-pre-wrap">
-                      {selectedOptimization.suggested_improvements[0]?.proposed_change || 
-                       selectedOptimization.suggested_improvements[0]?.change_explanation ||
-                       'No explanation provided'}
+                      {(() => {
+                        const improvement = selectedOptimization.suggested_improvements[0]
+                        const explanation = improvement?.proposed_change || improvement?.change_explanation || 'No explanation provided'
+                        return typeof explanation === 'string' ? explanation : JSON.stringify(explanation, null, 2)
+                      })()}
                     </p>
                   </CardContent>
                 </Card>
@@ -553,8 +569,8 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                         </CardHeader>
                         <CardContent>
                           <ul className="list-disc list-inside space-y-1 text-sm">
-                            {selectedOptimization.suggested_improvements[0].changes_summary.system_prompt_changes.map((change: string, idx: number) => (
-                              <li key={idx}>{change}</li>
+                            {selectedOptimization.suggested_improvements[0].changes_summary.system_prompt_changes.map((change: any, idx: number) => (
+                              <li key={idx}>{typeof change === 'string' ? change : JSON.stringify(change)}</li>
                             ))}
                           </ul>
                         </CardContent>
@@ -568,8 +584,8 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                         </CardHeader>
                         <CardContent>
                           <ul className="list-disc list-inside space-y-1 text-sm">
-                            {selectedOptimization.suggested_improvements[0].changes_summary.content_changes.map((change: string, idx: number) => (
-                              <li key={idx}>{change}</li>
+                            {selectedOptimization.suggested_improvements[0].changes_summary.content_changes.map((change: any, idx: number) => (
+                              <li key={idx}>{typeof change === 'string' ? change : JSON.stringify(change)}</li>
                             ))}
                           </ul>
                         </CardContent>
@@ -583,8 +599,8 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                         </CardHeader>
                         <CardContent>
                           <ul className="list-disc list-inside space-y-1 text-sm text-green-700 dark:text-green-300">
-                            {selectedOptimization.suggested_improvements[0].changes_summary.key_improvements.map((imp: string, idx: number) => (
-                              <li key={idx}>{imp}</li>
+                            {selectedOptimization.suggested_improvements[0].changes_summary.key_improvements.map((imp: any, idx: number) => (
+                              <li key={idx}>{typeof imp === 'string' ? imp : JSON.stringify(imp)}</li>
                             ))}
                           </ul>
                         </CardContent>

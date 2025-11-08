@@ -23,9 +23,9 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
     const oldLines = oldContent.split('\n')
     const newLines = newContent.split('\n')
     
-    // Use unidiff to create a proper diff
+    // Use unidiff to create a proper diff with expanded context for better clarity
     return formatLines(diffLines(oldLines, newLines), {
-      context: 3
+      context: 5  // Increased from 3 to 5 for more context around changes
     })
   }, [oldContent, newContent])
 
@@ -43,6 +43,31 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
       return []
     }
   }, [diffText, filename])
+
+  // Calculate change statistics from the parsed diff for accuracy
+  const stats = useMemo(() => {
+    if (files.length === 0) {
+      return { additions: 0, deletions: 0, modifications: 0 }
+    }
+    
+    let additions = 0
+    let deletions = 0
+    
+    // Count changes from the actual diff hunks
+    files.forEach(file => {
+      file.hunks.forEach((hunk: any) => {
+        hunk.changes.forEach((change: any) => {
+          if (change.type === 'insert') {
+            additions++
+          } else if (change.type === 'delete') {
+            deletions++
+          }
+        })
+      })
+    })
+    
+    return { additions, deletions, modifications: 0 }
+  }, [files])
 
   const renderFile = (file: any) => {
     const tokens = useMemo(() => {
@@ -82,6 +107,24 @@ export function SideBySideDiff({ oldContent, newContent, filename = 'document.md
 
   return (
     <div className="diff-view-container">
+      {/* Add change summary for clarity */}
+      {stats.additions + stats.deletions > 0 && (
+        <div className="diff-stats-summary">
+          <span className="diff-stat-label">Changes:</span>
+          {stats.additions > 0 && (
+            <span className="diff-stat-additions">+{stats.additions} lines added</span>
+          )}
+          {stats.deletions > 0 && (
+            <span className="diff-stat-deletions">-{stats.deletions} lines removed</span>
+          )}
+        </div>
+      )}
+      
+      {/* Add headers for split view columns */}
+      <div className="diff-split-header">
+        <div className="diff-split-header-col">Original Content</div>
+        <div className="diff-split-header-col">Resolved Content (After AI)</div>
+      </div>
       {files.map(renderFile)}
     </div>
   )

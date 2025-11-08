@@ -28,6 +28,7 @@ import {
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
+import { useWebSocket } from "@/contexts/WebSocketContext"
 
 interface DriftAlert {
   id: string
@@ -94,6 +95,7 @@ interface ExecutiveSummary {
 
 export function ExecutiveDriftAlertsWidget() {
   const router = useRouter()
+  const { on, off } = useWebSocket()
   const [driftAlerts, setDriftAlerts] = useState<DriftAlert[]>([])
   const [budgetAlerts, setBudgetAlerts] = useState<BudgetAlert[]>([])
   const [opportunities, setOpportunities] = useState<PositiveDriftOpportunity[]>([])
@@ -107,6 +109,20 @@ export function ExecutiveDriftAlertsWidget() {
     const interval = setInterval(fetchExecutiveDashboardData, 120000)
     return () => clearInterval(interval)
   }, [])
+
+  // Listen for real-time drift detection events
+  useEffect(() => {
+    const handleDriftDetected = (data: any) => {
+      // Refresh the dashboard data when new drift is detected
+      fetchExecutiveDashboardData()
+    }
+
+    on("drift:detected", handleDriftDetected)
+
+    return () => {
+      off("drift:detected", handleDriftDetected)
+    }
+  }, [on, off])
 
   const fetchExecutiveDashboardData = async () => {
     try {
