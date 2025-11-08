@@ -11,6 +11,7 @@ import { logger } from '../utils/logger'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { DriftPoint } from './driftDetectionService'
+import { emailNotificationService, PositiveDriftEmailData } from './emailNotificationService'
 
 export interface PositiveDriftMetrics {
   costSavings?: number // $ saved
@@ -269,6 +270,18 @@ export class PositiveDriftChangeRequestService {
         changeRequestId,
         crTitle,
         driftCategory: positiveDrift.driftCategory
+      })
+
+      // Send notification to sponsors about the opportunity
+      this.sendOpportunityNotification(
+        project_name,
+        document_name,
+        changeRequestId,
+        crTitle,
+        positiveDrift
+      ).catch(err => {
+        logger.error('[POSITIVE-DRIFT-CR] Error sending notification:', err)
+        // Don't fail CR creation if notification fails
       })
 
       return {
