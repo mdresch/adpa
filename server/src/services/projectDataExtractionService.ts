@@ -2569,14 +2569,18 @@ Requirements:
       }
       const mappedStatus = statusMap[(a.status || 'not_started').toLowerCase()] || 'not_started'
       
+      // Parse and validate dates (handle quarter formats like "Q1 2026")
+      const startDate = a.start_date ? convertQuarterDate(a.start_date) : null
+      const endDate = a.end_date ? convertQuarterDate(a.end_date) : null
+      
       values.push(
         projectId,
         a.name,          // For name column
         a.name,          // For activity_name column (NOT NULL)
         a.description,
         a.category || null,
-        a.start_date || null,
-        a.end_date || null,
+        startDate,
+        endDate,
         mappedStatus,    // Use mapped status value
         assignedTo,      // Use validated UUID or null
         userId

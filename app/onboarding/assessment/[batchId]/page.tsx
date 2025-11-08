@@ -1,8 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { MaturityCard } from '@/components/onboarding/MaturityCard';
+import { MaturityScore } from '@/components/onboarding/MaturityScore';
+import { MaturityJourneyPlanner } from '@/components/onboarding/MaturityJourneyPlanner';
+import { maturityTheme } from '@/lib/theme/maturity-portal-theme';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -13,8 +18,8 @@ import { Input } from '@/components/ui/input';
 import {
   Download,
   TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
+  AlertCircle,
+  CheckCircle,
   FileText,
   BarChart3,
   Target,
@@ -22,7 +27,7 @@ import {
   Upload,
   RefreshCw,
   Plus
-} from 'lucide-react';
+} from '@/components/ui/icons-shim';
 
 interface AssessmentData {
   batchId: string;
@@ -44,8 +49,10 @@ interface AssessmentData {
     currentLevel: number;
     targetLevel: number;
     description: string;
-    recommendations: string[];
-    estimatedEffort: string;
+    recommendations?: string[];
+    recommendation?: string;
+    estimatedEffort?: string;
+    estimated_improvement_points?: number;
   }[];
   benchmarks: {
     industryAverage: number;
@@ -63,9 +70,15 @@ interface AssessmentData {
 }
 
 export default function AssessmentResultsPage() {
-  const params = useParams();
   const router = useRouter();
-  const batchId = params.batchId as string;
+  
+  // Get batchId from URL
+  const [batchId, setBatchId] = useState<string>('');
+  useEffect(() => {
+    const pathSegments = window.location.pathname.split('/');
+    const id = pathSegments[pathSegments.length - 1];
+    setBatchId(id);
+  }, []);
   
   const [assessment, setAssessment] = useState<AssessmentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -263,7 +276,7 @@ export default function AssessmentResultsPage() {
             <div className="space-y-3 bg-white p-6 rounded-lg border border-blue-100">
               <h3 className="font-semibold text-sm text-blue-900 mb-4">Processing Steps:</h3>
               <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                 <span className="text-sm">Documents uploaded successfully</span>
               </div>
               <div className="flex items-center gap-3 text-muted-foreground">
@@ -358,7 +371,7 @@ export default function AssessmentResultsPage() {
               
               <div className="max-w-md mx-auto space-y-4 text-left">
                 <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-5 w-5 text-green-500 flex-shrink-0" />
+                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
                   <span>Documents uploaded successfully</span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -481,71 +494,101 @@ export default function AssessmentResultsPage() {
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4 mb-8">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Maturity Level</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-4xl font-bold ${maturityColor}`}>
-              {assessment.overallMaturityLevel}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              {assessment.overallMaturityLabel}
-            </p>
-            <Progress 
-              value={(assessment.overallMaturityLevel / 5) * 100} 
-              className="mt-2"
-            />
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0 }}
+        >
+          <MaturityCard variant="info" hover glow className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                Maturity Level
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="flex items-center justify-center py-4">
+              <MaturityScore
+                level={assessment.overallMaturityLevel as 1 | 2 | 3 | 4 | 5}
+                label={assessment.overallMaturityLabel}
+                size="lg"
+                animated
+                showProgress
+              />
+            </CardContent>
+          </MaturityCard>
+        </motion.div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Quality Score</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-blue-600">
-              {assessment.averageQualityScore?.toFixed(1) || '0.0'}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Average across all documents
-            </p>
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <MaturityCard variant="elevated" hover className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                Quality Score
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.info.text }}>
+                {assessment.averageQualityScore?.toFixed(1) || '0.0'}
+              </div>
+              <p className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                Average across all documents
+              </p>
+            </CardContent>
+          </MaturityCard>
+        </motion.div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Documents</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold">
-              {assessment.totalDocuments}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Assessed and classified
-            </p>
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+        >
+          <MaturityCard variant="default" hover className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                Documents
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.text.primary }}>
+                {assessment.totalDocuments}
+              </div>
+              <p className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                Assessed and classified
+              </p>
+            </CardContent>
+          </MaturityCard>
+        </motion.div>
 
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Gaps Identified</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-4xl font-bold text-orange-600">
-              {assessment.gaps.length}
-            </div>
-            <p className="text-xs text-muted-foreground mt-1">
-              Requiring attention
-            </p>
-          </CardContent>
-        </Card>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+        >
+          <MaturityCard variant="warning" hover className="h-full">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                Gaps Identified
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-4xl font-bold" style={{ color: maturityTheme.colors.warning.text }}>
+                {assessment.gaps.length}
+              </div>
+              <p className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                Requiring attention
+              </p>
+            </CardContent>
+          </MaturityCard>
+        </motion.div>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="journey">Your Journey</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="gaps">Gaps</TabsTrigger>
           <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
@@ -580,6 +623,28 @@ export default function AssessmentResultsPage() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* Your Journey Tab */}
+        <TabsContent value="journey" className="space-y-4">
+          <MaturityJourneyPlanner
+            currentLevel={assessment.overallMaturityLevel as 1 | 2 | 3 | 4 | 5}
+            currentLevelName={assessment.overallMaturityLabel}
+            achievementsAtCurrentLevel={[
+              `Processed and analyzed ${assessment.totalDocuments} PM documents`,
+              `Achieved ${assessment.averageQualityScore.toFixed(1)}% average quality score`,
+              `Identified ${assessment.gaps.length} improvement opportunities`,
+              `Established baseline maturity metrics`,
+              ...(assessment.overallMaturityLevel >= 2 ? ['Repeatable processes documented'] : []),
+              ...(assessment.overallMaturityLevel >= 3 ? ['Standardized PM methodology in place'] : []),
+              ...(assessment.overallMaturityLevel >= 4 ? ['Quantitative process management'] : []),
+              ...(assessment.overallMaturityLevel >= 5 ? ['Continuous improvement culture'] : [])
+            ]}
+            onSelectTargetLevel={(level) => {
+              console.log(`Target maturity level selected: ${level}`);
+              // Could trigger analytics or save preference
+            }}
+          />
         </TabsContent>
 
         {/* Documents Tab */}
@@ -649,7 +714,7 @@ export default function AssessmentResultsPage() {
                       <ul className="mt-2 text-sm space-y-1">
                         {gap.recommendations.map((rec, i) => (
                           <li key={i} className="flex items-start gap-2">
-                            <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
                             <span>{rec}</span>
                           </li>
                         ))}
@@ -657,7 +722,7 @@ export default function AssessmentResultsPage() {
                     )}
                     {gap.recommendation && !gap.recommendations && (
                       <div className="mt-2 text-sm flex items-start gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-green-500 mt-0.5" />
+                        <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
                         <span>{gap.recommendation}</span>
                       </div>
                     )}
@@ -746,23 +811,24 @@ export default function AssessmentResultsPage() {
       {/* Add Documents Dialog */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>Add More Documents to Assessment</DialogTitle>
-            <DialogDescription>
-              Upload additional documents to enhance your assessment. The system will process them and you can regenerate the assessment with all documents included.
-            </DialogDescription>
-          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold">Add More Documents to Assessment</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Upload additional documents to enhance your assessment. The system will process them and you can regenerate the assessment with all documents included.
+              </p>
+            </div>
           
-          <div className="grid gap-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="additional-files">Select Documents</Label>
-              <Input
-                id="additional-files"
-                type="file"
-                multiple
-                accept=".pdf,.doc,.docx,.txt,.md,.markdown"
-                onChange={(e) => setSelectedFiles(e.target.files)}
-                className="cursor-pointer"
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="additional-files">Select Documents</Label>
+                <Input
+                  id="additional-files"
+                  type="file"
+                  multiple
+                  accept=".pdf,.doc,.docx,.txt,.md,.markdown"
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedFiles(e.target.files)}
+                  className="cursor-pointer"
               />
               <p className="text-xs text-muted-foreground">
                 Supported formats: PDF, DOC, DOCX, TXT, MD (up to 100 files, 10MB each)
@@ -785,7 +851,7 @@ export default function AssessmentResultsPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <div className="flex justify-end gap-2 pt-4 border-t">
             <Button
               variant="outline"
               onClick={() => {
@@ -812,7 +878,8 @@ export default function AssessmentResultsPage() {
                 </>
               )}
             </Button>
-          </DialogFooter>
+          </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
