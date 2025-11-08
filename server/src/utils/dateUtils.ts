@@ -21,26 +21,46 @@ export function isValidDate(dateStr: string | undefined): boolean {
 }
 
 /**
- * Converts quarter-based dates (e.g., "2025-Q4") to standard date format (YYYY-MM-DD)
+ * Converts quarter-based dates to standard date format (YYYY-MM-DD)
  * Uses the last day of the quarter as the date
  * 
- * @param dateStr - Date string in format "YYYY-Q[1-4]" or "YYYY-MM-DD"
+ * @param dateStr - Date string in format "YYYY-Q[1-4]", "Q[1-4] YYYY", or "YYYY-MM-DD"
  * @returns Formatted date string (YYYY-MM-DD) or null if invalid
  * 
  * @example
  * convertQuarterDate("2025-Q4") // returns "2025-12-31"
- * convertQuarterDate("2025-Q1") // returns "2025-03-31"
+ * convertQuarterDate("Q1 2026") // returns "2026-03-31"
  * convertQuarterDate("2025-06-15") // returns "2025-06-15"
  * convertQuarterDate("invalid") // returns null
  */
 export function convertQuarterDate(dateStr: string | undefined): string | null {
   if (!dateStr) return null
   
+  // Trim whitespace
+  const trimmed = dateStr.trim()
+  
   // Check for quarter format (YYYY-Q[1-4])
-  const quarterMatch = dateStr.match(/^(\d{4})-Q([1-4])$/)
-  if (quarterMatch) {
-    const year = quarterMatch[1]
-    const quarter = quarterMatch[2]
+  const quarterMatch1 = trimmed.match(/^(\d{4})-Q([1-4])$/)
+  if (quarterMatch1) {
+    const year = quarterMatch1[1]
+    const quarter = quarterMatch1[2]
+    
+    // Map quarters to last day of quarter
+    const quarterEndDates: Record<string, string> = {
+      '1': '03-31', // Q1: Jan-Mar
+      '2': '06-30', // Q2: Apr-Jun
+      '3': '09-30', // Q3: Jul-Sep
+      '4': '12-31'  // Q4: Oct-Dec
+    }
+    
+    return `${year}-${quarterEndDates[quarter]}`
+  }
+  
+  // Check for alternate quarter format (Q[1-4] YYYY)
+  const quarterMatch2 = trimmed.match(/^Q([1-4])\s+(\d{4})$/)
+  if (quarterMatch2) {
+    const quarter = quarterMatch2[1]
+    const year = quarterMatch2[2]
     
     // Map quarters to last day of quarter
     const quarterEndDates: Record<string, string> = {
@@ -54,8 +74,8 @@ export function convertQuarterDate(dateStr: string | undefined): string | null {
   }
   
   // Already in YYYY-MM-DD format - validate it
-  if (dateStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    return isValidDate(dateStr) ? dateStr : null
+  if (trimmed.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return isValidDate(trimmed) ? trimmed : null
   }
   
   // Invalid format
