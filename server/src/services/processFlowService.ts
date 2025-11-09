@@ -640,12 +640,12 @@ class ProcessFlowService {
         if (assignedProvider) {
           providerAssignments.set(assignedProvider, {
             docIndex: currentDoc,
-            docName: doc.name || doc.title || doc.id,
+            docName: doc.documentName || doc.documentId,
             startTime: Date.now()
           })
         }
         
-        logger.info(`[Provider: ${assignedProvider || 'auto'}] Compressing document ${currentDoc}/${totalDocs}: ${doc.name || doc.title || doc.id}`)
+        logger.info(`[Provider: ${assignedProvider || 'auto'}] Compressing document ${currentDoc}/${totalDocs}: ${doc.documentName || doc.documentId}`)
         
         // Build active documents array showing which provider is processing which document
         const activeDocsArray = Array.from(providerAssignments.entries()).map(([provider, info]) => ({
@@ -658,8 +658,8 @@ class ProcessFlowService {
         // Report progress to callback with provider assignments
         if (onProgress) {
           await onProgress(`Compressing documents`, currentDoc, totalDocs, {
-            documentName: doc.name || doc.title || doc.id,
-            documentId: doc.id,
+            documentName: doc.documentName || doc.documentId,
+            documentId: doc.documentId,
             usedTokens,
             availableTokens,
             assignedProvider,
@@ -670,17 +670,17 @@ class ProcessFlowService {
       // Get document content from database
       const docResult = await this.pool.query(
         'SELECT content FROM documents WHERE id = $1',
-        [doc.id]
+        [doc.documentId]
       )
 
       if (docResult.rows.length === 0) {
-        logger.warn(`Document not found in database: ${doc.id}`)
+        logger.warn(`Document not found in database: ${doc.documentId}`)
           return null
       }
 
       const content = docResult.rows[0].content
       if (!content) {
-        logger.warn(`Document has no content: ${doc.id}`)
+        logger.warn(`Document has no content: ${doc.documentId}`)
           return null
       }
 
@@ -708,7 +708,7 @@ class ProcessFlowService {
                  AND is_valid = true
                ORDER BY created_at DESC 
                LIMIT 1`,
-              [doc.id, compressionMethod, compressionLevel, templateContextHash]
+              [doc.documentId, compressionMethod, compressionLevel, templateContextHash]
             )
             
             if (cachedResult.rows.length > 0) {
@@ -782,7 +782,7 @@ class ProcessFlowService {
                   updated_at = CURRENT_TIMESTAMP,
                   is_valid = true`,
                 [
-                  doc.id,
+                  doc.documentId,
                   compressionMethod,
                   compressionLevel,
                   content,
@@ -869,7 +869,7 @@ class ProcessFlowService {
             documentsProcessed++
             logger.info(`✅ Worker [${providerType}] completed document ${docIndex + 1} (${documentsProcessed} total)`)
           } else if (result && result.compressedTokens > 0) {
-            logger.warn(`⚠️ Worker [${providerType}] skipping document (would exceed budget): ${result.document.name}`)
+            logger.warn(`⚠️ Worker [${providerType}] skipping document (would exceed budget): ${result.document.documentName}`)
             break // Stop this worker if budget exceeded
           }
         }
@@ -905,7 +905,7 @@ class ProcessFlowService {
             compressedDocuments.push(result)
             usedTokens += result.compressedTokens
           } else if (result && result.compressedTokens > 0) {
-            logger.warn(`⚠️ Skipping document: ${result.document.name} (${result.compressedTokens.toLocaleString()} tokens)`)
+            logger.warn(`⚠️ Skipping document: ${result.document.documentName} (${result.compressedTokens.toLocaleString()} tokens)`)
           }
         }
       }
@@ -1263,10 +1263,10 @@ class ProcessFlowService {
       step3Context += `Priority Strategy: ${config.priorityStrategy}\n\n`
       step3Context += `### Prioritized Documents:\n`
       prioritizedDocuments.forEach((doc, index) => {
-        step3Context += `${index + 1}. ${doc.name || doc.title || `Document ${doc.id}`}\n`
+        step3Context += `${index + 1}. ${doc.documentName || `Document ${doc.documentId}`}\n`
         step3Context += `   - Priority Score: ${(doc.priorityScore * 100).toFixed(1)}%\n`
         step3Context += `   - Estimated Tokens: ${doc.estimatedTokens.toLocaleString()}\n`
-        step3Context += `   - Type: ${doc.type || 'Unknown'}\n\n`
+        step3Context += `   - Category: ${doc.category || 'Unknown'}\n\n`
       })
       
       steps[stepIndex].tokens = totalDocumentTokens
@@ -1321,7 +1321,7 @@ class ProcessFlowService {
         step4Context += `### 📄 Individual Document Results:\n\n`
         compressedDocuments.forEach((doc, index) => {
           const compressionPercent = ((1 - doc.compressionDetails.compressionRatio) * 100).toFixed(1)
-          step4Context += `**${index + 1}. ${doc.document.name || doc.document.title || `Document ${doc.document.id}`}** ✓\n`
+          step4Context += `**${index + 1}. ${doc.document.documentName || `Document ${doc.document.documentId}`}** ✓\n`
           step4Context += `   - 📥 Original: ${doc.compressionDetails.originalTokens.toLocaleString()} tokens\n`
           step4Context += `   - 📤 Compressed: ${doc.compressionDetails.compressedTokens.toLocaleString()} tokens\n`
           step4Context += `   - 🎯 Saved: ${compressionPercent}%\n`
@@ -1349,8 +1349,8 @@ class ProcessFlowService {
         compressionRatio,
         documents: compressedDocuments.map((doc, index) => ({
           index: index + 1,
-          name: doc.document.name || doc.document.title || `Document ${index + 1}`,
-          id: doc.document.id,
+          name: doc.document.documentName || `Document ${index + 1}`,
+          id: doc.document.documentId,
           originalTokens: doc.compressionDetails.originalTokens,
           compressedTokens: doc.compressionDetails.compressedTokens,
           compressionRatio: doc.compressionDetails.compressionRatio,
