@@ -30,6 +30,69 @@ interface CreateBaselineOptions {
 }
 
 /**
+ * Get the next baseline version number for a project
+ * 
+ * Queries existing baselines for the project and calculates the next version.
+ * Version format: "major.minor" (e.g., "1.0", "1.1", "2.0")
+ * 
+ * Logic:
+ * - If no baselines exist: return "1.0"
+ * - Otherwise: parse the latest version and increment minor version
+ * - If minor version reaches 10, increment major and reset minor to 0
+ * 
+ * @param client Database client
+ * @param projectId Project UUID
+ * @returns Next version string (e.g., "1.1", "2.0")
+ */
+async function getNextBaselineVersion(client: PoolClient, projectId: string): Promise<string> {
+  try {
+    // Get the latest baseline version for this project
+    const result = await client.query(
+      `SELECT version 
+       FROM project_baselines 
+       WHERE project_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 1`,
+      [projectId]
+    )
+
+    // Default to version 1.0 if no baselines exist
+    if (result.rows.length === 0) {
+      logger.info('No existing baselines found, starting with version 1.0')
+      return '1.0'
+    }
+
+    const currentVersion = result.rows[0].version
+    logger.info(`Found existing baseline version: ${currentVersion}`)
+
+    // Parse version (format: "major.minor")
+    const versionParts = currentVersion.split('.')
+    let major = parseInt(versionParts[0]) || 1
+    let minor = parseInt(versionParts[1]) || 0
+
+    // Increment minor version
+    minor += 1
+
+    // If minor reaches 10, increment major and reset minor
+    // This is a simple convention for baseline versioning
+    if (minor >= 10) {
+      major += 1
+      minor = 0
+    }
+
+    const nextVersion = `${major}.${minor}`
+    logger.info(`Calculated next baseline version: ${nextVersion}`)
+
+    return nextVersion
+  } catch (error) {
+    logger.error('Error calculating next baseline version:', error)
+    // Fall back to a safe default
+    logger.warn('Falling back to version 1.0 due to error')
+    return '1.0'
+  }
+}
+
+/**
  * Create comprehensive test baseline with all entity types
  */
 async function createTestBaseline(options: CreateBaselineOptions): Promise<void> {

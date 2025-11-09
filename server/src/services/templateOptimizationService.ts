@@ -42,6 +42,8 @@ interface TemplateOptimizationSuggestion {
     content_changes: string[]
     key_improvements: string[]
   }
+  tokens?: number
+  cost?: number
 }
 
 export class TemplateOptimizationService {
@@ -148,10 +150,10 @@ Always respond with valid JSON only.`,
       max_tokens: 8000
     })
 
-    // Extract token usage for analytics
-    const totalTokens = result.usage?.totalTokens || result.usage?.total_tokens || 0
-    const promptTokens = result.usage?.promptTokens || result.usage?.prompt_tokens || 0
-    const completionTokens = result.usage?.completionTokens || result.usage?.completion_tokens || 0
+    // Extract token usage for analytics (AI SDK v5 uses snake_case)
+    const totalTokens = result.usage?.total_tokens || 0
+    const promptTokens = result.usage?.prompt_tokens || 0
+    const completionTokens = result.usage?.completion_tokens || 0
     const estimatedCost = (totalTokens / 1000000) * 0.50 // Gemini 2.0 Flash Exp pricing
 
     logger.info('[TEMPLATE-OPT] AI optimization generated', {

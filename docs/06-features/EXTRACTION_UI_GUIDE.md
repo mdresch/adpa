@@ -9,7 +9,7 @@
 
 ## 🎯 What This Feature Does
 
-Automatically extracts **13 types of structured entities** from your project documents using AI:
+Automatically extracts **14 types of structured entities** from your project documents using AI:
 
 1. **Stakeholders** - People, teams, and organizations
 2. **Requirements** - Functional and non-functional requirements
@@ -24,6 +24,7 @@ Automatically extracts **13 types of structured entities** from your project doc
 11. **Deliverables** - Expected outputs and artifacts
 12. **Scope Items** - In-scope and out-of-scope items
 13. **Activities** - Tasks and activities to be performed
+14. **Technologies** - Technical tools, platforms, and frameworks
 
 These entities power the **RAG (Retrieval-Augmented Generation)** system for smarter, context-aware document generation!
 
