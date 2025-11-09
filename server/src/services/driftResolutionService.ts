@@ -121,7 +121,7 @@ export class DriftResolutionService {
           provider: 'google', // Prefer fast provider (Gemini 2.5 Flash)
           model: 'gemini-2.5-flash', // Optimized for speed
           temperature: 0.2, // Low temp for consistent, accurate resolution
-          maxTokens: 8000
+          max_tokens: 8000
         }, ['google', 'groq', 'mistral']), // Fallback to other fast providers
         new Promise<never>((_, reject) => 
           setTimeout(() => reject(new Error('AI resolution timeout: exceeded 5 seconds')), 5000)
