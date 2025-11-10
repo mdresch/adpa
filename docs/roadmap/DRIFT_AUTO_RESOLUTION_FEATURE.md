@@ -984,8 +984,8 @@ Resolution: Keep all 15, just note the additions in change log
 - [ ] All 3 strategies (conservative/balanced/permissive) work
 - [ ] Major changes flagged for approval
 - [ ] Applied resolution updates document successfully
-- [ ] Drift record marked as resolved
-- [ ] Audit log created
+- [x] Drift record marked as resolved ✅ **COMPLETED** (TASK-732)
+- [x] Audit log created ✅ **COMPLETED** (Implemented with drift resolution)
 - [x] WebSocket notifications sent ✅ **COMPLETED** (See: docs/features/WEBSOCKET_DRIFT_NOTIFICATIONS.md)
 - [ ] Works for all 14 entity types
 - [ ] Performance: Resolution generated in < 5 seconds
