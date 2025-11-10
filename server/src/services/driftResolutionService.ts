@@ -155,13 +155,15 @@ export class DriftResolutionService {
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiStartTime = Date.now()
       
+      // PERFORMANCE: Reduce maxTokens to 3000 (most resolutions don't need 4000)
+      // This speeds up generation time significantly
       const aiResponse = await aiService.generate({
         prompt,
         provider: 'openai', // Use OpenAI for speed and reliability
         model: 'gpt-4o-mini', // Fast and cost-effective model optimized for speed
-        temperature: 0.3, // Slightly higher for faster generation
-        maxTokens: 4000, // Reduced from 8000 for faster response
-        max_tokens: 4000 // Alternative parameter name for compatibility
+        temperature: 0.3, // Low temperature for consistent, focused output
+        maxTokens: 3000, // Optimized for speed - most resolutions need 1500-2500 tokens
+        max_tokens: 3000 // Alternative parameter name for compatibility
       })
       
       const aiDuration = Date.now() - aiStartTime
