@@ -49,6 +49,9 @@ Local development setup, Docker configuration, and migration guides.
   - `LOCAL_DEVELOPMENT_SUCCESS.md` - Local environment setup
   - `QUICK_RESTART_GUIDE.md` - Quick restart procedures
   - `manual-migration-guide.md` - Manual migration instructions
+  
+- **Template Configuration:**
+  - `TEMPLATE_CONFIGURATION_GUIDE.md` - Template configuration for RAG integration
 
 ### 04. Deployment
 **Path:** `04-deployment/`
@@ -303,6 +306,7 @@ Deprecated, duplicate, or superseded documentation files.
 - Docker setup: `03-development/DOCKER_DEVELOPMENT_GUIDE.md`
 - Database setup: `02-setup-configuration/NEON_DATABASE_SETUP.md`
 - Quick restart: `03-development/QUICK_RESTART_GUIDE.md`
+- Configure templates: `03-development/TEMPLATE_CONFIGURATION_GUIDE.md`
 
 **Deploy to production:**
 - Complete guide: `04-deployment/COMPLETE_DEPLOYMENT_GUIDE.md`

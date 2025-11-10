@@ -1,0 +1,131 @@
+name: Sync Documentation to GitHub Issues
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'docs/**/*.md'
+      - '**/BRIEFING*.md'
+      - '**/AGENT*.md'
+      - '.github/workflows/sync-docs-to-issues.yml'
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync all documentation'
+        required: false
+        default: 'false'
+
+jobs:
+  sync-docs-to-issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Fetch last 2 commits to detect changes
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'pnpm'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@fe02b34f77f8bc703788d5817da081398fad5dd2  # v4.0.0 (pinned to commit SHA for security)
+        with:
+          version: 10
+
+      - name: Install Dependencies
+        run: |
+          pnpm install --frozen-lockfile
+          cd scripts/issue-automation && npm install
+
+      - name: Detect Changed Briefing Documents
+        id: detect-changes
+        env:
+          FORCE_SYNC: ${{ github.event.inputs.force_sync }}  # Sanitize input via environment variable
+        run: |
+          if [ "$FORCE_SYNC" = "true" ]; then
+            echo "Force sync enabled - processing all briefing docs"
+            FILES=$(find . -type f \( -name "BRIEFING*.md" -o -name "AGENT*.md" \) -not -path "*/node_modules/*" -not -path "*/.git/*")
+          else
+            echo "Detecting changed files..."
+            FILES=$(git diff --name-only HEAD~1 HEAD | grep -E "(BRIEFING.*\.md|AGENT.*\.md)" || echo "")
+          fi
+          
+          if [ -z "$FILES" ]; then
+            echo "No briefing documents changed"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changed files:"
+            echo "$FILES"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "$FILES" > changed-files.txt
+          fi
+
+      - name: Generate Issues from Briefing Documents
+        if: steps.detect-changes.outputs.has_changes == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          node scripts/issue-automation/generate-issues.js
+
+      - name: Upload Issue Generation Report
+        if: steps.detect-changes.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: issue-generation-report
+          path: issue-generation-report.json
+          retention-days: 30
+
+      - name: Comment on Commit
+        if: steps.detect-changes.outputs.has_changes == 'true' && github.event_name == 'push'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let report;
+            try {
+              report = JSON.parse(fs.readFileSync('issue-generation-report.json', 'utf8'));
+            } catch (error) {
+              console.log('No report file found');
+              return;
+            }
+            
+            const issueLinks = report.created.map(issue => 
+              `- [#${issue.number}](${issue.url}) - ${issue.title}`
+            ).join('\n');
+            
+            const comment = `## 🤖 Documentation Sync Complete
+            
+            **Briefing documents synced to GitHub Issues:**
+            
+            ${issueLinks || 'No new issues created'}
+            
+            **Summary:**
+            - 📄 Documents processed: ${report.processed}
+            - ✅ Issues created: ${report.created.length}
+            - 📝 Issues updated: ${report.updated.length}
+            - ⏭️  Skipped: ${report.skipped.length}
+            
+            Issues are ready for GitHub Copilot agents to work on! 🚀
+            `;
+            
+            // Post comment on the commit (if it's a push event)
+            if (context.eventName === 'push') {
+              github.rest.repos.createCommitComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+                body: comment
+              });
+            }
+

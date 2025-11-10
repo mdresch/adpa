@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Badge } from "@/components/ui/badge"
 import { useAuth } from "@/contexts/AuthContext"
+import { apiClient } from "@/lib/api"
 import {
   LayoutDashboard,
   Settings,
@@ -25,11 +27,13 @@ import {
   LogOut,
   Workflow,
   TrendingUp,
+  CheckCircle,
 } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderOpen },
+  { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true },
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
@@ -46,8 +50,28 @@ const navigation = [
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const pathname = usePathname()
   const { user, logout } = useAuth()
+
+  useEffect(() => {
+    if (user) {
+      fetchPendingApprovals()
+      // Refresh every 30 seconds
+      const interval = setInterval(fetchPendingApprovals, 30000)
+      return () => clearInterval(interval)
+    }
+  }, [user])
+
+  const fetchPendingApprovals = async () => {
+    try {
+      const response = await apiClient.get('/approvals/stats/user')
+      setPendingCount(response.data.stats?.pending || 0)
+    } catch (error) {
+      // Silently fail - don't show errors in sidebar
+      console.error('Failed to fetch pending approvals:', error)
+    }
+  }
 
   return (
     <div
@@ -90,6 +114,7 @@ export function Sidebar() {
         <nav className="space-y-2">
           {navigation.map((item, index) => {
             const isActive = pathname === item.href
+            const showBadge = item.badge && pendingCount > 0
             return (
               <Link key={item.name} href={item.href}>
                 <Button
@@ -113,12 +138,20 @@ export function Sidebar() {
                   {!collapsed && (
                     <span
                       className={cn(
-                        "ml-3 transition-all duration-200",
+                        "ml-3 transition-all duration-200 flex-1",
                         isActive && "font-semibold text-blue-700 dark:text-blue-300",
                       )}
                     >
                       {item.name}
                     </span>
+                  )}
+                  {showBadge && !collapsed && (
+                    <Badge className="ml-auto bg-red-500 hover:bg-red-600 text-white">
+                      {pendingCount}
+                    </Badge>
+                  )}
+                  {showBadge && collapsed && (
+                    <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white dark:border-slate-800"></div>
                   )}
                   {isActive && (
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-500/10 to-purple-500/10 animate-pulse" />

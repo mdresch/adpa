@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -76,12 +77,16 @@ interface Baseline {
 interface DriftDetection {
   id: string
   baseline_id: string
-  drift_type: 'scope' | 'technical' | 'timeline' | 'cost' | 'criteria'
-  severity: 'low' | 'medium' | 'high' | 'critical'
-  description: string
-  detected_at: string
-  resolved: boolean
-  resolution_notes?: string
+  project_id: string
+  detection_type: string
+  drift_severity: 'low' | 'medium' | 'high' | 'critical'
+  drift_description: string
+  drift_impact: string
+  detection_date: string
+  status: 'detected' | 'acknowledged' | 'investigating' | 'resolved' | 'false_positive'
+  source_document_id?: string
+  document_name?: string
+  detected_by: string
 }
 
 interface MissingDocument {
@@ -97,6 +102,7 @@ interface BaselineManagementProps {
 }
 
 export function BaselineManagement({ projectId, documents }: BaselineManagementProps) {
+  const router = useRouter()
   const [baseline, setBaseline] = useState<Baseline | null>(null)
   const [baselines, setBaselines] = useState<Baseline[]>([])
   const [drifts, setDrifts] = useState<DriftDetection[]>([])
@@ -151,31 +157,30 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
     }
   }
 
-  // Fetch drift detections
+  // Fetch drift detections for the project
   const fetchDrifts = async () => {
-    if (!baseline) return
     try {
-      const response = await apiClient.request<{ drifts: DriftDetection[] }>(`/baselines/${baseline.id}/drift`)
+      const response = await apiClient.request<{ drifts: DriftDetection[], total: number }>(
+        `/projects/${projectId}/drift-detections`,
+        { suppressNotFoundError: true } as Record<string, unknown>
+      )
       setDrifts(response.drifts || [])
-    } catch (error) {
-      console.error('Error fetching drifts:', error)
+    } catch (error: unknown) {
+      const err = error as { status?: number }
+      if (err?.status !== 404) {
+        console.error('Error fetching drifts:', error)
+      }
+      setDrifts([])
     }
   }
 
   useEffect(() => {
     setLoading(true)
-    Promise.all([fetchBaseline(), fetchBaselines()]).finally(() => {
+    Promise.all([fetchBaseline(), fetchBaselines(), fetchDrifts()]).finally(() => {
       setLoading(false)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId])
-
-  useEffect(() => {
-    if (baseline) {
-      fetchDrifts()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseline])
 
   // Check for extracted entities when dialog opens
   const checkForEntities = async () => {
@@ -416,17 +421,28 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
                 AI-extracted project baseline for drift detection
               </CardDescription>
             </div>
-            {!baseline ? (
-              <Button onClick={() => setShowExtractDialog(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Baseline
-              </Button>
-            ) : (
-              <Button variant="outline" onClick={() => setShowExtractDialog(true)}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Update Baseline
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              {baseline && (
+                <Button
+                  onClick={() => router.push(`/projects/${projectId}/baseline/approval`)}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                >
+                  <Shield className="h-4 w-4 mr-2" />
+                  Executive Approval
+                </Button>
+              )}
+              {!baseline ? (
+                <Button onClick={() => setShowExtractDialog(true)}>
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Baseline
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => setShowExtractDialog(true)}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Update Baseline
+                </Button>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -731,59 +747,180 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
         </DialogContent>
       </Dialog>
 
-      {/* Drift Detections */}
-      {baseline && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-orange-600" />
-              Drift Detections
+      {/* Drift Detections - Enhanced */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-orange-600" />
+                Drift Detections
+                {drifts.length > 0 && (
+                  <Badge variant="destructive" className="ml-2">{drifts.length}</Badge>
+                )}
+              </CardTitle>
+              <CardDescription>
+                AI-detected deviations from the established baseline
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
               {drifts.length > 0 && (
-                <Badge variant="destructive" className="ml-2">{drifts.length}</Badge>
+                <Button
+                  onClick={() => router.push(`/projects/${projectId}/drift`)}
+                  className="bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white"
+                >
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Drift Management Center
+                </Button>
               )}
-            </CardTitle>
-            <CardDescription>
-              AI-detected deviations from the established baseline
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {drifts.length > 0 ? (
-              <div className="space-y-3">
-                {drifts.map(drift => (
-                  <div key={drift.id} className={`p-4 border rounded-lg ${getDriftSeverityColor(drift.drift_severity)}`}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Badge variant="outline" className="text-xs">{drift.detection_type.replace('_', ' ')}</Badge>
-                          <Badge variant="outline" className="text-xs">{drift.drift_severity}</Badge>
-                        </div>
-                        <p className="font-medium">{drift.drift_description}</p>
-                        {drift.drift_impact && (
-                          <p className="text-sm mt-1 opacity-75">Impact: {drift.drift_impact}</p>
+              {drifts.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchDrifts()}
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh
+                </Button>
+              )}
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {drifts.length > 0 ? (
+            <div className="space-y-4">
+              {/* Drift Summary Statistics */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div className="p-3 border border-red-200 bg-red-50 rounded-lg">
+                  <p className="text-xs text-red-700 font-medium">Critical</p>
+                  <p className="text-2xl font-bold text-red-900">
+                    {drifts.filter(d => d.drift_severity === 'critical').length}
+                  </p>
+                </div>
+                <div className="p-3 border border-orange-200 bg-orange-50 rounded-lg">
+                  <p className="text-xs text-orange-700 font-medium">High</p>
+                  <p className="text-2xl font-bold text-orange-900">
+                    {drifts.filter(d => d.drift_severity === 'high').length}
+                  </p>
+                </div>
+                <div className="p-3 border border-yellow-200 bg-yellow-50 rounded-lg">
+                  <p className="text-xs text-yellow-700 font-medium">Medium</p>
+                  <p className="text-2xl font-bold text-yellow-900">
+                    {drifts.filter(d => d.drift_severity === 'medium').length}
+                  </p>
+                </div>
+                <div className="p-3 border border-blue-200 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-700 font-medium">Low</p>
+                  <p className="text-2xl font-bold text-blue-900">
+                    {drifts.filter(d => d.drift_severity === 'low').length}
+                  </p>
+                </div>
+                <div className="p-3 border border-gray-200 bg-gray-50 rounded-lg">
+                  <p className="text-xs text-gray-700 font-medium">Unresolved</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {drifts.filter(d => d.status === 'detected').length}
+                  </p>
+                </div>
+              </div>
+
+              {/* Drift by Type */}
+              <div>
+                <h4 className="text-sm font-semibold mb-2">Drift by Type</h4>
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(new Set(drifts.map(d => d.detection_type))).map(type => (
+                    <Badge key={type} variant="secondary" className="text-xs">
+                      {type.replace(/_/g, ' ').toUpperCase()}: {drifts.filter(d => d.detection_type === type).length}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+
+              {/* Drift List - Group by Severity */}
+              <div className="space-y-4">
+                {['critical', 'high', 'medium', 'low'].map(severity => {
+                  const severityDrifts = drifts.filter(d => d.drift_severity === severity)
+                  if (severityDrifts.length === 0) return null
+
+                  return (
+                    <div key={severity}>
+                      <h4 className="text-sm font-semibold mb-2 capitalize flex items-center gap-2">
+                        <span className={`h-2 w-2 rounded-full ${
+                          severity === 'critical' ? 'bg-red-500' :
+                          severity === 'high' ? 'bg-orange-500' :
+                          severity === 'medium' ? 'bg-yellow-500' :
+                          'bg-blue-500'
+                        }`} />
+                        {severity} Severity ({severityDrifts.length})
+                      </h4>
+                      <div className="space-y-2">
+                        {severityDrifts.slice(0, 5).map(drift => (
+                          <div key={drift.id} className={`p-3 border rounded-lg ${getDriftSeverityColor(drift.drift_severity)}`}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {drift.detection_type.replace(/_/g, ' ').toUpperCase()}
+                                  </Badge>
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${
+                                      drift.status === 'resolved' ? 'bg-green-100 text-green-700' :
+                                      drift.status === 'investigating' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}
+                                  >
+                                    {drift.status}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm font-medium">{drift.drift_description}</p>
+                                {drift.drift_impact && typeof drift.drift_impact === 'string' && (
+                                  <p className="text-xs mt-1 opacity-75">
+                                    <strong>Impact:</strong> {drift.drift_impact}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right text-xs opacity-75">
+                                {new Date(drift.detection_date).toLocaleDateString()}
+                              </div>
+                            </div>
+                            {drift.document_name && (
+                              <p className="text-xs mt-2 opacity-75 flex items-center gap-1">
+                                <FileText className="h-3 w-3" />
+                                {drift.document_name}
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                        {severityDrifts.length > 5 && (
+                          <p className="text-xs text-muted-foreground text-center py-2">
+                            + {severityDrifts.length - 5} more {severity} severity drifts
+                          </p>
                         )}
                       </div>
-                      <div className="text-right text-xs opacity-75">
-                        {new Date(drift.detection_date).toLocaleDateString()}
-                      </div>
                     </div>
-                    {drift.document_title && (
-                      <p className="text-xs mt-2 opacity-75">
-                        Source: {drift.document_title}
-                      </p>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
-            ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500 opacity-50" />
-                <p className="font-medium mb-1">No Drift Detected</p>
-                <p className="text-sm">All documents align with the baseline</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              {baseline ? (
+                <>
+                  <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-500 opacity-50" />
+                  <p className="font-medium mb-1">No Drift Detected</p>
+                  <p className="text-sm">All documents align with the baseline</p>
+                </>
+              ) : (
+                <>
+                  <Target className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                  <p className="font-medium mb-1">Create a Baseline First</p>
+                  <p className="text-sm">Drift detection requires an approved baseline</p>
+                </>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Baseline History */}
       {baselines.length > 0 && (
@@ -1297,7 +1434,7 @@ export function BaselineManagement({ projectId, documents }: BaselineManagementP
           </DialogHeader>
           
           <Tabs defaultValue="document" className="flex-1 overflow-hidden flex flex-col">
-            <TabsList>
+            <TabsList aria-label="Baseline document and gaps navigation">
               <TabsTrigger value="document">Baseline Document</TabsTrigger>
               <TabsTrigger value="gaps">
                 Missing Details

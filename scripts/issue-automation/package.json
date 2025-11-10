@@ -1,0 +1,22 @@
+{
+  "name": "adpa-issue-automation",
+  "version": "1.0.0",
+  "description": "Automated GitHub issue generation from ADPA briefing documents",
+  "main": "generate-issues.js",
+  "scripts": {
+    "generate": "node generate-issues.js",
+    "preview": "node sync-local.js",
+    "preview:all": "node sync-local.js",
+    "validate": "node validate-briefings.js",
+    "validate:all": "node validate-briefings.js",
+    "create": "node create-briefing.js"
+  },
+  "dependencies": {
+    "@octokit/rest": "^20.0.2"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
+

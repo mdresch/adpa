@@ -2385,12 +2385,29 @@ Requirements:
       }
       const mappedStatus = statusMap[(d.status || 'not_started').toLowerCase()] || 'not_started'
       
+      // Validate and parse due_date
+      let parsedDueDate = null
+      if (d.due_date) {
+        // Check if it's a valid date format
+        if (isValidDate(d.due_date)) {
+          parsedDueDate = d.due_date
+        } else {
+          // Try quarter date conversion (YYYY-Q1, etc.)
+          const quarterDate = convertQuarterDate(d.due_date)
+          if (quarterDate) {
+            parsedDueDate = quarterDate
+          } else {
+            logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid due_date: ${d.due_date}, setting to null`)
+          }
+        }
+      }
+
       values.push(
         projectId,
         d.name,
         d.description,
         d.type,
-        d.due_date || null,
+        parsedDueDate,
         mappedStatus,  // Use mapped status value
         d.owner || null,
         userId
@@ -2552,14 +2569,18 @@ Requirements:
       }
       const mappedStatus = statusMap[(a.status || 'not_started').toLowerCase()] || 'not_started'
       
+      // Parse and validate dates (handle quarter formats like "Q1 2026")
+      const startDate = a.start_date ? convertQuarterDate(a.start_date) : null
+      const endDate = a.end_date ? convertQuarterDate(a.end_date) : null
+      
       values.push(
         projectId,
         a.name,          // For name column
         a.name,          // For activity_name column (NOT NULL)
         a.description,
         a.category || null,
-        a.start_date || null,
-        a.end_date || null,
+        startDate,
+        endDate,
         mappedStatus,    // Use mapped status value
         assignedTo,      // Use validated UUID or null
         userId
