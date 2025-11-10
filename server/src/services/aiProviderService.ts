@@ -381,7 +381,13 @@ class AIProviderService {
 // Provider Implementations
 
 class OpenAIProvider implements AIProvider {
-  constructor(private config: AIProviderConfig) {}
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
 
   async generate(request: AIRequest): Promise<AIResponse> {
     // Implementation would use OpenAI SDK
@@ -410,7 +416,13 @@ class OpenAIProvider implements AIProvider {
 }
 
 class GoogleAIProvider implements AIProvider {
-  constructor(private config: AIProviderConfig) {}
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
 
   async generate(request: AIRequest): Promise<AIResponse> {
     // Implementation would use Google AI SDK
@@ -437,7 +449,13 @@ class GoogleAIProvider implements AIProvider {
 }
 
 class AzureAIProvider implements AIProvider {
-  constructor(private config: AIProviderConfig) {}
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
 
   async generate(request: AIRequest): Promise<AIResponse> {
     return {
@@ -463,7 +481,13 @@ class AzureAIProvider implements AIProvider {
 }
 
 class AnthropicProvider implements AIProvider {
-  constructor(private config: AIProviderConfig) {}
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
 
   async generate(request: AIRequest): Promise<AIResponse> {
     return {
@@ -489,7 +513,13 @@ class AnthropicProvider implements AIProvider {
 }
 
 class CohereProvider implements AIProvider {
-  constructor(private config: AIProviderConfig) {}
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
 
   async generate(request: AIRequest): Promise<AIResponse> {
     return {
@@ -515,7 +545,13 @@ class CohereProvider implements AIProvider {
 }
 
 class HuggingFaceProvider implements AIProvider {
-  constructor(private config: AIProviderConfig) {}
+  name: string
+  type: AIProviderType
+
+  constructor(private config: AIProviderConfig) {
+    this.name = config.name
+    this.type = config.type
+  }
 
   async generate(request: AIRequest): Promise<AIResponse> {
     return {

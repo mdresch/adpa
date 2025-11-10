@@ -279,9 +279,19 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
   try {
     const { projectId } = req.params
 
-    // Check if user has access to project
+    // Check if user has access to project (including onboarding/guest-created projects)
+    // Allow access if: owner, creator, team member, OR project created by guest
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+      `SELECT p.id, p.created_by, u.email as creator_email
+       FROM projects p
+       LEFT JOIN users u ON p.created_by = u.id
+       WHERE p.id = $1 
+       AND (
+         p.owner_id = $2 
+         OR p.created_by = $2 
+         OR p.team_members ? $2::text
+         OR u.email = 'onboarding-guest@system.local'
+       )`,
       [projectId, req.user?.id]
     )
 
@@ -397,9 +407,19 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const { projectId } = req.params
     const { page = 1, limit = 10, status, search } = req.query
 
-    // Check if user has access to project
+    // Check if user has access to project (including onboarding/guest-created projects)
+    // Allow access if: owner, creator, team member, OR project created by guest (for admins/users to view onboarding assessments)
     const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+      `SELECT p.id, p.created_by, u.email as creator_email, u.role as creator_role
+       FROM projects p
+       LEFT JOIN users u ON p.created_by = u.id
+       WHERE p.id = $1 
+       AND (
+         p.owner_id = $2 
+         OR p.created_by = $2 
+         OR p.team_members ? $2::text
+         OR u.email = 'onboarding-guest@system.local'
+       )`,
       [projectId, req.user?.id]
     )
 
@@ -1191,15 +1211,21 @@ router.put("/:id",
       // ⭐ AUTOMATIC DRIFT DETECTION on document save
       let driftRevalidation = null
       
-      // Always run drift validation if document has project_id and content was updated
-      if (content && result.rows[0]?.project_id && result.rows[0]?.content) {
+      // Only run drift validation if content has ACTUALLY CHANGED
+      // This prevents false drift detection on every save
+      // Note: We check both contentString existence AND inequality to handle edge cases
+      const contentHasChanged = contentString !== undefined && doc.content !== contentString
+      
+      if (contentHasChanged && result.rows[0]?.project_id && result.rows[0]?.content) {
         try {
           const { driftDetectionService } = await import('../services/driftDetectionService')
           
-          log.info(`[DRIFT] Auto-detecting drift after document update`, {
+          log.info(`[DRIFT] Auto-detecting drift after document content change`, {
             projectId: result.rows[0].project_id,
             documentId: id,
-            documentName: result.rows[0].name
+            documentName: result.rows[0].name,
+            oldContentLength: doc.content?.length || 0,
+            newContentLength: contentString?.length || 0
           })
           
           // Check for drift using new drift detection service
@@ -1239,11 +1265,20 @@ router.put("/:id",
                 baselineId: baselineResult.rows[0].id,
                 driftPoints: driftResult.driftPoints,
                 severity: driftResult.severity,
-                triggeredBy: 'document_update'
+                triggeredBy: 'manual' // Manual user edit
               })
               
               // Add drift record ID to response
               driftRevalidation.driftRecordId = driftRecord.id
+              
+              // Trigger escalation check (TASK-742: Escalation matrix)
+              try {
+                await driftDetectionService.checkAndTriggerEscalation(driftRecord, driftResult.driftPoints)
+                log.info('[DRIFT] Escalation check completed', { driftRecordId: driftRecord.id })
+              } catch (escalationError) {
+                log.error('[DRIFT] Error triggering escalation:', escalationError)
+                // Don't fail the request if escalation fails
+              }
               
               // Emit WebSocket event for drift detection
               try {
