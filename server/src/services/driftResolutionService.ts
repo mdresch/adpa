@@ -14,6 +14,8 @@ import { PoolClient } from 'pg'
 import { emergencyMeetingService } from './emergencyMeetingService'
 import { approvalWorkflowService } from './approvalWorkflowService'
 import { createKnowledgeBaseFromDrift } from '../modules/knowledgeBase/integration'
+import { createHash } from 'crypto'
+import { redis } from '../database/redis'
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -70,6 +72,21 @@ interface DriftRecord {
 }
 
 export class DriftResolutionService {
+  private readonly CACHE_PREFIX = 'drift:resolution:'
+  private readonly CACHE_TTL = 60 * 60 // 1 hour (resolutions are deterministic for same input)
+
+  /**
+   * Generate cache key for drift resolution based on content hash
+   */
+  private generateCacheKey(documentContent: string, driftRecordId: string, strategy: string): string {
+    const contentHash = createHash('sha256')
+      .update(documentContent + driftRecordId + strategy)
+      .digest('hex')
+      .substring(0, 16)
+    
+    return `${this.CACHE_PREFIX}${contentHash}`
+  }
+
   /**
    * Resolve drift using AI
    */
@@ -103,6 +120,28 @@ export class DriftResolutionService {
       // Identify major changes early (before AI call)
       const majorChanges = this.identifyMajorChanges(driftPoints)
 
+      // PERFORMANCE: Check cache for existing resolution
+      const cacheKey = this.generateCacheKey(document.content, driftRecordId, strategy)
+      try {
+        const cached = await redis.get(cacheKey)
+        if (cached) {
+          const cachedResult = JSON.parse(cached)
+          const cacheDuration = Date.now() - startTime
+          logger.info('[DRIFT-RESOLUTION] ✅ Cache HIT - returning cached resolution', {
+            documentId,
+            driftRecordId,
+            strategy,
+            cacheDurationMs: cacheDuration
+          })
+          return cachedResult
+        }
+        logger.debug('[DRIFT-RESOLUTION] Cache MISS - generating new resolution', { cacheKey })
+      } catch (cacheError: any) {
+        logger.warn('[DRIFT-RESOLUTION] Cache check failed, proceeding without cache', {
+          error: cacheError.message
+        })
+      }
+
       // PERFORMANCE: Build optimized resolution prompt (reduced size)
       const prompt = this.buildOptimizedResolutionPrompt(
         document,
@@ -112,14 +151,19 @@ export class DriftResolutionService {
       )
 
       // PERFORMANCE: Call AI with optimized parameters for speed
+      // Use fast models: deepseek-chat (fast), gpt-4o-mini (fast), or gpt-4o (balanced)
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiStartTime = Date.now()
       
+      // PERFORMANCE: Reduce maxTokens to 3000 (most resolutions don't need 4000)
+      // This speeds up generation time significantly
       const aiResponse = await aiService.generate({
         prompt,
-        temperature: 0.3, // Slightly higher for faster generation
-        maxTokens: 4000, // Reduced from 8000 for faster response
-        max_tokens: 4000 // Alternative parameter name for compatibility
+        provider: 'openai', // Use OpenAI for speed and reliability
+        model: 'gpt-4o-mini', // Fast and cost-effective model optimized for speed
+        temperature: 0.3, // Low temperature for consistent, focused output
+        maxTokens: 3000, // Optimized for speed - most resolutions need 1500-2500 tokens
+        max_tokens: 3000 // Alternative parameter name for compatibility
       })
       
       const aiDuration = Date.now() - aiStartTime
@@ -143,8 +187,8 @@ export class DriftResolutionService {
       // Return immediately without waiting for preview
       const previewPromise = this.generateDiffPreview(document.content, resolvedContent)
 
-      // Return result with preview promise that resolves later
-      return {
+      // Build result
+      const result: ResolutionResult = {
         resolvedContent,
         originalContent: document.content,
         driftPoints,
@@ -154,6 +198,13 @@ export class DriftResolutionService {
         // Preview will be undefined initially, can be generated on-demand by client
         previewHtml: undefined
       }
+
+      // PERFORMANCE: Cache the result for future requests (fire and forget)
+      redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(result)).catch((err: any) => {
+        logger.warn('[DRIFT-RESOLUTION] Failed to cache result', { error: err.message })
+      })
+
+      return result
     } catch (error) {
       const errorDuration = Date.now() - startTime
       logger.error('[DRIFT-RESOLUTION] Resolution failed:', {
