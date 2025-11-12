@@ -1141,14 +1141,49 @@ These changes have been flagged as **major changes** based on the following crit
       const document = docResult.rows[0]
 
       // Determine request type and priority based on drift severity and changes
+      // TASK-745: Approval workflow integration - detect positive drift
       let requestType = 'negative_drift'
       let priority: 'low' | 'medium' | 'high' | 'critical' | 'emergency' = 'medium'
       let severity: 'low' | 'medium' | 'high' | 'critical' = driftRecord.drift_severity || 'medium'
 
-      // Check for budget overrun
+      // Check for positive drift (cost savings, timeline acceleration, efficiency improvements)
+      const hasPositiveDrift = majorChanges.some(change => {
+        // Budget reductions (cost savings)
+        if ((change.entityType === 'budget' || change.entityType === 'cost') && change.variance) {
+          return change.variance < -5 // 5% or more cost reduction
+        }
+        // Timeline acceleration (earlier completion)
+        if (change.entityType === 'milestone' || change.entityType === 'phase') {
+          // Check if current date is earlier than baseline (positive)
+          const baselineDate = change.baselineValue ? new Date(change.baselineValue) : null
+          const currentDate = change.currentValue ? new Date(change.currentValue) : null
+          if (baselineDate && currentDate && currentDate < baselineDate) {
+            return true
+          }
+        }
+        // Efficiency improvements
+        if (change.description && (
+          change.description.toLowerCase().includes('optimiz') ||
+          change.description.toLowerCase().includes('improved') ||
+          change.description.toLowerCase().includes('efficient')
+        )) {
+          return true
+        }
+        return false
+      })
+
+      // Check for budget overrun (negative)
       const hasBudgetOverrun = majorChanges.some(
-        change => change.entityType === 'budget' && change.variance && Math.abs(change.variance) > 10
+        change => change.entityType === 'budget' && change.variance && change.variance > 10
       )
+
+      // Prioritize positive drift detection
+      if (hasPositiveDrift && !hasBudgetOverrun) {
+        requestType = 'positive_drift'
+        // Positive drift priority based on value, but typically medium priority
+        priority = 'medium'
+        severity = 'low' // Positive drift is opportunity, not risk
+      }
 
       if (hasBudgetOverrun) {
         requestType = 'budget_overrun'
