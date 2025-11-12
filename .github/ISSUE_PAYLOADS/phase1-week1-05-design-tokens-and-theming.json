@@ -1,0 +1,6 @@
+{
+  "title": "Design Tokens & Theming",
+  "body": "See `.github/ISSUES/phase1-week1-05-design-tokens-and-theming.md`.\n\nDeliverable: `lib/theme/maturity-portal-theme.ts` and README describing token usage.",
+  "labels": ["phase:1","week:1","area:design","type:task","priority:high"],
+  "assignees": []
+}

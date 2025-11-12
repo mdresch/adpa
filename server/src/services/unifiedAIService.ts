@@ -3,11 +3,11 @@
  * Provides a single interface for all AI providers using the AI SDK
  */
 
-// import { generateText, generateObject } from 'ai' // Temporarily disabled
-// import { openai } from '@ai-sdk/openai' // Temporarily disabled
-// import { google } from '@ai-sdk/google' // Temporarily disabled
-// import { mistral } from '@ai-sdk/mistral' // Removed due to Zod import issues
-// import { azure } from '@ai-sdk/azure' // Temporarily disabled
+import { generateText, generateObject } from 'ai'
+import { openai } from '@ai-sdk/openai'
+// import { google } from '@ai-sdk/google' // Package not installed
+import { mistral } from '@ai-sdk/mistral'
+// import { azure } from '@ai-sdk/azure' // Package not installed
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 
@@ -126,14 +126,31 @@ class UnifiedAIService {
       case 'openai':
         return openai(config)
       case 'google':
-        return google(config)
+        throw new Error('Google AI SDK not installed. Install @ai-sdk/google to use this provider.')
+        // return google(config)
       case 'mistral':
-        throw new Error('Mistral AI SDK temporarily disabled due to Zod import issues')
-        // return mistral(config)
+        return mistral(config)
       case 'azure':
-        return azure(config)
+        throw new Error('Azure AI SDK not installed. Install @ai-sdk/azure to use this provider.')
+        // return azure(config)
       default:
         throw new Error(`Unsupported provider type: ${provider.type}`)
+    }
+  }
+
+  private normalizeUsage(usage: any | undefined): {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  } {
+    if (!usage) {
+      return { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+    }
+
+    return {
+      promptTokens: usage.prompt_tokens ?? usage.promptTokens ?? 0,
+      completionTokens: usage.completion_tokens ?? usage.completionTokens ?? 0,
+      totalTokens: usage.total_tokens ?? usage.totalTokens ?? 0,
     }
   }
 
@@ -177,21 +194,27 @@ class UnifiedAIService {
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
         })),
-        maxTokens: request.max_tokens || 1000,
+        maxOutputTokens: request.max_tokens || 1000,
         temperature: request.temperature || 0.7,
       })
 
       logger.info(`Generated content using AI provider: ${provider.name}`)
 
+      const {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+      } = this.normalizeUsage(response.usage)
+
       return {
         content: response.text,
         provider: provider.name,
         model: model,
-        usage: response.usage ? {
-          prompt_tokens: response.usage.promptTokens || 0,
-          completion_tokens: response.usage.completionTokens || 0,
-          total_tokens: response.usage.totalTokens || 0,
-        } : undefined,
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+        },
         metadata: {
           finishReason: response.finishReason,
           model: response.model,
@@ -288,7 +311,7 @@ class UnifiedAIService {
       await generateText({
         model: client(defaultModel),
         messages: [{ role: 'user', content: 'Hello' }],
-        maxTokens: 1,
+        maxOutputTokens: 1,
       })
     } catch (error: any) {
       throw new Error(`API key validation failed: ${error.message}`)
@@ -354,7 +377,7 @@ class UnifiedAIService {
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
         })),
-        maxTokens: request.max_tokens || 1000,
+        maxOutputTokens: request.max_tokens || 1000,
         temperature: request.temperature || 0.7,
       })
 

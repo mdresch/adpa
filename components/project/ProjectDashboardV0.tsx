@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
+import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target, Sparkles } from "lucide-react"
 import { toast } from "sonner"
+import { PMBOK8DomainDashboard } from "./PMBOK8DomainDashboard"
 
 interface ProjectDashboardV0Props {
   projectId: string
@@ -77,11 +78,20 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [baselines, setBaselines] = useState<Baseline[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  const [pmbok8Summary, setPmbok8Summary] = useState<{
+    totalEntities: number
+    domainCoverage: Record<string, boolean>
+    overallHealth: number | null
+  } | null>(null)
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [extractionProgress, setExtractionProgress] = useState(0)
+  const [extractionStatus, setExtractionStatus] = useState<string>("")
 
   useEffect(() => {
     void fetchProjectData()
     void fetchDocuments()
     void fetchBaselines()
+    void fetchPMBOK8Summary()
   }, [projectId])
 
   const fetchProjectData = async () => {
@@ -116,8 +126,6 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setDocuments(data.documents || [])
     } catch (error) {
       console.error('Failed to fetch documents:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -135,6 +143,140 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setBaselines(data.baselines || [])
     } catch (error) {
       console.error('Failed to fetch baselines:', error)
+    }
+  }
+
+  const handleRunFullExtraction = async () => {
+    try {
+      setIsExtracting(true)
+      setExtractionProgress(0)
+      setExtractionStatus("Starting extraction...")
+
+      // Get AI providers to use default provider/model
+      const providersResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai-providers`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      
+      const providers = await providersResponse.json()
+      
+      // Find active provider with models (check both normalized and raw formats)
+      const activeProvider = providers.find((p: any) => {
+        const isActive = p.is_active || p.enabled
+        const hasModels = (p.models && p.models.length > 0) || 
+                         (p.configuration?.models && p.configuration.models.length > 0)
+        return isActive && hasModels
+      })
+      
+      if (!activeProvider) {
+        toast.error('No active AI providers with models configured. Please configure a provider first.')
+        setIsExtracting(false)
+        return
+      }
+
+      // Get provider type and model (handle both formats)
+      const providerType = activeProvider.type || activeProvider.provider_type
+      const models = activeProvider.models || activeProvider.configuration?.models || []
+      const model = models[0] || activeProvider.configuration?.model || activeProvider.model
+
+      if (!providerType || !model) {
+        toast.error('Provider configuration incomplete. Please check AI provider settings.')
+        setIsExtracting(false)
+        return
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/extract`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          projectId,
+          aiProvider: providerType,
+          aiModel: model,
+          documentIds: undefined // Extract from all documents
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || 'Failed to start extraction')
+      }
+
+      const data = await response.json()
+      setExtractionStatus("Extraction job started")
+      toast.success("Extraction started! This may take 2-3 minutes...")
+
+      // Poll job status
+      const jobId = data.jobId
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/status/${jobId}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          })
+          
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json()
+            setExtractionProgress(statusData.progress || 0)
+            setExtractionStatus(statusData.status || "Processing...")
+
+            if (statusData.status === 'completed') {
+              clearInterval(pollInterval)
+              setIsExtracting(false)
+              setExtractionProgress(100)
+              toast.success(`Extraction complete! ${statusData.result?.totalEntities || 0} entities extracted.`)
+              
+              // Refresh data
+              void fetchPMBOK8Summary()
+            } else if (statusData.status === 'failed') {
+              clearInterval(pollInterval)
+              setIsExtracting(false)
+              toast.error('Extraction failed. Please try again.')
+            }
+          }
+        } catch (error) {
+          console.error('Failed to poll extraction status:', error)
+        }
+      }, 2000) // Poll every 2 seconds
+
+      // Cleanup interval after 5 minutes (safety timeout)
+      setTimeout(() => {
+        clearInterval(pollInterval)
+        setIsExtracting(false)
+        toast.info('Extraction is still running. Check the AI Extraction tab for progress.')
+      }, 300000) // 5 minutes
+
+    } catch (error) {
+      console.error('Extraction failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to start extraction')
+      setIsExtracting(false)
+      setExtractionProgress(0)
+      setExtractionStatus("")
+    }
+  }
+
+  const fetchPMBOK8Summary = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPmbok8Summary({
+          totalEntities: data.pmbok8Total || 0,
+          domainCoverage: data.domainCoverage || {},
+          overallHealth: null
+        })
+      }
+    } catch (error) {
+      // Silently fail - PMBOK 8 data is optional
+      console.debug('PMBOK 8 summary not available:', error)
     }
   }
 
@@ -280,6 +422,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
             <TabsTrigger value="documents">📄 Documents</TabsTrigger>
             <TabsTrigger value="baselines">🎯 Baselines</TabsTrigger>
             <TabsTrigger value="ai-extract">🤖 AI Extract</TabsTrigger>
+            <TabsTrigger value="pmbok8">🎯 PMBOK 8 Domains</TabsTrigger>
             <TabsTrigger value="analytics">📊 Analytics</TabsTrigger>
             <TabsTrigger value="timeline">📈 Timeline</TabsTrigger>
             <TabsTrigger value="team">👥 Team</TabsTrigger>
@@ -333,6 +476,75 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 </div>
               </CardContent>
             </Card>
+
+            {/* PMBOK 8 Domain Summary */}
+            {pmbok8Summary && pmbok8Summary.totalEntities > 0 && (
+              <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/20 dark:to-blue-950/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-purple-600" />
+                        PMBOK 8 Performance Domains
+                      </CardTitle>
+                      <CardDescription>
+                        {pmbok8Summary.totalEntities} entities across 5 performance domains
+                      </CardDescription>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setActiveTab("pmbok8")}
+                    >
+                      View Details
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-5 gap-3">
+                    {Object.entries(pmbok8Summary.domainCoverage).map(([domain, covered]) => {
+                      const domainLabels: Record<string, string> = {
+                        team: "Team",
+                        developmentApproach: "Dev Approach",
+                        projectWork: "Project Work",
+                        measurement: "Measurement",
+                        uncertainty: "Uncertainty"
+                      }
+                      return (
+                        <div 
+                          key={domain}
+                          className={`p-3 rounded-lg border-2 text-center transition-all ${
+                            covered 
+                              ? 'border-green-300 bg-green-50 dark:bg-green-950/20' 
+                              : 'border-gray-200 bg-gray-50 dark:bg-gray-950/20 opacity-50'
+                          }`}
+                        >
+                          <div className={`text-2xl mb-1 ${covered ? '' : 'opacity-30'}`}>
+                            {covered ? '✓' : '○'}
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground">
+                            {domainLabels[domain] || domain}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {Object.values(pmbok8Summary.domainCoverage).filter(Boolean).length} of 5 domains covered
+                    </span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setActiveTab("pmbok8")}
+                      className="text-purple-600 hover:text-purple-700"
+                    >
+                      View Full Analytics →
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Documents Tab */}
@@ -531,14 +743,50 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                     <CardDescription>14 entity types extracted from PMBOK 8 standards</CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => router.push(`/projects/${projectId}?tab=extraction`)}
+                    >
                       📊 View All Entities
                     </Button>
-                    <Button size="sm">🤖 Run Full Extraction</Button>
+                    <Button 
+                      size="sm" 
+                      onClick={handleRunFullExtraction}
+                      disabled={isExtracting || documents.length === 0}
+                    >
+                      {isExtracting ? (
+                        <>
+                          <Clock className="h-4 w-4 mr-2 animate-spin" />
+                          Extracting... {extractionProgress}%
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Run Full Extraction
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
+                {isExtracting && (
+                  <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        {extractionStatus || "Extracting project entities..."}
+                      </span>
+                      <span className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        {extractionProgress}%
+                      </span>
+                    </div>
+                    <Progress value={extractionProgress} className="h-2" />
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                      This typically takes 2-3 minutes. Please wait...
+                    </p>
+                  </div>
+                )}
                 <div className="rounded-lg border border-border overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-muted">
@@ -583,6 +831,11 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* PMBOK 8 Domains Tab */}
+          <TabsContent value="pmbok8" className="space-y-6">
+            <PMBOK8DomainDashboard projectId={projectId} />
           </TabsContent>
 
           {/* Analytics Tab */}

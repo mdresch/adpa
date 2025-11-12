@@ -122,6 +122,7 @@ export default function DocumentViewerPage() {
   } = useDriftDetection(documentId, document?.project_id)
 
   const [showResolutionDialog, setShowResolutionDialog] = useState(false)
+  const [selectedStrategy, setSelectedStrategy] = useState<'conservative' | 'balanced' | 'permissive'>('balanced')
 
   useEffect(() => {
     if (documentId && user) {
@@ -456,7 +457,15 @@ ${doc.content}
   // ⭐ Drift resolution handlers
   const onResolveDriftClick = async () => {
     setShowResolutionDialog(true)
-    await handleResolveDrift('balanced')
+    await handleResolveDrift(selectedStrategy)
+  }
+
+  const onStrategyChange = async (strategy: 'conservative' | 'balanced' | 'permissive') => {
+    setSelectedStrategy(strategy)
+    // Regenerate resolution with new strategy if preview already exists
+    if (resolutionPreview && driftAlert) {
+      await handleResolveDrift(strategy)
+    }
   }
 
   const onApplyDriftResolution = async () => {
@@ -1221,6 +1230,9 @@ ${doc.content}
         resolutionPreview={resolutionPreview}
         onApply={onApplyDriftResolution}
         isApplying={isApplying}
+        isLoading={isResolving}
+        onStrategyChange={onStrategyChange}
+        selectedStrategy={selectedStrategy}
       />
     </div>
   )
