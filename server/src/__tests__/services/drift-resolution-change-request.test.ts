@@ -69,11 +69,26 @@ describe('Drift Resolution - Change Request Creation', () => {
     await pool.query('DELETE FROM projects WHERE id = $1', [testProjectId])
     await pool.query('DELETE FROM users WHERE id = $1', [testUserId])
     
-    // Close pool
-    await pool.end()
+    // Note: Do NOT call pool.end() here - it closes the shared pool and breaks other tests
   })
 
+  // Helper function to reset drift record to 'detected' state for test isolation
+  async function resetDriftRecord(driftRecordId: string): Promise<void> {
+    await pool.query(
+      `UPDATE baseline_drift_detection 
+       SET status = 'detected', 
+           resolved_at = NULL, 
+           assigned_to = NULL, 
+           resolution_notes = NULL
+       WHERE id = $1`,
+      [driftRecordId]
+    )
+  }
+
   test('should create change request for major changes', async () => {
+    // Reset drift record to ensure test isolation
+    await resetDriftRecord(testDriftRecordId)
+    
     const resolvedContent = '# Resolved Content\n\nThis is the resolved document.'
     
     const majorChanges = [
@@ -136,6 +151,9 @@ describe('Drift Resolution - Change Request Creation', () => {
   })
 
   test('should not create change request when no major changes', async () => {
+    // Reset drift record to ensure test isolation
+    await resetDriftRecord(testDriftRecordId)
+    
     const resolvedContent = '# Resolved Content\n\nNo major changes.'
 
     // Apply resolution without major changes
@@ -152,6 +170,9 @@ describe('Drift Resolution - Change Request Creation', () => {
   })
 
   test('should handle missing major changes parameter', async () => {
+    // Reset drift record to ensure test isolation
+    await resetDriftRecord(testDriftRecordId)
+    
     const resolvedContent = '# Resolved Content'
 
     // Apply resolution without major changes parameter
@@ -165,5 +186,49 @@ describe('Drift Resolution - Change Request Creation', () => {
 
     // Verify no change request was created
     expect(result.changeRequestId).toBeUndefined()
+  })
+
+  test('should mark drift record as resolved when applying resolution', async () => {
+    // Reset drift record to ensure test isolation
+    await resetDriftRecord(testDriftRecordId)
+    
+    const resolvedContent = '# Resolved Content\n\nThis document has been resolved.'
+
+    // Get initial drift record status
+    const initialDrift = await pool.query(
+      `SELECT status, resolved_at, assigned_to, resolution_notes FROM baseline_drift_detection WHERE id = $1`,
+      [testDriftRecordId]
+    )
+
+    // Verify initial status is not 'resolved'
+    expect(initialDrift.rows[0].status).not.toBe('resolved')
+    expect(initialDrift.rows[0].resolved_at).toBeNull()
+
+    // Apply resolution
+    await driftResolutionService.applyResolution(
+      testDocumentId,
+      resolvedContent,
+      testDriftRecordId,
+      testUserId,
+      [] // No major changes
+    )
+
+    // Get updated drift record
+    const updatedDrift = await pool.query(
+      `SELECT status, resolved_at, assigned_to, resolution_notes FROM baseline_drift_detection WHERE id = $1`,
+      [testDriftRecordId]
+    )
+
+    // Verify drift record is marked as resolved
+    expect(updatedDrift.rows[0].status).toBe('resolved')
+    expect(updatedDrift.rows[0].resolved_at).not.toBeNull()
+    expect(updatedDrift.rows[0].assigned_to).toBe(testUserId)
+    expect(updatedDrift.rows[0].resolution_notes).toBe('AI-assisted drift resolution applied')
+
+    // Verify resolved_at is a recent timestamp (within last minute)
+    const resolvedAt = new Date(updatedDrift.rows[0].resolved_at)
+    const now = new Date()
+    const timeDiff = now.getTime() - resolvedAt.getTime()
+    expect(timeDiff).toBeLessThan(60000) // Less than 1 minute
   })
 })

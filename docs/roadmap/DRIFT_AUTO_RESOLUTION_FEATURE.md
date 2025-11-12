@@ -986,7 +986,7 @@ Resolution: Keep all 15, just note the additions in change log
 - [x] All 3 strategies (conservative/balanced/permissive) work ✅ **COMPLETED** (See: `server/src/services/driftResolutionService.ts`)
 - [x] Major changes flagged for approval ✅ **COMPLETED** (See: `server/src/services/driftResolutionService.ts` line 121)
 - [x] Applied resolution updates document successfully ✅ **COMPLETED** (See: `server/src/services/driftResolutionService.ts` line 625)
-- [x] Drift record marked as resolved ✅ **COMPLETED** (See: `server/src/services/driftResolutionService.ts` line 644)
+- [x] Drift record marked as resolved ✅ **COMPLETED** (TASK-732) (See: `server/src/services/driftResolutionService.ts` line 644)
 - [x] Audit log created ✅ **COMPLETED** (See: `server/src/services/driftResolutionService.ts` line 651)
 - [x] WebSocket notifications sent ✅ **COMPLETED** (See: docs/features/WEBSOCKET_DRIFT_NOTIFICATIONS.md)
 - [x] Works for all 14 entity types ✅ **COMPLETED** (See: `server/src/services/driftDetectionService.ts`)
