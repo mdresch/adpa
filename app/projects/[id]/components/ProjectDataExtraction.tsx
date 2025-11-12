@@ -122,34 +122,93 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
 
   const fetchAIProviders = async () => {
     try {
+      console.log('[EXTRACTION] Fetching AI providers...')
       const providers = await apiClient.getAIProviders()
       console.log('[EXTRACTION] Raw providers response:', providers)
+      console.log('[EXTRACTION] Providers count:', providers?.length || 0)
       console.log('[EXTRACTION] First provider object keys:', providers[0] ? Object.keys(providers[0]) : 'No providers')
       console.log('[EXTRACTION] First provider full object:', providers[0])
       
+      if (!providers || providers.length === 0) {
+        console.warn('[EXTRACTION] No providers returned from API')
+        setAiProviders([])
+        return
+      }
+      
       const activeProviders = providers.filter((p: any) => p.is_active).map((p: any) => {
-        // Normalize models - handle both 'models' array and 'model' string
-        const models = p.models || (p.model ? [p.model] : [])
+        // Helper function to extract model name/id from string or object
+        const extractModelName = (model: any): string => {
+          if (typeof model === 'string') {
+            return model
+          }
+          if (typeof model === 'object' && model !== null) {
+            // Model object has properties like id, name, isDefault, maxTokens, etc.
+            return model.name || model.id || model.model || String(model)
+          }
+          return String(model)
+        }
         
-        // Use 'type' property (confirmed from logs: ['id', 'name', 'type', 'models', ...])
+        // Normalize models - check multiple possible locations
+        // API returns: configuration.models array OR configuration.model string OR top-level model string
+        // Models can be strings or objects with {id, name, isDefault, maxTokens, ...}
+        const configModels = (p.configuration?.models || []).map(extractModelName)
+        const configModel = p.configuration?.model ? [extractModelName(p.configuration.model)] : []
+        const topLevelModel = p.model ? [extractModelName(p.model)] : []
+        const topLevelModels = (p.models || []).map(extractModelName)
+        
+        // Combine all possible model sources, deduplicate
+        const allModels = [...new Set([
+          ...configModels,
+          ...configModel,
+          ...topLevelModel,
+          ...topLevelModels
+        ])].filter(Boolean)
+        
+        // Use 'type' property from API (API returns 'type', not 'provider_type')
         const providerType = p.type || p.provider_type || p.providerType || p.provider || 'unknown'
         
         console.log(`[EXTRACTION] Provider ${p.name}:`, {
           type: p.type,
-          models: p.models,
-          modelsLength: p.models?.length || 0,
-          modelsContent: p.models,
-          hasModels: !!p.models && p.models.length > 0
+          provider_type: p.provider_type,
+          configModels: p.configuration?.models,
+          configModel: p.configuration?.model,
+          topLevelModel: p.model,
+          topLevelModels: p.models,
+          allModels: allModels,
+          modelsLength: allModels.length,
+          hasModels: allModels.length > 0
         })
+        
+        // If no models found, use backend fallback models (matching server/src/routes/ai-providers.ts)
+        const backendFallbackModels: Record<string, string[]> = {
+          openai: ['gpt-4o', 'gpt-4-turbo-preview', 'gpt-4', 'gpt-3.5-turbo'],
+          google: ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'],
+          azure: ['gpt-4', 'gpt-35-turbo', 'gpt-4-32k'],
+          groq: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192', 'mixtral-8x7b-32768'],
+          mistral: ['mistral-large-latest', 'mistral-small-latest', 'mistral-medium-latest'],
+          anthropic: ['claude-sonnet-4.0', 'claude-haiku-4.0', 'claude-opus-4.0', 'claude-3-sonnet'],
+          deepseek: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-coder'],
+          moonshot: ['kimi-k2-turbo-preview', 'moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
+          xai: ['grok-beta', 'grok-vision-beta']
+        }
+        
+        const finalModels = allModels.length > 0 ? allModels : (backendFallbackModels[providerType] || [])
         
         return {
           ...p,
-          provider_type: providerType, // Normalize to provider_type
-          models: models
+          provider_type: providerType, // Normalize to provider_type for component use
+          models: finalModels
         }
       })
       
       console.log('[EXTRACTION] Active providers with normalized models:', activeProviders)
+      console.log('[EXTRACTION] Active providers count:', activeProviders.length)
+      
+      if (activeProviders.length === 0) {
+        console.warn('[EXTRACTION] No active providers found after filtering')
+        setAiProviders([])
+        return
+      }
       
       setAiProviders(activeProviders)
       
@@ -159,15 +218,61 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
         console.log('[EXTRACTION] Setting default provider:', providerWithModels.provider_type, 'with models:', providerWithModels.models)
         
         setSelectedProvider(providerWithModels.provider_type)
-        setSelectedModel(providerWithModels.models[0])
         
-        console.log('[EXTRACTION] Defaults set - Provider:', providerWithModels.provider_type, 'Model:', providerWithModels.models[0])
+        // Validate selected model exists in available models, otherwise use first model
+        const currentModel = selectedModel
+        const modelExists = providerWithModels.models.includes(currentModel)
+        const modelToUse = modelExists ? currentModel : providerWithModels.models[0]
+        
+        if (!modelExists && currentModel) {
+          console.warn(`[EXTRACTION] Selected model "${currentModel}" not available, using "${modelToUse}" instead`)
+        }
+        
+        setSelectedModel(modelToUse)
+        
+        console.log('[EXTRACTION] Defaults set - Provider:', providerWithModels.provider_type, 'Model:', modelToUse)
       } else {
         console.warn('[EXTRACTION] No providers with models available')
+        // Fallback: try to set a default provider even without models
+        if (activeProviders.length > 0) {
+          const firstProvider = activeProviders[0]
+          setSelectedProvider(firstProvider.provider_type)
+          // Use first model from provider's models array (which now includes backend fallbacks)
+          if (firstProvider.models && firstProvider.models.length > 0) {
+            setSelectedModel(firstProvider.models[0])
+            console.log('[EXTRACTION] Using first available model:', firstProvider.models[0])
+          } else {
+            // Last resort: use backend default model mapping
+            const defaultModels: Record<string, string> = {
+              google: 'gemini-2.0-flash-exp',
+              openai: 'gpt-4-turbo-preview',
+              mistral: 'mistral-large-latest',
+              groq: 'llama-3.3-70b-versatile',
+              anthropic: 'claude-3-sonnet',
+              deepseek: 'deepseek-chat',
+              moonshot: 'moonshot-v1-8k',
+              xai: 'grok-beta'
+            }
+            const defaultModel = defaultModels[firstProvider.provider_type] || ''
+            if (defaultModel) {
+              setSelectedModel(defaultModel)
+              console.log('[EXTRACTION] Using hardcoded fallback default model:', defaultModel)
+            }
+          }
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[EXTRACTION] Failed to fetch AI providers:', error)
-      toast.error('Failed to load AI providers')
+      console.error('[EXTRACTION] Error details:', {
+        message: error?.message,
+        response: error?.response,
+        status: error?.response?.status,
+        data: error?.response?.data
+      })
+      toast.error(`Failed to load AI providers: ${error?.message || 'Unknown error'}. Please check your backend connection.`)
+      setAiProviders([])
+      setSelectedProvider('')
+      setSelectedModel('')
     }
   }
 
@@ -626,7 +731,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               Extract Project Data with AI
             </DialogTitle>
             <DialogDescription>
-              AI will analyze your project documents and extract 13 types of structured entities.
+              AI will analyze your project documents and extract 14 types of structured entities.
             </DialogDescription>
           </DialogHeader>
 
@@ -650,42 +755,59 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             <div className="space-y-4">
               {/* AI Provider Selection */}
               <div>
-                <Label htmlFor="ai-provider">AI Provider</Label>
-                <select
-                  id="ai-provider"
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-                  value={selectedProvider}
-                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                    const providerType = e.target.value
-                    console.log('[EXTRACTION] Provider changed to:', providerType)
-                    
-                    const provider = aiProviders.find(p => p.provider_type === providerType)
-                    console.log('[EXTRACTION] Found provider:', provider)
-                    console.log('[EXTRACTION] Provider models:', provider?.models)
-                    
-                    setSelectedProvider(providerType)
-                    
-                    // Auto-select first model for new provider (models already normalized in state)
-                    if (provider && provider.models && provider.models.length > 0) {
-                      console.log('[EXTRACTION] Auto-selecting model:', provider.models[0])
-                      setSelectedModel(provider.models[0])
-                    } else {
-                      console.warn('[EXTRACTION] No models available for provider:', providerType)
-                      setSelectedModel('')
-                    }
-                  }}
-                >
-                  {aiProviders.map((provider) => (
-                    <option key={provider.id} value={provider.provider_type}>
-                      {provider.name}
-                    </option>
-                  ))}
-                </select>
+                <Label htmlFor="ai-provider">AI Provider {aiProviders.length === 0 && <span className="text-red-500 text-xs">(No providers available)</span>}</Label>
+                {aiProviders.length === 0 ? (
+                  <div className="mt-1 p-3 border border-red-200 bg-red-50 dark:bg-red-950/20 rounded-md">
+                    <p className="text-sm text-red-800 dark:text-red-200">
+                      No AI providers configured. Please configure at least one provider in Settings → AI Providers.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    id="ai-provider"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
+                    value={selectedProvider}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      const providerType = e.target.value
+                      console.log('[EXTRACTION] Provider changed to:', providerType)
+                      
+                      const provider = aiProviders.find(p => p.provider_type === providerType)
+                      console.log('[EXTRACTION] Found provider:', provider)
+                      console.log('[EXTRACTION] Provider models:', provider?.models)
+                      
+                      setSelectedProvider(providerType)
+                      
+                      // Auto-select first model for new provider (models already normalized in state)
+                      if (provider && provider.models && provider.models.length > 0) {
+                        // Check if current model is valid for this provider, otherwise use first
+                        const currentModel = selectedModel
+                        const modelExists = provider.models.includes(currentModel)
+                        const modelToUse = modelExists ? currentModel : provider.models[0]
+                        
+                        if (!modelExists && currentModel) {
+                          console.warn(`[EXTRACTION] Model "${currentModel}" not available for ${providerType}, using "${modelToUse}"`)
+                        }
+                        
+                        console.log('[EXTRACTION] Auto-selecting model:', modelToUse)
+                        setSelectedModel(modelToUse)
+                      } else {
+                        console.warn('[EXTRACTION] No models available for provider:', providerType)
+                        setSelectedModel('')
+                      }
+                    }}
+                  >
+                    {aiProviders.map((provider) => (
+                      <option key={provider.id} value={provider.provider_type}>
+                        {provider.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               {/* AI Model Selection */}
               <div>
-                <Label htmlFor="ai-model">AI Model</Label>
+                <Label htmlFor="ai-model">AI Model {!selectedProvider && <span className="text-amber-500 text-xs">(Select provider first)</span>}</Label>
                 <select
                   id="ai-model"
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
@@ -700,8 +822,12 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     const provider = aiProviders.find((p: any) => p.provider_type === selectedProvider)
                     console.log('[EXTRACTION] Rendering models for provider:', selectedProvider, 'models:', provider?.models)
                     
-                    if (!provider) {
+                    if (!selectedProvider) {
                       return <option value="">Select a provider first</option>
+                    }
+                    
+                    if (!provider) {
+                      return <option value="">Provider not found</option>
                     }
                     
                     const models = provider.models || []
@@ -717,8 +843,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     ))
                   })()}
                 </select>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {selectedModel ? `Selected: ${selectedModel}` : 'No model selected'}
+                <p className={`text-xs mt-1 ${selectedModel ? 'text-muted-foreground' : 'text-amber-600 dark:text-amber-400'}`}>
+                  {selectedModel ? `Selected: ${selectedModel}` : '⚠️ No model selected - extraction cannot start'}
                 </p>
               </div>
 
@@ -841,9 +967,21 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                 <Button variant="outline" onClick={() => setShowExtractionDialog(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleExtractData} disabled={!selectedProvider || !selectedModel}>
+                <Button 
+                  onClick={handleExtractData} 
+                  disabled={!selectedProvider || !selectedModel || isExtracting}
+                  title={
+                    !selectedProvider 
+                      ? "Please select an AI provider" 
+                      : !selectedModel 
+                        ? "Please select an AI model" 
+                        : isExtracting
+                          ? "Extraction in progress..."
+                          : "Start extraction"
+                  }
+                >
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Start Extraction
+                  {isExtracting ? "Extracting..." : "Start Extraction"}
                 </Button>
               </>
             )}

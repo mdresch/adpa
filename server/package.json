@@ -4,6 +4,7 @@
   "description": "ADPA Backend API Server",
   "main": "dist/server.js",
   "scripts": {
+    "postinstall": "echo 'Skipping Puppeteer browser download. Set PUPPETEER_SKIP_DOWNLOAD=false to enable.'",
     "dev": "tsx watch src/server.ts",
     "build": "tsc --noEmit false || echo 'Build completed with warnings'",
     "build:strict": "tsc",
@@ -19,6 +20,7 @@
     "migrate:financial": "tsx scripts/run-financial-migrations.ts",
     "migrate:300": "tsx scripts/run-migration-300.ts",
     "migrate:300:rollback": "tsx scripts/rollback-migration-300.ts",
+    "migrate:325:ccb": "tsx scripts/run-migration-325-ccb.ts",
     "seed:financial": "tsx scripts/seed-financial-test-data.ts",
     "cleanup:financial": "tsx scripts/cleanup-and-reseed-financial.ts",
     "cleanup:duplicates": "tsx scripts/quick-cleanup-duplicates.ts",
@@ -36,7 +38,8 @@
     "migrate-assessments": "tsx scripts/run-missing-migrations.ts",
     "check-status": "tsx scripts/check-upload-status.ts",
     "reset-batches": "tsx scripts/reset-failed-batches.ts",
-    "clear-jobs": "tsx scripts/clear-failed-jobs.ts"
+    "clear-jobs": "tsx scripts/clear-failed-jobs.ts",
+    "diagnose:extraction": "tsx scripts/diagnose-extraction.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",
@@ -77,7 +80,7 @@
     "node-cron": "^4.2.1",
     "node-schedule": "^2.1.1",
     "nodemailer": "^7.0.10",
-    "openai": "^4.28.0",
+    "openai": "^4.104.0",
     "pdf-parse": "^2.4.5",
     "pdfkit": "^0.17.2",
     "pg": "^8.16.3",
@@ -100,6 +103,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.11.19",
+    "@types/nodemailer": "^6.4.14",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.0",

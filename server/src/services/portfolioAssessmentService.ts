@@ -738,10 +738,12 @@ async function getAssessment(assessmentId: string, userId: string): Promise<any>
  * Get assessment by batch ID
  */
 async function getAssessmentByBatchId(batchId: string, userId: string): Promise<any> {
+  // Fetch assessment where the assessments.batch_id matches the provided upload batch id.
+  // Previous implementation joined on project_id which could return no rows when an assessment
+  // is stored against a specific batch_id. Use a direct lookup by batch_id for correctness.
   const query = `
     SELECT a.* FROM assessments a
-    JOIN upload_batches ub ON a.project_id = ub.project_id
-    WHERE ub.id = $1
+    WHERE a.batch_id = $1
     ORDER BY a.created_at DESC
     LIMIT 1
   `;
@@ -754,9 +756,8 @@ async function getAssessmentByBatchId(batchId: string, userId: string): Promise<
  * Generate new assessment
  */
 async function generateAssessment(projectId: string, userId: string): Promise<any> {
-  return await assessProjectPortfolio(projectId, {
-    industry_vertical: 'technology'
-  });
+  // Call assessProjectPortfolio with the industryVertical string parameter.
+  return await assessProjectPortfolio(projectId, 'technology', userId);
 }
 
 // ============================================================================

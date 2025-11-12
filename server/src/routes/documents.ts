@@ -1271,6 +1271,15 @@ router.put("/:id",
               // Add drift record ID to response
               driftRevalidation.driftRecordId = driftRecord.id
               
+              // Trigger escalation check (TASK-742: Escalation matrix)
+              try {
+                await driftDetectionService.checkAndTriggerEscalation(driftRecord, driftResult.driftPoints)
+                log.info('[DRIFT] Escalation check completed', { driftRecordId: driftRecord.id })
+              } catch (escalationError) {
+                log.error('[DRIFT] Error triggering escalation:', escalationError)
+                // Don't fail the request if escalation fails
+              }
+              
               // Emit WebSocket event for drift detection
               try {
                 const { io } = await import('../server')
