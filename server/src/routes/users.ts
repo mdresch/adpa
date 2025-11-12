@@ -17,7 +17,7 @@ router.get("/",
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
     limit: Joi.number().integer().min(1).max(100).default(10),
-    role: Joi.string().valid("admin", "manager", "user", "viewer").optional(),
+    role: Joi.string().valid("admin", "manager", "user", "viewer", "ccb").optional(),
     search: Joi.string().max(100).optional(),
     is_active: Joi.boolean().optional(),
   })),
@@ -211,6 +211,22 @@ router.put("/:id",
       // Non-admin users cannot change role or is_active
       if (req.user?.role !== "admin" && (role || is_active !== undefined)) {
         return res.status(403).json({ error: "Insufficient permissions to modify role or status" })
+      }
+
+      // Prevent admins from changing their own role (to avoid locking themselves out)
+      if (req.user?.id === id && req.user?.role === "admin" && role && role !== "admin") {
+        return res.status(400).json({ 
+          error: "Cannot change your own role from admin",
+          message: "Admins cannot change their own role. Please have another admin make this change, or create a separate user account for CCB access."
+        })
+      }
+
+      // Prevent admins from deactivating themselves
+      if (req.user?.id === id && req.user?.role === "admin" && is_active === false) {
+        return res.status(400).json({ 
+          error: "Cannot deactivate your own account",
+          message: "Admins cannot deactivate their own account. Please have another admin make this change."
+        })
       }
 
       // Check if email is already taken by another user

@@ -957,8 +957,10 @@ class ApiClient {
 
   // AI API
   async getAIProviders(): Promise<any[]> {
-    const response = await this.request<{ providers: any[] }>("/ai/providers")
-    return response.providers
+    // The /api/ai-providers endpoint returns providers array directly, not wrapped
+    const response = await this.request<any[]>("/ai-providers")
+    // Handle both direct array response and wrapped response
+    return Array.isArray(response) ? response : (response.providers || [])
   }
 
   // AI Model Configuration API

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target } from "lucide-react"
+import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { PMBOK8DomainDashboard } from "./PMBOK8DomainDashboard"
 
@@ -83,6 +83,9 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
     domainCoverage: Record<string, boolean>
     overallHealth: number | null
   } | null>(null)
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [extractionProgress, setExtractionProgress] = useState(0)
+  const [extractionStatus, setExtractionStatus] = useState<string>("")
 
   useEffect(() => {
     void fetchProjectData()
@@ -123,8 +126,6 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setDocuments(data.documents || [])
     } catch (error) {
       console.error('Failed to fetch documents:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -142,6 +143,119 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setBaselines(data.baselines || [])
     } catch (error) {
       console.error('Failed to fetch baselines:', error)
+    }
+  }
+
+  const handleRunFullExtraction = async () => {
+    try {
+      setIsExtracting(true)
+      setExtractionProgress(0)
+      setExtractionStatus("Starting extraction...")
+
+      // Get AI providers to use default provider/model
+      const providersResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/ai-providers`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      
+      const providers = await providersResponse.json()
+      
+      // Find active provider with models (check both normalized and raw formats)
+      const activeProvider = providers.find((p: any) => {
+        const isActive = p.is_active || p.enabled
+        const hasModels = (p.models && p.models.length > 0) || 
+                         (p.configuration?.models && p.configuration.models.length > 0)
+        return isActive && hasModels
+      })
+      
+      if (!activeProvider) {
+        toast.error('No active AI providers with models configured. Please configure a provider first.')
+        setIsExtracting(false)
+        return
+      }
+
+      // Get provider type and model (handle both formats)
+      const providerType = activeProvider.type || activeProvider.provider_type
+      const models = activeProvider.models || activeProvider.configuration?.models || []
+      const model = models[0] || activeProvider.configuration?.model || activeProvider.model
+
+      if (!providerType || !model) {
+        toast.error('Provider configuration incomplete. Please check AI provider settings.')
+        setIsExtracting(false)
+        return
+      }
+
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/extract`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          projectId,
+          aiProvider: providerType,
+          aiModel: model,
+          documentIds: undefined // Extract from all documents
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || 'Failed to start extraction')
+      }
+
+      const data = await response.json()
+      setExtractionStatus("Extraction job started")
+      toast.success("Extraction started! This may take 2-3 minutes...")
+
+      // Poll job status
+      const jobId = data.jobId
+      const pollInterval = setInterval(async () => {
+        try {
+          const statusResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/status/${jobId}`, {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+            }
+          })
+          
+          if (statusResponse.ok) {
+            const statusData = await statusResponse.json()
+            setExtractionProgress(statusData.progress || 0)
+            setExtractionStatus(statusData.status || "Processing...")
+
+            if (statusData.status === 'completed') {
+              clearInterval(pollInterval)
+              setIsExtracting(false)
+              setExtractionProgress(100)
+              toast.success(`Extraction complete! ${statusData.result?.totalEntities || 0} entities extracted.`)
+              
+              // Refresh data
+              void fetchPMBOK8Summary()
+            } else if (statusData.status === 'failed') {
+              clearInterval(pollInterval)
+              setIsExtracting(false)
+              toast.error('Extraction failed. Please try again.')
+            }
+          }
+        } catch (error) {
+          console.error('Failed to poll extraction status:', error)
+        }
+      }, 2000) // Poll every 2 seconds
+
+      // Cleanup interval after 5 minutes (safety timeout)
+      setTimeout(() => {
+        clearInterval(pollInterval)
+        setIsExtracting(false)
+        toast.info('Extraction is still running. Check the AI Extraction tab for progress.')
+      }, 300000) // 5 minutes
+
+    } catch (error) {
+      console.error('Extraction failed:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to start extraction')
+      setIsExtracting(false)
+      setExtractionProgress(0)
+      setExtractionStatus("")
     }
   }
 
@@ -629,14 +743,50 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                     <CardDescription>14 entity types extracted from PMBOK 8 standards</CardDescription>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => router.push(`/projects/${projectId}?tab=extraction`)}
+                    >
                       📊 View All Entities
                     </Button>
-                    <Button size="sm">🤖 Run Full Extraction</Button>
+                    <Button 
+                      size="sm" 
+                      onClick={handleRunFullExtraction}
+                      disabled={isExtracting || documents.length === 0}
+                    >
+                      {isExtracting ? (
+                        <>
+                          <Clock className="h-4 w-4 mr-2 animate-spin" />
+                          Extracting... {extractionProgress}%
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Run Full Extraction
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
+                {isExtracting && (
+                  <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                        {extractionStatus || "Extracting project entities..."}
+                      </span>
+                      <span className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                        {extractionProgress}%
+                      </span>
+                    </div>
+                    <Progress value={extractionProgress} className="h-2" />
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                      This typically takes 2-3 minutes. Please wait...
+                    </p>
+                  </div>
+                )}
                 <div className="rounded-lg border border-border overflow-hidden">
                   <table className="w-full">
                     <thead className="bg-muted">

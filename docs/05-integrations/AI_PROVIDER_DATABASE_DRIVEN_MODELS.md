@@ -57,15 +57,18 @@ private async getDefaultModelConfigs(): Promise<AIModelConfig[]> {
 
 ### **Configuration Sources (Priority Order):**
 
-1. **`configuration.model`** - Explicitly set default model
-2. **`configuration.default_model`** - Alternative field name
-3. **`configuration.defaultModel`** - Camel case variant
-4. **Provider Defaults** - Built-in fallbacks per provider type:
-   - `google` → `gemini-2.5-flash`
-   - `groq` → `llama-3.3-70b-versatile`
-   - `mistral` → `mistral-large-latest`
-   - `openai` → `gpt-4o`
-   - `anthropic` → `claude-sonnet-4`
+1. **`configuration.models`** - Array of configured models (highest priority)
+2. **`configuration.model`** - Explicitly set default model
+3. **`configuration.default_model`** - Alternative field name
+4. **`configuration.defaultModel`** - Camel case variant
+5. **Centralized Fallback Models** - Built-in fallbacks from `aiService.getModelsForProvider()`:
+   - `google` → `['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro', 'gemini-pro-vision']`
+   - `groq` → `['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'llama3-70b-8192', ...]`
+   - `mistral` → `['mistral-large-latest', 'mistral-small-latest', 'mistral-medium-latest']`
+   - `openai` → `['gpt-4o', 'gpt-4-turbo', 'gpt-4', 'gpt-3.5-turbo']`
+   - `anthropic` → `['claude-sonnet-4.0', 'claude-haiku-4.0', 'claude-opus-4.0', ...]`
+
+**Important**: The fallback mechanism ensures that **every provider always has at least one model available**, even if none are configured in the database. This prevents extraction jobs and other AI operations from failing due to missing model configurations.
 
 ### **Example Database State:**
 
@@ -274,11 +277,52 @@ npm run build
 
 ---
 
+## 🔄 Model Fallback Mechanism
+
+### **How It Works:**
+
+When a provider is queried via `/api/ai-providers`, the system:
+
+1. **Checks database** for `configuration.models` array
+2. **If empty or missing**, automatically applies fallback models from `aiService.getModelsForProvider()`
+3. **Always returns** a non-empty `models` array in the API response
+4. **Frontend components** (like extraction dialog) can always find at least one model to use
+
+### **Implementation:**
+
+```typescript
+// Backend: server/src/routes/ai-providers.ts
+const configuredModels = row.configuration?.models || []
+const fallbackModels = aiService.getModelsForProvider(row.provider_type)
+const models = configuredModels.length > 0 ? configuredModels : fallbackModels
+
+// Result: configuration.models always has at least one model
+```
+
+### **Benefits:**
+
+- ✅ **No broken UI**: Extraction dialog always has models to select
+- ✅ **Single source of truth**: Fallback models defined in `aiService.ts`
+- ✅ **Consistency**: Same fallback models used across entire application
+- ✅ **Zero configuration**: Works out-of-the-box even with new providers
+- ✅ **Easy updates**: Change fallback models in one place (`aiService.ts`)
+
+### **Where It's Used:**
+
+- **AI Providers API** (`/api/ai-providers`) - Returns providers with fallback models
+- **Project Data Extraction** - Uses fallback models when none configured
+- **Document Generation** - Falls back to default models automatically
+- **AI Analytics** - Tracks usage with fallback models
+
+---
+
 ## ✅ Summary
 
 The system now:
 - ✅ **Queries database** for provider configurations
 - ✅ **Respects default models** from AI Providers settings
+- ✅ **Applies fallback models** automatically when none configured
+- ✅ **Uses centralized fallback** from `aiService.getModelsForProvider()`
 - ✅ **Honors priority order** for failover
 - ✅ **Uses provider-specific settings** (temperature, max_tokens, etc.)
 - ✅ **Automatically excludes inactive** providers
@@ -286,5 +330,5 @@ The system now:
 - ✅ **Falls back gracefully** with exponential backoff
 - ✅ **Logs which provider/model** was actually used
 
-**Result**: Fully configurable, database-driven AI provider system! 🎉
+**Result**: Fully configurable, database-driven AI provider system with intelligent fallback! 🎉
 

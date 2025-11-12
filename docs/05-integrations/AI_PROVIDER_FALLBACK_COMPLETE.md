@@ -61,22 +61,51 @@ The AI provider fallback system is now fully integrated and dynamically configur
 
 ## 🔄 How Fallback Works
 
-### Example Flow:
-1. **User starts pipeline** with template and project
-2. **Pipeline calls AI** with primary provider (e.g., "openai")
-3. **AI Service queries database** for active providers:
-   ```sql
-   SELECT provider_type FROM ai_providers 
-   WHERE is_active = true 
-   ORDER BY priority ASC
-   ```
-4. **Builds fallback chain**: `['openai', 'google', 'mistral', 'groq']`
-5. **Tries each provider** in order:
-   - `openai` → FAIL (inactive)
-   - `google` → SUCCESS ✅
-6. **Logs**: `✅ [AI-FALLBACK] Success with provider: google`
-7. **Returns result** with `providerUsed: 'google'`
-8. **Pipeline continues** without interruption
+### **Two-Level Fallback System:**
+
+#### **Level 1: Model Fallback** (When provider has no models configured)
+- If `configuration.models` is empty → Uses `aiService.getModelsForProvider()` fallback
+- Ensures every provider always has at least one model available
+- Prevents UI failures (e.g., extraction dialog always has selectable models)
+- **Single source of truth**: Fallback models defined in `aiService.ts`
+
+#### **Level 2: Provider Fallback** (When provider fails)
+- Example Flow:
+  1. **User starts pipeline** with template and project
+  2. **Pipeline calls AI** with primary provider (e.g., "openai")
+  3. **AI Service queries database** for active providers:
+     ```sql
+     SELECT provider_type FROM ai_providers 
+     WHERE is_active = true 
+     ORDER BY priority ASC
+     ```
+  4. **Builds fallback chain**: `['openai', 'google', 'mistral', 'groq']`
+  5. **Tries each provider** in order:
+     - `openai` → FAIL (inactive)
+     - `google` → SUCCESS ✅
+  6. **Logs**: `✅ [AI-FALLBACK] Success with provider: google`
+  7. **Returns result** with `providerUsed: 'google'`
+  8. **Pipeline continues** without interruption
+
+### **Model Fallback Examples:**
+
+```typescript
+// Provider with no models configured
+{
+  provider_type: 'google',
+  configuration: { models: [] }  // Empty!
+}
+
+// API automatically applies fallback:
+{
+  provider_type: 'google',
+  configuration: {
+    models: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro', 'gemini-pro-vision']
+  }
+}
+```
+
+**Result**: Extraction dialog can always select a model, even for newly added providers!
 
 ---
 

@@ -343,15 +343,15 @@ class AIService {
       hasPrompt: !!request.prompt
     })
     
-    // Fetch AI Gateway API key from database
+    // Fetch AI Gateway API key from database (optional - will fallback to direct provider calls if not configured)
     const { getAIGatewayKey } = await import("../routes/settings")
     const gatewayApiKey = await getAIGatewayKey()
     
     if (!gatewayApiKey) {
-      logger.error('[AI-SERVICE] No AI Gateway API key configured')
-      throw new Error("AI Gateway API key not configured. Please configure it in Settings.")
+      logger.info('[AI-SERVICE] No AI Gateway API key configured - will use direct provider APIs')
+    } else {
+      logger.debug('[AI-SERVICE] Gateway API key retrieved')
     }
-    logger.debug('[AI-SERVICE] Gateway API key retrieved')
 
     // KISS: Build system and user messages separately
     let systemMessage: string | undefined = undefined
@@ -647,6 +647,13 @@ class AIService {
         }
       }
       
+      // If AI Gateway is not configured, skip directly to fallback
+      if (!gatewayApiKey) {
+        logger.info(`🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ${providerType}`)
+        // Throw a special error to trigger fallback logic
+        throw new Error('AI_GATEWAY_NOT_CONFIGURED')
+      }
+      
       // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral)
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
@@ -699,16 +706,41 @@ class AIService {
             maxOutputTokens: request.max_tokens || 2000,
           } as any)
         }
+        
+        // Validate that result has content before marking as successful
+        if (!result || !result.text || result.text.trim().length === 0) {
+          logger.warn('[AI-SERVICE] AI Gateway returned empty content, triggering fallback')
+          throw new Error('AI_GATEWAY_EMPTY_RESPONSE')
+        }
+        
         gatewaySuccess = true
       } catch (gatewayError: any) {
-        logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
-        logger.warn('⚠️ [AI-SERVICE] Gateway error:', gatewayError?.message || gatewayError)
+        // Check if this is a "not configured" error (should fallback immediately)
+        const isNotConfigured = gatewayError?.message === 'AI_GATEWAY_NOT_CONFIGURED'
+        const isEmptyResponse = gatewayError?.message === 'AI_GATEWAY_EMPTY_RESPONSE'
         
-        // Restore key before fallback
-        if (previousKey) {
-          process.env.AI_GATEWAY_API_KEY = previousKey
+        if (isNotConfigured) {
+          logger.info('🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API')
+        } else if (isEmptyResponse) {
+          logger.warn('⚠️ [AI-SERVICE] AI Gateway returned empty content - falling back to direct provider')
         } else {
-          delete process.env.AI_GATEWAY_API_KEY
+          logger.warn('⚠️ [AI-SERVICE] AI Gateway failed, attempting direct provider fallback...')
+          logger.warn('⚠️ [AI-SERVICE] Gateway error:', gatewayError?.message || gatewayError)
+        }
+        
+        // Check if result exists but is empty (edge case where gateway "succeeds" but returns empty)
+        if (result && (!result.text || result.text.trim().length === 0)) {
+          logger.warn('[AI-SERVICE] AI Gateway returned empty content, triggering fallback')
+          gatewaySuccess = false // Mark as failed so fallback triggers
+        }
+        
+        // Restore key before fallback (only if we had one)
+        if (gatewayApiKey) {
+          if (previousKey) {
+            process.env.AI_GATEWAY_API_KEY = previousKey
+          } else {
+            delete process.env.AI_GATEWAY_API_KEY
+          }
         }
         
         // FALLBACK: Try direct Google AI
@@ -723,14 +755,70 @@ class AIService {
           
           logger.debug('[AI-SERVICE] Using direct Google AI')
           const genAI = new GoogleGenerativeAI(directApiKey)
-          const model = genAI.getGenerativeModel({ model: request.model || 'gemini-2.5-flash' })
+          
+          // Map deprecated/unavailable models to current working ones
+          // Note: gemini-1.5-flash and gemini-1.5-pro are NOT available in v1beta API
+          // Use gemini-2.0-flash-exp or gemini-2.5-flash which are confirmed working
+          const modelMap: Record<string, string> = {
+            'gemini-pro': 'gemini-2.0-flash-exp',
+            'gemini-pro-vision': 'gemini-2.0-flash-exp',
+            'gemini-1.0-pro': 'gemini-2.0-flash-exp',
+            'gemini-1.0-pro-vision': 'gemini-2.0-flash-exp',
+            'gemini-1.5-flash': 'gemini-2.0-flash-exp', // Not available in v1beta
+            'gemini-1.5-pro': 'gemini-2.0-flash-exp', // Not available in v1beta
+          }
+          
+          // Use mapped model or fallback to current default (gemini-2.0-flash-exp works in v1beta)
+          const requestedModel = request.model || 'gemini-2.0-flash-exp'
+          const modelName = modelMap[requestedModel] || requestedModel
+          
+          // Validate model name (ensure it's a current model that works in v1beta API)
+          // Only include models confirmed to work in v1beta API
+          const validModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
+          const finalModel = validModels.includes(modelName) ? modelName : 'gemini-2.0-flash-exp'
+          
+          // Log model mapping for debugging
+          if (requestedModel !== finalModel) {
+            logger.info(`[AI-SERVICE] Model mapping: ${requestedModel} → ${finalModel}`, {
+              requestedModel,
+              mappedModel: modelName,
+              finalModel,
+              wasDeprecated: modelMap[requestedModel] !== undefined,
+              wasInvalid: !validModels.includes(modelName)
+            })
+          } else {
+            logger.debug(`[AI-SERVICE] Using model: ${finalModel}`)
+          }
+          
+          const model = genAI.getGenerativeModel({ model: finalModel })
           // KISS: Combine system and user message for Google AI (it doesn't have separate system role)
           const combinedPrompt = systemMessage 
             ? `${systemMessage}\n\n---\n\n${userMessage}`
             : userMessage
           const googleResult = await model.generateContent(combinedPrompt)
           const response = await googleResult.response
+          
+          // Check for safety filter blocks
+          const blocked = response.promptFeedback?.blockReason
+          if (blocked) {
+            logger.error('[AI-SERVICE] Google AI blocked content due to safety filter', {
+              blockReason: blocked,
+              safetyRatings: response.promptFeedback?.safetyRatings
+            })
+            throw new Error(`Google AI safety filter blocked content: ${blocked}`)
+          }
+          
           const text = response.text()
+          
+          // Validate that Google AI returned content
+          if (!text || text.trim().length === 0) {
+            logger.error('[AI-SERVICE] Google AI returned empty content', {
+              hasResponse: !!response,
+              candidates: googleResult.response.candidates?.length || 0,
+              finishReason: googleResult.response.candidates?.[0]?.finishReason
+            })
+            throw new Error('Google AI returned empty response - possible safety filter or content policy violation')
+          }
           
           logger.debug('[AI-SERVICE] Google AI successful:', { contentLength: text.length })
           
@@ -746,19 +834,19 @@ class AIService {
           // Track detailed AI usage for analytics (background, non-blocking)
           const responseTimeMs = Date.now() - startTime
           setImmediate(() => {
-            this.trackAIUsageAsync(request.provider, request.model || 'gemini-2.5-flash', {
+            this.trackAIUsageAsync(request.provider, finalModel, {
               prompt_tokens: Math.ceil(promptLength / 4),
               completion_tokens: Math.ceil(text.length / 4),
               total_tokens: estimatedTokens,
             }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
           })
           
-          logger.info(`[AI] ✓ Google AI/${request.model || 'gemini-2.5-flash'} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
+          logger.info(`[AI] ✓ Google AI/${finalModel} - ${estimatedTokens} tokens - ${Date.now() - startTime}ms`)
           
           return {
             content: text,
             provider: request.provider,
-            model: request.model || 'gemini-2.5-flash',
+            model: finalModel,
             usage: {
               prompt_tokens: Math.ceil(promptLength / 4),
               completion_tokens: Math.ceil(text.length / 4),
@@ -1059,6 +1147,74 @@ class AIService {
           }
         }
         
+        // FALLBACK: Try direct OpenAI
+        if (providerType === 'openai') {
+          logger.info('🔄 [AI-SERVICE] Falling back to direct OpenAI...')
+          
+          // Get direct API key from provider configuration
+          const directApiKey = providerResult.rows[0].configuration?.apiKey
+          if (!directApiKey) {
+            throw new Error('Direct OpenAI API key not found in provider configuration')
+          }
+          
+          logger.debug('[AI-SERVICE] Using direct OpenAI')
+          const openai = createOpenAI({ apiKey: directApiKey })
+          
+          // Use the model specified in request, or default to gpt-4o
+          const modelName = request.model || 'gpt-4o'
+          
+          const openaiResult = await generateText({
+            model: openai(modelName),
+            messages: [
+              ...(systemMessage ? [{ role: 'system' as const, content: systemMessage }] : []),
+              { role: 'user' as const, content: userMessage }
+            ],
+            temperature: request.temperature || 0.7,
+            maxOutputTokens: request.max_tokens || 2000
+          })
+          
+          logger.debug('[AI-SERVICE] OpenAI successful:', { contentLength: openaiResult.text.length })
+          
+          const { inputTokens, outputTokens, totalTokens } = this.normalizeUsage(openaiResult.usage)
+          
+          // Update usage stats
+          await this.updateUsageStats(request.provider, {
+            total_tokens: totalTokens,
+          })
+          
+          // Track detailed AI usage for analytics (background, non-blocking)
+          const responseTimeMs = Date.now() - startTime
+          setImmediate(() => {
+            this.trackAIUsageAsync(
+              request.provider,
+              modelName,
+              {
+                prompt_tokens: inputTokens,
+                completion_tokens: outputTokens,
+                total_tokens: totalTokens,
+              },
+              responseTimeMs,
+              true,
+              request.userId,
+              request.projectId,
+              request.documentId
+            )
+          })
+          
+          logger.info(`[AI] ✓ OpenAI/${modelName} - ${totalTokens} tokens - ${responseTimeMs}ms`)
+          
+          return {
+            content: openaiResult.text,
+            provider: request.provider,
+            model: modelName,
+            usage: {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: totalTokens,
+            },
+          }
+        }
+        
         // No fallback available for this provider
         throw gatewayError
       } finally {
@@ -1072,51 +1228,63 @@ class AIService {
         }
       }
 
-      // AI Gateway success path
-      const {
-        inputTokens: gatewayInputTokens,
-        outputTokens: gatewayOutputTokens,
-        totalTokens: gatewayTotalTokens,
-      } = this.normalizeUsage(result.usage)
+      // AI Gateway success path - only execute if gateway actually succeeded and has content
+      if (gatewaySuccess && result && result.text && result.text.trim().length > 0) {
 
-      logger.info(`[AI] ✓ ${request.provider}/${request.model || gatewayModelId} - ${gatewayTotalTokens} tokens - ${Date.now() - startTime}ms`)
+        const {
+          inputTokens: gatewayInputTokens,
+          outputTokens: gatewayOutputTokens,
+          totalTokens: gatewayTotalTokens,
+        } = this.normalizeUsage(result.usage)
 
-      // Update usage stats
-      await this.updateUsageStats(request.provider, {
-        total_tokens: gatewayTotalTokens,
-      })
+        logger.info(`[AI] ✓ ${request.provider}/${request.model || gatewayModelId} - ${gatewayTotalTokens} tokens - ${Date.now() - startTime}ms`)
 
-      // Track detailed AI usage for analytics (background, non-blocking)
-      const responseTimeMs = Date.now() - startTime
-      setImmediate(() => {
-        this.trackAIUsageAsync(
-          request.provider,
-          request.model || gatewayModelId,
-          {
+        // Update usage stats
+        await this.updateUsageStats(request.provider, {
+          total_tokens: gatewayTotalTokens,
+        })
+
+        // Track detailed AI usage for analytics (background, non-blocking)
+        const responseTimeMs = Date.now() - startTime
+        setImmediate(() => {
+          this.trackAIUsageAsync(
+            request.provider,
+            request.model || gatewayModelId,
+            {
+              prompt_tokens: gatewayInputTokens,
+              completion_tokens: gatewayOutputTokens,
+              total_tokens: gatewayTotalTokens,
+            },
+            responseTimeMs,
+            true,
+            request.userId,
+            request.projectId,
+            request.documentId
+          )
+        })
+
+        logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
+
+        return {
+          content: result.text,
+          provider: request.provider,
+          model: request.model || gatewayModelId,
+          usage: {
             prompt_tokens: gatewayInputTokens,
             completion_tokens: gatewayOutputTokens,
             total_tokens: gatewayTotalTokens,
           },
-          responseTimeMs,
-          true,
-          request.userId,
-          request.projectId,
-          request.documentId
-        )
-      })
-
-      logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
-
-      return {
-        content: result.text,
-        provider: request.provider,
-        model: request.model || gatewayModelId,
-        usage: {
-          prompt_tokens: gatewayInputTokens,
-          completion_tokens: gatewayOutputTokens,
-          total_tokens: gatewayTotalTokens,
-        },
+        }
       }
+      
+      // If we reach here, gateway failed or returned empty - should have been handled by fallback
+      // This should not happen, but log it for debugging
+      logger.error('[AI-SERVICE] Unexpected state: gatewaySuccess=false but no fallback return', {
+        gatewaySuccess,
+        hasResult: !!result,
+        resultTextLength: result?.text?.length || 0
+      })
+      throw new Error('AI generation failed: No valid response from gateway or fallback')
     } catch (error) {
       logger.error(`❌ [AI-SERVICE-ERROR] AI generation failed for provider ${request.provider}:`, error)
       logger.error(`❌ [AI-SERVICE-ERROR] Error details:`, {
@@ -1131,7 +1299,7 @@ class AIService {
   private async buildGatewayModelId(providerType: string, model?: string): Promise<string> {
     const defaultModels: Record<string, string> = {
       'openai': 'gpt-4o',
-      'google': 'gemini-2.5-flash',
+      'google': 'gemini-2.0-flash-exp', // Use v1beta-compatible model
       'groq': 'llama-3.3-70b-versatile',
       'mistral': 'mistral-large-latest',
       'anthropic': 'claude-sonnet-4',
@@ -1154,7 +1322,40 @@ class AIService {
       'xai': ['grok-'],
     }
 
+    // Model mapping for deprecated/unavailable models (centralized validation)
+    const modelMaps: Record<string, Record<string, string>> = {
+      'google': {
+        'gemini-pro': 'gemini-2.0-flash-exp',
+        'gemini-pro-vision': 'gemini-2.0-flash-exp',
+        'gemini-1.0-pro': 'gemini-2.0-flash-exp',
+        'gemini-1.0-pro-vision': 'gemini-2.0-flash-exp',
+        'gemini-1.5-flash': 'gemini-2.0-flash-exp', // Not available in v1beta
+        'gemini-1.5-pro': 'gemini-2.0-flash-exp', // Not available in v1beta
+      }
+    }
+
+    // Validate and map model if needed
     let modelId = model || defaultModels[providerType] || 'gpt-4o'
+    
+    // Apply model mapping for deprecated models
+    if (modelMaps[providerType] && modelMaps[providerType][modelId]) {
+      const mappedModel = modelMaps[providerType][modelId]
+      logger.info(`[AI-SERVICE] Model mapping (Gateway): ${modelId} → ${mappedModel}`, {
+        providerType,
+        originalModel: modelId,
+        mappedModel
+      })
+      modelId = mappedModel
+    }
+    
+    // Validate model against valid models list for Google (v1beta API compatibility)
+    if (providerType === 'google') {
+      const validModels = ['gemini-2.0-flash-exp', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.5-flash-lite']
+      if (!validModels.includes(modelId)) {
+        logger.warn(`[AI-SERVICE] Invalid Google model ${modelId}, using default: gemini-2.0-flash-exp`)
+        modelId = 'gemini-2.0-flash-exp'
+      }
+    }
     
     // Check if the requested model is compatible with the provider
     const compatibleFamilies = providerModelFamilies[providerType] || []
@@ -1230,12 +1431,18 @@ class AIService {
     }
   }
 
-  private getModelsForProvider(providerType: string): string[] {
+  /**
+   * Get default models for a provider type (fallback when none configured)
+   * This is the centralized fallback system used throughout the application
+   */
+  getModelsForProvider(providerType: string): string[] {
     switch (providerType) {
       case "openai":
         return ["gpt-4o", "gpt-4-turbo", "gpt-4", "gpt-3.5-turbo", "gpt-5"]
       case "google":
-        return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-pro", "gemini-pro-vision"]
+        // Note: gemini-1.5-flash and gemini-1.5-pro are NOT available in v1beta API
+        // Only include models confirmed to work in v1beta API
+        return ["gemini-2.0-flash-exp", "gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.5-flash-lite"]
       case "azure":
         return ["gpt-4", "gpt-35-turbo", "gpt-4-32k"]
       case "groq":

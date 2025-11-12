@@ -329,6 +329,77 @@ interface RiskResponseRecord {
 
 export class ProjectDataExtractionService {
   /**
+   * Validate AI response and throw error if empty/invalid
+   * This ensures empty responses trigger retries and provider fallback
+   */
+  private validateAIResponse(
+    response: any,
+    entityType: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): void {
+    if (!response || !response.content || response.content.trim().length === 0) {
+      const errorMsg = `AI returned empty or invalid response for ${entityType} extraction`
+      logger.error(`[EXTRACTION-${entityType.toUpperCase()}] ${errorMsg}`, {
+        hasResponse: !!response,
+        hasContent: !!(response?.content),
+        contentLength: response?.content?.length || 0,
+        provider: options.aiProvider,
+        model: options.aiModel
+      })
+      // Throw error to trigger Bull retry and provider fallback
+      throw new Error(`${errorMsg} - Provider: ${options.aiProvider || 'unknown'}, Model: ${options.aiModel || 'unknown'}`)
+    }
+  }
+
+  /**
+   * Get the best available AI provider for extraction
+   * Model selection is handled by aiService.generate() fallback mechanism
+   * This method only selects the provider - model validation/mapping happens in AI service
+   */
+  private async getBestAIProviderAndModel(
+    requestedProvider?: string,
+    requestedModel?: string
+  ): Promise<{ provider: string; model?: string }> {
+    try {
+      // If provider is explicitly requested, use it (model will be validated by AI service)
+      if (requestedProvider) {
+        logger.info(`[EXTRACTION] Using requested provider: ${requestedProvider}`, {
+          requestedModel: requestedModel || 'auto-select'
+        })
+        // Pass model through - aiService.generate() will validate/map it
+        return { provider: requestedProvider, model: requestedModel }
+      }
+      
+      // No provider specified - use AI service's centralized fallback mechanism
+      // Get available providers (includes is_active flag)
+      const availableProviders = await aiService.getAvailableProviders()
+      const activeProviders = availableProviders.filter(p => p.is_active)
+      
+      if (activeProviders.length === 0) {
+        throw new Error('No active AI providers configured')
+      }
+      
+      // Use first active provider - let AI service handle model selection
+      const selectedProvider = activeProviders[0]
+      logger.info(`[EXTRACTION] Auto-selected provider: ${selectedProvider.type}`, {
+        providerName: selectedProvider.name,
+        defaultModel: selectedProvider.default_model || 'auto-select',
+        note: 'Model selection/validation handled by AI service fallback mechanism'
+      })
+      
+      // Pass default_model if available, otherwise let AI service select
+      return { 
+        provider: selectedProvider.type, 
+        model: selectedProvider.default_model || requestedModel 
+      }
+    } catch (error) {
+      logger.error('[EXTRACTION] Error selecting AI provider:', error)
+      // Fallback to OpenAI if selection fails - AI service will handle model selection
+      return { provider: 'openai' }
+    }
+  }
+
+  /**
    * Main entry point: Extract all entities from project documents
    */
   async extractProjectEntities(
@@ -340,11 +411,25 @@ export class ProjectDataExtractionService {
       documentIds?: string[]
     } = {}
   ): Promise<ExtractionResult> {
+    // Get best provider/model using centralized fallback mechanism
+    const { provider: bestProvider, model: bestModel } = await this.getBestAIProviderAndModel(
+      options.aiProvider,
+      options.aiModel
+    )
+    
+    // Override options with best provider/model
+    const extractionOptions = {
+      ...options,
+      aiProvider: bestProvider,
+      aiModel: bestModel
+    }
+    
     try {
       logger.info('[EXTRACTION] Starting project entity extraction', {
         projectId,
         userId,
-        provider: options.aiProvider || 'default'
+        provider: bestProvider,
+        model: bestModel
       })
 
       const startTime = Date.now()
@@ -384,29 +469,29 @@ export class ProjectDataExtractionService {
         opportunities,
         riskResponses
       ] = await Promise.all([
-        this.extractStakeholders(documents, projectId, options),
-        this.extractRequirements(documents, projectId, options),
-        this.extractRisks(documents, projectId, options),
-        this.extractMilestones(documents, projectId, options),
-        this.extractConstraints(documents, projectId, options),
-        this.extractSuccessCriteria(documents, projectId, options),
-        this.extractBestPractices(documents, projectId, options),
-        this.extractPhases(documents, projectId, options),
-        this.extractResources(documents, projectId, options),
-        this.extractTechnologies(documents, projectId, options),
-        this.extractQualityStandards(documents, projectId, options),
-        this.extractDeliverables(documents, projectId, options),
-        this.extractScopeItems(documents, projectId, options),
-        this.extractActivities(documents, projectId, options),
-        this.extractTeamAgreements(documents, projectId, options),
-        this.extractDevelopmentApproaches(documents, projectId, options),
-        this.extractProjectIterations(documents, projectId, options),
-        this.extractWorkItems(documents, projectId, options),
-        this.extractCapacityPlans(documents, projectId, options),
-        this.extractPerformanceMeasurements(documents, projectId, options),
-        this.extractEarnedValueMetrics(documents, projectId, options),
-        this.extractOpportunities(documents, projectId, options),
-        this.extractRiskResponses(documents, projectId, options)
+        this.extractStakeholders(documents, projectId, extractionOptions),
+        this.extractRequirements(documents, projectId, extractionOptions),
+        this.extractRisks(documents, projectId, extractionOptions),
+        this.extractMilestones(documents, projectId, extractionOptions),
+        this.extractConstraints(documents, projectId, extractionOptions),
+        this.extractSuccessCriteria(documents, projectId, extractionOptions),
+        this.extractBestPractices(documents, projectId, extractionOptions),
+        this.extractPhases(documents, projectId, extractionOptions),
+        this.extractResources(documents, projectId, extractionOptions),
+        this.extractTechnologies(documents, projectId, extractionOptions),
+        this.extractQualityStandards(documents, projectId, extractionOptions),
+        this.extractDeliverables(documents, projectId, extractionOptions),
+        this.extractScopeItems(documents, projectId, extractionOptions),
+        this.extractActivities(documents, projectId, extractionOptions),
+        this.extractTeamAgreements(documents, projectId, extractionOptions),
+        this.extractDevelopmentApproaches(documents, projectId, extractionOptions),
+        this.extractProjectIterations(documents, projectId, extractionOptions),
+        this.extractWorkItems(documents, projectId, extractionOptions),
+        this.extractCapacityPlans(documents, projectId, extractionOptions),
+        this.extractPerformanceMeasurements(documents, projectId, extractionOptions),
+        this.extractEarnedValueMetrics(documents, projectId, extractionOptions),
+        this.extractOpportunities(documents, projectId, extractionOptions),
+        this.extractRiskResponses(documents, projectId, extractionOptions)
       ])
 
       const extractionTime = Date.now() - startTime
@@ -718,13 +803,26 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
 
+      // Validate AI response - throw error to trigger retry/fallback
+      this.validateAIResponse(response, 'stakeholders', options)
+
       const parsed = this.parseAIResponse(response.content)
+      
+      // Log if parsing returned empty object
+      if (!parsed || Object.keys(parsed).length === 0) {
+        logger.warn('[EXTRACTION-STAKEHOLDERS] AI response parsed to empty object', {
+          contentLength: response.content.length,
+          contentPreview: response.content.substring(0, 500)
+        })
+        return []
+      }
+      
       const rawStakeholders = parsed.stakeholders || []
 
       // Deduplicate stakeholders by normalized name
@@ -739,9 +837,11 @@ Requirements:
       return stakeholders
     } catch (error: unknown) {
       logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       })
-      return []
+      // Re-throw to trigger Bull retry and provider fallback
+      throw error
     }
   }
 
@@ -787,8 +887,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 3000
       })
@@ -849,8 +949,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
       })
@@ -916,8 +1016,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -976,8 +1076,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -1037,8 +1137,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -1095,8 +1195,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 1500
       })
@@ -1156,8 +1256,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 1500
       })
@@ -1224,8 +1324,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 1500
       })
@@ -1367,8 +1467,8 @@ Return pure JSON only.`
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -1429,8 +1529,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -1493,8 +1593,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
       })
@@ -1555,8 +1655,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
       })
@@ -1627,8 +1727,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 3500
       })
@@ -1695,8 +1795,8 @@ Rules:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.25,
         max_tokens: 2500
       })
@@ -1763,13 +1863,26 @@ Guidance:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.2,
         max_tokens: 2200
       })
 
+      // Validate AI response - throw error to trigger retry/fallback
+      this.validateAIResponse(response, 'development_approaches', options)
+
       const parsed = this.parseAIResponse(response.content)
+      
+      // Log if parsing returned empty object
+      if (!parsed || Object.keys(parsed).length === 0) {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object', {
+          contentLength: response.content.length,
+          contentPreview: response.content.substring(0, 500)
+        })
+        return []
+      }
+      
       const approaches = (parsed.development_approaches || []).map((item: any) => ({
         ...item,
         ceremonies: this.ensureStringArray(item?.ceremonies),
@@ -1782,9 +1895,11 @@ Guidance:
       return approaches
     } catch (error: unknown) {
       logger.error('[EXTRACTION-DEVELOPMENT-APPROACH] Extraction failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       })
-      return []
+      // Re-throw to trigger Bull retry and provider fallback
+      throw error
     }
   }
 
@@ -1835,8 +1950,8 @@ Rules:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.2,
         max_tokens: 2600
       })
@@ -1855,9 +1970,18 @@ Rules:
 
       return iterations
     } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorStack = error instanceof Error ? error.stack : undefined
       logger.error('[EXTRACTION-ITERATIONS] Extraction failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: errorMessage,
+        stack: errorStack,
+        projectId,
+        provider: options.aiProvider,
+        model: options.aiModel,
+        documentCount: documents.length
       })
+      // Return empty array instead of throwing to allow partial success
+      // The parent job will track this as a failed entity type
       return []
     }
   }
@@ -1907,8 +2031,8 @@ Guidelines:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.25,
         max_tokens: 2600
       })
@@ -1976,8 +2100,8 @@ Rules:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.25,
         max_tokens: 2300
       })
@@ -2046,8 +2170,8 @@ Guidelines:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.2,
         max_tokens: 2600
       })
@@ -2117,8 +2241,8 @@ Rules:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.2,
         max_tokens: 2500
       })
@@ -2192,8 +2316,8 @@ Rules:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.25,
         max_tokens: 2400
       })
@@ -2258,8 +2382,8 @@ Guidelines:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.25,
         max_tokens: 2300
       })
@@ -2334,8 +2458,20 @@ Guidelines:
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>
   ): string {
     const sections: string[] = []
+    
+    // Filter out documents with no content
+    const validDocuments = documents.filter(doc => doc.content && doc.content.trim().length > 0)
+    
+    if (validDocuments.length === 0) {
+      logger.warn('[EXTRACTION] No documents with valid content found')
+      return '[No document content available for extraction]'
+    }
+    
+    if (validDocuments.length < documents.length) {
+      logger.warn(`[EXTRACTION] Filtered out ${documents.length - validDocuments.length} documents with empty content`)
+    }
 
-    documents.forEach((doc, index) => {
+    validDocuments.forEach((doc, index) => {
       sections.push(`--- Document ${index + 1}: ${doc.title} ---`)
       sections.push(`Template: ${doc.template_name || 'Unknown'}`)
       sections.push('')
@@ -2348,7 +2484,9 @@ Guidelines:
       sections.push('')
     })
 
-    return sections.join('\n')
+    const context = sections.join('\n')
+    logger.debug(`[EXTRACTION] Built document context: ${validDocuments.length} documents, ${context.length} characters`)
+    return context
   }
 
   /**
@@ -4561,10 +4699,34 @@ Guidelines:
       documentIds?: string[]
     } = {}
   ): Promise<any[]> {
+    // Get best provider/model using centralized fallback mechanism
+    const { provider: bestProvider, model: bestModel } = await this.getBestAIProviderAndModel(
+      options.aiProvider,
+      options.aiModel
+    )
+    
+    // Override options with best provider/model
+    const extractionOptions = {
+      ...options,
+      aiProvider: bestProvider,
+      aiModel: bestModel
+    }
+    
     const documents = await this.getProjectDocuments(projectId, options.documentIds)
     
+    // Log document retrieval for debugging
+    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Retrieved ${documents.length} documents for extraction`, {
+      projectId,
+      entityType,
+      documentIds: options.documentIds,
+      documentTitles: documents.map(d => d.title),
+      totalContentLength: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0),
+      provider: bestProvider,
+      model: bestModel
+    })
+    
     if (documents.length === 0) {
-      logger.warn(`[EXTRACTION] No documents found for ${entityType}`)
+      logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] No documents found - cannot extract entities`)
       return []
     }
 
@@ -4575,8 +4737,8 @@ Guidelines:
       projectId,
       documentContext,
       entityType,
-      options.aiProvider,
-      options.aiModel
+      bestProvider,
+      bestModel
     )
     
     if (cached) {
@@ -4585,99 +4747,126 @@ Guidelines:
     }
 
     // Cache miss - perform AI extraction
-    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ❌ Cache miss, calling AI...`)
+    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ❌ Cache miss, calling AI...`, {
+      provider: bestProvider,
+      model: bestModel,
+      documentCount: documents.length,
+      totalContentChars: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0)
+    })
     
     let entities: any[]
     
-    // Map entity type to extraction method - pass documents array and options
-    switch (entityType) {
+    try {
+      // Map entity type to extraction method - pass documents array and extractionOptions
+      switch (entityType) {
       case 'stakeholders':
-        entities = await this.extractStakeholders(documents, projectId, options)
+        entities = await this.extractStakeholders(documents, projectId, extractionOptions)
         break
       case 'requirements':
-        entities = await this.extractRequirements(documents, projectId, options)
+        entities = await this.extractRequirements(documents, projectId, extractionOptions)
         break
       case 'risks':
-        entities = await this.extractRisks(documents, projectId, options)
+        entities = await this.extractRisks(documents, projectId, extractionOptions)
         break
       case 'milestones':
-        entities = await this.extractMilestones(documents, projectId, options)
+        entities = await this.extractMilestones(documents, projectId, extractionOptions)
         break
       case 'constraints':
-        entities = await this.extractConstraints(documents, projectId, options)
+        entities = await this.extractConstraints(documents, projectId, extractionOptions)
         break
       case 'success_criteria':
-        entities = await this.extractSuccessCriteria(documents, projectId, options)
+        entities = await this.extractSuccessCriteria(documents, projectId, extractionOptions)
         break
       case 'best_practices':
-        entities = await this.extractBestPractices(documents, projectId, options)
+        entities = await this.extractBestPractices(documents, projectId, extractionOptions)
         break
       case 'phases':
-        entities = await this.extractPhases(documents, projectId, options)
+        entities = await this.extractPhases(documents, projectId, extractionOptions)
         break
       case 'resources':
-        entities = await this.extractResources(documents, projectId, options)
+        entities = await this.extractResources(documents, projectId, extractionOptions)
         break
       case 'technologies':
-        entities = await this.extractTechnologies(documents, projectId, options)
+        entities = await this.extractTechnologies(documents, projectId, extractionOptions)
         break
       case 'quality_standards':
-        entities = await this.extractQualityStandards(documents, projectId, options)
+        entities = await this.extractQualityStandards(documents, projectId, extractionOptions)
         break
       case 'deliverables':
-        entities = await this.extractDeliverables(documents, projectId, options)
+        entities = await this.extractDeliverables(documents, projectId, extractionOptions)
         break
       case 'scope_items':
-        entities = await this.extractScopeItems(documents, projectId, options)
+        entities = await this.extractScopeItems(documents, projectId, extractionOptions)
         break
       case 'activities':
-        entities = await this.extractActivities(documents, projectId, options)
+        entities = await this.extractActivities(documents, projectId, extractionOptions)
         break
       case 'team_agreements':
-        entities = await this.extractTeamAgreements(documents, projectId, options)
+        entities = await this.extractTeamAgreements(documents, projectId, extractionOptions)
         break
       case 'development_approaches':
-        entities = await this.extractDevelopmentApproaches(documents, projectId, options)
+        entities = await this.extractDevelopmentApproaches(documents, projectId, extractionOptions)
         break
       case 'project_iterations':
-        entities = await this.extractProjectIterations(documents, projectId, options)
+        entities = await this.extractProjectIterations(documents, projectId, extractionOptions)
         break
       case 'work_items':
-        entities = await this.extractWorkItems(documents, projectId, options)
+        entities = await this.extractWorkItems(documents, projectId, extractionOptions)
         break
       case 'capacity_plans':
-        entities = await this.extractCapacityPlans(documents, projectId, options)
+        entities = await this.extractCapacityPlans(documents, projectId, extractionOptions)
         break
       case 'performance_measurements':
-        entities = await this.extractPerformanceMeasurements(documents, projectId, options)
+        entities = await this.extractPerformanceMeasurements(documents, projectId, extractionOptions)
         break
       case 'earned_value_metrics':
-        entities = await this.extractEarnedValueMetrics(documents, projectId, options)
+        entities = await this.extractEarnedValueMetrics(documents, projectId, extractionOptions)
         break
       case 'opportunities':
-        entities = await this.extractOpportunities(documents, projectId, options)
+        entities = await this.extractOpportunities(documents, projectId, extractionOptions)
         break
       case 'risk_responses':
-        entities = await this.extractRiskResponses(documents, projectId, options)
+        entities = await this.extractRiskResponses(documents, projectId, extractionOptions)
         break
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
+      }
+    } catch (extractionError: any) {
+      const errorMessage = extractionError?.message || String(extractionError)
+      logger.error(`[EXTRACTION-${entityType.toUpperCase()}] Extraction failed: ${errorMessage}`, {
+        entityType,
+        projectId,
+        provider: bestProvider,
+        model: bestModel,
+        documentCount: documents.length,
+        error: errorMessage,
+        stack: extractionError?.stack,
+        code: extractionError?.code,
+        name: extractionError?.name
+      })
+      // Re-throw with more context so Bull can retry
+      throw new Error(`Failed to extract ${entityType}: ${errorMessage}`)
     }
     
     // Cache the result for future extractions (only if successful)
-    if (entities.length > 0) {
-      await aiCacheService.set(
-        projectId,
-        documentContext,
-        entityType,
-        entities,
-        options.aiProvider,
-        options.aiModel
-      )
-      logger.info(`[EXTRACTION-${entityType.toUpperCase()}] 💾 Cached ${entities.length} entities for future use`)
+    if (entities && entities.length > 0) {
+      try {
+        await aiCacheService.set(
+          projectId,
+          documentContext,
+          entityType,
+          entities,
+          bestProvider,
+          bestModel
+        )
+        logger.info(`[EXTRACTION-${entityType.toUpperCase()}] 💾 Cached ${entities.length} entities for future use`)
+      } catch (cacheError: any) {
+        // Don't fail extraction if caching fails
+        logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Failed to cache results: ${cacheError?.message || cacheError}`)
+      }
     }
     
-    return entities
+    return entities || []
   }
 
   /**
@@ -4781,11 +4970,21 @@ Guidelines:
       await client.query('COMMIT')
       logger.info(`[EXTRACTION] Successfully saved ${entities.length} ${entityType}`)
       
-    } catch (error) {
+    } catch (error: any) {
       await client.query('ROLLBACK')
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${errorMessage}`)
-      throw error
+      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${errorMessage}`, {
+        entityType,
+        projectId,
+        userId,
+        entityCount: entities.length,
+        error: errorMessage,
+        stack: error?.stack,
+        code: error?.code,
+        detail: error?.detail
+      })
+      // Re-throw with more context
+      throw new Error(`Failed to save ${entityType} (${entities.length} entities): ${errorMessage}`)
     } finally {
       client.release()
     }
