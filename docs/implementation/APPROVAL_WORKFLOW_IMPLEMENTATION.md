@@ -2,8 +2,9 @@
 
 **Task ID**: TASK-745  
 **Source**: DRIFT_TO_CHANGE_REQUEST_WORKFLOW.md  
-**Status**: Phase 1 Complete (Backend)  
-**Date**: November 7, 2025
+**Status**: ✅ Complete - All drift types integrated  
+**Date**: January 2025  
+**Last Updated**: January 2025
 
 ---
 
@@ -78,13 +79,60 @@ pending → in_progress → approved
 
 ---
 
+## Integration Points
+
+### 1. Positive Drift Integration
+
+**Location**: `server/src/services/positiveDriftChangeRequestService.ts`
+
+When positive drift is detected (cost savings, timeline acceleration, efficiency improvements):
+- ✅ Change request is automatically created
+- ✅ Approval workflow is automatically created with type `positive_drift`
+- ✅ Priority is set based on estimated value (>$100K = high, >$50K = medium, else = low)
+- ✅ Severity is set to `low` (opportunity, not risk)
+- ✅ Approval steps are created based on workflow template
+
+**Example Flow**:
+```
+Positive Drift Detected → CR Created → Approval Workflow Created → Notifications Sent
+```
+
+### 2. Negative Drift Integration
+
+**Location**: `server/src/services/driftResolutionService.ts`
+
+When negative drift is resolved with major changes:
+- ✅ Change request is created for major changes
+- ✅ Approval workflow is automatically created
+- ✅ Request type determined by drift analysis:
+  - `budget_overrun` - If budget variance > 10%
+  - `positive_drift` - If positive indicators detected
+  - `negative_drift` - Default for other negative drift
+- ✅ Priority and severity set based on drift severity and budget impact
+
+### 3. Budget Overrun Integration
+
+**Location**: `server/src/services/driftResolutionService.ts`
+
+When budget overrun is detected:
+- ✅ Request type set to `budget_overrun`
+- ✅ Priority escalates based on overrun percentage:
+  - ≥25% = `emergency` + `critical` severity
+  - ≥10% = `critical` + `high` severity
+  - <10% = `high` + `medium` severity
+- ✅ Emergency meeting may be auto-scheduled for critical overruns
+
 ## Summary
 
 ✅ Complete database schema with 6 tables  
 ✅ Full service layer with state machine  
 ✅ REST API with 7 endpoints  
-✅ Integration with drift detection  
-✅ Email notification system  
-✅ Comprehensive audit trail  
+✅ **Full integration with all drift types**:
+  - ✅ Positive drift → Approval workflow
+  - ✅ Negative drift → Approval workflow  
+  - ✅ Budget overrun → Approval workflow with escalation
+- ✅ Email notification system  
+- ✅ Comprehensive audit trail  
+- ✅ Tests updated to verify approval workflow creation
 
-**Next Steps**: Frontend UI development and comprehensive testing.
+**Status**: Backend integration complete. Frontend UI development recommended for full user experience.

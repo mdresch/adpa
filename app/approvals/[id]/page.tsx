@@ -136,12 +136,15 @@ export default function ApprovalDetailPage() {
   const fetchApprovalDetails = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get(`/approvals/${approvalId}`)
-      setApproval(response.data.approval)
-      setSteps(response.data.steps || [])
+      const response = await apiClient.get<any>(`/approvals/${approvalId}`)
+      // API returns { success: true, approval: {...}, steps: [...] }
+      setApproval(response.approval)
+      setSteps(response.steps || [])
     } catch (error) {
       console.error('Error fetching approval details:', error)
       toast.error('Failed to load approval details')
+      setApproval(null)
+      setSteps([])
     } finally {
       setLoading(false)
     }
@@ -259,30 +262,31 @@ export default function ApprovalDetailPage() {
   const overdue = isOverdue(approval.sla_deadline)
 
   return (
-    <AnimatedLayout>
+    <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title="Approval Details" />
-        <PageTransition>
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">
-            {/* Back Button */}
-            <div className="mb-4">
-              <Link href="/approvals">
-                <Button variant="outline" size="sm">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Approvals
-                </Button>
-              </Link>
-            </div>
-
-            {/* Header */}
-            <div className="mb-6">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <h1 className="text-3xl font-bold mb-2">{approval.title}</h1>
-                  <p className="text-gray-600">{approval.description}</p>
-                </div>
+        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+          <PageTransition>
+            <AnimatedLayout>
+              {/* Back Button */}
+              <div className="mb-4">
+                <Link href="/approvals">
+                  <Button variant="outline" size="sm">
+                    <ArrowLeft className="h-4 w-4 mr-2" />
+                    Back to Approvals
+                  </Button>
+                </Link>
               </div>
+
+              {/* Header */}
+              <div className="mb-6">
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h1 className="text-3xl font-bold mb-2">{approval.title}</h1>
+                    <p className="text-muted-foreground">{approval.description}</p>
+                  </div>
+                </div>
 
               <div className="flex flex-wrap gap-2">
                 {/* Status Badge */}
@@ -467,8 +471,9 @@ export default function ApprovalDetailPage() {
                 </div>
               </CardContent>
             </Card>
-          </main>
-        </PageTransition>
+            </AnimatedLayout>
+          </PageTransition>
+        </main>
       </div>
 
       {/* Approve Dialog */}
@@ -583,6 +588,6 @@ export default function ApprovalDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </AnimatedLayout>
+    </div>
   )
 }

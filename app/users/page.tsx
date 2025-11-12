@@ -1,6 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { apiClient } from "@/lib/api"
+import { useAuth } from "@/contexts/AuthContext"
+import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,84 +50,73 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+// Role mapping: backend role -> display name
+const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  admin: "Administrator",
+  manager: "Project Manager",
+  user: "User",
+  viewer: "Viewer",
+  ccb: "Change Control Board",
+}
+
+// Reverse mapping: display name -> backend role
+const DISPLAY_TO_ROLE: Record<string, string> = {
+  "Administrator": "admin",
+  "Project Manager": "manager",
+  "User": "user",
+  "Viewer": "viewer",
+  "Change Control Board": "ccb",
+}
+
+interface User {
+  id: string
+  name: string
+  email: string
+  role: string
+  is_active: boolean
+  last_login?: string
+  created_at: string
+  avatar_url?: string
+}
+
 export default function UsersAndRoles() {
-  const [users] = useState([
-    {
-      id: "1",
-      name: "Sarah Johnson",
-      email: "sarah.johnson@company.com",
-      role: "Administrator",
-      department: "IT Operations",
-      status: "active",
-      lastLogin: "2024-01-20 14:30",
-      createdAt: "2023-06-15",
-      permissions: ["full_access", "user_management", "system_config"],
-      avatar: "SJ",
-      projects: 8,
-      documentsGenerated: 156,
-      loginCount: 342,
-    },
-    {
-      id: "2",
-      name: "John Doe",
-      email: "john.doe@company.com",
-      role: "Project Manager",
-      department: "Engineering",
-      status: "active",
-      lastLogin: "2024-01-20 09:15",
-      createdAt: "2023-08-22",
-      permissions: ["project_access", "document_generation", "team_management"],
-      avatar: "JD",
-      projects: 5,
-      documentsGenerated: 89,
-      loginCount: 198,
-    },
-    {
-      id: "3",
-      name: "Jane Smith",
-      email: "jane.smith@company.com",
-      role: "Business Analyst",
-      department: "Product",
-      status: "active",
-      lastLogin: "2024-01-19 16:45",
-      createdAt: "2023-09-10",
-      permissions: ["document_generation", "template_access", "analytics_view"],
-      avatar: "JS",
-      projects: 12,
-      documentsGenerated: 234,
-      loginCount: 267,
-    },
-    {
-      id: "4",
-      name: "Mike Wilson",
-      email: "mike.wilson@company.com",
-      role: "Developer",
-      department: "Engineering",
-      status: "inactive",
-      lastLogin: "2024-01-15 11:20",
-      createdAt: "2023-11-05",
-      permissions: ["template_access", "integration_config"],
-      avatar: "MW",
-      projects: 3,
-      documentsGenerated: 45,
-      loginCount: 87,
-    },
-    {
-      id: "5",
-      name: "Lisa Chen",
-      email: "lisa.chen@company.com",
-      role: "Data Manager",
-      department: "Data & Analytics",
-      status: "active",
-      lastLogin: "2024-01-20 13:10",
-      createdAt: "2023-07-18",
-      permissions: ["data_access", "analytics_view", "report_generation"],
-      avatar: "LC",
-      projects: 7,
-      documentsGenerated: 178,
-      loginCount: 223,
-    },
-  ])
+  const router = useRouter()
+  const { user, isAuthenticated, loading: authLoading } = useAuth()
+  const [users, setUsers] = useState<User[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [editFormData, setEditFormData] = useState<{
+    name: string
+    email: string
+    role: string
+    is_active: boolean
+  }>({
+    name: "",
+    email: "",
+    role: "user",
+    is_active: true,
+  })
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [createFormData, setCreateFormData] = useState<{
+    name: string
+    email: string
+    role: string
+    password: string
+    department: string
+    notes: string
+    sendInvite: boolean
+  }>({
+    name: "",
+    email: "",
+    role: "user",
+    password: "",
+    department: "",
+    notes: "",
+    sendInvite: false,
+  })
+  const [creating, setCreating] = useState(false)
 
   const [roles] = useState([
     {
@@ -189,44 +182,311 @@ export default function UsersAndRoles() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [roleFilter, setRoleFilter] = useState("all")
 
-  const filteredUsers = users.filter((user) => {
-    const matchesSearch =
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.department.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesStatus = statusFilter === "all" || user.status === statusFilter
-    const matchesRole = roleFilter === "all" || user.role === roleFilter
-    return matchesSearch && matchesStatus && matchesRole
-  })
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!authLoading && !isAuthenticated) {
+      router.push("/auth/login")
+      toast.error("Please log in to access this page")
+    }
+  }, [isAuthenticated, authLoading, router])
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "active":
-        return "bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
-      case "inactive":
-        return "bg-gradient-to-r from-slate-500 to-gray-500 text-white"
-      case "suspended":
-        return "bg-gradient-to-r from-red-500 to-pink-500 text-white"
-      default:
-        return "bg-gradient-to-r from-slate-500 to-gray-500 text-white"
+  // Check if user is admin
+  useEffect(() => {
+    if (!authLoading && user && user.role !== "admin") {
+      router.push("/")
+      toast.error("Access denied: Admin role required")
+    }
+  }, [user, authLoading, router])
+
+  // Fetch users from API
+  useEffect(() => {
+    const fetchUsers = async () => {
+      // Wait for auth to finish loading
+      if (authLoading) {
+        return
+      }
+
+      // Don't fetch if not authenticated or not admin
+      if (!isAuthenticated || !user || user.role !== "admin") {
+        setLoading(false)
+        return
+      }
+
+      try {
+        setLoading(true)
+        setError(null)
+        
+        // Ensure token is set in API client
+        const token = localStorage.getItem("auth_token")
+        if (token) {
+          apiClient.setToken(token)
+        } else {
+          throw new Error("No authentication token found")
+        }
+        
+        // Request all users with a higher limit (max 100 per backend validation)
+        const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+        console.log("[Users] API Response:", response)
+        
+        // Handle paginated response
+        const usersList = response?.users || []
+        
+        if (!usersList || usersList.length === 0) {
+          console.log("[Users] No users found in response")
+          setUsers([])
+        } else {
+          console.log(`[Users] Loaded ${usersList.length} users`)
+          setUsers(usersList)
+        }
+      } catch (err: any) {
+        console.error("[Users] Failed to fetch users:", err)
+        console.error("[Users] Error details:", {
+          message: err?.message,
+          status: err?.status,
+          response: err?.response,
+          stack: err?.stack
+        })
+        
+        // Check for specific error types
+        let errorMessage = "Failed to load users. Please try again."
+        
+        if (err?.status === 403 || err?.response?.status === 403) {
+          errorMessage = "Access denied. Admin role required to view users."
+        } else if (err?.status === 401 || err?.response?.status === 401) {
+          errorMessage = "Authentication required. Please log in."
+          // Redirect to login
+          router.push("/auth/login")
+        } else if (err?.response?.data?.error) {
+          errorMessage = err.response.data.error
+        } else if (err?.message) {
+          errorMessage = err.message
+        }
+        
+        setError(errorMessage)
+        toast.error(errorMessage)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    void fetchUsers()
+  }, [isAuthenticated, user, authLoading, router])
+
+  // Handle edit user
+  const handleEditUser = (user: User) => {
+    setEditingUser(user)
+    setEditFormData({
+      name: user.name || "",
+      email: user.email || "",
+      role: user.role || "user",
+      is_active: user.is_active ?? true,
+    })
+    setShowEditDialog(true)
+  }
+
+  // Save user changes
+  const handleSaveUser = async () => {
+    if (!editingUser) return
+
+    // Prevent admins from changing their own role
+    if (user && editingUser.id === user.id && user.role === "admin" && editFormData.role !== "admin") {
+      toast.error("Cannot change your own role from admin. Please create a separate CCB user account or have another admin make this change.")
+      return
+    }
+
+    // Prevent admins from deactivating themselves
+    if (user && editingUser.id === user.id && user.role === "admin" && !editFormData.is_active) {
+      toast.error("Cannot deactivate your own account. Please have another admin make this change.")
+      return
+    }
+
+    try {
+      await apiClient.updateUser(editingUser.id, {
+        name: editFormData.name,
+        email: editFormData.email,
+        role: editFormData.role,
+        is_active: editFormData.is_active,
+      })
+
+      // Refresh users list
+      const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+      setUsers(response?.users || [])
+
+      toast.success("User updated successfully")
+      setShowEditDialog(false)
+      setEditingUser(null)
+    } catch (err: any) {
+      console.error("Failed to update user:", err)
+      const errorMessage = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to update user"
+      toast.error(errorMessage)
     }
   }
 
+  // Toggle user active status
+  const handleToggleActive = async (user: User) => {
+    try {
+      await apiClient.updateUser(user.id, {
+        is_active: !user.is_active,
+      })
+
+      // Refresh users list
+      const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+      setUsers(response?.users || [])
+
+      toast.success(`User ${!user.is_active ? "activated" : "deactivated"} successfully`)
+    } catch (err) {
+      console.error("Failed to update user status:", err)
+      toast.error("Failed to update user status")
+    }
+  }
+
+  // Create new user
+  const handleCreateUser = async () => {
+    try {
+      setCreating(true)
+
+      // Validate password strength
+      const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/
+      if (!passwordRegex.test(createFormData.password)) {
+        toast.error("Password must contain at least one uppercase letter, one lowercase letter, and one number")
+        setCreating(false)
+        return
+      }
+
+      // Call API to create user
+      const response = await apiClient.post("/users", {
+        name: createFormData.name,
+        email: createFormData.email,
+        password: createFormData.password,
+        role: createFormData.role,
+      })
+
+      // Refresh users list
+      const usersResponse = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+      setUsers(usersResponse?.users || [])
+
+      toast.success(`User ${createFormData.name} created successfully!`)
+      
+      // Reset form and close dialog
+      setCreateFormData({
+        name: "",
+        email: "",
+        role: "user",
+        password: "",
+        department: "",
+        notes: "",
+        sendInvite: false,
+      })
+      setShowCreateDialog(false)
+
+      // TODO: Send invitation email if sendInvite is true
+      if (createFormData.sendInvite) {
+        console.log("[Users] Invitation email would be sent to:", createFormData.email)
+        // Implement email sending logic here if needed
+      }
+    } catch (err: any) {
+      console.error("Failed to create user:", err)
+      const errorMessage = err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to create user"
+      toast.error(errorMessage)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  // Delete user
+  const handleDeleteUser = async (user: User) => {
+    if (!confirm(`Are you sure you want to delete ${user.name || user.email}?`)) {
+      return
+    }
+
+    try {
+      await apiClient.delete(`/users/${user.id}`)
+      
+      // Refresh users list
+      const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+      setUsers(response?.users || [])
+
+      toast.success("User deleted successfully")
+    } catch (err) {
+      console.error("Failed to delete user:", err)
+      toast.error("Failed to delete user")
+    }
+  }
+
+  const filteredUsers = users.filter((user) => {
+    const displayRole = ROLE_DISPLAY_NAMES[user.role] || user.role
+    const matchesSearch =
+      (user.name || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (user.email || "").toLowerCase().includes(searchTerm.toLowerCase())
+    const matchesStatus = statusFilter === "all" || (statusFilter === "active" && user.is_active) || (statusFilter === "inactive" && !user.is_active)
+    const matchesRole = roleFilter === "all" || displayRole === roleFilter
+    return matchesSearch && matchesStatus && matchesRole
+  })
+
+  // Get unique roles for filter dropdown
+  const availableRoles = Array.from(new Set(users.map(u => ROLE_DISPLAY_NAMES[u.role] || u.role)))
+
+  const getStatusColor = (isActive: boolean) => {
+    return isActive
+      ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white"
+      : "bg-gradient-to-r from-slate-500 to-gray-500 text-white"
+  }
+
   const getRoleIcon = (role: string) => {
-    switch (role) {
+    const displayRole = ROLE_DISPLAY_NAMES[role] || role
+    switch (displayRole) {
       case "Administrator":
         return Crown
       case "Project Manager":
         return Users
-      case "Business Analyst":
-        return Activity
-      case "Developer":
-        return Settings
-      case "Data Manager":
+      case "Change Control Board":
         return Shield
+      case "User":
+        return UserCheck
+      case "Viewer":
+        return UserX
       default:
         return UserCheck
     }
+  }
+
+  const getInitials = (name: string, email: string) => {
+    if (name) {
+      const parts = name.split(" ")
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase()
+      }
+      return name.substring(0, 2).toUpperCase()
+    }
+    return email.substring(0, 2).toUpperCase()
+  }
+
+  // Show loading state while auth is loading
+  if (authLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-slate-500 dark:text-slate-400">Loading...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Show access denied if not authenticated or not admin
+  if (!isAuthenticated || !user || user.role !== "admin") {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="text-center">
+          <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
+          <p className="text-slate-500 dark:text-slate-400">
+            {!isAuthenticated 
+              ? "Please log in to access this page."
+              : "Admin role required to view users."}
+          </p>
+        </div>
+      </div>
+    )
   }
 
   const statsData = [
@@ -318,7 +578,7 @@ export default function UsersAndRoles() {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                 >
-                  <Dialog>
+                  <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
                     <DialogTrigger asChild>
                       <Button className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300">
                         <Plus className="h-4 w-4 mr-2" />
@@ -340,84 +600,156 @@ export default function UsersAndRoles() {
                           Create a new user account with appropriate role and permissions.
                         </DialogDescription>
                       </DialogHeader>
-                      <div className="grid gap-6 py-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="user-name" className="text-sm font-semibold">
-                              Full Name
-                            </Label>
-                            <Input
-                              id="user-name"
-                              placeholder="Enter full name"
-                              className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
-                            />
+                      <form
+                        onSubmit={(e) => {
+                          e.preventDefault()
+                          handleCreateUser()
+                        }}
+                      >
+                        <div className="grid gap-6 py-4">
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="user-name" className="text-sm font-semibold">
+                                Full Name *
+                              </Label>
+                              <Input
+                                id="user-name"
+                                placeholder="Enter full name"
+                                value={createFormData.name}
+                                onChange={(e) => setCreateFormData({ ...createFormData, name: e.target.value })}
+                                required
+                                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="user-email" className="text-sm font-semibold">
+                                Email Address *
+                              </Label>
+                              <Input
+                                id="user-email"
+                                type="email"
+                                placeholder="user@company.com"
+                                value={createFormData.email}
+                                onChange={(e) => setCreateFormData({ ...createFormData, email: e.target.value })}
+                                required
+                                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                              />
+                            </div>
                           </div>
-                          <div>
-                            <Label htmlFor="user-email" className="text-sm font-semibold">
-                              Email Address
-                            </Label>
-                            <Input
-                              id="user-email"
-                              type="email"
-                              placeholder="user@company.com"
-                              className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <Label htmlFor="user-role" className="text-sm font-semibold">
-                              Role
-                            </Label>
-                            <Select>
-                              <SelectTrigger className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500">
-                                <SelectValue placeholder="Select role" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {roles.map((role) => (
-                                  <SelectItem key={role.id} value={role.name}>
-                                    {role.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="user-password" className="text-sm font-semibold">
+                                Password *
+                              </Label>
+                              <Input
+                                id="user-password"
+                                type="password"
+                                placeholder="Min 8 characters"
+                                value={createFormData.password}
+                                onChange={(e) => setCreateFormData({ ...createFormData, password: e.target.value })}
+                                required
+                                minLength={8}
+                                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                              />
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                                Must contain uppercase, lowercase, and number
+                              </p>
+                            </div>
+                            <div>
+                              <Label htmlFor="user-role" className="text-sm font-semibold">
+                                Role *
+                              </Label>
+                              <Select
+                                value={ROLE_DISPLAY_NAMES[createFormData.role] || createFormData.role}
+                                onValueChange={(value) => {
+                                  const backendRole = DISPLAY_TO_ROLE[value] || value
+                                  setCreateFormData({ ...createFormData, role: backendRole })
+                                }}
+                              >
+                                <SelectTrigger className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500">
+                                  <SelectValue placeholder="Select role" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {Object.entries(ROLE_DISPLAY_NAMES).map(([backendRole, displayName]) => (
+                                    <SelectItem key={backendRole} value={displayName}>
+                                      {displayName}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
                           </div>
                           <div>
                             <Label htmlFor="user-department" className="text-sm font-semibold">
-                              Department
+                              Department (Optional)
                             </Label>
                             <Input
                               id="user-department"
                               placeholder="e.g., Engineering, Product"
+                              value={createFormData.department}
+                              onChange={(e) => setCreateFormData({ ...createFormData, department: e.target.value })}
                               className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
                             />
                           </div>
+                          <div>
+                            <Label htmlFor="user-notes" className="text-sm font-semibold">
+                              Notes (Optional)
+                            </Label>
+                            <Textarea
+                              id="user-notes"
+                              placeholder="Additional notes about the user"
+                              value={createFormData.notes}
+                              onChange={(e) => setCreateFormData({ ...createFormData, notes: e.target.value })}
+                              className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                            />
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <Switch
+                              id="send-invite"
+                              checked={createFormData.sendInvite}
+                              onCheckedChange={(checked) => setCreateFormData({ ...createFormData, sendInvite: checked })}
+                            />
+                            <Label htmlFor="send-invite" className="text-sm">
+                              Send invitation email to user
+                            </Label>
+                          </div>
                         </div>
-                        <div>
-                          <Label htmlFor="user-notes" className="text-sm font-semibold">
-                            Notes (Optional)
-                          </Label>
-                          <Textarea
-                            id="user-notes"
-                            placeholder="Additional notes about the user"
-                            className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
-                          />
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Switch id="send-invite" />
-                          <Label htmlFor="send-invite" className="text-sm">
-                            Send invitation email to user
-                          </Label>
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          type="submit"
-                          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
-                        >
-                          Create User
-                        </Button>
-                      </DialogFooter>
+                        <DialogFooter>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                              setShowCreateDialog(false)
+                              setCreateFormData({
+                                name: "",
+                                email: "",
+                                role: "user",
+                                password: "",
+                                department: "",
+                                notes: "",
+                                sendInvite: false,
+                              })
+                            }}
+                            disabled={creating}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+                            disabled={creating || !createFormData.name || !createFormData.email || !createFormData.password || createFormData.password.length < 8}
+                          >
+                            {creating ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Creating...
+                              </>
+                            ) : (
+                              "Create User"
+                            )}
+                          </Button>
+                        </DialogFooter>
+                      </form>
                     </DialogContent>
                   </Dialog>
                 </motion.div>
@@ -513,76 +845,82 @@ export default function UsersAndRoles() {
                         onChange={(e) => setRoleFilter(e.target.value)}
                       >
                         <option value="all">All Roles</option>
-                        {roles.map((role) => (
-                          <option key={role.id} value={role.name}>
-                            {role.name}
+                        {availableRoles.map((role) => (
+                          <option key={role} value={role}>
+                            {role}
                           </option>
                         ))}
                       </motion.select>
                     </div>
                   </motion.div>
 
+                  {/* Loading State */}
+                  {loading && (
+                    <div className="text-center py-16">
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <p className="text-slate-500 dark:text-slate-400">Loading users...</p>
+                    </div>
+                  )}
+
+                  {/* Error State */}
+                  {error && !loading && (
+                    <div className="text-center py-16">
+                      <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+                      <p className="text-red-600 dark:text-red-400">{error}</p>
+                      <Button onClick={() => window.location.reload()} className="mt-4">
+                        Retry
+                      </Button>
+                    </div>
+                  )}
+
                   {/* Users List */}
-                  <AnimatedGrid className="space-y-4">
-                    {filteredUsers.map((user, index) => {
-                      const RoleIcon = getRoleIcon(user.role)
-                      return (
-                        <AnimatedGridItem key={user.id}>
-                          <Card className="glass border-0 shadow-lg hover:shadow-2xl transition-all duration-300 hover-lift group">
-                            <CardContent className="p-6">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-4">
-                                  <motion.div
-                                    whileHover={{ scale: 1.1 }}
-                                    className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg"
-                                  >
-                                    <span className="text-white font-bold text-lg">{user.avatar}</span>
-                                  </motion.div>
-                                  <div className="flex-1">
-                                    <div className="flex items-center space-x-3 mb-2">
-                                      <h3 className="font-semibold text-lg text-slate-800 dark:text-slate-100">
-                                        {user.name}
-                                      </h3>
-                                      <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
-                                      <Badge variant="outline" className="flex items-center space-x-1">
-                                        <RoleIcon className="h-3 w-3" />
-                                        <span>{user.role}</span>
-                                      </Badge>
-                                    </div>
-                                    <div className="flex items-center space-x-6 text-sm text-slate-500 dark:text-slate-400">
-                                      <div className="flex items-center space-x-1">
-                                        <Mail className="h-3 w-3" />
-                                        <span>{user.email}</span>
+                  {!loading && !error && (
+                    <AnimatedGrid className="space-y-4">
+                      {filteredUsers.map((user, index) => {
+                        const RoleIcon = getRoleIcon(user.role)
+                        const displayRole = ROLE_DISPLAY_NAMES[user.role] || user.role
+                        const initials = getInitials(user.name || "", user.email)
+                        const lastLoginDate = user.last_login ? new Date(user.last_login).toLocaleDateString() : "Never"
+                        return (
+                          <AnimatedGridItem key={user.id}>
+                            <Card className="glass border-0 shadow-lg hover:shadow-2xl transition-all duration-300 hover-lift group">
+                              <CardContent className="p-6">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-4">
+                                    <motion.div
+                                      whileHover={{ scale: 1.1 }}
+                                      className="w-12 h-12 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center shadow-lg"
+                                    >
+                                      <span className="text-white font-bold text-lg">{initials}</span>
+                                    </motion.div>
+                                    <div className="flex-1">
+                                      <div className="flex items-center space-x-3 mb-2">
+                                        <h3 className="font-semibold text-lg text-slate-800 dark:text-slate-100">
+                                          {user.name || user.email}
+                                        </h3>
+                                        <Badge className={getStatusColor(user.is_active)}>
+                                          {user.is_active ? "Active" : "Inactive"}
+                                        </Badge>
+                                        <Badge variant="outline" className="flex items-center space-x-1">
+                                          <RoleIcon className="h-3 w-3" />
+                                          <span>{displayRole}</span>
+                                        </Badge>
                                       </div>
-                                      <div className="flex items-center space-x-1">
-                                        <Users className="h-3 w-3" />
-                                        <span>{user.department}</span>
+                                      <div className="flex items-center space-x-6 text-sm text-slate-500 dark:text-slate-400">
+                                        <div className="flex items-center space-x-1">
+                                          <Mail className="h-3 w-3" />
+                                          <span>{user.email}</span>
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                          <Calendar className="h-3 w-3" />
+                                          <span>Last login: {lastLoginDate}</span>
+                                        </div>
+                                        <div className="flex items-center space-x-1">
+                                          <Calendar className="h-3 w-3" />
+                                          <span>Joined: {new Date(user.created_at).toLocaleDateString()}</span>
+                                        </div>
                                       </div>
-                                      <div className="flex items-center space-x-1">
-                                        <Calendar className="h-3 w-3" />
-                                        <span>Last login: {user.lastLogin}</span>
-                                      </div>
                                     </div>
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-6">
-                                  <div className="text-center">
-                                    <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-                                      {user.projects}
-                                    </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">Projects</div>
-                                  </div>
-                                  <div className="text-center">
-                                    <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                                      {user.documentsGenerated}
-                                    </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">Documents</div>
-                                  </div>
-                                  <div className="text-center">
-                                    <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                                      {user.loginCount}
-                                    </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">Logins</div>
                                   </div>
                                   <motion.div
                                     initial={{ opacity: 0, scale: 0 }}
@@ -600,16 +938,18 @@ export default function UsersAndRoles() {
                                         </Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="glass border-0 shadow-xl">
-                                        <DropdownMenuItem className="hover:bg-slate-50 dark:hover:bg-slate-800">
+                                        <DropdownMenuItem 
+                                          className="hover:bg-slate-50 dark:hover:bg-slate-800"
+                                          onClick={() => handleEditUser(user)}
+                                        >
                                           <Edit className="h-4 w-4 mr-2" />
                                           Edit User
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                                          <Key className="h-4 w-4 mr-2" />
-                                          Reset Password
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem className="hover:bg-slate-50 dark:hover:bg-slate-800">
-                                          {user.status === "active" ? (
+                                        <DropdownMenuItem 
+                                          className="hover:bg-slate-50 dark:hover:bg-slate-800"
+                                          onClick={() => handleToggleActive(user)}
+                                        >
+                                          {user.is_active ? (
                                             <>
                                               <UserX className="h-4 w-4 mr-2" />
                                               Deactivate
@@ -621,7 +961,10 @@ export default function UsersAndRoles() {
                                             </>
                                           )}
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20">
+                                        <DropdownMenuItem 
+                                          className="text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                          onClick={() => handleDeleteUser(user)}
+                                        >
                                           <Trash2 className="h-4 w-4 mr-2" />
                                           Delete User
                                         </DropdownMenuItem>
@@ -629,13 +972,13 @@ export default function UsersAndRoles() {
                                     </DropdownMenu>
                                   </motion.div>
                                 </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </AnimatedGridItem>
-                      )
-                    })}
-                  </AnimatedGrid>
+                              </CardContent>
+                            </Card>
+                          </AnimatedGridItem>
+                        )
+                      })}
+                    </AnimatedGrid>
+                  )}
 
                   {filteredUsers.length === 0 && (
                     <motion.div
@@ -803,6 +1146,122 @@ export default function UsersAndRoles() {
           </main>
         </div>
       </div>
+
+      {/* Edit User Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="sm:max-w-[600px] glass border-0 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+              Edit User
+            </DialogTitle>
+            <DialogDescription className="text-slate-600 dark:text-slate-300">
+              Update user information and role assignment.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-6 py-4">
+            <div>
+              <Label htmlFor="edit-name" className="text-sm font-semibold">
+                Name
+              </Label>
+              <Input
+                id="edit-name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-email" className="text-sm font-semibold">
+                Email
+              </Label>
+              <Input
+                id="edit-email"
+                type="email"
+                value={editFormData.email}
+                onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+              />
+            </div>
+            <div>
+              <Label htmlFor="edit-role" className="text-sm font-semibold">
+                Role
+              </Label>
+              <Select
+                value={ROLE_DISPLAY_NAMES[editFormData.role] || editFormData.role}
+                onValueChange={(value) => {
+                  const backendRole = DISPLAY_TO_ROLE[value] || value
+                  
+                  // Warn if admin is trying to change their own role
+                  if (user && editingUser && editingUser.id === user.id && user.role === "admin" && backendRole !== "admin") {
+                    if (!confirm("⚠️ WARNING: Changing your own role from Admin will remove your admin access!\n\nYou will lose access to:\n- User management\n- System configuration\n- Admin-only features\n\nConsider creating a separate CCB user account instead.\n\nDo you want to continue?")) {
+                      return
+                    }
+                  }
+                  
+                  setEditFormData({ ...editFormData, role: backendRole })
+                }}
+                disabled={user && editingUser && editingUser.id === user.id && user.role === "admin"}
+              >
+                <SelectTrigger className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors">
+                  <SelectValue placeholder="Select role" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(ROLE_DISPLAY_NAMES).map(([backendRole, displayName]) => (
+                    <SelectItem key={backendRole} value={displayName}>
+                      {displayName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {user && editingUser && editingUser.id === user.id && user.role === "admin" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                  ⚠️ You cannot change your own role from Admin. Create a separate CCB user account instead.
+                </p>
+              )}
+            </div>
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="edit-active"
+                checked={editFormData.is_active}
+                onCheckedChange={(checked) => {
+                  // Prevent admins from deactivating themselves
+                  if (user && editingUser && editingUser.id === user.id && user.role === "admin" && !checked) {
+                    toast.error("Cannot deactivate your own account. Please have another admin make this change.")
+                    return
+                  }
+                  setEditFormData({ ...editFormData, is_active: checked })
+                }}
+                disabled={user && editingUser && editingUser.id === user.id && user.role === "admin"}
+              />
+              <Label htmlFor="edit-active" className="text-sm font-semibold">
+                Active User
+              </Label>
+              {user && editingUser && editingUser.id === user.id && user.role === "admin" && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 ml-2">
+                  ⚠️ Cannot deactivate your own account
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditDialog(false)
+                setEditingUser(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveUser}
+              className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white"
+            >
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageTransition>
   )
 }

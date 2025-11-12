@@ -1096,10 +1096,14 @@ qualityAuditQueue.on("failed", (job, err) => {
 
 // Project Data Extraction job processor
 // Define entity types for granular extraction
+// Includes all PMBOK 8 performance domain entities
 const ENTITY_TYPES = [
   'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
   'success_criteria', 'best_practices', 'phases', 'resources',
-  'quality_standards', 'deliverables', 'scope_items', 'activities'
+  'technologies', 'quality_standards', 'deliverables', 'scope_items', 'activities',
+  // PMBOK 8 Performance Domain entities
+  'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
+  'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses'
 ] as const
 
 type EntityType = typeof ENTITY_TYPES[number]
@@ -1168,12 +1172,77 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
         if (completed + failed === childJobs.length) {
           clearInterval(checkInterval)
           
+          // Get details about failed jobs for better error reporting
+          const failedJobs: Array<{ entityType: string; error: string }> = []
           if (failed > 0) {
-            throw new Error(`${failed} entity extraction(s) failed`)
+            for (let i = 0; i < childJobs.length; i++) {
+              if (states[i] === 'failed') {
+                try {
+                  const job = childJobs[i]
+                  const entityType = job.data?.entityType || 'unknown'
+                  
+                  // Try to get error from job's failedReason or returnvalue
+                  let errorMessage = 'Unknown error'
+                  try {
+                    // Bull stores error in failedReason property
+                    if ((job as any).failedReason) {
+                      errorMessage = (job as any).failedReason
+                    } else {
+                      // Try to get from returnvalue (if error was returned)
+                      const returnValue = await job.getReturnvalue().catch(() => null)
+                      if (returnValue?.error) {
+                        errorMessage = returnValue.error
+                      } else if (returnValue?.message) {
+                        errorMessage = returnValue.message
+                      }
+                    }
+                  } catch (err) {
+                    // If we can't get error details, use generic message
+                    errorMessage = 'Failed after retries'
+                  }
+                  
+                  failedJobs.push({ entityType, error: errorMessage })
+                  logger.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
+                    jobId: job.id,
+                    error: errorMessage,
+                    parentJobId: jobId,
+                    jobData: job.data
+                  })
+                } catch (err: any) {
+                  logger.error(`[EXTRACTION-PARENT] Could not get failed job details: ${err?.message || err}`, {
+                    jobId: childJobs[i].id,
+                    error: err
+                  })
+                  // Still add to failed list with generic error
+                  const entityType = childJobs[i].data?.entityType || 'unknown'
+                  failedJobs.push({ entityType, error: `Could not retrieve error: ${err?.message || 'Unknown'}` })
+                }
+              }
+            }
+            
+            // Log all failed entity types
+            const failedTypes = failedJobs.map(f => f.entityType).join(', ')
+            logger.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
+              failedJobs,
+              completed,
+              total: childJobs.length
+            })
+            
+            // Allow partial success if at least 50% succeeded
+            const successRate = completed / childJobs.length
+            if (successRate >= 0.5) {
+              logger.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
+              // Finalize with partial results
+              await finalizeExtractionJob(jobId, projectId, failedJobs)
+            } else {
+              // Too many failures - fail the entire job
+              const errorMessage = `${failed} entity extraction(s) failed: ${failedTypes}. Errors: ${failedJobs.map(f => `${f.entityType}: ${f.error}`).join('; ')}`
+              throw new Error(errorMessage)
+            }
+          } else {
+            // All succeeded - finalize parent job
+            await finalizeExtractionJob(jobId, projectId)
           }
-          
-          // All succeeded - finalize parent job
-          await finalizeExtractionJob(jobId, projectId)
         } else {
           // Update progress based on completed child jobs
           const progress = 10 + Math.floor((completed / childJobs.length) * 85)
@@ -1235,22 +1304,32 @@ ENTITY_TYPES.forEach((entityType) => {
       return { entityType, count: entities.length }
       
     } catch (error: any) {
-      logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, { parentJobId })
-      throw error // Bull will retry automatically
+      logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, {
+        parentJobId,
+        entityType,
+        projectId,
+        error: error.message,
+        stack: error.stack,
+        provider: aiProvider,
+        model: aiModel
+      })
+      throw error // Bull will retry automatically (up to 3 attempts)
     }
   })
 })
 
 /**
  * Finalize parent job after all child jobs complete
+ * @param failedJobs Optional array of failed entity types for partial success scenarios
  */
-async function finalizeExtractionJob(jobId: string, projectId: string) {
+async function finalizeExtractionJob(jobId: string, projectId: string, failedJobs?: Array<{ entityType: string; error: string }>) {
   try {
     logger.info(`[EXTRACTION-PARENT] Finalizing job ${jobId}`)
     
     await updateJobStatus(jobId, "processing", 95, WORKER_ID, "project-data-extraction")
     
     // Query actual counts from database (child jobs already saved)
+    // Includes all entity types including PMBOK 8 performance domain entities
     const countQueries = await Promise.all([
       pool.query(`SELECT COUNT(*) as count FROM stakeholders WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM requirements WHERE project_id = $1`, [projectId]),
@@ -1261,10 +1340,21 @@ async function finalizeExtractionJob(jobId: string, projectId: string) {
       pool.query(`SELECT COUNT(*) as count FROM best_practices WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM phases WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM resources WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM technologies WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM quality_standards WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM deliverables WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM scope_items WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM activities WHERE project_id = $1`, [projectId])
+      pool.query(`SELECT COUNT(*) as count FROM activities WHERE project_id = $1`, [projectId]),
+      // PMBOK 8 Performance Domain entities
+      pool.query(`SELECT COUNT(*) as count FROM team_agreements WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM development_approaches WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM project_iterations WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM work_items WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM capacity_plans WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM performance_measurements WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM earned_value_metrics WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM opportunities WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM risk_responses WHERE project_id = $1`, [projectId])
     ])
     
     const counts = {
@@ -1277,10 +1367,21 @@ async function finalizeExtractionJob(jobId: string, projectId: string) {
       bestPractices: parseInt(countQueries[6].rows[0].count),
       phases: parseInt(countQueries[7].rows[0].count),
       resources: parseInt(countQueries[8].rows[0].count),
-      qualityStandards: parseInt(countQueries[9].rows[0].count),
-      deliverables: parseInt(countQueries[10].rows[0].count),
-      scopeItems: parseInt(countQueries[11].rows[0].count),
-      activities: parseInt(countQueries[12].rows[0].count)
+      technologies: parseInt(countQueries[9].rows[0].count),
+      qualityStandards: parseInt(countQueries[10].rows[0].count),
+      deliverables: parseInt(countQueries[11].rows[0].count),
+      scopeItems: parseInt(countQueries[12].rows[0].count),
+      activities: parseInt(countQueries[13].rows[0].count),
+      // PMBOK 8 Performance Domain entities
+      teamAgreements: parseInt(countQueries[14].rows[0].count),
+      developmentApproaches: parseInt(countQueries[15].rows[0].count),
+      projectIterations: parseInt(countQueries[16].rows[0].count),
+      workItems: parseInt(countQueries[17].rows[0].count),
+      capacityPlans: parseInt(countQueries[18].rows[0].count),
+      performanceMeasurements: parseInt(countQueries[19].rows[0].count),
+      earnedValueMetrics: parseInt(countQueries[20].rows[0].count),
+      opportunities: parseInt(countQueries[21].rows[0].count),
+      riskResponses: parseInt(countQueries[22].rows[0].count)
     }
     
     const totalEntities = Object.values(counts).reduce((sum, count) => sum + count, 0)
@@ -1291,23 +1392,49 @@ async function finalizeExtractionJob(jobId: string, projectId: string) {
     const jobData = await pool.query(`SELECT created_by FROM jobs WHERE id = $1`, [jobId])
     const userId = jobData.rows[0]?.created_by
     
-    // Update job to completed
+    // Prepare result with optional failed entity info
+    const result: any = {
+      totalEntities,
+      entityCounts: counts,
+      success: true
+    }
+    
+    if (failedJobs && failedJobs.length > 0) {
+      result.partialSuccess = true
+      result.failedEntityTypes = failedJobs.map(f => f.entityType)
+      result.failedCount = failedJobs.length
+      result.warnings = failedJobs.map(f => `${f.entityType}: ${f.error}`)
+      logger.warn(`[EXTRACTION-PARENT] Partial success: ${failedJobs.length} entity types failed`, {
+        failedTypes: result.failedEntityTypes
+      })
+    }
+    
+    // Update job to completed (status is VARCHAR(20), so we use 'completed' and store warnings in result)
+    // Note: Status column is VARCHAR(20), so we can't use 'completed_with_warnings' (25 chars)
+    // Instead, we store the partial success info in the result JSON
     await pool.query(
       `UPDATE jobs 
        SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
        WHERE id = $2`,
-      [JSON.stringify({ totalEntities, entityCounts: counts }), jobId]
+      [JSON.stringify(result), jobId]
     )
     
-    // Emit success notification
+    // Emit success notification (or warning if partial success)
     if (userId) {
+      const message = failedJobs && failedJobs.length > 0
+        ? `Extracted ${totalEntities} entities (${failedJobs.length} entity types failed: ${failedJobs.map(f => f.entityType).join(', ')})`
+        : `Successfully extracted ${totalEntities} entities from project documents`
+      
+      // Emit job completion event (status is always 'completed', warnings are in the event data)
       io.emit("job:completed", {
         jobId,
         userId,
         status: "completed",
-        message: `Successfully extracted ${totalEntities} entities from project documents`,
+        message,
         projectId,
-        totalEntities
+        totalEntities,
+        partialSuccess: failedJobs && failedJobs.length > 0,
+        warnings: failedJobs && failedJobs.length > 0 ? failedJobs : undefined
       })
     }
     

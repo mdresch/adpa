@@ -118,13 +118,13 @@ export const schemas = {
     email: Joi.string().email().required(),
     password: Joi.string().min(8).pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)")).required(),
     name: Joi.string().min(2).max(100).required(),
-    role: Joi.string().valid("admin", "manager", "user", "viewer").default("user"),
+    role: Joi.string().valid("admin", "manager", "user", "viewer", "ccb").default("user"),
   }),
   
   updateUser: Joi.object({
     email: Joi.string().email().optional(),
     name: Joi.string().min(2).max(100).optional(),
-    role: Joi.string().valid("admin", "manager", "user", "viewer").optional(),
+    role: Joi.string().valid("admin", "manager", "user", "viewer", "ccb").optional(),
     is_active: Joi.boolean().optional(),
     permissions: Joi.object().optional(),
   }),
