@@ -215,6 +215,31 @@ describe('Positive Drift Change Request Generation', () => {
       )
 
       expect(driftRecord.rows[0].status).toBe('opportunity_cr_created')
+
+      // TASK-745: Verify approval workflow was created
+      if (result.approvalRequestId) {
+        const approvalRequest = await pool.query(
+          `SELECT * FROM approval_requests WHERE id = $1`,
+          [result.approvalRequestId]
+        )
+
+        expect(approvalRequest.rows.length).toBe(1)
+        expect(approvalRequest.rows[0].request_type).toBe('positive_drift')
+        expect(approvalRequest.rows[0].change_request_id).toBe(result.changeRequestId)
+        expect(approvalRequest.rows[0].status).toBe('pending')
+        expect(approvalRequest.rows[0].priority).toBe('medium') // Default for positive drift
+        expect(approvalRequest.rows[0].severity).toBe('low') // Positive drift is opportunity, not risk
+
+        // Verify approval steps were created
+        const steps = await pool.query(
+          `SELECT * FROM approval_steps WHERE approval_request_id = $1 ORDER BY step_order`,
+          [result.approvalRequestId]
+        )
+
+        expect(steps.rows.length).toBeGreaterThan(0)
+        expect(steps.rows[0].status).toBe('pending')
+        expect(steps.rows[0].step_order).toBe(1)
+      }
     })
 
     test('should generate CR with correct content structure', async () => {
