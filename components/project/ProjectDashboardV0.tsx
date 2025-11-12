@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock } from "lucide-react"
+import { ArrowLeft, Search, FileText, Download, AlertTriangle, CheckCircle2, Clock, Target } from "lucide-react"
 import { toast } from "sonner"
+import { PMBOK8DomainDashboard } from "./PMBOK8DomainDashboard"
 
 interface ProjectDashboardV0Props {
   projectId: string
@@ -77,11 +78,17 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [baselines, setBaselines] = useState<Baseline[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [activeTab, setActiveTab] = useState("overview")
+  const [pmbok8Summary, setPmbok8Summary] = useState<{
+    totalEntities: number
+    domainCoverage: Record<string, boolean>
+    overallHealth: number | null
+  } | null>(null)
 
   useEffect(() => {
     void fetchProjectData()
     void fetchDocuments()
     void fetchBaselines()
+    void fetchPMBOK8Summary()
   }, [projectId])
 
   const fetchProjectData = async () => {
@@ -135,6 +142,27 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       setBaselines(data.baselines || [])
     } catch (error) {
       console.error('Failed to fetch baselines:', error)
+    }
+  }
+
+  const fetchPMBOK8Summary = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setPmbok8Summary({
+          totalEntities: data.pmbok8Total || 0,
+          domainCoverage: data.domainCoverage || {},
+          overallHealth: null
+        })
+      }
+    } catch (error) {
+      // Silently fail - PMBOK 8 data is optional
+      console.debug('PMBOK 8 summary not available:', error)
     }
   }
 
@@ -280,6 +308,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
             <TabsTrigger value="documents">📄 Documents</TabsTrigger>
             <TabsTrigger value="baselines">🎯 Baselines</TabsTrigger>
             <TabsTrigger value="ai-extract">🤖 AI Extract</TabsTrigger>
+            <TabsTrigger value="pmbok8">🎯 PMBOK 8 Domains</TabsTrigger>
             <TabsTrigger value="analytics">📊 Analytics</TabsTrigger>
             <TabsTrigger value="timeline">📈 Timeline</TabsTrigger>
             <TabsTrigger value="team">👥 Team</TabsTrigger>
@@ -333,6 +362,75 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 </div>
               </CardContent>
             </Card>
+
+            {/* PMBOK 8 Domain Summary */}
+            {pmbok8Summary && pmbok8Summary.totalEntities > 0 && (
+              <Card className="border-2 border-purple-200 bg-gradient-to-br from-purple-50/50 to-blue-50/50 dark:from-purple-950/20 dark:to-blue-950/20">
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5 text-purple-600" />
+                        PMBOK 8 Performance Domains
+                      </CardTitle>
+                      <CardDescription>
+                        {pmbok8Summary.totalEntities} entities across 5 performance domains
+                      </CardDescription>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setActiveTab("pmbok8")}
+                    >
+                      View Details
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-5 gap-3">
+                    {Object.entries(pmbok8Summary.domainCoverage).map(([domain, covered]) => {
+                      const domainLabels: Record<string, string> = {
+                        team: "Team",
+                        developmentApproach: "Dev Approach",
+                        projectWork: "Project Work",
+                        measurement: "Measurement",
+                        uncertainty: "Uncertainty"
+                      }
+                      return (
+                        <div 
+                          key={domain}
+                          className={`p-3 rounded-lg border-2 text-center transition-all ${
+                            covered 
+                              ? 'border-green-300 bg-green-50 dark:bg-green-950/20' 
+                              : 'border-gray-200 bg-gray-50 dark:bg-gray-950/20 opacity-50'
+                          }`}
+                        >
+                          <div className={`text-2xl mb-1 ${covered ? '' : 'opacity-30'}`}>
+                            {covered ? '✓' : '○'}
+                          </div>
+                          <div className="text-xs font-medium text-muted-foreground">
+                            {domainLabels[domain] || domain}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-4 pt-4 border-t flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">
+                      {Object.values(pmbok8Summary.domainCoverage).filter(Boolean).length} of 5 domains covered
+                    </span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setActiveTab("pmbok8")}
+                      className="text-purple-600 hover:text-purple-700"
+                    >
+                      View Full Analytics →
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           {/* Documents Tab */}
@@ -583,6 +681,11 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* PMBOK 8 Domains Tab */}
+          <TabsContent value="pmbok8" className="space-y-6">
+            <PMBOK8DomainDashboard projectId={projectId} />
           </TabsContent>
 
           {/* Analytics Tab */}

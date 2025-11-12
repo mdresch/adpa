@@ -225,6 +225,144 @@ export interface ApiResponse<T> {
   }
 }
 
+// PMBOK 8 Performance Domain Types
+export interface PMBOK8EntityCounts {
+  // Legacy entities
+  stakeholders: number
+  requirements: number
+  risks: number
+  milestones: number
+  constraints: number
+  successCriteria: number
+  bestPractices: number
+  phases: number
+  resources: number
+  technologies: number
+  qualityStandards: number
+  deliverables: number
+  scopeItems: number
+  activities: number
+  // PMBOK 8 Performance Domain entities
+  teamAgreements: number
+  developmentApproaches: number
+  projectIterations: number
+  workItems: number
+  capacityPlans: number
+  performanceMeasurements: number
+  earnedValueMetrics: number
+  opportunities: number
+  riskResponses: number
+}
+
+export interface PMBOK8DomainCounts {
+  team: number
+  developmentApproach: number
+  projectWork: number
+  measurement: number
+  uncertainty: number
+}
+
+export interface PMBOK8DomainCoverage {
+  team: boolean
+  developmentApproach: boolean
+  projectWork: boolean
+  measurement: boolean
+  uncertainty: boolean
+}
+
+export interface ProjectExtractionResults {
+  success: boolean
+  projectId: string
+  entityCounts: PMBOK8EntityCounts
+  totalEntities: number
+  pmbok8DomainCounts: PMBOK8DomainCounts
+  pmbok8Total: number
+  domainCoverage: PMBOK8DomainCoverage
+}
+
+export interface DomainHealth {
+  score: number | null
+  status: 'healthy' | 'needs_attention' | 'active' | 'inactive' | 'blocked' | 'at_risk' | 'on_track' | 'managed'
+}
+
+export interface PMBOK8DomainAnalytics {
+  projectId: string
+  domains: {
+    team: {
+      total_agreements: number
+      active_agreements: number
+      under_review: number
+      avg_adherence_score: number | null
+      total_violations: number
+      agreements_with_violations: number
+      health: DomainHealth
+    }
+    developmentApproach: {
+      total_approaches: number
+      unique_frameworks: number
+      total_iterations: number
+      completed_iterations: number
+      avg_velocity: number | null
+      avg_story_points: number | null
+      health: DomainHealth
+    }
+    projectWork: {
+      workItems: {
+        total_work_items: number
+        completed_items: number
+        in_progress_items: number
+        blocked_items: number
+        total_estimated_hours: number | null
+        total_actual_hours: number | null
+        avg_progress: number | null
+        unique_assignees: number
+      }
+      capacity: {
+        total_capacity_plans: number
+        avg_utilization: number | null
+        total_available_hours: number | null
+        total_allocated_hours: number | null
+      }
+      health: DomainHealth
+    }
+    measurement: {
+      performance: {
+        total_measurements: number
+        on_track_count: number
+        at_risk_count: number
+        off_track_count: number
+        avg_variance: number | null
+        measured_criteria: number
+      }
+      evm: {
+        total_evm_records: number
+        avg_spi: number | null
+        avg_cpi: number | null
+        avg_sv: number | null
+        avg_cv: number | null
+        latest_measurement_date: string | null
+      }
+      health: DomainHealth
+    }
+    uncertainty: {
+      total_opportunities: number
+      realized_opportunities: number
+      exploiting_opportunities: number
+      total_expected_benefit: number | null
+      total_risk_responses: number
+      effective_responses: number
+      ineffective_responses: number
+      avg_response_cost: number | null
+      health: DomainHealth
+    }
+  }
+  overallHealth: {
+    domainsCovered: number
+    averageScore: number
+  }
+  generated_at: string
+}
+
 class ApiClient {
   private baseURL: string
   private token: string | null = null
@@ -1067,6 +1205,12 @@ class ApiClient {
 
   async getAITrends(period: string = "30d"): Promise<any> {
     const response = await this.request(`/ai-analytics/trends?period=${period}`)
+    return response
+  }
+
+  // PMBOK 8 Domain Analytics API
+  async getPMBOK8DomainAnalytics(projectId: string): Promise<PMBOK8DomainAnalytics> {
+    const response = await this.request<PMBOK8DomainAnalytics>(`/analytics/pmbok8-domains/${projectId}`)
     return response
   }
 
