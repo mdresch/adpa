@@ -307,6 +307,21 @@ export class GitHubService {
   }
 
   /**
+   * Get a specific issue by number
+   */
+  async getIssue(issueNumber: number): Promise<GitHubIssue> {
+    try {
+      const response = await this.client.get(
+        `/repos/${this.config.owner}/${this.config.repo}/issues/${issueNumber}`
+      )
+      return response.data
+    } catch (error) {
+      logger.error(`Failed to get issue #${issueNumber}:`, error)
+      throw new Error(`Failed to get issue: ${error.response?.data?.message || error.message}`)
+    }
+  }
+
+  /**
    * Create an issue
    */
   async createIssue(
