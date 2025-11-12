@@ -1073,21 +1073,36 @@ class AIService {
       }
 
       // AI Gateway success path
-      logger.info(`[AI] ✓ ${request.provider}/${request.model || gatewayModelId} - ${result.usage.total_tokens} tokens - ${Date.now() - startTime}ms`)
+      const {
+        inputTokens: gatewayInputTokens,
+        outputTokens: gatewayOutputTokens,
+        totalTokens: gatewayTotalTokens,
+      } = this.normalizeUsage(result.usage)
+
+      logger.info(`[AI] ✓ ${request.provider}/${request.model || gatewayModelId} - ${gatewayTotalTokens} tokens - ${Date.now() - startTime}ms`)
 
       // Update usage stats
       await this.updateUsageStats(request.provider, {
-        total_tokens: result.usage.total_tokens,
+        total_tokens: gatewayTotalTokens,
       })
 
       // Track detailed AI usage for analytics (background, non-blocking)
       const responseTimeMs = Date.now() - startTime
       setImmediate(() => {
-        this.trackAIUsageAsync(request.provider, request.model || gatewayModelId, {
-          prompt_tokens: (result.usage as any).prompt_tokens || 0,
-          completion_tokens: (result.usage as any).completion_tokens || 0,
-          total_tokens: result.usage.total_tokens,
-        }, responseTimeMs, true, request.userId, request.projectId, request.documentId)
+        this.trackAIUsageAsync(
+          request.provider,
+          request.model || gatewayModelId,
+          {
+            prompt_tokens: gatewayInputTokens,
+            completion_tokens: gatewayOutputTokens,
+            total_tokens: gatewayTotalTokens,
+          },
+          responseTimeMs,
+          true,
+          request.userId,
+          request.projectId,
+          request.documentId
+        )
       })
 
       logger.info('✅ [AI-SERVICE-8/8] Usage stats updated. Returning response.')
@@ -1097,9 +1112,9 @@ class AIService {
         provider: request.provider,
         model: request.model || gatewayModelId,
         usage: {
-          prompt_tokens: (result.usage as any).prompt_tokens || 0,
-          completion_tokens: (result.usage as any).completion_tokens || 0,
-          total_tokens: result.usage.total_tokens,
+          prompt_tokens: gatewayInputTokens,
+          completion_tokens: gatewayOutputTokens,
+          total_tokens: gatewayTotalTokens,
         },
       }
     } catch (error) {
