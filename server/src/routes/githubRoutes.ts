@@ -390,4 +390,72 @@ router.post(
   }
 )
 
+// Pick up an issue for processing
+router.post(
+  "/:id/issues/:issueNumber/pickup",
+  authenticateToken,
+  requirePermission("integrations.manage"),
+  validate(Joi.object({
+    createJob: Joi.boolean().default(false),
+    assignToUser: Joi.string(),
+    addComment: Joi.boolean().default(false)
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const integrationId = req.params.id
+      const issueNumber = parseInt(req.params.issueNumber, 10)
+      const { createJob, assignToUser, addComment } = req.body
+
+      if (isNaN(issueNumber)) {
+        return res.status(400).json({ error: "Invalid issue number" })
+      }
+
+      // Get integration from database
+      const result = await pool.query(
+        `SELECT * FROM integrations WHERE id = $1 AND type = 'github'`,
+        [integrationId]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "GitHub integration not found" })
+      }
+
+      const integration = result.rows[0]
+      const configuration = integration.configuration
+      const credentials = JSON.parse(Buffer.from(integration.credentials_encrypted, "base64").toString())
+
+      // Create GitHub integration
+      const githubIntegration = new GitHubIntegration({
+        owner: configuration.owner,
+        repo: configuration.repo,
+        apiToken: credentials.api_token,
+        defaultBranch: configuration.default_branch
+      }, integrationId)
+
+      // Pick up issue for processing
+      const result_data = await githubIntegration.pickUpIssue(issueNumber, {
+        createJob,
+        assignToUser,
+        addComment
+      })
+
+      log.info(`Successfully picked up issue #${issueNumber} for processing`)
+
+      res.json({
+        success: true,
+        issue: result_data.issue,
+        processingMetadata: result_data.processingMetadata,
+        message: `Issue #${issueNumber} picked up for processing`
+      })
+    } catch (error) {
+      log.error(`Failed to pick up issue #${req.params.issueNumber}:`, error)
+      res.status(500).json({ 
+        error: "Failed to pick up issue",
+        message: error.message 
+      })
+    }
+  }
+)
+
 export default router

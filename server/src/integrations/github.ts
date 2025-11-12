@@ -216,6 +216,181 @@ export class GitHubIntegration implements IntegrationProvider {
   }
 
   /**
+   * Get a specific issue by number
+   */
+  async getIssue(issueNumber: number): Promise<GitHubIssue> {
+    try {
+      const issue = await this.service.getIssue(issueNumber)
+      logger.info(`Retrieved issue #${issueNumber}: ${issue.title}`)
+      return issue
+    } catch (error) {
+      logger.error(`Failed to get issue #${issueNumber}:`, error)
+      throw new Error(`Failed to get issue: ${error.message}`)
+    }
+  }
+
+  /**
+   * Pick up an issue for processing
+   * This method fetches the issue, extracts information, and optionally creates a processing job
+   */
+  async pickUpIssue(
+    issueNumber: number,
+    options?: {
+      createJob?: boolean
+      assignToUser?: string
+      addComment?: boolean
+    }
+  ): Promise<{
+    issue: GitHubIssue
+    processingMetadata?: {
+      jobId?: string
+      extractedInfo?: {
+        title: string
+        description: string
+        labels: string[]
+        priority?: string
+        estimatedEffort?: string
+      }
+    }
+  }> {
+    try {
+      logger.info(`Picking up issue #${issueNumber} for processing`)
+      
+      // Get the issue details
+      const issue = await this.service.getIssue(issueNumber)
+      
+      if (issue.state === "closed") {
+        logger.warn(`Issue #${issueNumber} is already closed`)
+        throw new Error(`Cannot process closed issue #${issueNumber}`)
+      }
+
+      // Extract information from the issue
+      const extractedInfo = {
+        title: issue.title,
+        description: issue.body || "",
+        labels: issue.labels.map((label: any) => label.name || label),
+        priority: this.extractPriority(issue),
+        estimatedEffort: this.extractEstimatedEffort(issue),
+      }
+
+      // Store processing metadata in database
+      const processingMetadata: any = {
+        extractedInfo,
+        pickedUpAt: new Date().toISOString(),
+        integrationId: this.integrationId,
+      }
+
+      // Optionally create a background job for processing
+      if (options?.createJob) {
+        // This would integrate with the job queue system
+        // For now, we'll just log it
+        logger.info(`Would create processing job for issue #${issueNumber}`)
+        // TODO: Integrate with Bull queue if needed
+        // const job = await queueService.addJob('process-github-issue', { issueNumber, issue })
+        // processingMetadata.jobId = job.id
+      }
+
+      // Store issue processing record
+      await this.storeIssueProcessingRecord(issueNumber, issue, processingMetadata)
+
+      logger.info(`Successfully picked up issue #${issueNumber} for processing`)
+      
+      return {
+        issue,
+        processingMetadata,
+      }
+    } catch (error) {
+      logger.error(`Failed to pick up issue #${issueNumber}:`, error)
+      throw new Error(`Failed to pick up issue: ${error.message}`)
+    }
+  }
+
+  /**
+   * Extract priority from issue labels or content
+   */
+  private extractPriority(issue: GitHubIssue): string {
+    const priorityLabels = ["priority:critical", "priority:high", "priority:medium", "priority:low"]
+    const labels = issue.labels.map((label: any) => (label.name || label).toLowerCase())
+    
+    for (const priority of priorityLabels) {
+      if (labels.includes(priority)) {
+        return priority.split(":")[1]
+      }
+    }
+    
+    // Check title/body for priority keywords
+    const content = `${issue.title} ${issue.body || ""}`.toLowerCase()
+    if (content.includes("critical") || content.includes("urgent")) return "high"
+    if (content.includes("low priority") || content.includes("nice to have")) return "low"
+    
+    return "medium"
+  }
+
+  /**
+   * Extract estimated effort from issue labels or content
+   */
+  private extractEstimatedEffort(issue: GitHubIssue): string {
+    const effortLabels = ["effort:small", "effort:medium", "effort:large", "effort:xlarge"]
+    const labels = issue.labels.map((label: any) => (label.name || label).toLowerCase())
+    
+    for (const effort of effortLabels) {
+      if (labels.includes(effort)) {
+        return effort.split(":")[1]
+      }
+    }
+    
+    // Check body for effort estimates
+    const body = (issue.body || "").toLowerCase()
+    if (body.includes("1-2 hours") || body.includes("small")) return "small"
+    if (body.includes("1-2 days") || body.includes("medium")) return "medium"
+    if (body.includes("1 week") || body.includes("large")) return "large"
+    if (body.includes("2+ weeks") || body.includes("xlarge")) return "xlarge"
+    
+    return "medium"
+  }
+
+  /**
+   * Store issue processing record in database
+   */
+  private async storeIssueProcessingRecord(
+    issueNumber: number,
+    issue: GitHubIssue,
+    metadata: any
+  ): Promise<void> {
+    try {
+      await pool.query(
+        `
+        INSERT INTO integration_sync_metadata (
+          integration_id,
+          adpa_document_id,
+          external_id,
+          external_type,
+          metadata
+        )
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (integration_id, external_id, external_type)
+        DO UPDATE SET metadata = $5, updated_at = CURRENT_TIMESTAMP
+      `,
+        [
+          this.integrationId,
+          null, // No document ID for issue processing
+          `issue-${issueNumber}`,
+          "github_issue_processing",
+          JSON.stringify({
+            issueNumber,
+            issueTitle: issue.title,
+            issueUrl: issue.html_url,
+            ...metadata,
+          }),
+        ]
+      )
+    } catch (error) {
+      logger.error("Failed to store issue processing record:", error)
+      // Don't throw - this is metadata storage, not critical
+    }
+  }
+
+  /**
    * Create an issue
    */
   async createIssue(
