@@ -9,6 +9,7 @@
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { emailNotificationService, BudgetOverrunEmailData, ScopeCreepEmailData } from './emailNotificationService'
+import { emergencyMeetingService } from './emergencyMeetingService'
 
 export interface EscalationRule {
   id: string
@@ -590,25 +591,131 @@ export class EscalationService {
   }
 
   /**
-   * Schedule emergency meeting (placeholder - integrate with calendar)
+   * Schedule emergency meeting using emergency meeting service
+   * TASK-743: Auto-schedule emergency meetings for critical drift
    */
   private async scheduleMeeting(alert: EscalationAlert, rule: EscalationRule): Promise<void> {
-    // TODO: Integrate with calendar system (Google Calendar, Outlook, etc.)
-    logger.info('[ESCALATION] Emergency meeting would be scheduled for alert:', alert.id)
-    
-    await pool.query(
-      `UPDATE escalation_alerts 
-       SET meeting_scheduled = true, meeting_scheduled_at = NOW(), updated_at = NOW() 
-       WHERE id = $1`,
-      [alert.id]
-    )
+    try {
+      logger.info('[ESCALATION] Scheduling emergency meeting for alert', {
+        alertId: alert.id,
+        driftType: rule.drift_type,
+        severity: rule.severity_level
+      })
 
-    await this.logAlertHistory(
-      alert.id,
-      'meeting_scheduled',
-      `Emergency meeting scheduled with: ${rule.escalate_to.join(', ')}`,
-      null
-    )
+      // Only schedule meetings for budget overrun drift (as per TASK-743)
+      if (rule.drift_type === 'budget_overrun' && alert.alert_details) {
+        const driftData = alert.alert_details
+        
+        // Get project details
+        const projectResult = await pool.query(
+          'SELECT id, name FROM projects WHERE id = $1',
+          [alert.project_id]
+        )
+        
+        if (projectResult.rows.length === 0) {
+          logger.warn('[ESCALATION] Project not found, cannot schedule meeting', {
+            projectId: alert.project_id
+          })
+          return
+        }
+
+        const project = projectResult.rows[0]
+
+        // Extract budget drift information
+        const approvedBudget = driftData.approved_budget || 0
+        const projectedCost = driftData.projected_cost || 0
+        const overrunAmount = projectedCost - approvedBudget
+        const overrunPercentage = alert.variance_percentage || 0
+
+        // Only schedule meeting if overrun is significant (>= 5%)
+        if (overrunPercentage < 5) {
+          logger.info('[ESCALATION] Overrun below 5%, meeting not required', {
+            overrunPercentage
+          })
+          return
+        }
+
+        // Schedule the emergency meeting
+        const meetingResult = await emergencyMeetingService.scheduleBudgetOverrunMeeting(
+          {
+            projectId: alert.project_id,
+            projectName: project.name,
+            driftRecordId: alert.drift_detection_id,
+            approvedBudget,
+            projectedCost,
+            overrunAmount,
+            overrunPercentage,
+            rootCause: driftData.root_cause || 'Budget drift detected by automated system'
+          },
+          null // System-triggered, no specific user
+        )
+
+        logger.info('[ESCALATION] Emergency meeting scheduled successfully', {
+          alertId: alert.id,
+          meetingId: meetingResult.meeting.meetingId,
+          scheduledDate: meetingResult.meeting.scheduledDate,
+          severity: meetingResult.meeting.severity,
+          attendeeCount: meetingResult.attendees.length
+        })
+
+        // Update alert to reflect meeting was scheduled
+        await pool.query(
+          `UPDATE escalation_alerts 
+           SET meeting_scheduled = true, 
+               meeting_scheduled_at = NOW(), 
+               updated_at = NOW(),
+               alert_details = jsonb_set(
+                 COALESCE(alert_details, '{}'::jsonb),
+                 '{emergency_meeting_id}',
+                 $2::jsonb
+               )
+           WHERE id = $1`,
+          [alert.id, JSON.stringify(meetingResult.meeting.meetingId)]
+        )
+
+        // Log meeting scheduling to alert history
+        await this.logAlertHistory(
+          alert.id,
+          'meeting_scheduled',
+          `Emergency meeting scheduled: ${meetingResult.meeting.meetingId} with ${meetingResult.attendees.length} attendees for ${meetingResult.meeting.scheduledDate}`,
+          null,
+          {
+            meetingId: meetingResult.meeting.meetingId,
+            severity: meetingResult.meeting.severity,
+            scheduledDate: meetingResult.meeting.scheduledDate,
+            attendeeCount: meetingResult.attendees.length
+          }
+        )
+      } else {
+        // For non-budget drift types, just mark as meeting required
+        logger.info('[ESCALATION] Meeting required but auto-scheduling only supports budget overrun', {
+          driftType: rule.drift_type
+        })
+        
+        await pool.query(
+          `UPDATE escalation_alerts 
+           SET updated_at = NOW() 
+           WHERE id = $1`,
+          [alert.id]
+        )
+
+        await this.logAlertHistory(
+          alert.id,
+          'meeting_required',
+          `Emergency meeting required with: ${rule.escalate_to.join(', ')}. Manual scheduling needed for ${rule.drift_type}.`,
+          null
+        )
+      }
+    } catch (error) {
+      logger.error('[ESCALATION] Error scheduling emergency meeting:', error)
+      // Don't throw - log error but continue with alert processing
+      await this.logAlertHistory(
+        alert.id,
+        'meeting_scheduling_failed',
+        `Failed to schedule emergency meeting: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        null
+      )
+    }
   }
 
   /**

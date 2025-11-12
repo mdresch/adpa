@@ -15,23 +15,13 @@ export class AIInsightsEngine {
       const insights: AIInsight[] = [
         {
           insight_id: `insight_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          insight_type: 'content_enhancement',
+          insight_type: 'content_improvement',
           insight_title: 'Content Structure Optimization',
           insight_description: 'Template could benefit from improved content structure',
           confidence_score: 0.8,
-          impact_score: 0.7,
-          recommendations: [
-            {
-              recommendation: 'Add more detailed sections',
-              priority: 'medium',
-              effort: 'low'
-            }
-          ],
-          metadata: {
-            generated_at: new Date(),
-            source: 'ai_analysis',
-            version: '1.0.0'
-          }
+          relevance_score: 0.85,
+          implementation_suggestion: 'Add more detailed sections and improve organization',
+          expected_impact: 0.15
         }
       ]
 

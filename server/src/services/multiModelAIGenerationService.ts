@@ -5,7 +5,7 @@
 
 import { logger } from '@/utils/logger'
 import { AIService } from './aiService'
-import type { AIGenerationRequest, AIGenerationResponse } from './aiService'
+import type { AIGenerateRequest, AIGenerateResponse } from './aiService'
 
 export interface MultiModelConfig {
   primary_models: ModelConfig[]
@@ -389,7 +389,7 @@ export class MultiModelAIGenerationService {
     const startTime = Date.now()
 
     try {
-      const aiRequest: AIGenerationRequest = {
+      const aiRequest: AIGenerateRequest = {
         prompt: request.prompt,
         provider: model.provider,
         model: model.model,
@@ -705,7 +705,7 @@ export class MultiModelAIGenerationService {
   private async performHealthCheck(model: ModelConfig): Promise<boolean> {
     try {
       // Simple health check - generate a short test prompt
-      const testRequest: AIGenerationRequest = {
+      const testRequest: AIGenerateRequest = {
         prompt: 'Test',
         provider: model.provider,
         model: model.model,
@@ -933,7 +933,7 @@ interface GenerationResult {
   metadata: {
     generation_id: string
     model_config: ModelConfig
-    ai_response: AIGenerationResponse
+    ai_response: AIGenerateResponse
   }
   failover_used?: boolean
   retry_count?: number
