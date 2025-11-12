@@ -77,12 +77,27 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
     await pool.query('DELETE FROM projects WHERE id = $1', [testProjectId])
     await pool.query('DELETE FROM users WHERE id = $1', [testUserId])
     
-    // Close pool
-    await pool.end()
+    // Note: Do NOT call pool.end() here - it closes the shared pool and breaks other tests
   })
 
   describe('Acceptance Criterion: Drift record marked as resolved', () => {
+    // Helper function to reset drift record to 'detected' state for test isolation
+    async function resetDriftRecord(driftRecordId: string): Promise<void> {
+      await pool.query(
+        `UPDATE baseline_drift_detection 
+         SET status = 'detected', 
+             resolved_at = NULL, 
+             assigned_to = NULL, 
+             resolution_notes = NULL
+         WHERE id = $1`,
+        [driftRecordId]
+      )
+    }
+
     test('should update drift record status to "resolved"', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = '# Resolved Content\n\nThis content has been aligned with baseline.'
 
       // Verify initial state
@@ -132,6 +147,9 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
     })
 
     test('should set resolved_at timestamp to current time', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = '# Resolved Content v2'
       const beforeTimestamp = new Date()
 
@@ -156,6 +174,9 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
     })
 
     test('should persist drift record in database after resolution', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = '# Resolved Content v3'
 
       await driftResolutionService.applyResolution(
@@ -177,6 +198,9 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
     })
 
     test('should maintain audit trail for drift resolution', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = '# Resolved Content v4'
 
       await driftResolutionService.applyResolution(
@@ -216,6 +240,9 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
 
   describe('Edge Cases', () => {
     test('should handle resolution with major changes', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = '# Resolved with Major Changes'
       const majorChanges = [
         {
@@ -247,6 +274,9 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
     })
 
     test('should handle resolution with empty content', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = ''
 
       await driftResolutionService.applyResolution(
@@ -268,6 +298,9 @@ describe('TASK-732: Drift Record Marked as Resolved', () => {
 
   describe('Integration with Document Update', () => {
     test('should update document and mark drift as resolved in single transaction', async () => {
+      // Reset drift record to ensure test isolation
+      await resetDriftRecord(testDriftRecordId)
+      
       const resolvedContent = '# Final Resolved Content\n\nBaseline aligned.'
 
       // Get initial document content
