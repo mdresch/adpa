@@ -973,6 +973,17 @@ class ApiClient {
     })
   }
 
+  async pickUpGitHubIssue(integrationId: string, issueNumber: number, options?: {
+    createJob?: boolean
+    assignToUser?: string
+    addComment?: boolean
+  }): Promise<any> {
+    return this.request<any>(`/integrations/github/${integrationId}/issues/${issueNumber}/pickup`, {
+      method: "POST",
+      body: JSON.stringify(options || {}),
+    })
+  }
+
   // Jobs API
   async getJobs(params?: {
     page?: number
