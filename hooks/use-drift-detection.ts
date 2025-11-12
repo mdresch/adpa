@@ -92,13 +92,15 @@ export function useDriftDetection(documentId: string, projectId?: string) {
         strategy
       })
 
-      const response = await apiClient.post('/api/drift/resolve', {
+      const result = await apiClient.resolveDrift(
         documentId,
-        driftRecordId: driftAlert.driftRecordId,
+        driftAlert.driftRecordId,
         strategy
-      })
+      )
 
-      const result = response.data
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to generate resolution')
+      }
 
       setResolutionPreview({
         resolvedContent: result.resolvedContent,
@@ -131,11 +133,16 @@ export function useDriftDetection(documentId: string, projectId?: string) {
         driftRecordId: driftAlert.driftRecordId
       })
 
-      await apiClient.post('/api/drift/apply', {
+      const result = await apiClient.applyDriftResolution(
         documentId,
-        driftRecordId: driftAlert.driftRecordId,
-        resolvedContent: resolutionPreview.resolvedContent
-      })
+        driftAlert.driftRecordId,
+        resolutionPreview.resolvedContent,
+        resolutionPreview.majorChanges
+      )
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to apply resolution')
+      }
 
       // Clear drift alert
       setDriftAlert(null)
@@ -144,8 +151,8 @@ export function useDriftDetection(documentId: string, projectId?: string) {
       toast.success('✅ Drift resolved! Document realigned with baseline.')
 
       // If major changes, show change request notification
-      if (resolutionPreview.requiresApproval) {
-        toast.info('Change request created for major changes requiring approval')
+      if (result.changeRequestCreated) {
+        toast.info(`Change request created for major changes requiring approval${result.changeRequestId ? ` (CR-${result.changeRequestId})` : ''}`)
       }
 
       // Return success to allow caller to refresh document

@@ -1143,6 +1143,76 @@ class ApiClient {
   }> {
     return this.get(`/stakeholders/project/${projectId}/engagement-matrix`)
   }
+
+  // Drift Detection & Resolution API
+  async checkDrift(projectId: string, documentId: string): Promise<{
+    success: boolean
+    driftDetected: boolean
+    severity: 'low' | 'medium' | 'high' | 'critical'
+    driftCount: number
+    summary: string
+    driftPoints: any[]
+  }> {
+    return this.post('/api/drift/check', {
+      projectId,
+      documentId
+    })
+  }
+
+  async resolveDrift(
+    documentId: string,
+    driftRecordId: string,
+    strategy: 'conservative' | 'balanced' | 'permissive' = 'balanced'
+  ): Promise<{
+    success: boolean
+    resolvedContent: string
+    originalContent: string
+    driftPoints: any[]
+    majorChanges: any[]
+    requiresApproval: boolean
+    strategy: string
+    previewHtml?: string
+  }> {
+    return this.post('/api/drift/resolve', {
+      documentId,
+      driftRecordId,
+      strategy
+    })
+  }
+
+  async applyDriftResolution(
+    documentId: string,
+    driftRecordId: string,
+    resolvedContent: string,
+    majorChanges?: any[]
+  ): Promise<{
+    success: boolean
+    message: string
+    changeRequestCreated?: boolean
+    changeRequestId?: string
+  }> {
+    return this.post('/api/drift/apply', {
+      documentId,
+      driftRecordId,
+      resolvedContent,
+      majorChanges
+    })
+  }
+
+  async getDriftRecord(driftRecordId: string): Promise<{
+    success: boolean
+    driftRecord: any
+  }> {
+    return this.get(`/api/drift/${driftRecordId}`)
+  }
+
+  async getProjectDriftRecords(projectId: string, status?: string): Promise<{
+    success: boolean
+    driftRecords: any[]
+  }> {
+    const query = status ? `?status=${status}` : ''
+    return this.get(`/api/drift/project/${projectId}${query}`)
+  }
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)
