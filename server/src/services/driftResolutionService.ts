@@ -9,6 +9,7 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { DriftPoint } from './driftDetectionService'
+import { knowledgeBaseService } from './knowledgeBaseService'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { emergencyMeetingService } from './emergencyMeetingService'
@@ -741,6 +742,41 @@ Generate a REVISED version of the document that resolves the drift:
           changeRequestId,
           userId
         )
+      }
+
+      // 5. ⭐ Create knowledge base entry for lessons learned
+      try {
+        const driftResult = await client.query(
+          'SELECT project_id FROM baseline_drift_detection WHERE id = $1',
+          [driftRecordId]
+        )
+
+        if (driftResult.rows.length > 0) {
+          const projectId = driftResult.rows[0].project_id
+
+          // Asynchronously create knowledge base entry (don't block the main flow)
+          knowledgeBaseService.createFromDrift(
+            driftRecordId,
+            projectId,
+            userId
+          ).catch(error => {
+            logger.warn('[DRIFT-RESOLUTION] Failed to create knowledge base entry', {
+              error: error.message,
+              driftRecordId
+            })
+          })
+
+          logger.info('[DRIFT-RESOLUTION] Knowledge base entry creation initiated', {
+            driftRecordId,
+            projectId
+          })
+        }
+      } catch (kbError) {
+        // Log but don't fail the main transaction
+        logger.warn('[DRIFT-RESOLUTION] Error initiating knowledge base entry', {
+          error: kbError,
+          driftRecordId
+        })
       }
 
       await client.query('COMMIT')
