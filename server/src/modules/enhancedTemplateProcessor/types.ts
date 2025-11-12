@@ -10,8 +10,8 @@ export interface EnhancedTemplateProcessor {
   getProcessingStatus(jobId: string): Promise<TemplateProcessingStatus>
   
   // AI enhancement
-  enhanceWithAIInsights(template: DocumentTemplate, context: ContextBundle): Promise<AIEnhancedTemplate>
-  applyMethodologyAlignment(template: DocumentTemplate, framework: string): Promise<MethodologyAlignedTemplate>
+  enhanceWithAIInsights(template: DocumentTemplate, context: ContextBundle): Promise<EnhancedTemplate>
+  applyMethodologyAlignment(template: DocumentTemplate, framework: string): Promise<EnhancedTemplate>
   generateTemplateRecommendations(template: DocumentTemplate): Promise<TemplateRecommendation[]>
   
   // Quality assessment
@@ -635,43 +635,7 @@ export interface ContextBundle {
   metadata: Record<string, any>
 }
 
-// Additional types for engines
-export interface AIInsight {
-  insight_id: string
-  insight_type: string
-  insight_title: string
-  insight_description: string
-  confidence_score: number
-  impact_score: number
-  recommendations: AIInsightRecommendation[]
-  metadata: {
-    generated_at: Date
-    source: string
-    version: string
-  }
-}
-
-export interface AIInsightRecommendation {
-  recommendation: string
-  priority: string
-  effort: string
-}
-
-export interface MethodologyEnhancement {
-  enhancement_id: string
-  framework: string
-  enhancement_type: string
-  enhancement_description: string
-  enhancement_impact: number
-  enhancement_confidence: number
-  applied_at: Date
-  metadata: {
-    template_id: string
-    framework_version: string
-    alignment_score: number
-  }
-}
-
+// Supporting types that aren't duplicates
 export interface MethodologyComplianceValidation {
   validation_id: string
   framework: string
@@ -694,54 +658,11 @@ export interface ComplianceValidationResult {
   validation_details: string
 }
 
-export interface TemplateQualityAssessment {
-  assessment_id: string
-  template_id: string
-  overall_score: number
-  quality_dimensions: {
-    structure_quality: number
-    content_quality: number
-    methodology_compliance: number
-    usability_quality: number
-    performance_quality: number
-  }
-  assessments: QualityAssessmentDetail[]
-  assessment_timestamp: Date
-  metadata: {
-    assessment_method: string
-    assessment_version: string
-  }
-}
-
 export interface QualityAssessmentDetail {
   assessment_type: string
   assessment_score: number
   assessment_details: string
   recommendations: QualityRecommendation[]
-}
-
-export interface QualityRecommendation {
-  recommendation: string
-  priority: string
-  effort: string
-}
-
-export interface TemplateOptimization {
-  optimization_id: string
-  template_id: string
-  optimization_impact: number
-  optimization_score: number
-  optimizations_applied: OptimizationDetail[]
-  performance_improvements: {
-    processing_time_reduction: number
-    memory_usage_reduction: number
-    output_quality_improvement: number
-  }
-  optimization_timestamp: Date
-  metadata: {
-    optimization_method: string
-    optimization_version: string
-  }
 }
 
 export interface OptimizationDetail {
@@ -753,20 +674,6 @@ export interface OptimizationDetail {
   metadata: {
     optimization_category: string
     optimization_method: string
-  }
-}
-
-export interface VariableResolution {
-  variable_id: string
-  variable_name: string
-  variable_type: string
-  resolved_value: any
-  resolution_confidence: number
-  resolution_source: string
-  resolution_timestamp: Date
-  metadata: {
-    resolution_method: string
-    resolution_context: any
   }
 }
 

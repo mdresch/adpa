@@ -37,6 +37,7 @@ import {
   Upload,
   Wand2,
   Loader2,
+  AlertTriangle,
 } from "@/components/ui/icons-shim"
 import {
   Dialog,
@@ -95,6 +96,9 @@ interface Document {
   quality_score?: number
   quality_status?: 'passed' | 'warning' | 'failed' | 'pending' | 'not_audited'
   quality_audit_id?: string
+  drift_count?: number
+  has_critical_drift?: boolean
+  has_high_drift?: boolean
 }
 
 interface DocumentStats {
@@ -183,6 +187,45 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
+  // Enrich documents with drift data
+  const enrichDocumentsWithDriftData = async (docs: Document[]) => {
+    try {
+      // Fetch all drifts for the project
+      const driftResponse = await apiClient.request<{ drifts: any[], total: number }>(
+        `/projects/${projectId}/drift-detections`,
+        { suppressNotFoundError: true } as Record<string, unknown>
+      )
+      
+      const drifts = driftResponse.drifts || []
+      
+      // Count drifts per document
+      const driftsByDoc = new Map<string, { count: number, hasCritical: boolean, hasHigh: boolean }>()
+      
+      drifts.forEach((drift: any) => {
+        if (drift.source_document_id) {
+          const existing = driftsByDoc.get(drift.source_document_id) || { count: 0, hasCritical: false, hasHigh: false }
+          existing.count++
+          if (drift.drift_severity === 'critical') existing.hasCritical = true
+          if (drift.drift_severity === 'high') existing.hasHigh = true
+          driftsByDoc.set(drift.source_document_id, existing)
+        }
+      })
+      
+      // Enrich documents with drift data
+      docs.forEach(doc => {
+        const driftData = driftsByDoc.get(doc.id)
+        if (driftData) {
+          doc.drift_count = driftData.count
+          doc.has_critical_drift = driftData.hasCritical
+          doc.has_high_drift = driftData.hasHigh
+        }
+      })
+    } catch (error) {
+      console.error('Error fetching drift data:', error)
+      // Continue without drift data
+    }
+  }
+
   // Fetch documents
   const fetchDocuments = async () => {
     try {
@@ -195,7 +238,12 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       if (templateFilter !== "all") params.template = templateFilter
       
       const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
-      setDocuments(response.documents || [])
+      const docs = response.documents || []
+      
+      // Fetch drift counts for each document
+      await enrichDocumentsWithDriftData(docs)
+      
+      setDocuments(docs)
       setPagination(response.pagination || pagination)
     } catch (error) {
       console.error("Failed to fetch documents:", error)
@@ -900,6 +948,19 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                       status={document.quality_status}
                                       compact
                                     />
+                                  )}
+                                  {document.drift_count && document.drift_count > 0 && (
+                                    <Badge
+                                      variant={document.has_critical_drift ? "destructive" : document.has_high_drift ? "default" : "secondary"}
+                                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        router.push(`/projects/${projectId}/drift`)
+                                      }}
+                                    >
+                                      <AlertTriangle className="h-3 w-3 mr-1" />
+                                      {document.drift_count} Drift{document.drift_count > 1 ? 's' : ''}
+                                    </Badge>
                                   )}
                                 </div>
                                 

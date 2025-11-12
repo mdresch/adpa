@@ -34,6 +34,7 @@ import { Header } from "@/components/header"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout } from "@/components/animated-layout"
 import { apiClient } from "@/lib/api"
+import { IssueList } from "./components/IssueList"
 
 interface GitHubIntegration {
   id: string
@@ -181,6 +182,32 @@ export default function GitHubIntegrationPage() {
       }
     } catch (error) {
       console.error("Failed to fetch issues:", error)
+    }
+  }
+
+  const handlePickUpIssue = async (issue: GitHubIssue) => {
+    if (!integration) {
+      toast.error("Integration not configured")
+      return
+    }
+
+    try {
+      toast.loading(`Picking up issue #${issue.number}...`)
+      const data = await apiClient.pickUpGitHubIssue(integration.id, issue.number, {
+        createJob: false,
+        addComment: false
+      })
+
+      if (data.success) {
+        toast.success(`Issue #${issue.number} picked up for processing`)
+        // Optionally refresh issues list
+        await fetchIssues(integration.id)
+      } else {
+        toast.error(data.error || "Failed to pick up issue")
+      }
+    } catch (error: any) {
+      console.error("Failed to pick up issue:", error)
+      toast.error(error.message || "Failed to pick up issue")
     }
   }
 
@@ -717,63 +744,12 @@ export default function GitHubIntegrationPage() {
                         </Button>
                       </div>
 
-                      {issues.length > 0 ? (
-                        <div className="space-y-4">
-                          {issues.map((issue) => (
-                            <Card key={issue.id}>
-                              <CardContent className="p-4">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <FileText className="h-5 w-5 text-muted-foreground" />
-                                    <div>
-                                      <h4 className="font-medium">#{issue.number} {issue.title}</h4>
-                                      <p className="text-sm text-muted-foreground">
-                                        by {issue.user.login} • {formatDate(issue.created_at)}
-                                      </p>
-                                      {issue.labels.length > 0 && (
-                                        <div className="flex gap-1 mt-2">
-                                          {issue.labels.map((label) => (
-                                            <Badge
-                                              key={label.name}
-                                              variant="outline"
-                                              style={{ backgroundColor: `#${label.color}20`, borderColor: `#${label.color}` }}
-                                            >
-                                              {label.name}
-                                            </Badge>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Badge className={getIssueStateColor(issue.state)}>
-                                      {issue.state}
-                                    </Badge>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() => window.open(issue.html_url, "_blank")}
-                                    >
-                                      <Eye className="h-4 w-4 mr-2" />
-                                      View
-                                    </Button>
-                                  </div>
-                                </div>
-                              </CardContent>
-                            </Card>
-                          ))}
-                        </div>
-                      ) : (
-                        <Card>
-                          <CardContent className="text-center py-8">
-                            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="text-lg font-medium mb-2">No Issues</h3>
-                            <p className="text-muted-foreground">
-                              No issues found in this repository
-                            </p>
-                          </CardContent>
-                        </Card>
-                      )}
+                      <IssueList
+                        issues={issues}
+                        loading={false}
+                        onPickUp={handlePickUpIssue}
+                        integrationId={integration?.id}
+                      />
                     </TabsContent>
                   </Tabs>
                 </motion.div>

@@ -226,6 +226,22 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         })
       })
 
+      // Drift detection notifications
+      socketInstance.on("drift:detected", (data) => {
+        const severityLabels = {
+          critical: "🔴 Critical",
+          high: "🟠 High",
+          medium: "🟡 Medium",
+          low: "🔵 Low",
+        }
+        const severityLabel = severityLabels[data.severity as keyof typeof severityLabels] || data.severity
+        
+        toast.warning(`${severityLabel} Drift Detected`, {
+          description: `${data.documentTitle || "Document"} has ${data.driftCount} baseline drift${data.driftCount !== 1 ? "s" : ""}`,
+          duration: 10000,
+        })
+      })
+
       // Global JWT error handler to stop retry storms
       socketInstance.on("join:error", (err: any) => {
         if (err.code === 'JWT_INVALID' || err.message?.includes('Invalid or expired token')) {
@@ -570,4 +586,30 @@ export function useDocumentCollaboration(documentId: string) {
     broadcastCursorPosition,
     broadcastTextSelection,
   }
+}
+
+// Hook for drift detection notifications
+export function useDriftDetection(projectId?: string) {
+  const { joinRoom, leaveRoom, on, off } = useWebSocket()
+  const [driftAlerts, setDriftAlerts] = useState<any[]>([])
+
+  useEffect(() => {
+    if (projectId) {
+      const room = `project:${projectId}`
+      joinRoom(room)
+
+      const handleDriftDetected = (data: any) => {
+        setDriftAlerts(prev => [data, ...prev.slice(0, 9)]) // Keep last 10 alerts
+      }
+
+      on("drift:detected", handleDriftDetected)
+
+      return () => {
+        leaveRoom(room)
+        off("drift:detected", handleDriftDetected)
+      }
+    }
+  }, [projectId, joinRoom, leaveRoom, on, off])
+
+  return driftAlerts
 }

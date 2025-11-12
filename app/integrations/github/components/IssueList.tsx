@@ -46,9 +46,11 @@ interface IssueListProps {
   issues: Issue[]
   loading?: boolean
   onViewDetails?: (issue: Issue) => void
+  onPickUp?: (issue: Issue) => void
+  integrationId?: string
 }
 
-export function IssueList({ issues, loading = false, onViewDetails }: IssueListProps) {
+export function IssueList({ issues, loading = false, onViewDetails, onPickUp, integrationId }: IssueListProps) {
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-US", {
       year: "numeric",
@@ -205,9 +207,18 @@ export function IssueList({ issues, loading = false, onViewDetails }: IssueListP
                   <ExternalLink className="h-4 w-4 mr-2" />
                   View
                 </Button>
-                {onViewDetails && (
+                {onPickUp && integrationId && issue.state === "open" && (
                   <Button
                     variant="default"
+                    size="sm"
+                    onClick={() => onPickUp(issue)}
+                  >
+                    Pick Up
+                  </Button>
+                )}
+                {onViewDetails && (
+                  <Button
+                    variant="secondary"
                     size="sm"
                     onClick={() => onViewDetails(issue)}
                   >
