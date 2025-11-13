@@ -2781,11 +2781,13 @@ Guidelines:
     
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
-      const jsonMatch = cleanedContent.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-      if (jsonMatch) {
-        cleanedContent = jsonMatch[1]
+      // First, try to extract JSON from markdown code blocks
+      // Match ```json or ``` followed by whitespace and then capture everything until closing ```
+      const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (codeBlockMatch) {
+        cleanedContent = codeBlockMatch[1].trim()
       } else {
-        // Try to extract JSON object from markdown
+        // If no closing ``` found, try to extract JSON object directly
         const objectMatch = cleanedContent.match(/\{[\s\S]*\}/)
         if (objectMatch) {
           cleanedContent = objectMatch[0]
