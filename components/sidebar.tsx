@@ -65,11 +65,14 @@ export function Sidebar() {
 
   const fetchPendingApprovals = async () => {
     try {
-      const response = await apiClient.get('/approvals/stats/user')
-      setPendingCount(response.data.stats?.pending || 0)
+      const response = await apiClient.get<any>('/approvals/stats/user')
+      // API returns { success: true, stats: {...} } or direct stats object
+      const stats = response.stats || response
+      setPendingCount(stats?.pending || 0)
     } catch (error) {
       // Silently fail - don't show errors in sidebar
       console.error('Failed to fetch pending approvals:', error)
+      setPendingCount(0)
     }
   }
 

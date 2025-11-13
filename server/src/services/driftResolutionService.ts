@@ -9,11 +9,14 @@ import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
 import { aiService } from './aiService'
 import { DriftPoint } from './driftDetectionService'
+import { knowledgeBaseService } from './knowledgeBaseService'
 import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { emergencyMeetingService } from './emergencyMeetingService'
 import { approvalWorkflowService } from './approvalWorkflowService'
 import { createKnowledgeBaseFromDrift } from '../modules/knowledgeBase/integration'
+import { createHash } from 'crypto'
+import { redis } from '../database/redis'
 
 export interface ResolutionResult {
   resolvedContent: string
@@ -70,6 +73,21 @@ interface DriftRecord {
 }
 
 export class DriftResolutionService {
+  private readonly CACHE_PREFIX = 'drift:resolution:'
+  private readonly CACHE_TTL = 60 * 60 // 1 hour (resolutions are deterministic for same input)
+
+  /**
+   * Generate cache key for drift resolution based on content hash
+   */
+  private generateCacheKey(documentContent: string, driftRecordId: string, strategy: string): string {
+    const contentHash = createHash('sha256')
+      .update(documentContent + driftRecordId + strategy)
+      .digest('hex')
+      .substring(0, 16)
+    
+    return `${this.CACHE_PREFIX}${contentHash}`
+  }
+
   /**
    * Resolve drift using AI
    */
@@ -103,6 +121,28 @@ export class DriftResolutionService {
       // Identify major changes early (before AI call)
       const majorChanges = this.identifyMajorChanges(driftPoints)
 
+      // PERFORMANCE: Check cache for existing resolution
+      const cacheKey = this.generateCacheKey(document.content, driftRecordId, strategy)
+      try {
+        const cached = await redis.get(cacheKey)
+        if (cached) {
+          const cachedResult = JSON.parse(cached)
+          const cacheDuration = Date.now() - startTime
+          logger.info('[DRIFT-RESOLUTION] ✅ Cache HIT - returning cached resolution', {
+            documentId,
+            driftRecordId,
+            strategy,
+            cacheDurationMs: cacheDuration
+          })
+          return cachedResult
+        }
+        logger.debug('[DRIFT-RESOLUTION] Cache MISS - generating new resolution', { cacheKey })
+      } catch (cacheError: any) {
+        logger.warn('[DRIFT-RESOLUTION] Cache check failed, proceeding without cache', {
+          error: cacheError.message
+        })
+      }
+
       // PERFORMANCE: Build optimized resolution prompt (reduced size)
       const prompt = this.buildOptimizedResolutionPrompt(
         document,
@@ -110,32 +150,44 @@ export class DriftResolutionService {
         driftPoints,
         strategy
       )
+      logger.info(`[DRIFT-RESOLUTION] Prompt built in ${Date.now() - startTime}ms, length: ${prompt.length} chars`)
 
-      // PERFORMANCE: Call AI with optimized parameters for speed
+      // PERFORMANCE: Call AI with timeout enforcement and fast provider selection
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiStartTime = Date.now()
       
-      const aiResponse = await aiService.generate({
-        prompt,
-        temperature: 0.3, // Slightly higher for faster generation
-        maxTokens: 4000, // Reduced from 8000 for faster response
-        max_tokens: 4000 // Alternative parameter name for compatibility
-      })
+      // PERFORMANCE: Use Promise.race to enforce 5-second timeout
+      // Prefer fast providers: Google Gemini 2.5 Flash, with fallback to OpenAI gpt-4o-mini
+      const aiResponse = await Promise.race([
+        // Try fast providers first with fallback
+        aiService.generateWithFallback({
+          prompt,
+          provider: 'google', // Prefer fast provider (Gemini 2.5 Flash)
+          model: 'gemini-2.5-flash', // Optimized for speed
+          temperature: 0.2, // Low temp for consistent, accurate resolution
+          max_tokens: 3000 // Optimized for speed
+        }, ['google', 'openai', 'groq', 'mistral']),
+        // Timeout after 5 seconds
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('AI resolution timeout: exceeded 5 seconds')), 5000)
+        )
+      ])
       
       const aiDuration = Date.now() - aiStartTime
-      logger.info('[DRIFT-RESOLUTION] AI generation completed', { durationMs: aiDuration })
+      logger.info('[DRIFT-RESOLUTION] ⚡ AI generation completed', { durationMs: aiDuration })
 
       // Parse resolved content
       const resolvedContent = this.parseResolvedContent(aiResponse.content)
 
       const totalDuration = Date.now() - startTime
-      logger.info('[DRIFT-RESOLUTION] Resolution generated successfully', {
+      logger.info('[DRIFT-RESOLUTION] ✅ Resolution generated successfully', {
         documentId,
         driftRecordId,
         majorChangesCount: majorChanges.length,
         totalDurationMs: totalDuration,
         dataFetchMs: dataFetchTime,
         aiGenerationMs: aiDuration,
+        meetsPerformanceTarget: totalDuration < 5000,
         performanceTarget: totalDuration < 5000 ? 'MET' : 'EXCEEDED'
       })
 
@@ -143,8 +195,8 @@ export class DriftResolutionService {
       // Return immediately without waiting for preview
       const previewPromise = this.generateDiffPreview(document.content, resolvedContent)
 
-      // Return result with preview promise that resolves later
-      return {
+      // Build result
+      const result: ResolutionResult = {
         resolvedContent,
         originalContent: document.content,
         driftPoints,
@@ -154,6 +206,13 @@ export class DriftResolutionService {
         // Preview will be undefined initially, can be generated on-demand by client
         previewHtml: undefined
       }
+
+      // PERFORMANCE: Cache the result for future requests (fire and forget)
+      redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(result)).catch((err: any) => {
+        logger.warn('[DRIFT-RESOLUTION] Failed to cache result', { error: err.message })
+      })
+
+      return result
     } catch (error) {
       const errorDuration = Date.now() - startTime
       logger.error('[DRIFT-RESOLUTION] Resolution failed:', {
@@ -352,7 +411,7 @@ Return the corrected document in Markdown. Add <!-- REQUIRES APPROVAL: reason --
 
   /**
    * Legacy method kept for compatibility
-   * Build AI prompt for drift resolution
+   * Build AI prompt for drift resolution (optimized for speed)
    * Handles all 14 entity types: scope_items, deliverables, requirements, milestones,
    * phases, activities, resources, technologies, stakeholders, constraints, risks,
    * success_criteria, quality_standards, best_practices
@@ -363,71 +422,56 @@ Return the corrected document in Markdown. Add <!-- REQUIRES APPROVAL: reason --
     driftPoints: DriftPoint[],
     strategy: string
   ): string {
-    return `You are a project management expert tasked with resolving baseline drift in a project document.
+    // Optimized prompt - reduce token count for faster processing
+    const strategyRules = strategy === 'conservative' 
+      ? 'Revert ALL changes to baseline exactly'
+      : strategy === 'permissive'
+      ? 'Keep most changes, revert only critical violations'
+      : 'Keep valid updates, revert unauthorized changes'
+    
+    // Only include affected baseline entities, not all baseline data
+    const affectedBaselineData = this.extractAffectedBaselineData(baseline, driftPoints)
+    
+    return `Resolve baseline drift in: ${document.title}
 
-## CONTEXT
+BASELINE (Version ${baseline.version}):
+${affectedBaselineData}
 
-**Document**: ${document.title}
-**Approved Baseline**: Version ${baseline.version}
-**Drift Detected**: ${driftPoints.length} drift points identified across entity types
+DRIFT POINTS (${driftPoints.length}):
+${driftPoints.map((d, i) => `${i+1}. ${d.driftType.toUpperCase()} ${d.entityType}: ${d.description}`).join('\n')}
 
-## ENTITY TYPES TRACKED
-The system tracks 14 entity types:
-- **Scope**: scope_items, deliverables, requirements, constraints
-- **Timeline**: milestones, phases, activities
-- **Resources**: resources, technologies, stakeholders
-- **Quality & Risk**: risks, success_criteria, quality_standards, best_practices
+STRATEGY: ${strategyRules}
 
-## BASELINE ENTITIES (APPROVED - AUTHORITATIVE)
+TASK: Revise document to align with baseline. For major changes (budget >10%, key dates, scope), add: <!-- REQUIRES APPROVAL: [reason] -->
 
-${this.formatBaselineEntities(baseline)}
-
-## CURRENT DOCUMENT CONTENT (DRIFTED)
-
+CURRENT DOCUMENT:
 ${document.content}
 
-## DRIFT POINTS TO RESOLVE
-
-${driftPoints.map((drift, i) => `
-${i + 1}. ${drift.driftType.toUpperCase()}: ${drift.description}
-   - Entity Type: ${drift.entityType}
-   - Baseline: ${JSON.stringify(drift.baselineValue)}
-   - Current: ${JSON.stringify(drift.currentValue)}
-   - Requires Approval: ${drift.requiresApproval ? 'YES' : 'NO'}
-`).join('\n')}
-
-## RESOLUTION STRATEGY: ${strategy.toUpperCase()}
-
-**Conservative**: Revert ALL changes to match baseline exactly
-**Balanced**: Keep valid updates, revert unauthorized changes, flag major changes (RECOMMENDED)
-**Permissive**: Keep most changes, only revert critical baseline violations
-
-## YOUR TASK
-
-Generate a REVISED version of the document that resolves the drift:
-
-1. **For REMOVED baseline entities**: Re-add them to the document in appropriate sections
-   - Applies to: scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices
-2. **For ADDED non-baseline entities**: 
-   - Conservative: Remove them
-   - Balanced: Keep if minor/helpful, remove if major/unauthorized
-   - Permissive: Keep all, just note the addition
-3. **For MODIFIED entities**: Restore baseline values OR clearly mark as change request
-4. **For critical changes** (milestones, deliverables, requirements): Revert to baseline OR flag for approval
-5. **For budget/resource changes >10%**: FLAG as requiring formal approval
-
-**Preserve**:
-- Document structure and formatting (Markdown)
-- Non-entity content (explanatory text, context, headers)
-- Section headings and organization
-- Overall document quality
-
-**Output**: Complete revised document in Markdown format that aligns with the approved baseline.
-
-**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions, high-priority requirements/deliverables), include a comment: 
-<!-- REQUIRES APPROVAL: [reason] -->
-
-**IMPORTANT**: Return ONLY the revised document content, no explanations or metadata.`
+OUTPUT: Revised document (Markdown only, no explanations)`
+  }
+  
+  /**
+   * Extract only affected baseline entities to reduce prompt size
+   */
+  private extractAffectedBaselineData(baseline: Baseline, driftPoints: DriftPoint[]): string {
+    const affectedTypes = new Set(driftPoints.map(d => d.entityType))
+    const sections: string[] = []
+    
+    // Only include baseline sections for entity types that have drift
+    if (affectedTypes.has('stakeholder') && baseline.resource_baseline?.stakeholders) {
+      sections.push(`Stakeholders: ${baseline.resource_baseline.stakeholders.length} total`)
+    }
+    if (affectedTypes.has('risk') && baseline.scope_baseline?.risks) {
+      sections.push(`Risks: ${baseline.scope_baseline.risks.length} total`)
+    }
+    if (affectedTypes.has('milestone') && baseline.timeline_baseline?.milestones) {
+      sections.push(`Milestones: ${baseline.timeline_baseline.milestones.length} total`)
+    }
+    if (affectedTypes.has('budget') && baseline.cost_baseline?.total_budget) {
+      sections.push(`Budget: $${baseline.cost_baseline.total_budget}`)
+    }
+    
+    return sections.join('\n') || 'Baseline data available'
   }
 
   /**
@@ -690,6 +734,41 @@ Generate a REVISED version of the document that resolves the drift:
           changeRequestId,
           userId
         )
+      }
+
+      // 5. ⭐ Create knowledge base entry for lessons learned
+      try {
+        const driftResult = await client.query(
+          'SELECT project_id FROM baseline_drift_detection WHERE id = $1',
+          [driftRecordId]
+        )
+
+        if (driftResult.rows.length > 0) {
+          const projectId = driftResult.rows[0].project_id
+
+          // Asynchronously create knowledge base entry (don't block the main flow)
+          knowledgeBaseService.createFromDrift(
+            driftRecordId,
+            projectId,
+            userId
+          ).catch(error => {
+            logger.warn('[DRIFT-RESOLUTION] Failed to create knowledge base entry', {
+              error: error.message,
+              driftRecordId
+            })
+          })
+
+          logger.info('[DRIFT-RESOLUTION] Knowledge base entry creation initiated', {
+            driftRecordId,
+            projectId
+          })
+        }
+      } catch (kbError) {
+        // Log but don't fail the main transaction
+        logger.warn('[DRIFT-RESOLUTION] Error initiating knowledge base entry', {
+          error: kbError,
+          driftRecordId
+        })
       }
 
       await client.query('COMMIT')
@@ -1054,14 +1133,49 @@ These changes have been flagged as **major changes** based on the following crit
       const document = docResult.rows[0]
 
       // Determine request type and priority based on drift severity and changes
+      // TASK-745: Approval workflow integration - detect positive drift
       let requestType = 'negative_drift'
       let priority: 'low' | 'medium' | 'high' | 'critical' | 'emergency' = 'medium'
       let severity: 'low' | 'medium' | 'high' | 'critical' = driftRecord.drift_severity || 'medium'
 
-      // Check for budget overrun
+      // Check for positive drift (cost savings, timeline acceleration, efficiency improvements)
+      const hasPositiveDrift = majorChanges.some(change => {
+        // Budget reductions (cost savings)
+        if ((change.entityType === 'budget' || change.entityType === 'cost') && change.variance) {
+          return change.variance < -5 // 5% or more cost reduction
+        }
+        // Timeline acceleration (earlier completion)
+        if (change.entityType === 'milestone' || change.entityType === 'phase') {
+          // Check if current date is earlier than baseline (positive)
+          const baselineDate = change.baselineValue ? new Date(change.baselineValue) : null
+          const currentDate = change.currentValue ? new Date(change.currentValue) : null
+          if (baselineDate && currentDate && currentDate < baselineDate) {
+            return true
+          }
+        }
+        // Efficiency improvements
+        if (change.description && (
+          change.description.toLowerCase().includes('optimiz') ||
+          change.description.toLowerCase().includes('improved') ||
+          change.description.toLowerCase().includes('efficient')
+        )) {
+          return true
+        }
+        return false
+      })
+
+      // Check for budget overrun (negative)
       const hasBudgetOverrun = majorChanges.some(
-        change => change.entityType === 'budget' && change.variance && Math.abs(change.variance) > 10
+        change => change.entityType === 'budget' && change.variance && change.variance > 10
       )
+
+      // Prioritize positive drift detection
+      if (hasPositiveDrift && !hasBudgetOverrun) {
+        requestType = 'positive_drift'
+        // Positive drift priority based on value, but typically medium priority
+        priority = 'medium'
+        severity = 'low' // Positive drift is opportunity, not risk
+      }
 
       if (hasBudgetOverrun) {
         requestType = 'budget_overrun'

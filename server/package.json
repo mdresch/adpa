@@ -20,6 +20,7 @@
     "migrate:financial": "tsx scripts/run-financial-migrations.ts",
     "migrate:300": "tsx scripts/run-migration-300.ts",
     "migrate:300:rollback": "tsx scripts/rollback-migration-300.ts",
+    "migrate:325:ccb": "tsx scripts/run-migration-325-ccb.ts",
     "seed:financial": "tsx scripts/seed-financial-test-data.ts",
     "cleanup:financial": "tsx scripts/cleanup-and-reseed-financial.ts",
     "cleanup:duplicates": "tsx scripts/quick-cleanup-duplicates.ts",
@@ -37,7 +38,8 @@
     "migrate-assessments": "tsx scripts/run-missing-migrations.ts",
     "check-status": "tsx scripts/check-upload-status.ts",
     "reset-batches": "tsx scripts/reset-failed-batches.ts",
-    "clear-jobs": "tsx scripts/clear-failed-jobs.ts"
+    "clear-jobs": "tsx scripts/clear-failed-jobs.ts",
+    "diagnose:extraction": "tsx scripts/diagnose-extraction.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",

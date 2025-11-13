@@ -247,10 +247,16 @@ This roadmap outlines the path to **complete PMBOK 8th Edition compliance** by a
 - **Current**: ⭐⭐⭐ 60%
 - **After Phase 1**: ⭐⭐⭐⭐⭐ 95% ✅ (Team Agreements added)
 - **After Phase 3**: ⭐⭐⭐⭐⭐ 100% ✅ (Team Development added)
+- **2025-11 Update**:
+  - `team_agreements` extraction live (categories, adherence, review cadence)
+  - Resource records enriched (competency level, certifications, training needs, team assignment, performance rating)
 
 ### Domain 3: Development Approach & Life Cycle
 - **Current**: ⭐⭐⭐ 60%
 - **After Phase 2**: ⭐⭐⭐⭐⭐ 95% ✅ (Development Approach added)
+- **2025-11 Update**:
+  - `development_approaches` table populated (approach, framework, ceremonies, artifacts)
+  - `project_iterations` stored with goals, velocity, impediments
 
 ### Domain 4: Planning Performance Domain
 - **Current**: ⭐⭐⭐⭐ 85% ✅
@@ -261,6 +267,9 @@ This roadmap outlines the path to **complete PMBOK 8th Edition compliance** by a
 - **Current**: ⭐⭐⭐ 65%
 - **After Phase 1**: ⭐⭐⭐⭐ 80% (Performance Actuals added)
 - **After Phase 2**: ⭐⭐⭐⭐⭐ 95% ✅ (Lessons Learned, Issues added)
+- **2025-11 Update**:
+  - `work_items` extraction captures assignments, estimates vs actuals, blockers
+  - `capacity_plans` stores allocation windows & utilization
 
 ### Domain 6: Delivery Performance Domain
 - **Current**: ⭐⭐⭐⭐ 85% ✅
@@ -271,11 +280,17 @@ This roadmap outlines the path to **complete PMBOK 8th Edition compliance** by a
 - **Current**: ⭐⭐⭐½ 70%
 - **After Phase 1**: ⭐⭐⭐⭐⭐ 95% ✅ (Performance Actuals added)
 - **After Phase 3**: ⭐⭐⭐⭐⭐ 100% ✅ (EVM added)
+- **2025-11 Update**:
+  - `performance_measurements` table logging actual vs target, trend, status
+  - `earned_value_metrics` table with PV/EV/AC and SPI/CPI + reforecasting data
 
 ### Domain 8: Uncertainty Performance Domain
 - **Current**: ⭐⭐⭐⭐⭐ 95% ✅
 - **After Phase 2**: ⭐⭐⭐⭐⭐ 100% ✅ (Issues added)
 - **After Phase 3**: ⭐⭐⭐⭐⭐ 100% ✅ (Opportunities separated)
+- **2025-11 Update**:
+  - `opportunities` table adds positive risk tracking
+  - `risk_responses` table tracks action effectiveness & residual exposure
 
 ---
 

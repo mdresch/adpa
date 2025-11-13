@@ -186,8 +186,7 @@ Risk status will be reviewed weekly during project status meetings.`
       console.error('Cleanup error:', error)
     }
     
-    // Close pool
-    await pool.end()
+    // Note: Do NOT call pool.end() here - it closes the shared pool and breaks other tests
   })
 
   test('should generate resolution in under 5 seconds', async () => {
@@ -228,6 +227,59 @@ Risk status will be reviewed weekly during project status meetings.`
       throw error
     }
   }, 10000) // 10 second timeout for the test itself
+
+  test('should handle conservative strategy within 5 seconds', async () => {
+    const startTime = Date.now()
+
+    const result = await driftResolutionService.resolveDrift(
+      testDocumentId,
+      testDriftRecordId,
+      testUserId,
+      'conservative'
+    )
+
+    const elapsed = Date.now() - startTime
+
+    expect(result).toBeDefined()
+    expect(elapsed).toBeLessThan(5000)
+    
+    console.log(`✅ Conservative strategy: ${elapsed}ms`)
+  }, 10000)
+
+  test('should handle permissive strategy within 5 seconds', async () => {
+    const startTime = Date.now()
+
+    const result = await driftResolutionService.resolveDrift(
+      testDocumentId,
+      testDriftRecordId,
+      testUserId,
+      'permissive'
+    )
+
+    const elapsed = Date.now() - startTime
+
+    expect(result).toBeDefined()
+    expect(elapsed).toBeLessThan(5000)
+    
+    console.log(`✅ Permissive strategy: ${elapsed}ms`)
+  }, 10000)
+
+  test('should log performance metrics', async () => {
+    const startTime = Date.now()
+
+    await driftResolutionService.resolveDrift(
+      testDocumentId,
+      testDriftRecordId,
+      testUserId,
+      'balanced'
+    )
+
+    const duration = Date.now() - startTime
+    
+    // Verify performance timing
+    expect(duration).toBeLessThan(5000)
+    console.log(`✅ Performance metrics logged: ${duration}ms`)
+  })
 
   test('should handle multiple resolution requests efficiently', async () => {
     // This test verifies that optimizations like caching work correctly

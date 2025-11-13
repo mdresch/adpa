@@ -138,6 +138,22 @@ class UnifiedAIService {
     }
   }
 
+  private normalizeUsage(usage: any | undefined): {
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  } {
+    if (!usage) {
+      return { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+    }
+
+    return {
+      promptTokens: usage.prompt_tokens ?? usage.promptTokens ?? 0,
+      completionTokens: usage.completion_tokens ?? usage.completionTokens ?? 0,
+      totalTokens: usage.total_tokens ?? usage.totalTokens ?? 0,
+    }
+  }
+
   /**
    * Generate content using AI SDK v5
    */
@@ -184,13 +200,24 @@ class UnifiedAIService {
 
       logger.info(`Generated content using AI provider: ${provider.name}`)
 
+      const {
+        promptTokens,
+        completionTokens,
+        totalTokens,
+      } = this.normalizeUsage(response.usage)
+
       return {
         content: response.text,
         provider: provider.name,
         model: model,
-        usage: response.usage as any, // AI SDK v5 usage structure
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: totalTokens,
+        },
         metadata: {
           finishReason: response.finishReason,
+          model: response.model,
         }
       }
 

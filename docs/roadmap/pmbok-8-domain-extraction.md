@@ -7,6 +7,28 @@
 
 ---
 
+## ✅ November 2025 Update: Domain Data Foundations Landed
+
+We now have end-to-end extraction + storage for the remaining PMBOK 8 domains:
+
+- **New database tables**  
+  - `team_agreements`, `development_approaches`, `project_iterations`  
+  - `work_items`, `capacity_plans`, `performance_measurements`, `earned_value_metrics`  
+  - `opportunities`, `risk_responses`
+- **Extraction service updates**  
+  - `ProjectDataExtractionService` now prompts AI for domain-specific entities  
+  - Normalization helpers ensure consistent casing, enums, and array handling  
+  - Save routines perform idempotent upserts with conflict handling and field validation
+- **Resource enrichment**  
+  - Human resources now capture competency level, certifications, training needs, team assignment, and performance rating
+
+Remaining work (tracked separately):
+1. Surface the new entities in dashboards / analytics views  
+2. Extend automated tests to cover the new extraction flows  
+3. Update performance domain scorecards to use new metrics (capacity plans, EVM actuals, team agreements, etc.)
+
+---
+
 ## 📚 Background: PMBOK 7th → 8th Edition Shift
 
 ### **PMBOK 7th Edition (Traditional - Current System):**
