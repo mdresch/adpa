@@ -955,13 +955,15 @@ Requirements:
 - Infer priority from context (must-have = critical, should-have = high, etc.)
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive requirements (was truncating)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 3000
-      })
+        max_tokens: 10000 // Increased from 3000 to handle very large requirement extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const requirements = parsed.requirements || []
@@ -1207,13 +1209,15 @@ Requirements:
 - Extract specific measurable targets if mentioned
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive success criteria (was truncating at ~9K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
-      })
+        max_tokens: 10000 // Increased from 2000 to handle very large success criteria extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const successCriteria = parsed.success_criteria || []
@@ -1326,13 +1330,15 @@ Requirements:
 - Infer status from context
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 8000 to handle large documents with many phases (was truncating)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 1500
-      })
+        max_tokens: 8000 // Increased from 1500 to handle large documents with many phases (was truncating)
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const phases = parsed.phases || []
@@ -1537,13 +1543,15 @@ QUALITY CHECKLIST:
 
 Return pure JSON only.`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive technology lists (was truncating at ~8.7K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
-      })
+        max_tokens: 10000 // Increased from 2000 to handle very large technology extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const technologies = parsed.technologies || []
@@ -1663,13 +1671,15 @@ Requirements:
 - Infer status from context
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive deliverables (was truncating at ~10.7K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2500
-      })
+        max_tokens: 10000 // Increased from 2500 to handle very large deliverables extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const deliverables = parsed.deliverables || []
@@ -1726,12 +1736,13 @@ Requirements:
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 12000 to handle very large documents with extensive scope analysis (40+ items)
       const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 5000 // Increased from 2500 to handle large documents with many scope items
+        max_tokens: 12000 // Increased from 5000 to handle very large scope extractions (was truncating at ~23K chars)
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -1798,13 +1809,15 @@ Requirements:
 - Infer status from context (future = planned, ongoing = in_progress, past = completed)
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive activity lists (was truncating at ~12.7K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 3500
-      })
+        max_tokens: 10000 // Increased from 3500 to handle very large activities extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const activities = parsed.activities || []
@@ -2332,7 +2345,7 @@ JSON schema:
   "performance_measurements": [
     {
       "success_criterion_name": "Name of criterion being measured",
-      "measurement_date": "YYYY-MM-DD",
+      "measurement_date": "YYYY-MM-DD (REQUIRED - use document date if measurement date not specified)",
       "actual_value": number or null,
       "target_value": number or null,
       "units": "Units (%, days, USD, etc.) or null",
@@ -2347,10 +2360,12 @@ JSON schema:
 }
 
 Guidelines:
-- Convert values to numbers when possible (strip % or currency symbols).
-- If only textual comparison exists (e.g., "ahead by 5%"), compute variance when possible.
-- Use null where numbers aren't available.
-- Return ONLY valid JSON.`
+- **measurement_date is REQUIRED**: Extract the date when measurement was taken, or use document date if not specified
+- Extract BOTH actual measurements (historical data) AND target/planned measurements (future goals)
+- Convert values to numbers when possible (strip % or currency symbols)
+- If only textual comparison exists (e.g., "ahead by 5%"), compute variance when possible
+- Use null where numbers aren't available
+- Return ONLY valid JSON`
 
       const response = await aiService.generate({
         prompt,
@@ -2857,6 +2872,14 @@ Output valid JSON object with "performance_actuals" array only.`
     return []
   }
 
+  /**
+   * Extract numeric value from various formats:
+   * - Currency: €3.1M, $2.5M, £1.8M
+   * - Percentages: 50%, <10%, ±5%, from 28% to 80%
+   * - Ranges: Extract target value (e.g., "from 28% to 80%" -> 80)
+   * - Comparison operators: <, >, ±, ≤, ≥
+   * - Million/billion: M, B, K, million, billion, thousand
+   */
   private safeNumber(value: unknown): number | undefined {
     if (value === null || value === undefined) {
       return undefined
@@ -2865,19 +2888,46 @@ Output valid JSON object with "performance_actuals" array only.`
       return Number.isFinite(value) ? value : undefined
     }
     if (typeof value === 'string') {
-      const trimmed = value.trim()
+      let trimmed = value.trim()
       if (!trimmed) return undefined
 
-      const normalized = trimmed
-        .replace(/percent/gi, '')
-        .replace(/[%,$]/g, '')
-        .replace(/[^0-9.+\-]/g, ' ')
-        .trim()
+      // Handle ranges: "from 28% to 80%" -> extract 80 (target value)
+      const rangeMatch = trimmed.match(/(?:from|between)\s+[\d.,]+\s*(?:%|percent)?\s*(?:to|and)\s+([\d.,]+)/i)
+      if (rangeMatch) {
+        trimmed = rangeMatch[1] + (trimmed.includes('%') ? '%' : '')
+      }
 
-      if (!normalized) return undefined
+      // Extract the main numeric value (handles comparison operators and currency symbols)
+      // Match: <10%, >50%, ±5%, ≤20%, ≥30%, €3.1M, $2.5M, or just 50%
+      let numericStr = trimmed.match(/(?:[<>≤≥±€$£¥]|less than|greater than|approximately|about|around)\s*([\d.,]+)/i)?.[1] 
+                    || trimmed.match(/(?:[€$£¥]\s*)?([\d.,]+)/i)?.[1]
+      
+      if (!numericStr) return undefined
 
-      const num = Number(normalized)
-      return Number.isFinite(num) ? num : undefined
+      // Remove thousand separators (commas)
+      numericStr = numericStr.replace(/,/g, '')
+
+      // Parse base number
+      let num = parseFloat(numericStr)
+      if (!Number.isFinite(num)) return undefined
+
+      // Handle million/billion multipliers
+      const multiplierMatch = trimmed.match(/([MBK]|million|billion|thousand)/i)
+      if (multiplierMatch) {
+        const multiplier = multiplierMatch[1].toUpperCase()
+        if (multiplier === 'B' || multiplier === 'BILLION') {
+          num *= 1000000000
+        } else if (multiplier === 'M' || multiplier === 'MILLION') {
+          num *= 1000000
+        } else if (multiplier === 'K' || multiplier === 'THOUSAND') {
+          num *= 1000
+        }
+      }
+
+      // For percentages, keep as-is (50% -> 50, not 0.5)
+      // The percentage symbol is informational, not a divisor
+
+      return num
     }
     return undefined
   }
@@ -2893,27 +2943,41 @@ Output valid JSON object with "performance_actuals" array only.`
     if (!value) {
       return null
     }
-    const trimmed = value.toString().trim()
+    let trimmed = value.toString().trim()
     if (!trimmed) {
       return null
     }
 
+    // Extract YYYY-MM-DD pattern from strings with extra text
+    // Examples: "2025-12-31 (initial version)" -> "2025-12-31"
+    //           "Monthly (first due 2025-11-30)" -> "2025-11-30"
+    //           "Bi-weekly (first due 2025-11-15)" -> "2025-11-15"
+    const datePatternMatch = trimmed.match(/(\d{4}-\d{2}-\d{2})/)
+    if (datePatternMatch) {
+      trimmed = datePatternMatch[1]
+    }
+
+    // Try quarter date conversion first
     const quarterDate = convertQuarterDate(trimmed)
     if (quarterDate) {
       return quarterDate
     }
 
+    // Check if it's already a valid YYYY-MM-DD date
     if (isValidDate(trimmed)) {
       return trimmed
     }
 
-    // Attempt to parse simple Month YYYY formats (e.g., "March 2025")
+    // Attempt to parse other date formats (e.g., "March 2025", "2025-12-31")
     const parsed = Date.parse(trimmed)
     if (!Number.isNaN(parsed)) {
-      return new Date(parsed).toISOString().split('T')[0]
+      const date = new Date(parsed)
+      if (isValidDate(date.toISOString().split('T')[0])) {
+        return date.toISOString().split('T')[0]
+      }
     }
 
-    logger.warn(`[EXTRACTION] Unable to normalize date "${trimmed}", storing as null`)
+    logger.debug(`[EXTRACTION] Unable to normalize date "${value}", storing as null`)
     return null
   }
 
@@ -3678,7 +3742,23 @@ Output valid JSON object with "performance_actuals" array only.`
       // Truncate fields to match database constraints
       const name = s.name?.substring(0, 255) || 'Unnamed Stakeholder'
       const role = s.role?.substring(0, 100) || 'Stakeholder'
-      const email = s.email?.substring(0, 255) || null
+      // Email is NOT NULL in database, use placeholder if missing
+      const email = s.email?.substring(0, 255) || `${name.toLowerCase().replace(/\s+/g, '.')}@placeholder.local`
+      
+      // Normalize influence_level and interest_level to valid enum values
+      const normalizeLevel = (level: string | undefined): 'high' | 'medium' | 'low' => {
+        if (!level) return 'medium'
+        const normalized = level.toLowerCase().trim()
+        if (normalized === 'high' || normalized === 'medium' || normalized === 'low') {
+          return normalized as 'high' | 'medium' | 'low'
+        }
+        // Default to medium for invalid values
+        logger.debug(`[EXTRACTION] Invalid level "${level}", defaulting to medium`)
+        return 'medium'
+      }
+      
+      const interestLevel = normalizeLevel(s.interest_level)
+      const influenceLevel = normalizeLevel(s.influence_level)
       
       // Log if truncation occurred
       if (s.name && s.name.length > 255) {
@@ -3693,8 +3773,8 @@ Output valid JSON object with "performance_actuals" array only.`
         name,
         role,
         email,
-        s.interest_level,
-        s.influence_level,
+        interestLevel,
+        influenceLevel,
         s.expectations || null,
         s.concerns || null,
         userId
@@ -4095,16 +4175,17 @@ Output valid JSON object with "performance_actuals" array only.`
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
       
-      // Extract numeric value from strings like "90% within 6 months" or "95"
+      // Extract numeric value using improved safeNumber logic
       const extractNumeric = (value: string | number | null | undefined): number | null => {
-        if (typeof value === 'number') return value
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null
         if (!value) return null
-        const numericMatch = String(value).match(/^(\d+(?:\.\d+)?)/)
-        if (numericMatch) {
-          return parseFloat(numericMatch[1])
+        
+        const extracted = this.safeNumber(value)
+        if (extracted === undefined) {
+          logger.debug(`[EXTRACTION] Could not extract numeric from: ${value}, setting to null`)
+          return null
         }
-        logger.warn(`[EXTRACTION] Could not extract numeric from: ${value}, setting to null`)
-        return null
+        return extracted
       }
       
       const targetValue = extractNumeric(sc.target_value)
@@ -5365,14 +5446,24 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     performanceMeasurements.forEach(measurement => {
-      const measurementDate = this.normalizeDate(measurement.measurement_date)
       const criterionName = measurement.success_criterion_name?.trim()
-
-      if (!measurementDate || !criterionName) {
+      
+      if (!criterionName) {
         logger.warn(
-          `[EXTRACTION] Skipping measurement due to missing date or criterion (${measurement.measurement_date}, ${measurement.success_criterion_name})`
+          `[EXTRACTION] Skipping measurement due to missing criterion name (${measurement.success_criterion_name})`
         )
         return
+      }
+
+      // Use provided date, or fallback to current date if missing (for planned/target measurements)
+      // This allows storing success criteria even when actual measurements haven't been taken yet
+      let measurementDate = this.normalizeDate(measurement.measurement_date)
+      if (!measurementDate) {
+        // Fallback to current date for planned/target measurements
+        measurementDate = new Date().toISOString().split('T')[0]
+        logger.debug(
+          `[EXTRACTION] Using fallback date for measurement "${criterionName}" (no date provided, using today)`
+        )
       }
 
       const rowIndex = placeholders.length
