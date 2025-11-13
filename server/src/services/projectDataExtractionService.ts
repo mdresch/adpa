@@ -2781,17 +2781,54 @@ Guidelines:
     
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
-      // First, try to extract JSON from markdown code blocks
-      // Match ```json or ``` followed by whitespace and then capture everything until closing ```
-      const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*([\s\S]*?)```/)
-      if (codeBlockMatch) {
-        cleanedContent = codeBlockMatch[1].trim()
-      } else {
-        // If no closing ``` found, try to extract JSON object directly
-        const objectMatch = cleanedContent.match(/\{[\s\S]*\}/)
-        if (objectMatch) {
-          cleanedContent = objectMatch[0]
+      // More robust extraction: find first ``` and matching closing ```
+      const firstCodeBlockStart = cleanedContent.indexOf('```')
+      if (firstCodeBlockStart !== -1) {
+        // Find the end of the opening marker (```json or just ```)
+        let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
+        // Skip optional language identifier (json, etc.)
+        while (codeBlockStart < cleanedContent.length && 
+               cleanedContent[codeBlockStart] !== '\n' && 
+               cleanedContent[codeBlockStart] !== '`') {
+          codeBlockStart++
         }
+        // Skip newline if present
+        if (cleanedContent[codeBlockStart] === '\n') {
+          codeBlockStart++
+        }
+        
+        // Find the closing ```
+        const codeBlockEnd = cleanedContent.indexOf('```', codeBlockStart)
+        if (codeBlockEnd !== -1) {
+          // Extract content between code block markers
+          cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
+        } else {
+          // No closing marker found, extract from start to end
+          cleanedContent = cleanedContent.substring(codeBlockStart).trim()
+        }
+      }
+      
+      // Fallback: if still contains ```, try regex approach
+      if (cleanedContent.includes('```')) {
+        const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          cleanedContent = codeBlockMatch[1].trim()
+        }
+      }
+      
+      // Final cleanup: remove any remaining markdown artifacts
+      cleanedContent = cleanedContent
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/, '')
+        .replace(/```\s*$/, '')
+        .trim()
+      
+      // Log extracted content for debugging (first 200 chars)
+      if (cleanedContent.length > 0) {
+        logger.debug('[EXTRACTION] Extracted from code block', {
+          preview: cleanedContent.substring(0, 200),
+          length: cleanedContent.length
+        })
       }
     }
     
