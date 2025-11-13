@@ -150,37 +150,44 @@ export class DriftResolutionService {
         driftPoints,
         strategy
       )
+      logger.info(`[DRIFT-RESOLUTION] Prompt built in ${Date.now() - startTime}ms, length: ${prompt.length} chars`)
 
-      // PERFORMANCE: Call AI with optimized parameters for speed
-      // Use fast models: deepseek-chat (fast), gpt-4o-mini (fast), or gpt-4o (balanced)
+      // PERFORMANCE: Call AI with timeout enforcement and fast provider selection
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiStartTime = Date.now()
       
-      // PERFORMANCE: Reduce maxTokens to 3000 (most resolutions don't need 4000)
-      // This speeds up generation time significantly
-      const aiResponse = await aiService.generate({
-        prompt,
-        provider: 'openai', // Use OpenAI for speed and reliability
-        model: 'gpt-4o-mini', // Fast and cost-effective model optimized for speed
-        temperature: 0.3, // Low temperature for consistent, focused output
-        maxTokens: 3000, // Optimized for speed - most resolutions need 1500-2500 tokens
-        max_tokens: 3000 // Alternative parameter name for compatibility
-      })
+      // PERFORMANCE: Use Promise.race to enforce 5-second timeout
+      // Prefer fast providers: Google Gemini 2.5 Flash, with fallback to OpenAI gpt-4o-mini
+      const aiResponse = await Promise.race([
+        // Try fast providers first with fallback
+        aiService.generateWithFallback({
+          prompt,
+          provider: 'google', // Prefer fast provider (Gemini 2.5 Flash)
+          model: 'gemini-2.5-flash', // Optimized for speed
+          temperature: 0.2, // Low temp for consistent, accurate resolution
+          max_tokens: 3000 // Optimized for speed
+        }, ['google', 'openai', 'groq', 'mistral']),
+        // Timeout after 5 seconds
+        new Promise<never>((_, reject) => 
+          setTimeout(() => reject(new Error('AI resolution timeout: exceeded 5 seconds')), 5000)
+        )
+      ])
       
       const aiDuration = Date.now() - aiStartTime
-      logger.info('[DRIFT-RESOLUTION] AI generation completed', { durationMs: aiDuration })
+      logger.info('[DRIFT-RESOLUTION] ⚡ AI generation completed', { durationMs: aiDuration })
 
       // Parse resolved content
       const resolvedContent = this.parseResolvedContent(aiResponse.content)
 
       const totalDuration = Date.now() - startTime
-      logger.info('[DRIFT-RESOLUTION] Resolution generated successfully', {
+      logger.info('[DRIFT-RESOLUTION] ✅ Resolution generated successfully', {
         documentId,
         driftRecordId,
         majorChangesCount: majorChanges.length,
         totalDurationMs: totalDuration,
         dataFetchMs: dataFetchTime,
         aiGenerationMs: aiDuration,
+        meetsPerformanceTarget: totalDuration < 5000,
         performanceTarget: totalDuration < 5000 ? 'MET' : 'EXCEEDED'
       })
 
@@ -404,7 +411,7 @@ Return the corrected document in Markdown. Add <!-- REQUIRES APPROVAL: reason --
 
   /**
    * Legacy method kept for compatibility
-   * Build AI prompt for drift resolution
+   * Build AI prompt for drift resolution (optimized for speed)
    * Handles all 14 entity types: scope_items, deliverables, requirements, milestones,
    * phases, activities, resources, technologies, stakeholders, constraints, risks,
    * success_criteria, quality_standards, best_practices
@@ -415,71 +422,56 @@ Return the corrected document in Markdown. Add <!-- REQUIRES APPROVAL: reason --
     driftPoints: DriftPoint[],
     strategy: string
   ): string {
-    return `You are a project management expert tasked with resolving baseline drift in a project document.
+    // Optimized prompt - reduce token count for faster processing
+    const strategyRules = strategy === 'conservative' 
+      ? 'Revert ALL changes to baseline exactly'
+      : strategy === 'permissive'
+      ? 'Keep most changes, revert only critical violations'
+      : 'Keep valid updates, revert unauthorized changes'
+    
+    // Only include affected baseline entities, not all baseline data
+    const affectedBaselineData = this.extractAffectedBaselineData(baseline, driftPoints)
+    
+    return `Resolve baseline drift in: ${document.title}
 
-## CONTEXT
+BASELINE (Version ${baseline.version}):
+${affectedBaselineData}
 
-**Document**: ${document.title}
-**Approved Baseline**: Version ${baseline.version}
-**Drift Detected**: ${driftPoints.length} drift points identified across entity types
+DRIFT POINTS (${driftPoints.length}):
+${driftPoints.map((d, i) => `${i+1}. ${d.driftType.toUpperCase()} ${d.entityType}: ${d.description}`).join('\n')}
 
-## ENTITY TYPES TRACKED
-The system tracks 14 entity types:
-- **Scope**: scope_items, deliverables, requirements, constraints
-- **Timeline**: milestones, phases, activities
-- **Resources**: resources, technologies, stakeholders
-- **Quality & Risk**: risks, success_criteria, quality_standards, best_practices
+STRATEGY: ${strategyRules}
 
-## BASELINE ENTITIES (APPROVED - AUTHORITATIVE)
+TASK: Revise document to align with baseline. For major changes (budget >10%, key dates, scope), add: <!-- REQUIRES APPROVAL: [reason] -->
 
-${this.formatBaselineEntities(baseline)}
-
-## CURRENT DOCUMENT CONTENT (DRIFTED)
-
+CURRENT DOCUMENT:
 ${document.content}
 
-## DRIFT POINTS TO RESOLVE
-
-${driftPoints.map((drift, i) => `
-${i + 1}. ${drift.driftType.toUpperCase()}: ${drift.description}
-   - Entity Type: ${drift.entityType}
-   - Baseline: ${JSON.stringify(drift.baselineValue)}
-   - Current: ${JSON.stringify(drift.currentValue)}
-   - Requires Approval: ${drift.requiresApproval ? 'YES' : 'NO'}
-`).join('\n')}
-
-## RESOLUTION STRATEGY: ${strategy.toUpperCase()}
-
-**Conservative**: Revert ALL changes to match baseline exactly
-**Balanced**: Keep valid updates, revert unauthorized changes, flag major changes (RECOMMENDED)
-**Permissive**: Keep most changes, only revert critical baseline violations
-
-## YOUR TASK
-
-Generate a REVISED version of the document that resolves the drift:
-
-1. **For REMOVED baseline entities**: Re-add them to the document in appropriate sections
-   - Applies to: scope_items, deliverables, requirements, milestones, phases, activities, resources, technologies, stakeholders, constraints, risks, success_criteria, quality_standards, best_practices
-2. **For ADDED non-baseline entities**: 
-   - Conservative: Remove them
-   - Balanced: Keep if minor/helpful, remove if major/unauthorized
-   - Permissive: Keep all, just note the addition
-3. **For MODIFIED entities**: Restore baseline values OR clearly mark as change request
-4. **For critical changes** (milestones, deliverables, requirements): Revert to baseline OR flag for approval
-5. **For budget/resource changes >10%**: FLAG as requiring formal approval
-
-**Preserve**:
-- Document structure and formatting (Markdown)
-- Non-entity content (explanatory text, context, headers)
-- Section headings and organization
-- Overall document quality
-
-**Output**: Complete revised document in Markdown format that aligns with the approved baseline.
-
-**CRITICAL**: If a change is major (budget >10%, key milestone dates, scope additions, high-priority requirements/deliverables), include a comment: 
-<!-- REQUIRES APPROVAL: [reason] -->
-
-**IMPORTANT**: Return ONLY the revised document content, no explanations or metadata.`
+OUTPUT: Revised document (Markdown only, no explanations)`
+  }
+  
+  /**
+   * Extract only affected baseline entities to reduce prompt size
+   */
+  private extractAffectedBaselineData(baseline: Baseline, driftPoints: DriftPoint[]): string {
+    const affectedTypes = new Set(driftPoints.map(d => d.entityType))
+    const sections: string[] = []
+    
+    // Only include baseline sections for entity types that have drift
+    if (affectedTypes.has('stakeholder') && baseline.resource_baseline?.stakeholders) {
+      sections.push(`Stakeholders: ${baseline.resource_baseline.stakeholders.length} total`)
+    }
+    if (affectedTypes.has('risk') && baseline.scope_baseline?.risks) {
+      sections.push(`Risks: ${baseline.scope_baseline.risks.length} total`)
+    }
+    if (affectedTypes.has('milestone') && baseline.timeline_baseline?.milestones) {
+      sections.push(`Milestones: ${baseline.timeline_baseline.milestones.length} total`)
+    }
+    if (affectedTypes.has('budget') && baseline.cost_baseline?.total_budget) {
+      sections.push(`Budget: $${baseline.cost_baseline.total_budget}`)
+    }
+    
+    return sections.join('\n') || 'Baseline data available'
   }
 
   /**

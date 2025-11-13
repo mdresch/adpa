@@ -617,11 +617,7 @@ export class ApprovalWorkflowService {
         await emailNotificationService.sendEmail({
           to: approver.email,
           subject,
-          body: message,
-          metadata: {
-            approval_request_id: requestId,
-            notification_type: notificationType
-          }
+          text: message
         })
 
         // Log notification
