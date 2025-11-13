@@ -143,6 +143,49 @@ router.get(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { projectId } = req.params
+      const userId = (req as any).user?.id
+      const userRole = (req as any).user?.role
+
+      // SECURITY: Verify user has access to this project
+      // Admins have access to all projects
+      if (userRole === 'admin') {
+        // Admin can access any project - verify project exists
+        const projectExists = await pool!.query(
+          'SELECT id FROM projects WHERE id = $1',
+          [projectId]
+        )
+        if (projectExists.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Project not found'
+          })
+        }
+      } else {
+        // Non-admin users: Check if user is the project owner (owner_id or created_by)
+        const projectAccess = await pool!.query(
+          `SELECT p.id 
+           FROM projects p
+           WHERE p.id = $1 
+           AND (
+             COALESCE(p.owner_id, p.created_by) = $2 
+             OR p.created_by = $2
+           )
+           LIMIT 1`,
+          [projectId, userId]
+        )
+
+        if (projectAccess.rows.length === 0) {
+          logger.warn('[EXTRACTION-API] Unauthorized access attempt to results', {
+            projectId,
+            userId,
+            userRole
+          })
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied: You do not have permission to view this project'
+          })
+        }
+      }
 
       // Initialize counts object - includes PMBOK 8 performance domain entities
       const entityCounts: Record<string, number> = {
@@ -192,7 +235,7 @@ router.get(
         { name: 'activities', key: 'activities' },
         // PMBOK 8 Performance Domain tables
         { name: 'team_agreements', key: 'teamAgreements' },
-        { name: 'development_approaches', key: 'developmentApproaches' },
+        { name: 'development_approach', key: 'developmentApproaches' },
         { name: 'project_iterations', key: 'projectIterations' },
         { name: 'work_items', key: 'workItems' },
         { name: 'capacity_plans', key: 'capacityPlans' },
@@ -352,29 +395,46 @@ router.get(
       }
 
       // SECURITY: Verify user has access to this project
-      // Check if user is the project owner (owner_id or created_by)
-      const projectAccess = await pool!.query(
-        `SELECT p.id 
-         FROM projects p
-         WHERE p.id = $1 
-         AND (
-           COALESCE(p.owner_id, p.created_by) = $2 
-           OR p.created_by = $2
-         )
-         LIMIT 1`,
-        [projectId, userId]
-      )
+      // Admins have access to all projects
+      const userRole = (req as any).user?.role
+      if (userRole === 'admin') {
+        // Admin can access any project - verify project exists
+        const projectExists = await pool!.query(
+          'SELECT id FROM projects WHERE id = $1',
+          [projectId]
+        )
+        if (projectExists.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Project not found'
+          })
+        }
+      } else {
+        // Non-admin users: Check if user is the project owner (owner_id or created_by)
+        const projectAccess = await pool!.query(
+          `SELECT p.id 
+           FROM projects p
+           WHERE p.id = $1 
+           AND (
+             COALESCE(p.owner_id, p.created_by) = $2 
+             OR p.created_by = $2
+           )
+           LIMIT 1`,
+          [projectId, userId]
+        )
 
-      if (projectAccess.rows.length === 0) {
-        logger.warn('[EXTRACTION-API] Unauthorized access attempt', {
-          projectId,
-          userId,
-          entityType
-        })
-        return res.status(403).json({
-          success: false,
-          error: 'Access denied: You do not have permission to view this project'
-        })
+        if (projectAccess.rows.length === 0) {
+          logger.warn('[EXTRACTION-API] Unauthorized access attempt', {
+            projectId,
+            userId,
+            entityType,
+            userRole
+          })
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied: You do not have permission to view this project'
+          })
+        }
       }
 
       // Validate and sanitize pagination parameters
@@ -401,6 +461,7 @@ router.get(
 
       // Map entity type to table name
       const tableMap: Record<string, string> = {
+        // Legacy entities (PMBOK 7 and earlier)
         stakeholders: 'stakeholders',
         requirements: 'requirements',
         risks: 'risks',
@@ -413,7 +474,17 @@ router.get(
         qualityStandards: 'quality_standards',
         deliverables: 'deliverables',
         scopeItems: 'scope_items',
-        activities: 'activities'
+        activities: 'activities',
+        // PMBOK 8 Performance Domain entities
+        teamAgreements: 'team_agreements',
+        developmentApproaches: 'development_approach', // Note: singular table name
+        projectIterations: 'project_iterations',
+        workItems: 'work_items',
+        capacityPlans: 'capacity_plans',
+        performanceMeasurements: 'performance_measurements',
+        earnedValueMetrics: 'earned_value_metrics',
+        opportunities: 'opportunities',
+        riskResponses: 'risk_responses'
       }
 
       const tableName = tableMap[entityType]

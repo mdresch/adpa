@@ -219,13 +219,48 @@ interface TeamAgreement {
 }
 
 interface DevelopmentApproach {
-  approach: 'agile' | 'waterfall' | 'hybrid' | 'iterative' | 'custom'
+  // Approach selection
+  approach: 'predictive' | 'adaptive' | 'hybrid' | 'incremental' | 'iterative'
+  methodology?: 'waterfall' | 'scrum' | 'kanban' | 'lean' | 'safe' | 'prince2' | 'custom'
+  
+  // Justification
+  justification: string
+  
+  // Context factors (PMBOK 8 Domain 3)
+  uncertainty_level?: 'low' | 'medium' | 'high'
+  requirements_stability?: 'stable' | 'evolving' | 'uncertain'
+  stakeholder_engagement_model?: string
+  delivery_cadence?: 'single' | 'iterative' | 'incremental' | 'continuous'
+  
+  // Organizational context
+  organizational_maturity?: 'low' | 'medium' | 'high'
+  team_experience_level?: 'junior' | 'mixed' | 'senior'
+  regulatory_constraints?: boolean
+  
+  // Tailoring decisions
+  tailoring_decisions?: Array<{
+    area: string
+    standard_process: string
+    tailored_process: string
+    justification: string
+  }>
+  
+  // Life cycle
+  life_cycle_phases?: string[]
+  iteration_length?: number
+  iteration_unit?: 'days' | 'weeks'
+  
+  // Governance
+  governance_approach?: 'lightweight' | 'standard' | 'formal'
+  review_gates?: string[]
+  
+  // Legacy fields (for backward compatibility with existing extraction)
   framework?: string
   lifecycle_model?: string
   iteration_length_weeks?: number
   ceremonies?: string[]
   artifacts?: string[]
-  tailoring_decisions?: string
+  tailoring_decisions_text?: string
   governance_notes?: string
   source_document?: string
 }
@@ -1823,76 +1858,185 @@ Rules:
   /**
    * Extract development approaches for PMBOK 8 Development Approach & Life Cycle Domain
    */
+  /**
+   * Extract development approach metadata (TASK-90)
+   * Returns a single DevelopmentApproach object (one per project)
+   */
   private async extractDevelopmentApproaches(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
     options: { aiProvider?: string; aiModel?: string }
   ): Promise<DevelopmentApproach[]> {
     try {
-      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Starting extraction')
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Starting extraction (TASK-90)')
 
       const documentContext = this.buildDocumentContext(documents)
 
-      const prompt = `Identify the project's **Development Approach & Life Cycle** decisions and return them as JSON.
+      const prompt = `You are analyzing project documents to extract DEVELOPMENT APPROACH - the methodology selected for this project.
+This is project-level metadata (ONE record per project).
+
+Look for:
+- "Methodology: Agile/Scrum/Waterfall/Hybrid"
+- "Development approach: Predictive/Adaptive"
+- "Tailoring justification" or "Why we chose [methodology]"
+- Life cycle phases mentioned
+- Sprint/iteration lengths
+- Delivery cadence (single release vs incremental)
+- Governance approach (formal gates, agile ceremonies)
+- Context factors: uncertainty level, requirements stability, team experience
 
 SOURCE DOCUMENTS:
 ${documentContext}
 
-Schema:
+Extract as a single JSON object (not array - one per project):
+
 {
-  "development_approaches": [
+  "approach": "predictive" | "adaptive" | "hybrid" | "incremental" | "iterative",
+  "methodology": "waterfall" | "scrum" | "kanban" | "lean" | "safe" | "prince2" | "custom" | null,
+  "justification": "Full explanation of why this approach was selected (Markdown format)",
+  "uncertainty_level": "low" | "medium" | "high" | null,
+  "requirements_stability": "stable" | "evolving" | "uncertain" | null,
+  "stakeholder_engagement_model": "periodic" | "continuous" | null,
+  "delivery_cadence": "single" | "iterative" | "incremental" | "continuous" | null,
+  "organizational_maturity": "low" | "medium" | "high" | null,
+  "team_experience_level": "junior" | "mixed" | "senior" | null,
+  "regulatory_constraints": boolean | null,
+  "life_cycle_phases": ["Phase 1 name", "Phase 2 name", ...],
+  "iteration_length": number (if iterative) | null,
+  "iteration_unit": "days" | "weeks" | null,
+  "governance_approach": "lightweight" | "standard" | "formal" | null,
+  "review_gates": ["Gate 1", "Gate 2", ...],
+  "tailoring_decisions": [
     {
-      "approach": "agile|waterfall|hybrid|iterative|custom",
-      "framework": "Scrum, SAFe, Prince2, etc. or null",
-      "lifecycle_model": "Incremental, Iterative, Continuous Delivery, etc. or null",
-      "iteration_length_weeks": integer or null,
-      "ceremonies": ["Daily stand-up", "Retrospective"],
-      "artifacts": ["Product backlog", "Gantt chart"],
-      "tailoring_decisions": "Markdown summary of tailoring",
-      "governance_notes": "Governance/approval requirements or null",
-      "source_document": "Document title where this decision appears"
+      "area": "What was tailored",
+      "standard_process": "Normal org process",
+      "tailored_process": "How it was adapted",
+      "justification": "Why"
     }
   ]
 }
 
 Guidance:
-- Capture explicit methodology decisions, cadence, and key governance checkpoints.
-- Use arrays for ceremonies/artifacts.
-- Use null for unknown numeric or textual values.
-- Return ONLY valid JSON.`
+- Return a single object (not array) - this is project-level metadata
+- Use null for unknown values
+- Use arrays for phases, review_gates, tailoring_decisions
+- justification must be comprehensive Markdown explaining WHY the approach was chosen
+- If no methodology information found, return null
 
-      const response = await aiService.generate({
+Return JSON object only. Return null if no methodology information found.`
+
+      // Log the full prompt for debugging
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Full prompt being sent to AI', {
+        promptLength: prompt.length,
+        promptPreview: prompt.substring(0, 500),
+        fullPrompt: prompt, // Full prompt for debugging
+        documentCount: documents.length,
+        totalDocumentChars: documents.reduce((sum, doc) => sum + (doc.content?.length || 0), 0)
+      })
+
+      // Use generateWithFallback for automatic provider fallback if requested provider is unavailable
+      // Note: max_tokens increased to 5000 to accommodate comprehensive justification field (markdown format)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
-        temperature: 0.2,
-        max_tokens: 2200
+        temperature: 0.3,
+        max_tokens: 5000 // Increased from 2500 to handle long justification markdown content
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+
+      // Log the raw response BEFORE any parsing
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Raw AI response received', {
+        providerUsed: (response as any).providerUsed || options.aiProvider || 'unknown',
+        responseLength: response.content.length,
+        responsePreview: response.content.substring(0, 500),
+        fullResponse: response.content, // Full raw response for debugging
+        usage: response.usage,
+        hasCodeBlocks: response.content.includes('```'),
+        startsWithJson: response.content.trim().startsWith('{'),
+        startsWithCodeBlock: response.content.trim().startsWith('```')
       })
 
       // Validate AI response - throw error to trigger retry/fallback
-      this.validateAIResponse(response, 'development_approaches', options)
+      // Note: response from generateWithFallback includes providerUsed, but validateAIResponse expects standard format
+      const standardResponse = {
+        content: response.content,
+        usage: response.usage
+      }
+      this.validateAIResponse(standardResponse, 'development_approach', options)
+      
+      // Log which provider was actually used
+      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Used provider: ${(response as any).providerUsed || options.aiProvider || 'unknown'}`)
 
       const parsed = this.parseAIResponse(response.content)
       
+      // Log parsing result
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Parsing result', {
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed),
+        parsedKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
+        parsedPreview: parsed ? JSON.stringify(parsed).substring(0, 500) : 'null'
+      })
+      
       // Log if parsing returned empty object
-      if (!parsed || Object.keys(parsed).length === 0) {
-        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object', {
+      if (!parsed || Object.keys(parsed).length === 0 || parsed === null) {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object or null', {
           contentLength: response.content.length,
           contentPreview: response.content.substring(0, 500)
         })
         return []
       }
       
-      const approaches = (parsed.development_approaches || []).map((item: any) => ({
-        ...item,
-        ceremonies: this.ensureStringArray(item?.ceremonies),
-        artifacts: this.ensureStringArray(item?.artifacts),
-        iteration_length_weeks: this.safeInteger(item?.iteration_length_weeks)
-      }))
+      // Handle both single object and array responses (for backward compatibility)
+      let approach: any
+      if (Array.isArray(parsed.development_approaches)) {
+        // Legacy format - take first one
+        approach = parsed.development_approaches[0]
+      } else if (parsed.approach) {
+        // New format - single object
+        approach = parsed
+      } else {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] No development approach found in response')
+        return []
+      }
 
-      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Extracted ${approaches.length} development approaches`)
+      if (!approach || !approach.approach) {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] Invalid approach object')
+        return []
+      }
 
-      return approaches
+      // Normalize the response
+      const normalized: DevelopmentApproach = {
+        approach: approach.approach,
+        methodology: approach.methodology || approach.framework || null,
+        justification: approach.justification || approach.tailoring_decisions_text || 'No justification provided',
+        uncertainty_level: approach.uncertainty_level || null,
+        requirements_stability: approach.requirements_stability || null,
+        stakeholder_engagement_model: approach.stakeholder_engagement_model || null,
+        delivery_cadence: approach.delivery_cadence || null,
+        organizational_maturity: approach.organizational_maturity || null,
+        team_experience_level: approach.team_experience_level || null,
+        regulatory_constraints: approach.regulatory_constraints || false,
+        life_cycle_phases: this.ensureStringArray(approach.life_cycle_phases || (approach.lifecycle_model ? [approach.lifecycle_model] : [])),
+        iteration_length: this.safeInteger(approach.iteration_length || approach.iteration_length_weeks ? (approach.iteration_length_weeks * 7) : null),
+        iteration_unit: approach.iteration_unit || (approach.iteration_length_weeks ? 'weeks' : null),
+        governance_approach: approach.governance_approach || null,
+        review_gates: this.ensureStringArray(approach.review_gates),
+        tailoring_decisions: Array.isArray(approach.tailoring_decisions) ? approach.tailoring_decisions : [],
+        // Legacy fields for backward compatibility
+        framework: approach.framework || approach.methodology || null,
+        lifecycle_model: approach.lifecycle_model || null,
+        iteration_length_weeks: this.safeInteger(approach.iteration_length_weeks || (approach.iteration_length && approach.iteration_unit === 'weeks' ? approach.iteration_length / 7 : null)),
+        ceremonies: this.ensureStringArray(approach.ceremonies),
+        artifacts: this.ensureStringArray(approach.artifacts),
+        tailoring_decisions_text: approach.tailoring_decisions_text || (Array.isArray(approach.tailoring_decisions) ? approach.tailoring_decisions.map((td: any) => `${td.area}: ${td.justification}`).join('\n') : null),
+        governance_notes: approach.governance_notes || null,
+        source_document: approach.source_document || null
+      }
+
+      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Extracted development approach: ${normalized.approach} (${normalized.methodology || 'N/A'})`)
+
+      // Return as array (for consistency with other extraction methods) but should only have one item
+      return [normalized]
     } catch (error: unknown) {
       logger.error('[EXTRACTION-DEVELOPMENT-APPROACH] Extraction failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -2659,28 +2803,692 @@ Guidelines:
   }
 
   /**
+   * Close incomplete JSON object by adding missing closing braces/brackets
+   */
+  private closeIncompleteJsonObject(content: string): string {
+    let openBraces = 0
+    let openBrackets = 0
+    let inString = false
+    let escapeNext = false
+    
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i]
+      
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+      
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+      
+      if (char === '"') {
+        inString = !inString
+        continue
+      }
+      
+      if (!inString) {
+        if (char === '{') openBraces++
+        if (char === '}') openBraces--
+        if (char === '[') openBrackets++
+        if (char === ']') openBrackets--
+      }
+    }
+    
+    // Add missing closing brackets/braces
+    let result = ''
+    if (openBrackets > 0) {
+      result += ']'.repeat(openBrackets)
+    }
+    if (openBraces > 0) {
+      result += '}'.repeat(openBraces)
+    }
+    
+    return result
+  }
+
+  /**
    * Parse AI response (handles both JSON and markdown-wrapped JSON)
+   * Includes fixes for common JSON malformation issues
    */
   private parseAIResponse(content: string): any {
-    try {
-      // Try direct JSON parse
-      return JSON.parse(content)
-    } catch {
-      // Try extracting JSON from markdown code blocks
-      const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
-      if (jsonMatch) {
-        return JSON.parse(jsonMatch[1])
+    logger.debug('[EXTRACTION-PARSE] Starting JSON parsing', {
+      originalLength: content.length,
+      originalPreview: content.substring(0, 200),
+      hasCodeBlocks: content.includes('```'),
+      startsWithBrace: content.trim().startsWith('{'),
+      startsWithBracket: content.trim().startsWith('[')
+    })
+    
+    let cleanedContent = content.trim()
+    
+    // Remove markdown code blocks if present
+    if (cleanedContent.includes('```')) {
+      logger.debug('[EXTRACTION-PARSE] Detected markdown code blocks, extracting JSON')
+      // Use manual extraction to find the LAST closing ``` (most reliable for long responses)
+      // This handles cases where the JSON is very long and might have escaped backticks
+      const firstCodeBlockStart = cleanedContent.indexOf('```')
+      if (firstCodeBlockStart !== -1) {
+        // Find the end of the opening marker (```json or just ```)
+        let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
+        // Skip optional language identifier (json, etc.)
+        while (codeBlockStart < cleanedContent.length && 
+               cleanedContent[codeBlockStart] !== '\n' && 
+               cleanedContent[codeBlockStart] !== '`') {
+          codeBlockStart++
+        }
+        // Skip newline if present
+        if (codeBlockStart < cleanedContent.length && cleanedContent[codeBlockStart] === '\n') {
+          codeBlockStart++
+        }
+        
+        // Find the LAST closing ``` (in case there are multiple code blocks or escaped backticks)
+        let codeBlockEnd = cleanedContent.lastIndexOf('```')
+        if (codeBlockEnd !== -1 && codeBlockEnd > codeBlockStart) {
+          // Extract content between code block markers
+          cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
+        } else {
+          // No closing marker found - might be incomplete JSON, extract from start to end
+          cleanedContent = cleanedContent.substring(codeBlockStart).trim()
+          logger.warn('[EXTRACTION-PARSE] No closing code block marker found - JSON may be incomplete', {
+            extractedLength: cleanedContent.length,
+            lastChars: cleanedContent.substring(Math.max(0, cleanedContent.length - 100))
+          })
+        }
       }
       
-      // Try finding JSON object without markdown
-      const objectMatch = content.match(/\{[\s\S]*\}/)
-      if (objectMatch) {
-        return JSON.parse(objectMatch[0])
+      // Try regex as fallback if manual extraction left code blocks
+      if (cleanedContent.includes('```')) {
+        logger.debug('[EXTRACTION-PARSE] Manual extraction left code blocks, trying regex fallback')
+        const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          cleanedContent = codeBlockMatch[1].trim()
+        }
       }
       
-      logger.warn('[EXTRACTION] Failed to parse AI response as JSON')
-      return {}
+      // Final cleanup: remove any remaining markdown artifacts
+      cleanedContent = cleanedContent
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/, '')
+        .replace(/```\s*$/, '')
+        .trim()
+      
+      // Log extracted content for debugging (first 200 chars)
+      if (cleanedContent.length > 0) {
+        logger.debug('[EXTRACTION-PARSE] Extracted from code block', {
+          preview: cleanedContent.substring(0, 200),
+          length: cleanedContent.length,
+          hasCodeBlocks: cleanedContent.includes('```'),
+          extractedContent: cleanedContent // Full extracted content for debugging
+        })
+      }
     }
+    
+    logger.debug('[EXTRACTION-PARSE] Attempting direct JSON parse', {
+      cleanedLength: cleanedContent.length,
+      cleanedPreview: cleanedContent.substring(0, 300),
+      firstChar: cleanedContent[0],
+      lastChar: cleanedContent[cleanedContent.length - 1]
+    })
+    
+    // Try direct JSON parse first
+    try {
+      const parsed = JSON.parse(cleanedContent)
+      logger.debug('[EXTRACTION-PARSE] Direct parse successful', {
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed),
+        keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+      })
+      return parsed
+    } catch (parseError: any) {
+      // Extract error position for context
+      const errorPosMatch = parseError.message.match(/position (\d+)/)
+      const errorPosition = errorPosMatch ? parseInt(errorPosMatch[1]) : null
+      const contextStart = errorPosition ? Math.max(0, errorPosition - 100) : 0
+      const contextEnd = errorPosition ? Math.min(cleanedContent.length, errorPosition + 100) : 500
+      const errorContext = errorPosition ? cleanedContent.substring(contextStart, contextEnd) : cleanedContent.substring(0, 500)
+      
+      // Log the error for debugging
+      logger.warn('[EXTRACTION-PARSE] JSON parse error, attempting fixes', {
+        error: parseError.message,
+        errorPosition: errorPosition?.toString(),
+        errorLine: parseError.message.match(/line (\d+)/)?.[1],
+        errorColumn: parseError.message.match(/column (\d+)/)?.[1],
+        contentLength: cleanedContent.length,
+        contentPreview: cleanedContent.substring(0, 500),
+        errorContext: errorContext, // Context around the error position
+        charAtError: errorPosition !== null && errorPosition < cleanedContent.length ? cleanedContent[errorPosition] : null,
+        charsAroundError: errorPosition !== null && errorPosition > 0 && errorPosition < cleanedContent.length - 1 
+          ? cleanedContent.substring(Math.max(0, errorPosition - 5), Math.min(cleanedContent.length, errorPosition + 5))
+          : null
+      })
+      
+      // Try to fix common JSON issues
+      try {
+        // Check if error is about control characters
+        const isControlCharError = parseError.message.includes('control character')
+        
+        // Ensure code block is extracted first (in case it wasn't caught earlier)
+        let fixed = cleanedContent
+        if (fixed.includes('```')) {
+          const codeBlockStart = fixed.indexOf('```')
+          if (codeBlockStart !== -1) {
+            let start = codeBlockStart + 3
+            // Skip language identifier
+            while (start < fixed.length && fixed[start] !== '\n' && fixed[start] !== '`') {
+              start++
+            }
+            if (fixed[start] === '\n') start++
+            
+            const codeBlockEnd = fixed.indexOf('```', start)
+            if (codeBlockEnd !== -1) {
+              fixed = fixed.substring(start, codeBlockEnd).trim()
+            } else {
+              fixed = fixed.substring(start).trim()
+            }
+            // Clean up any remaining markdown artifacts
+            fixed = fixed.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
+          }
+        }
+        
+        // Fix trailing commas in arrays and objects
+        fixed = fixed
+          .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas before } or ]
+          .replace(/,(\s*,)/g, ',') // Remove duplicate commas
+        
+        // Check if error is about unescaped quotes
+        const isUnescapedQuoteError = parseError.message.includes("Expected ',' or '}' after property value") || 
+                                      parseError.message.includes("Unterminated string") ||
+                                      parseError.message.includes("Unexpected token")
+        
+        // If control character error OR unescaped quote error, fix both in a single pass
+        if (isControlCharError || isUnescapedQuoteError) {
+          logger.warn('[EXTRACTION] Fixing control characters and/or unescaped quotes in JSON', {
+            originalLength: fixed.length,
+            errorPosition: parseError.message.match(/position (\d+)/)?.[1],
+            preview: fixed.substring(0, 500),
+            isControlCharError,
+            isUnescapedQuoteError
+          })
+          
+          // Use a state machine to properly escape control characters only within string literals
+          let result = ''
+          let inString = false
+          let escapeNext = false
+          let lastChar = ''
+          
+          for (let i = 0; i < fixed.length; i++) {
+            const char = fixed[i]
+            const charCode = char.charCodeAt(0)
+            
+            // Handle escape sequences
+            if (escapeNext) {
+              result += char
+              escapeNext = false
+              lastChar = char
+              continue
+            }
+            
+            // Check for backslash (start of escape sequence)
+            if (char === '\\') {
+              result += char
+              escapeNext = true
+              lastChar = char
+              continue
+            }
+            
+            // Check for quote (start/end of string)
+            if (char === '"') {
+              if (inString) {
+                // We're inside a string - check if this quote is a delimiter or content
+                if (lastChar === '\\') {
+                  // Already escaped quote - keep as is
+                  result += char
+                } else {
+                  // Unescaped quote - check if it's the end of the string
+                  // Look ahead to see if this is followed by : or , or } or ] or whitespace + one of those
+                  // Be conservative: only treat as delimiter if clearly followed by JSON structure markers
+                  let isStringEnd = false
+                  let lookAheadPos = i + 1
+                  
+                  // Skip whitespace
+                  while (lookAheadPos < fixed.length && /\s/.test(fixed[lookAheadPos])) {
+                    lookAheadPos++
+                  }
+                  
+                  if (lookAheadPos < fixed.length) {
+                    const nextNonWhitespace = fixed[lookAheadPos]
+                    // Only treat as delimiter if followed by clear JSON structure markers
+                    if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
+                        nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                        nextNonWhitespace === '\n') {
+                      isStringEnd = true
+                    }
+                    // If followed by a quote (double quote), it's likely a delimiter
+                    else if (nextNonWhitespace === '"' && lookAheadPos < fixed.length - 1) {
+                      // Check if next quote is followed by : (property name delimiter)
+                      let nextNextPos = lookAheadPos + 1
+                      while (nextNextPos < fixed.length && /\s/.test(fixed[nextNextPos])) {
+                        nextNextPos++
+                      }
+                      if (nextNextPos < fixed.length && fixed[nextNextPos] === ':') {
+                        isStringEnd = true
+                      }
+                    }
+                  } else {
+                    // End of string - this is the closing quote
+                    isStringEnd = true
+                  }
+                  
+                  if (isStringEnd) {
+                    // This is the string delimiter - don't escape it
+                    inString = false
+                    result += char
+                  } else {
+                    // This is an unescaped quote within string content - escape it to be safe
+                    result += '\\"'
+                  }
+                }
+              } else {
+                // Outside string - this is a string delimiter
+                inString = true
+                result += char
+              }
+              lastChar = char
+              continue
+            }
+            
+            // If we're inside a string literal, escape control characters and unescaped quotes
+            if (inString) {
+              // Check for control characters (0x00-0x1F) except already escaped ones
+              if (charCode >= 0x00 && charCode <= 0x1F) {
+                // Escape common control characters
+                if (char === '\n') {
+                  result += '\\n'
+                } else if (char === '\r') {
+                  result += '\\r'
+                } else if (char === '\t') {
+                  result += '\\t'
+                } else if (char === '\b') {
+                  result += '\\b'
+                } else if (char === '\f') {
+                  result += '\\f'
+                } else {
+                  // Escape other control characters as Unicode
+                  result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+                }
+              } else {
+                result += char
+              }
+            } else {
+              result += char
+            }
+            
+            lastChar = char
+          }
+          
+          fixed = result
+          
+          logger.warn('[EXTRACTION-PARSE] Fixed control characters and/or quotes', {
+            originalLength: cleanedContent.length,
+            fixedLength: fixed.length,
+            lengthChange: fixed.length - cleanedContent.length,
+            preview: fixed.substring(0, 500),
+            fixedContent: fixed // Full fixed content for debugging
+          })
+        }
+        
+        logger.debug('[EXTRACTION-PARSE] Attempting parse after fixes', {
+          fixedLength: fixed.length,
+          fixedPreview: fixed.substring(0, 300)
+        })
+        
+        // Try parsing fixed version
+        try {
+          const parsed = JSON.parse(fixed)
+          logger.debug('[EXTRACTION-PARSE] Parse successful after fixes', {
+            parsedType: typeof parsed,
+            isArray: Array.isArray(parsed),
+            keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+          })
+          return parsed
+        } catch (parseAfterFixError: any) {
+          // Check if the new error is about unescaped quotes (might not have been caught in first pass)
+          const isNewUnescapedQuoteError = parseAfterFixError.message.includes("Expected ',' or '}' after property value") || 
+                                           parseAfterFixError.message.includes("Unterminated string") ||
+                                           parseAfterFixError.message.includes("Unexpected token")
+          
+          // If we fixed control chars but now have quote error, apply quote fix
+          if (isControlCharError && isNewUnescapedQuoteError && !isUnescapedQuoteError) {
+            logger.warn('[EXTRACTION] Applying quote fix after control character fix', {
+              originalError: parseError.message,
+              newError: parseAfterFixError.message
+            })
+            
+            // Apply quote fix to the already-fixed string
+            let result = ''
+            let inString = false
+            let escapeNext = false
+            let lastChar = ''
+            
+            for (let i = 0; i < fixed.length; i++) {
+              const char = fixed[i]
+              
+              if (escapeNext) {
+                result += char
+                escapeNext = false
+                lastChar = char
+                continue
+              }
+              
+              if (char === '\\') {
+                result += char
+                escapeNext = true
+                lastChar = char
+                continue
+              }
+              
+              if (char === '"') {
+                if (inString) {
+                  if (lastChar === '\\') {
+                    result += char
+                  } else {
+                    let isStringEnd = false
+                    let lookAheadPos = i + 1
+                    while (lookAheadPos < fixed.length && /\s/.test(fixed[lookAheadPos])) {
+                      lookAheadPos++
+                    }
+                    if (lookAheadPos < fixed.length) {
+                      const nextNonWhitespace = fixed[lookAheadPos]
+                      if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
+                          nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                          nextNonWhitespace === '\n') {
+                        isStringEnd = true
+                      } else if (nextNonWhitespace === '"' && lookAheadPos < fixed.length - 1) {
+                        let nextNextPos = lookAheadPos + 1
+                        while (nextNextPos < fixed.length && /\s/.test(fixed[nextNextPos])) {
+                          nextNextPos++
+                        }
+                        if (nextNextPos < fixed.length && fixed[nextNextPos] === ':') {
+                          isStringEnd = true
+                        }
+                      }
+                    } else {
+                      isStringEnd = true
+                    }
+                    
+                    if (isStringEnd) {
+                      inString = false
+                      result += char
+                    } else {
+                      result += '\\"'
+                    }
+                  }
+                } else {
+                  inString = true
+                  result += char
+                }
+                lastChar = char
+                continue
+              }
+              
+              result += char
+              lastChar = char
+            }
+            
+            fixed = result
+            
+            // Try parsing again
+            try {
+              return JSON.parse(fixed)
+            } catch (retryError: any) {
+              logger.warn('[EXTRACTION] JSON still invalid after quote fix retry', {
+                error: retryError.message
+              })
+              throw retryError
+            }
+          }
+          
+          // Check if error is "Unterminated string" at the end - might be incomplete JSON
+          const isUnterminatedAtEnd = parseAfterFixError.message.includes('Unterminated string') &&
+                                      parseAfterFixError.message.match(/position (\d+)/)?.[1] &&
+                                      parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') >= fixed.length - 10
+          
+          if (isUnterminatedAtEnd) {
+            logger.warn('[EXTRACTION] Detected incomplete JSON (unterminated string at end) - attempting to close', {
+              error: parseAfterFixError.message,
+              fixedLength: fixed.length,
+              lastChars: fixed.substring(Math.max(0, fixed.length - 200))
+            })
+            
+            // Simple approach: close the unterminated string and any unclosed objects/arrays
+            // Check if we're inside a string (work backwards to find the last unclosed quote)
+            let inString = false
+            let escapeNext = false
+            
+            // Work backwards to determine if we're in a string
+            for (let i = fixed.length - 1; i >= 0; i--) {
+              const char = fixed[i]
+              
+              if (escapeNext) {
+                escapeNext = false
+                continue
+              }
+              
+              if (char === '\\') {
+                escapeNext = true
+                continue
+              }
+              
+              if (char === '"') {
+                // Check if this is a string delimiter (look backwards for : or , or { or [)
+                let lookBackPos = i - 1
+                while (lookBackPos >= 0 && /\s/.test(fixed[lookBackPos])) {
+                  lookBackPos--
+                }
+                if (lookBackPos >= 0 && (fixed[lookBackPos] === ':' || fixed[lookBackPos] === ',' || fixed[lookBackPos] === '{' || fixed[lookBackPos] === '[')) {
+                  // This is the start of an unterminated string - we're inside a string
+                  inString = true
+                  break
+                } else {
+                  // This might be the end of a string, but we're not sure
+                  // Assume we're in a string if we haven't found a clear delimiter
+                  inString = true
+                  break
+                }
+              }
+            }
+            
+            // Close the string and object
+            let closedJson = fixed
+            if (inString) {
+              closedJson += '"'
+            }
+            closedJson += this.closeIncompleteJsonObject(closedJson)
+            
+            try {
+              const parsed = JSON.parse(closedJson)
+              logger.info('[EXTRACTION] Successfully closed incomplete JSON', {
+                originalLength: fixed.length,
+                closedLength: closedJson.length,
+                keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+              })
+              return parsed
+            } catch (closeError) {
+              logger.warn('[EXTRACTION] Failed to close incomplete JSON', {
+                error: closeError instanceof Error ? closeError.message : String(closeError),
+                closedJsonPreview: closedJson.substring(Math.max(0, closedJson.length - 200))
+              })
+            }
+          }
+          
+          // If still failing, log and try alternative approach
+          logger.warn('[EXTRACTION] JSON still invalid after control character/quote fix', {
+            error: parseAfterFixError.message,
+            errorPosition: parseAfterFixError.message.match(/position (\d+)/)?.[1],
+            fixedPreview: fixed.substring(Math.max(0, (parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') - 100)), parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') + 100)
+          })
+          throw parseAfterFixError // Re-throw to try next fallback
+        }
+      } catch (fixError) {
+        // Try extracting just the first complete JSON object
+        try {
+          // Find the first { and try to match balanced braces
+          const firstBrace = cleanedContent.indexOf('{')
+          if (firstBrace !== -1) {
+            let braceCount = 0
+            let endPos = firstBrace
+            
+            for (let i = firstBrace; i < cleanedContent.length; i++) {
+              if (cleanedContent[i] === '{') braceCount++
+              if (cleanedContent[i] === '}') braceCount--
+              if (braceCount === 0) {
+                endPos = i + 1
+                break
+              }
+            }
+            
+            if (braceCount === 0) {
+              let extracted = cleanedContent.substring(firstBrace, endPos)
+              
+              // Apply control character and quote fix to extracted JSON
+              const needsFix = parseError.message.includes('control character') ||
+                              parseError.message.includes("Expected ',' or '}' after property value") ||
+                              parseError.message.includes("Unterminated string") ||
+                              parseError.message.includes("Unexpected token")
+              if (needsFix) {
+                let result = ''
+                let inString = false
+                let escapeNext = false
+                let lastChar = ''
+                
+                for (let i = 0; i < extracted.length; i++) {
+                  const char = extracted[i]
+                  const charCode = char.charCodeAt(0)
+                  
+                  if (escapeNext) {
+                    result += char
+                    escapeNext = false
+                    lastChar = char
+                    continue
+                  }
+                  
+                  if (char === '\\') {
+                    result += char
+                    escapeNext = true
+                    lastChar = char
+                    continue
+                  }
+                  
+                  if (char === '"') {
+                    if (inString) {
+                      // We're inside a string - check if this quote is a delimiter or content
+                      if (lastChar === '\\') {
+                        // Already escaped quote - keep as is
+                        result += char
+                      } else {
+                        // Unescaped quote - check if it's the end of the string
+                        // Look ahead to see if this is followed by : or , or } or ] or whitespace + one of those
+                        // Be conservative: only treat as delimiter if clearly followed by JSON structure markers
+                        let isStringEnd = false
+                        let lookAheadPos = i + 1
+                        
+                        // Skip whitespace
+                        while (lookAheadPos < extracted.length && /\s/.test(extracted[lookAheadPos])) {
+                          lookAheadPos++
+                        }
+                        
+                        if (lookAheadPos < extracted.length) {
+                          const nextNonWhitespace = extracted[lookAheadPos]
+                          // Only treat as delimiter if followed by clear JSON structure markers
+                          if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
+                              nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                              nextNonWhitespace === '\n') {
+                            isStringEnd = true
+                          }
+                          // If followed by a quote (double quote), it's likely a delimiter
+                          else if (nextNonWhitespace === '"' && lookAheadPos < extracted.length - 1) {
+                            // Check if next quote is followed by : (property name delimiter)
+                            let nextNextPos = lookAheadPos + 1
+                            while (nextNextPos < extracted.length && /\s/.test(extracted[nextNextPos])) {
+                              nextNextPos++
+                            }
+                            if (nextNextPos < extracted.length && extracted[nextNextPos] === ':') {
+                              isStringEnd = true
+                            }
+                          }
+                        } else {
+                          // End of string - this is the closing quote
+                          isStringEnd = true
+                        }
+                        
+                        if (isStringEnd) {
+                          // This is the string delimiter - don't escape it
+                          inString = false
+                          result += char
+                        } else {
+                          // This is an unescaped quote within string content - escape it to be safe
+                          result += '\\"'
+                        }
+                      }
+                    } else {
+                      // Outside string - this is a string delimiter
+                      inString = true
+                      result += char
+                    }
+                    lastChar = char
+                    continue
+                  }
+                  
+                  if (inString && charCode >= 0x00 && charCode <= 0x1F) {
+                    if (char === '\n') {
+                      result += '\\n'
+                    } else if (char === '\r') {
+                      result += '\\r'
+                    } else if (char === '\t') {
+                      result += '\\t'
+                    } else if (char === '\b') {
+                      result += '\\b'
+                    } else if (char === '\f') {
+                      result += '\\f'
+                    } else {
+                      result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+                    }
+                  } else {
+                    result += char
+                  }
+                  
+                  lastChar = char
+                }
+                
+                extracted = result
+              }
+              
+              return JSON.parse(extracted)
+            }
+          }
+        } catch (extractError) {
+          // Last resort: try to find any JSON-like structure
+          logger.error('[EXTRACTION] All JSON parsing attempts failed', {
+            originalError: parseError.message,
+            fixError: fixError instanceof Error ? fixError.message : String(fixError),
+            extractError: extractError instanceof Error ? extractError.message : String(extractError),
+            contentLength: cleanedContent.length,
+            contentSample: cleanedContent.substring(0, 1000)
+          })
+          
+          // Return empty object to prevent complete failure
+          // The extraction method will handle empty response
+          return {}
+        }
+      }
+    }
+    
+    // Fallback: return empty object
+    logger.warn('[EXTRACTION] Failed to parse AI response as JSON, returning empty object')
+    return {}
   }
 
   // Database save methods continue in next message...
@@ -3914,7 +4722,8 @@ Guidelines:
   }
 
   /**
-   * Save development approaches to database
+   * Save development approach to database (TASK-90)
+   * This is project-level metadata - ONE record per project (UPSERT)
    */
   private async saveDevelopmentApproaches(
     client: PoolClient,
@@ -3923,64 +4732,161 @@ Guidelines:
     developmentApproaches: DevelopmentApproach[]
   ): Promise<void> {
     if (developmentApproaches.length === 0) {
-      logger.info('[EXTRACTION] No development_approaches to save, skipping')
+      logger.info('[EXTRACTION] No development_approach to save, skipping')
       return
     }
 
-    const allowedApproaches = new Set(['agile', 'waterfall', 'hybrid', 'iterative', 'custom'])
+    // TASK-90: This is project-level metadata - take the first (and should be only) approach
+    const approach = developmentApproaches[0]
 
-    const values: any[] = []
-    const placeholders: string[] = []
+    // Normalize approach values
+    const allowedApproaches = new Set(['predictive', 'adaptive', 'hybrid', 'incremental', 'iterative'])
+    const rawApproach = (approach.approach || 'hybrid').toString().toLowerCase()
+    const normalizedApproach = allowedApproaches.has(rawApproach) ? rawApproach : 'hybrid'
 
-    developmentApproaches.forEach((approach, index) => {
-      const offset = index * 12
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
-      )
+    // Normalize methodology
+    const allowedMethodologies = new Set(['waterfall', 'scrum', 'kanban', 'lean', 'safe', 'prince2', 'custom'])
+    const rawMethodology = (approach.methodology || approach.framework || '').toString().toLowerCase()
+    const normalizedMethodology = allowedMethodologies.has(rawMethodology) ? rawMethodology : null
 
-      const rawApproach = (approach.approach || 'custom').toString().toLowerCase()
-      const normalizedApproach = allowedApproaches.has(rawApproach) ? rawApproach : 'custom'
-      const framework = (approach.framework || '').trim() || 'unspecified'
+    // Normalize other enum fields
+    const normalizeEnum = (value: any, allowed: Set<string>, defaultValue: string | null = null): string | null => {
+      if (!value) return defaultValue
+      const normalized = value.toString().toLowerCase()
+      return allowed.has(normalized) ? normalized : defaultValue
+    }
 
-      values.push(
-        projectId,
-        normalizedApproach,
-        framework,
-        approach.lifecycle_model || null,
-        this.safeInteger(approach.iteration_length_weeks),
-        this.ensureStringArray(approach.ceremonies),
-        this.ensureStringArray(approach.artifacts),
-        approach.tailoring_decisions || null,
-        approach.governance_notes || null,
-        null, // source_document_id placeholder
-        userId,
-        userId
-      )
-    })
-
-    await client.query(
-      `
-      INSERT INTO development_approaches (
-        project_id, approach, framework, lifecycle_model, iteration_length_weeks,
-        ceremonies, artifacts, tailoring_decisions, governance_notes,
-        source_document_id, created_by, updated_by
-      )
-      VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, approach, framework) DO UPDATE SET
-        lifecycle_model = EXCLUDED.lifecycle_model,
-        iteration_length_weeks = EXCLUDED.iteration_length_weeks,
-        ceremonies = EXCLUDED.ceremonies,
-        artifacts = EXCLUDED.artifacts,
-        tailoring_decisions = EXCLUDED.tailoring_decisions,
-        governance_notes = EXCLUDED.governance_notes,
-        source_document_id = COALESCE(EXCLUDED.source_document_id, development_approaches.source_document_id),
-        updated_by = EXCLUDED.updated_by,
-        updated_at = CURRENT_TIMESTAMP
-    `,
-      values
+    const uncertaintyLevel = normalizeEnum(
+      approach.uncertainty_level,
+      new Set(['low', 'medium', 'high']),
+      null
     )
 
-    logger.info(`[EXTRACTION] Saved ${developmentApproaches.length} development approaches`)
+    const requirementsStability = normalizeEnum(
+      approach.requirements_stability,
+      new Set(['stable', 'evolving', 'uncertain']),
+      null
+    )
+
+    const deliveryCadence = normalizeEnum(
+      approach.delivery_cadence,
+      new Set(['single', 'iterative', 'incremental', 'continuous']),
+      null
+    )
+
+    const organizationalMaturity = normalizeEnum(
+      approach.organizational_maturity,
+      new Set(['low', 'medium', 'high']),
+      null
+    )
+
+    const teamExperienceLevel = normalizeEnum(
+      approach.team_experience_level,
+      new Set(['junior', 'mixed', 'senior']),
+      null
+    )
+
+    const iterationUnit = normalizeEnum(
+      approach.iteration_unit,
+      new Set(['days', 'weeks']),
+      null
+    )
+
+    const governanceApproach = normalizeEnum(
+      approach.governance_approach,
+      new Set(['lightweight', 'standard', 'formal']),
+      null
+    )
+
+    // Prepare tailoring decisions JSONB
+    const tailoringDecisions = Array.isArray(approach.tailoring_decisions) && approach.tailoring_decisions.length > 0
+      ? JSON.stringify(approach.tailoring_decisions)
+      : '[]'
+
+    // Prepare life cycle phases JSONB
+    const lifeCyclePhases = Array.isArray(approach.life_cycle_phases) && approach.life_cycle_phases.length > 0
+      ? JSON.stringify(approach.life_cycle_phases)
+      : '[]'
+
+    // Prepare review gates JSONB
+    const reviewGates = Array.isArray(approach.review_gates) && approach.review_gates.length > 0
+      ? JSON.stringify(approach.review_gates)
+      : '[]'
+
+    // Calculate iteration_length (convert weeks to days if needed)
+    let iterationLength: number | null = null
+    if (approach.iteration_length) {
+      iterationLength = approach.iteration_length
+    } else if (approach.iteration_length_weeks) {
+      iterationLength = approach.iteration_length_weeks * 7 // Convert weeks to days
+    }
+
+    // Ensure justification is provided
+    const justification = approach.justification || approach.tailoring_decisions_text || 'No justification provided'
+
+    // UPSERT into development_approach table (one per project)
+    // Note: Table uses defined_by (not created_by) and has no updated_by column
+    // created_at and updated_at are auto-managed by database
+    await client.query(
+      `
+      INSERT INTO development_approach (
+        project_id, approach, methodology, justification,
+        uncertainty_level, requirements_stability, stakeholder_engagement_model, delivery_cadence,
+        organizational_maturity, team_experience_level, regulatory_constraints,
+        tailoring_decisions, life_cycle_phases, iteration_length, iteration_unit,
+        governance_approach, review_gates,
+        source_document_id, defined_by, approved_by, effective_date
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+      ON CONFLICT (project_id) DO UPDATE SET
+        approach = EXCLUDED.approach,
+        methodology = EXCLUDED.methodology,
+        justification = EXCLUDED.justification,
+        uncertainty_level = EXCLUDED.uncertainty_level,
+        requirements_stability = EXCLUDED.requirements_stability,
+        stakeholder_engagement_model = EXCLUDED.stakeholder_engagement_model,
+        delivery_cadence = EXCLUDED.delivery_cadence,
+        organizational_maturity = EXCLUDED.organizational_maturity,
+        team_experience_level = EXCLUDED.team_experience_level,
+        regulatory_constraints = EXCLUDED.regulatory_constraints,
+        tailoring_decisions = EXCLUDED.tailoring_decisions,
+        life_cycle_phases = EXCLUDED.life_cycle_phases,
+        iteration_length = EXCLUDED.iteration_length,
+        iteration_unit = EXCLUDED.iteration_unit,
+        governance_approach = EXCLUDED.governance_approach,
+        review_gates = EXCLUDED.review_gates,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, development_approach.source_document_id),
+        defined_by = COALESCE(EXCLUDED.defined_by, development_approach.defined_by),
+        approved_by = COALESCE(EXCLUDED.approved_by, development_approach.approved_by),
+        effective_date = COALESCE(EXCLUDED.effective_date, development_approach.effective_date),
+        updated_at = CURRENT_TIMESTAMP
+      `,
+      [
+        projectId,
+        normalizedApproach,
+        normalizedMethodology,
+        justification,
+        uncertaintyLevel,
+        requirementsStability,
+        approach.stakeholder_engagement_model || null,
+        deliveryCadence,
+        organizationalMaturity,
+        teamExperienceLevel,
+        approach.regulatory_constraints || false,
+        tailoringDecisions,
+        lifeCyclePhases,
+        iterationLength,
+        iterationUnit,
+        governanceApproach,
+        reviewGates,
+        null, // source_document_id - would need to resolve from source_document name
+        userId, // defined_by
+        null, // approved_by - not extracted, would be set manually
+        null  // effective_date - not extracted, would be set manually
+      ]
+    )
+
+    logger.info(`[EXTRACTION] Saved development approach: ${normalizedApproach} (${normalizedMethodology || 'N/A'}) for project ${projectId}`)
   }
 
   /**
