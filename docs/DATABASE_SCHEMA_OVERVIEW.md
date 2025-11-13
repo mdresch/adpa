@@ -78,6 +78,26 @@ API Request Logs:    61,179 rows (31 MB)
 
 ---
 
+### **3a. Performance Measurement** (1 table) ⭐ **PMBOK 8 MEASUREMENT DOMAIN**
+
+**Performance Actuals** - Tracks actual vs. planned performance:
+- ✅ `performance_actuals` - 0 rows, 80 KB (25 columns) - **TASK-129 COMPLETE** ✅
+  - **Purpose**: Track actual performance data (schedule, cost, progress, quality)
+  - **Key Features**:
+    - Automatic variance calculation (schedule, cost, progress)
+    - Links to entities: milestones, deliverables, activities, phases, resources
+    - Supports PMBOK 8 Measurement Performance Domain requirements
+    - Calculates SPI (Schedule Performance Index) and CPI (Cost Performance Index)
+  - **Indexes**: 8 indexes optimized for common query patterns
+    - Single column: `project_id`, `entity_name`, `measurement_date`
+    - Composite: `(project_id, entity_type)`, `(project_id, measurement_date)`, `(entity_type, entity_id)`, `(project_id, entity_type, measurement_date)`
+    - Partial: `measured_by` (WHERE measured_by IS NOT NULL)
+  - **Triggers**: Automatic variance calculation, `updated_at` timestamp
+  - **Migration**: `327_performance_actuals.sql` ✅
+  - **Tests**: Comprehensive schema and API integration tests ✅
+
+---
+
 ### **4. Baseline & Drift Detection** (5 tables) ⭐ **UNIQUE TO ADPA**
 
 - ✅ `project_baselines` - 12 rows, 696 KB (30 columns)
