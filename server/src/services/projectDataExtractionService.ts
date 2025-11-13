@@ -1925,6 +1925,15 @@ Guidance:
 
 Return JSON object only. Return null if no methodology information found.`
 
+      // Log the full prompt for debugging
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Full prompt being sent to AI', {
+        promptLength: prompt.length,
+        promptPreview: prompt.substring(0, 500),
+        fullPrompt: prompt, // Full prompt for debugging
+        documentCount: documents.length,
+        totalDocumentChars: documents.reduce((sum, doc) => sum + (doc.content?.length || 0), 0)
+      })
+
       // Use generateWithFallback for automatic provider fallback if requested provider is unavailable
       const response = await aiService.generateWithFallback({
         prompt,
@@ -1933,6 +1942,18 @@ Return JSON object only. Return null if no methodology information found.`
         temperature: 0.3,
         max_tokens: 2500
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+
+      // Log the raw response BEFORE any parsing
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Raw AI response received', {
+        providerUsed: (response as any).providerUsed || options.aiProvider || 'unknown',
+        responseLength: response.content.length,
+        responsePreview: response.content.substring(0, 500),
+        fullResponse: response.content, // Full raw response for debugging
+        usage: response.usage,
+        hasCodeBlocks: response.content.includes('```'),
+        startsWithJson: response.content.trim().startsWith('{'),
+        startsWithCodeBlock: response.content.trim().startsWith('```')
+      })
 
       // Validate AI response - throw error to trigger retry/fallback
       // Note: response from generateWithFallback includes providerUsed, but validateAIResponse expects standard format
@@ -1946,6 +1967,14 @@ Return JSON object only. Return null if no methodology information found.`
       logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Used provider: ${(response as any).providerUsed || options.aiProvider || 'unknown'}`)
 
       const parsed = this.parseAIResponse(response.content)
+      
+      // Log parsing result
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Parsing result', {
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed),
+        parsedKeys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : [],
+        parsedPreview: parsed ? JSON.stringify(parsed).substring(0, 500) : 'null'
+      })
       
       // Log if parsing returned empty object
       if (!parsed || Object.keys(parsed).length === 0 || parsed === null) {
@@ -2777,10 +2806,19 @@ Guidelines:
    * Includes fixes for common JSON malformation issues
    */
   private parseAIResponse(content: string): any {
+    logger.debug('[EXTRACTION-PARSE] Starting JSON parsing', {
+      originalLength: content.length,
+      originalPreview: content.substring(0, 200),
+      hasCodeBlocks: content.includes('```'),
+      startsWithBrace: content.trim().startsWith('{'),
+      startsWithBracket: content.trim().startsWith('[')
+    })
+    
     let cleanedContent = content.trim()
     
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
+      logger.debug('[EXTRACTION-PARSE] Detected markdown code blocks, extracting JSON')
       // Try regex first (most reliable for well-formed code blocks)
       // Match ```json or ``` followed by optional whitespace/newline, then content, then closing ```
       const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
@@ -2824,24 +2862,52 @@ Guidelines:
       
       // Log extracted content for debugging (first 200 chars)
       if (cleanedContent.length > 0) {
-        logger.debug('[EXTRACTION] Extracted from code block', {
+        logger.debug('[EXTRACTION-PARSE] Extracted from code block', {
           preview: cleanedContent.substring(0, 200),
           length: cleanedContent.length,
-          hasCodeBlocks: cleanedContent.includes('```')
+          hasCodeBlocks: cleanedContent.includes('```'),
+          extractedContent: cleanedContent // Full extracted content for debugging
         })
       }
     }
     
+    logger.debug('[EXTRACTION-PARSE] Attempting direct JSON parse', {
+      cleanedLength: cleanedContent.length,
+      cleanedPreview: cleanedContent.substring(0, 300),
+      firstChar: cleanedContent[0],
+      lastChar: cleanedContent[cleanedContent.length - 1]
+    })
+    
     // Try direct JSON parse first
     try {
-      return JSON.parse(cleanedContent)
+      const parsed = JSON.parse(cleanedContent)
+      logger.debug('[EXTRACTION-PARSE] Direct parse successful', {
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed),
+        keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+      })
+      return parsed
     } catch (parseError: any) {
+      // Extract error position for context
+      const errorPosMatch = parseError.message.match(/position (\d+)/)
+      const errorPosition = errorPosMatch ? parseInt(errorPosMatch[1]) : null
+      const contextStart = errorPosition ? Math.max(0, errorPosition - 100) : 0
+      const contextEnd = errorPosition ? Math.min(cleanedContent.length, errorPosition + 100) : 500
+      const errorContext = errorPosition ? cleanedContent.substring(contextStart, contextEnd) : cleanedContent.substring(0, 500)
+      
       // Log the error for debugging
-      logger.warn('[EXTRACTION] JSON parse error, attempting fixes', {
+      logger.warn('[EXTRACTION-PARSE] JSON parse error, attempting fixes', {
         error: parseError.message,
-        errorPosition: parseError.message.match(/position (\d+)/)?.[1],
+        errorPosition: errorPosition?.toString(),
+        errorLine: parseError.message.match(/line (\d+)/)?.[1],
+        errorColumn: parseError.message.match(/column (\d+)/)?.[1],
         contentLength: cleanedContent.length,
-        contentPreview: cleanedContent.substring(0, 500)
+        contentPreview: cleanedContent.substring(0, 500),
+        errorContext: errorContext, // Context around the error position
+        charAtError: errorPosition !== null && errorPosition < cleanedContent.length ? cleanedContent[errorPosition] : null,
+        charsAroundError: errorPosition !== null && errorPosition > 0 && errorPosition < cleanedContent.length - 1 
+          ? cleanedContent.substring(Math.max(0, errorPosition - 5), Math.min(cleanedContent.length, errorPosition + 5))
+          : null
       })
       
       // Try to fix common JSON issues
@@ -3010,15 +3076,29 @@ Guidelines:
           
           fixed = result
           
-          logger.warn('[EXTRACTION] Fixed control characters', {
+          logger.warn('[EXTRACTION-PARSE] Fixed control characters and/or quotes', {
+            originalLength: cleanedContent.length,
             fixedLength: fixed.length,
-            preview: fixed.substring(0, 500)
+            lengthChange: fixed.length - cleanedContent.length,
+            preview: fixed.substring(0, 500),
+            fixedContent: fixed // Full fixed content for debugging
           })
         }
         
+        logger.debug('[EXTRACTION-PARSE] Attempting parse after fixes', {
+          fixedLength: fixed.length,
+          fixedPreview: fixed.substring(0, 300)
+        })
+        
         // Try parsing fixed version
         try {
-          return JSON.parse(fixed)
+          const parsed = JSON.parse(fixed)
+          logger.debug('[EXTRACTION-PARSE] Parse successful after fixes', {
+            parsedType: typeof parsed,
+            isArray: Array.isArray(parsed),
+            keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+          })
+          return parsed
         } catch (parseAfterFixError: any) {
           // Check if the new error is about unescaped quotes (might not have been caught in first pass)
           const isNewUnescapedQuoteError = parseAfterFixError.message.includes("Expected ',' or '}' after property value") || 
