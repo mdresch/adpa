@@ -2782,11 +2782,12 @@ Guidelines:
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
       // Try regex first (most reliable for well-formed code blocks)
+      // Match ```json or ``` followed by optional whitespace/newline, then content, then closing ```
       const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
       if (codeBlockMatch && codeBlockMatch[1]) {
         cleanedContent = codeBlockMatch[1].trim()
       } else {
-        // Fallback: manual extraction
+        // Fallback: manual extraction - find first ``` and last ```
         const firstCodeBlockStart = cleanedContent.indexOf('```')
         if (firstCodeBlockStart !== -1) {
           // Find the end of the opening marker (```json or just ```)
@@ -2802,9 +2803,9 @@ Guidelines:
             codeBlockStart++
           }
           
-          // Find the closing ```
-          const codeBlockEnd = cleanedContent.indexOf('```', codeBlockStart)
-          if (codeBlockEnd !== -1) {
+          // Find the LAST closing ``` (in case there are multiple code blocks or escaped backticks)
+          let codeBlockEnd = cleanedContent.lastIndexOf('```')
+          if (codeBlockEnd !== -1 && codeBlockEnd > codeBlockStart) {
             // Extract content between code block markers
             cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
           } else {
@@ -2912,16 +2913,49 @@ Guidelines:
             
             // Check for quote (start/end of string)
             if (char === '"') {
-              // Only toggle if not escaped
-              if (lastChar !== '\\') {
-                inString = !inString
+              if (inString) {
+                // We're inside a string - check if this quote is a delimiter or content
+                if (lastChar === '\\') {
+                  // Already escaped quote - keep as is
+                  result += char
+                } else {
+                  // Unescaped quote - check if it's the end of the string
+                  // Look ahead to see if this is followed by : or , or } or ] or whitespace + one of those
+                  let isStringEnd = false
+                  let lookAheadPos = i + 1
+                  while (lookAheadPos < fixed.length && /\s/.test(fixed[lookAheadPos])) {
+                    lookAheadPos++
+                  }
+                  if (lookAheadPos < fixed.length) {
+                    const nextNonWhitespace = fixed[lookAheadPos]
+                    if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
+                        nextNonWhitespace === '}' || nextNonWhitespace === ']') {
+                      isStringEnd = true
+                    }
+                  } else {
+                    // End of string - this is the closing quote
+                    isStringEnd = true
+                  }
+                  
+                  if (isStringEnd) {
+                    // This is the string delimiter - don't escape it
+                    inString = false
+                    result += char
+                  } else {
+                    // This is an unescaped quote within string content - escape it
+                    result += '\\"'
+                  }
+                }
+              } else {
+                // Outside string - this is a string delimiter
+                inString = true
+                result += char
               }
-              result += char
               lastChar = char
               continue
             }
             
-            // If we're inside a string literal, escape control characters
+            // If we're inside a string literal, escape control characters and unescaped quotes
             if (inString) {
               // Check for control characters (0x00-0x1F) except already escaped ones
               if (charCode >= 0x00 && charCode <= 0x1F) {
@@ -3017,10 +3051,44 @@ Guidelines:
                   }
                   
                   if (char === '"') {
-                    if (lastChar !== '\\') {
-                      inString = !inString
+                    if (inString) {
+                      // We're inside a string - check if this quote is a delimiter or content
+                      if (lastChar === '\\') {
+                        // Already escaped quote - keep as is
+                        result += char
+                      } else {
+                        // Unescaped quote - check if it's the end of the string
+                        // Look ahead to see if this is followed by : or , or } or ] or whitespace + one of those
+                        let isStringEnd = false
+                        let lookAheadPos = i + 1
+                        while (lookAheadPos < extracted.length && /\s/.test(extracted[lookAheadPos])) {
+                          lookAheadPos++
+                        }
+                        if (lookAheadPos < extracted.length) {
+                          const nextNonWhitespace = extracted[lookAheadPos]
+                          if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
+                              nextNonWhitespace === '}' || nextNonWhitespace === ']') {
+                            isStringEnd = true
+                          }
+                        } else {
+                          // End of string - this is the closing quote
+                          isStringEnd = true
+                        }
+                        
+                        if (isStringEnd) {
+                          // This is the string delimiter - don't escape it
+                          inString = false
+                          result += char
+                        } else {
+                          // This is an unescaped quote within string content - escape it
+                          result += '\\"'
+                        }
+                      }
+                    } else {
+                      // Outside string - this is a string delimiter
+                      inString = true
+                      result += char
                     }
-                    result += char
                     lastChar = char
                     continue
                   }
