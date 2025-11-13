@@ -10,7 +10,6 @@ import { pool } from '@/database/connection'
 import { logger } from '@/utils/logger'
 import { convertQuarterDate, isValidDate, addDays, getCurrentDate } from '@/utils/dateUtils'
 import { aiService } from './aiService'
-import type { AIGenerateRequest } from './aiService'
 import { aiCacheService } from './aiCacheService'
 import type { PoolClient } from 'pg'
 
@@ -29,6 +28,15 @@ interface ExtractionResult {
   deliverables: Deliverable[]
   scope_items: ScopeItem[]
   activities: Activity[]
+  team_agreements: TeamAgreement[]
+  development_approaches: DevelopmentApproach[]
+  project_iterations: ProjectIteration[]
+  work_items: WorkItemRecord[]
+  capacity_plans: CapacityPlan[]
+  performance_measurements: PerformanceMeasurement[]
+  earned_value_metrics: EarnedValueMetric[]
+  opportunities: OpportunityRecord[]
+  risk_responses: RiskResponseRecord[]
 }
 
 interface Stakeholder {
@@ -115,6 +123,12 @@ interface Resource {
   availability?: string
   cost?: number
   skills?: string[]
+  competency_level?: 'junior' | 'intermediate' | 'senior' | 'expert'
+  certifications?: string[]
+  training_needs?: string[]
+  team_assignment?: string
+  performance_rating?: number
+  development_plan?: string
 }
 
 interface QualityStandard {
@@ -176,7 +190,215 @@ interface Activity {
   effort_unit?: 'hours' | 'days' | 'story_points'
 }
 
+interface TeamAgreement {
+  title: string
+  description?: string
+  category:
+    | 'working_hours'
+    | 'communication'
+    | 'decision_making'
+    | 'conflict_resolution'
+    | 'quality_standards'
+    | 'meeting_norms'
+    | 'code_of_conduct'
+    | 'collaboration_tools'
+    | 'response_times'
+    | 'knowledge_sharing'
+    | 'other'
+  agreed_by?: string[]
+  facilitated_by?: string
+  effective_date?: string
+  review_frequency?: string
+  next_review_date?: string
+  status?: 'draft' | 'active' | 'under_review' | 'revised' | 'deprecated'
+  adherence_score?: number
+  violations_count?: number
+  last_violation_date?: string
+  notes?: string
+  source_document?: string
+}
+
+interface DevelopmentApproach {
+  approach: 'agile' | 'waterfall' | 'hybrid' | 'iterative' | 'custom'
+  framework?: string
+  lifecycle_model?: string
+  iteration_length_weeks?: number
+  ceremonies?: string[]
+  artifacts?: string[]
+  tailoring_decisions?: string
+  governance_notes?: string
+  source_document?: string
+}
+
+interface ProjectIteration {
+  name: string
+  iteration_type?: 'sprint' | 'iteration' | 'program_increment' | 'release' | 'phase'
+  sequence_number?: number
+  start_date?: string
+  end_date?: string
+  goals?: string[]
+  planned_story_points?: number
+  completed_story_points?: number
+  velocity?: number
+  status?: 'planned' | 'active' | 'completed' | 'cancelled'
+  retrospective_summary?: string
+  impediments?: string[]
+  source_document?: string
+}
+
+interface WorkItemRecord {
+  name: string
+  description?: string
+  activity_name?: string
+  assigned_to?: string
+  estimated_hours?: number
+  actual_hours?: number
+  progress_percentage?: number
+  status?: 'todo' | 'in_progress' | 'review' | 'done' | 'blocked'
+  blockers?: string[]
+  completed_date?: string
+  source_document?: string
+}
+
+interface CapacityPlan {
+  team_member: string
+  role?: string
+  period_start: string
+  period_end: string
+  available_hours?: number
+  allocated_hours?: number
+  utilization_percentage?: number
+  notes?: string
+  source_document?: string
+}
+
+interface PerformanceMeasurement {
+  success_criterion_name: string
+  measurement_date: string
+  actual_value?: number
+  target_value?: number
+  units?: string
+  variance?: number
+  variance_percentage?: number
+  trend?: 'improving' | 'stable' | 'declining'
+  status?: 'on_track' | 'at_risk' | 'off_track'
+  notes?: string
+  source_document?: string
+}
+
+interface EarnedValueMetric {
+  measurement_date: string
+  planned_value?: number
+  earned_value?: number
+  actual_cost?: number
+  schedule_variance?: number
+  cost_variance?: number
+  schedule_performance_index?: number
+  cost_performance_index?: number
+  estimate_at_completion?: number
+  estimate_to_complete?: number
+  notes?: string
+  source_document?: string
+}
+
+interface OpportunityRecord {
+  title: string
+  description?: string
+  category?: string
+  probability?: 'very_high' | 'high' | 'medium' | 'low' | 'very_low'
+  benefit_level?: 'very_high' | 'high' | 'medium' | 'low' | 'very_low'
+  exploitation_strategy?: string
+  owner?: string
+  status?: 'identified' | 'planned' | 'exploiting' | 'realized' | 'missed'
+  expected_benefit?: number
+  trigger_conditions?: string
+  source_document?: string
+}
+
+interface RiskResponseRecord {
+  risk_title?: string
+  response_date?: string
+  action_taken?: string
+  effectiveness?: 'effective' | 'partially_effective' | 'ineffective'
+  cost_of_response?: number
+  residual_risk_level?: 'very_high' | 'high' | 'medium' | 'low' | 'very_low'
+  owner?: string
+  notes?: string
+  source_document?: string
+}
+
 export class ProjectDataExtractionService {
+  /**
+   * Validate AI response and throw error if empty/invalid
+   * This ensures empty responses trigger retries and provider fallback
+   */
+  private validateAIResponse(
+    response: any,
+    entityType: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): void {
+    if (!response || !response.content || response.content.trim().length === 0) {
+      const errorMsg = `AI returned empty or invalid response for ${entityType} extraction`
+      logger.error(`[EXTRACTION-${entityType.toUpperCase()}] ${errorMsg}`, {
+        hasResponse: !!response,
+        hasContent: !!(response?.content),
+        contentLength: response?.content?.length || 0,
+        provider: options.aiProvider,
+        model: options.aiModel
+      })
+      // Throw error to trigger Bull retry and provider fallback
+      throw new Error(`${errorMsg} - Provider: ${options.aiProvider || 'unknown'}, Model: ${options.aiModel || 'unknown'}`)
+    }
+  }
+
+  /**
+   * Get the best available AI provider for extraction
+   * Model selection is handled by aiService.generate() fallback mechanism
+   * This method only selects the provider - model validation/mapping happens in AI service
+   */
+  private async getBestAIProviderAndModel(
+    requestedProvider?: string,
+    requestedModel?: string
+  ): Promise<{ provider: string; model?: string }> {
+    try {
+      // If provider is explicitly requested, use it (model will be validated by AI service)
+      if (requestedProvider) {
+        logger.info(`[EXTRACTION] Using requested provider: ${requestedProvider}`, {
+          requestedModel: requestedModel || 'auto-select'
+        })
+        // Pass model through - aiService.generate() will validate/map it
+        return { provider: requestedProvider, model: requestedModel }
+      }
+      
+      // No provider specified - use AI service's centralized fallback mechanism
+      // Get available providers (includes is_active flag)
+      const availableProviders = await aiService.getAvailableProviders()
+      const activeProviders = availableProviders.filter(p => p.is_active)
+      
+      if (activeProviders.length === 0) {
+        throw new Error('No active AI providers configured')
+      }
+      
+      // Use first active provider - let AI service handle model selection
+      const selectedProvider = activeProviders[0]
+      logger.info(`[EXTRACTION] Auto-selected provider: ${selectedProvider.type}`, {
+        providerName: selectedProvider.name,
+        defaultModel: selectedProvider.default_model || 'auto-select',
+        note: 'Model selection/validation handled by AI service fallback mechanism'
+      })
+      
+      // Pass default_model if available, otherwise let AI service select
+      return { 
+        provider: selectedProvider.type, 
+        model: selectedProvider.default_model || requestedModel 
+      }
+    } catch (error) {
+      logger.error('[EXTRACTION] Error selecting AI provider:', error)
+      // Fallback to OpenAI if selection fails - AI service will handle model selection
+      return { provider: 'openai' }
+    }
+  }
+
   /**
    * Main entry point: Extract all entities from project documents
    */
@@ -189,11 +411,25 @@ export class ProjectDataExtractionService {
       documentIds?: string[]
     } = {}
   ): Promise<ExtractionResult> {
+    // Get best provider/model using centralized fallback mechanism
+    const { provider: bestProvider, model: bestModel } = await this.getBestAIProviderAndModel(
+      options.aiProvider,
+      options.aiModel
+    )
+    
+    // Override options with best provider/model
+    const extractionOptions = {
+      ...options,
+      aiProvider: bestProvider,
+      aiModel: bestModel
+    }
+    
     try {
       logger.info('[EXTRACTION] Starting project entity extraction', {
         projectId,
         userId,
-        provider: options.aiProvider || 'default'
+        provider: bestProvider,
+        model: bestModel
       })
 
       const startTime = Date.now()
@@ -222,22 +458,40 @@ export class ProjectDataExtractionService {
         qualityStandards,
         deliverables,
         scopeItems,
-        activities
+        activities,
+        teamAgreements,
+        developmentApproaches,
+        projectIterations,
+        workItems,
+        capacityPlans,
+        performanceMeasurements,
+        earnedValueMetrics,
+        opportunities,
+        riskResponses
       ] = await Promise.all([
-        this.extractStakeholders(documents, projectId, options),
-        this.extractRequirements(documents, projectId, options),
-        this.extractRisks(documents, projectId, options),
-        this.extractMilestones(documents, projectId, options),
-        this.extractConstraints(documents, projectId, options),
-        this.extractSuccessCriteria(documents, projectId, options),
-        this.extractBestPractices(documents, projectId, options),
-        this.extractPhases(documents, projectId, options),
-        this.extractResources(documents, projectId, options),
-        this.extractTechnologies(documents, projectId, options),
-        this.extractQualityStandards(documents, projectId, options),
-        this.extractDeliverables(documents, projectId, options),
-        this.extractScopeItems(documents, projectId, options),
-        this.extractActivities(documents, projectId, options)
+        this.extractStakeholders(documents, projectId, extractionOptions),
+        this.extractRequirements(documents, projectId, extractionOptions),
+        this.extractRisks(documents, projectId, extractionOptions),
+        this.extractMilestones(documents, projectId, extractionOptions),
+        this.extractConstraints(documents, projectId, extractionOptions),
+        this.extractSuccessCriteria(documents, projectId, extractionOptions),
+        this.extractBestPractices(documents, projectId, extractionOptions),
+        this.extractPhases(documents, projectId, extractionOptions),
+        this.extractResources(documents, projectId, extractionOptions),
+        this.extractTechnologies(documents, projectId, extractionOptions),
+        this.extractQualityStandards(documents, projectId, extractionOptions),
+        this.extractDeliverables(documents, projectId, extractionOptions),
+        this.extractScopeItems(documents, projectId, extractionOptions),
+        this.extractActivities(documents, projectId, extractionOptions),
+        this.extractTeamAgreements(documents, projectId, extractionOptions),
+        this.extractDevelopmentApproaches(documents, projectId, extractionOptions),
+        this.extractProjectIterations(documents, projectId, extractionOptions),
+        this.extractWorkItems(documents, projectId, extractionOptions),
+        this.extractCapacityPlans(documents, projectId, extractionOptions),
+        this.extractPerformanceMeasurements(documents, projectId, extractionOptions),
+        this.extractEarnedValueMetrics(documents, projectId, extractionOptions),
+        this.extractOpportunities(documents, projectId, extractionOptions),
+        this.extractRiskResponses(documents, projectId, extractionOptions)
       ])
 
       const extractionTime = Date.now() - startTime
@@ -259,7 +513,16 @@ export class ProjectDataExtractionService {
           qualityStandards: qualityStandards.length,
           deliverables: deliverables.length,
           scopeItems: scopeItems.length,
-          activities: activities.length
+          activities: activities.length,
+          teamAgreements: teamAgreements.length,
+          developmentApproaches: developmentApproaches.length,
+          projectIterations: projectIterations.length,
+          workItems: workItems.length,
+          capacityPlans: capacityPlans.length,
+          performanceMeasurements: performanceMeasurements.length,
+          earnedValueMetrics: earnedValueMetrics.length,
+          opportunities: opportunities.length,
+          riskResponses: riskResponses.length
         }
       })
 
@@ -277,7 +540,16 @@ export class ProjectDataExtractionService {
         quality_standards: qualityStandards,
         deliverables,
         scope_items: scopeItems,
-        activities
+        activities,
+        team_agreements: teamAgreements,
+        development_approaches: developmentApproaches,
+        project_iterations: projectIterations,
+        work_items: workItems,
+        capacity_plans: capacityPlans,
+        performance_measurements: performanceMeasurements,
+        earned_value_metrics: earnedValueMetrics,
+        opportunities,
+        risk_responses: riskResponses
       }
     } catch (error: unknown) {
       logger.error('[EXTRACTION] Entity extraction failed', {
@@ -374,6 +646,51 @@ export class ProjectDataExtractionService {
       // Save activities
       if (entities.activities.length > 0) {
         await this.saveActivities(client, projectId, userId, entities.activities)
+      }
+
+      // Save team agreements
+      if (entities.team_agreements.length > 0) {
+        await this.saveTeamAgreements(client, projectId, userId, entities.team_agreements)
+      }
+
+      // Save development approaches
+      if (entities.development_approaches.length > 0) {
+        await this.saveDevelopmentApproaches(client, projectId, userId, entities.development_approaches)
+      }
+
+      // Save project iterations
+      if (entities.project_iterations.length > 0) {
+        await this.saveProjectIterations(client, projectId, userId, entities.project_iterations)
+      }
+
+      // Save work items
+      if (entities.work_items.length > 0) {
+        await this.saveWorkItems(client, projectId, userId, entities.work_items)
+      }
+
+      // Save capacity plans
+      if (entities.capacity_plans.length > 0) {
+        await this.saveCapacityPlans(client, projectId, userId, entities.capacity_plans)
+      }
+
+      // Save performance measurements
+      if (entities.performance_measurements.length > 0) {
+        await this.savePerformanceMeasurements(client, projectId, userId, entities.performance_measurements)
+      }
+
+      // Save earned value metrics
+      if (entities.earned_value_metrics.length > 0) {
+        await this.saveEarnedValueMetrics(client, projectId, userId, entities.earned_value_metrics)
+      }
+
+      // Save opportunities
+      if (entities.opportunities.length > 0) {
+        await this.saveOpportunities(client, projectId, userId, entities.opportunities)
+      }
+
+      // Save risk responses
+      if (entities.risk_responses.length > 0) {
+        await this.saveRiskResponses(client, projectId, userId, entities.risk_responses)
       }
 
       await client.query('COMMIT')
@@ -486,13 +803,26 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
 
+      // Validate AI response - throw error to trigger retry/fallback
+      this.validateAIResponse(response, 'stakeholders', options)
+
       const parsed = this.parseAIResponse(response.content)
+      
+      // Log if parsing returned empty object
+      if (!parsed || Object.keys(parsed).length === 0) {
+        logger.warn('[EXTRACTION-STAKEHOLDERS] AI response parsed to empty object', {
+          contentLength: response.content.length,
+          contentPreview: response.content.substring(0, 500)
+        })
+        return []
+      }
+      
       const rawStakeholders = parsed.stakeholders || []
 
       // Deduplicate stakeholders by normalized name
@@ -507,9 +837,11 @@ Requirements:
       return stakeholders
     } catch (error: unknown) {
       logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
-        error: error instanceof Error ? error.message : String(error)
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       })
-      return []
+      // Re-throw to trigger Bull retry and provider fallback
+      throw error
     }
   }
 
@@ -555,8 +887,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 3000
       })
@@ -617,8 +949,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
       })
@@ -684,8 +1016,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -744,8 +1076,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -805,8 +1137,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -863,8 +1195,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 1500
       })
@@ -924,8 +1256,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 1500
       })
@@ -969,7 +1301,14 @@ Extract resources in JSON format with the following structure:
       "type": "human|equipment|material|financial",
       "role": "Their role (for human resources)",
       "allocation": "Full-time, Part-time, or percentage",
-      "availability": "When they are available"
+      "availability": "When they are available",
+      "skills": ["Skill 1", "Skill 2"],
+      "competency_level": "junior|intermediate|senior|expert",
+      "certifications": ["Certification 1"],
+      "training_needs": ["Training need 1"],
+      "team_assignment": "Team or squad name",
+      "performance_rating": 0-10 number,
+      "development_plan": "Summary of development actions"
     }
   ]
 }
@@ -979,18 +1318,37 @@ Requirements:
 - Include equipment/tools
 - Include financial resources (budget allocations)
 - Extract allocation and availability if mentioned
+- For human resources, include skills, competency, certifications, training needs, and performance indicators
+- If a value is not provided in documents, use null or an empty array
 - Return ONLY valid JSON, no markdown or explanation`
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 1500
       })
 
       const parsed = this.parseAIResponse(response.content)
-      const resources = parsed.resources || []
+      const resources = (parsed.resources || []).map((resource: any) => ({
+        ...resource,
+        skills: Array.isArray(resource?.skills)
+          ? resource.skills
+          : resource?.skills
+            ? [resource.skills]
+            : [],
+        certifications: Array.isArray(resource?.certifications)
+          ? resource.certifications
+          : resource?.certifications
+            ? [resource.certifications]
+            : [],
+        training_needs: Array.isArray(resource?.training_needs)
+          ? resource.training_needs
+          : resource?.training_needs
+            ? [resource.training_needs]
+            : []
+      }))
 
       logger.info(`[EXTRACTION-RESOURCES] Extracted ${resources.length} resources`)
 
@@ -1109,8 +1467,8 @@ Return pure JSON only.`
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -1171,8 +1529,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2000
       })
@@ -1235,8 +1593,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
       })
@@ -1297,8 +1655,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
       })
@@ -1369,8 +1727,8 @@ Requirements:
 
       const response = await aiService.generate({
         prompt,
-        provider: options.aiProvider || 'openai',
-        model: options.aiModel || 'gpt-4-turbo-preview',
+        provider: options.aiProvider!,
+        model: options.aiModel,
         temperature: 0.3,
         max_tokens: 3500
       })
@@ -1383,6 +1741,664 @@ Requirements:
       return activities
     } catch (error: unknown) {
       logger.error('[EXTRACTION-ACTIVITIES] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract team agreements for PMBOK 8 Team Performance Domain
+   */
+  private async extractTeamAgreements(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<TeamAgreement[]> {
+    try {
+      logger.info('[EXTRACTION-TEAM-AGREEMENTS] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `You are analyzing project documentation to extract **Team Agreements** aligned with the PMBOK 8 **Team Performance Domain**.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+Use the following JSON schema exactly:
+{
+  "team_agreements": [
+    {
+      "title": "Agreement title",
+      "description": "Summary of the agreement in Markdown",
+      "category": "working_hours|communication|decision_making|conflict_resolution|quality_standards|meeting_norms|code_of_conduct|collaboration_tools|response_times|knowledge_sharing|other",
+      "agreed_by": ["Name or role"],
+      "facilitated_by": "Name or role",
+      "effective_date": "YYYY-MM-DD or null",
+      "review_frequency": "weekly|monthly|quarterly|annually|as_needed|null",
+      "next_review_date": "YYYY-MM-DD or null",
+      "status": "draft|active|under_review|revised|deprecated",
+      "adherence_score": 0-10 number,
+      "violations_count": integer,
+      "last_violation_date": "YYYY-MM-DD or null",
+      "notes": "Additional context or null",
+      "source_document": "Document title where this was found"
+    }
+  ]
+}
+
+Rules:
+- Capture explicit or implied team working agreements, norms, or ground rules.
+- Use arrays for agreed_by even if a single name is mentioned.
+- If information is missing, use null or an empty array instead of inventing data.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.25,
+        max_tokens: 2500
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const agreements = (parsed.team_agreements || []).map((agreement: any) => ({
+        ...agreement,
+        agreed_by: this.ensureStringArray(agreement?.agreed_by),
+        adherence_score: this.safeNumber(agreement?.adherence_score),
+        violations_count: this.safeInteger(agreement?.violations_count)
+      }))
+
+      logger.info(`[EXTRACTION-TEAM-AGREEMENTS] Extracted ${agreements.length} team agreements`)
+
+      return agreements
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-TEAM-AGREEMENTS] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract development approaches for PMBOK 8 Development Approach & Life Cycle Domain
+   */
+  private async extractDevelopmentApproaches(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<DevelopmentApproach[]> {
+    try {
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Identify the project's **Development Approach & Life Cycle** decisions and return them as JSON.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+Schema:
+{
+  "development_approaches": [
+    {
+      "approach": "agile|waterfall|hybrid|iterative|custom",
+      "framework": "Scrum, SAFe, Prince2, etc. or null",
+      "lifecycle_model": "Incremental, Iterative, Continuous Delivery, etc. or null",
+      "iteration_length_weeks": integer or null,
+      "ceremonies": ["Daily stand-up", "Retrospective"],
+      "artifacts": ["Product backlog", "Gantt chart"],
+      "tailoring_decisions": "Markdown summary of tailoring",
+      "governance_notes": "Governance/approval requirements or null",
+      "source_document": "Document title where this decision appears"
+    }
+  ]
+}
+
+Guidance:
+- Capture explicit methodology decisions, cadence, and key governance checkpoints.
+- Use arrays for ceremonies/artifacts.
+- Use null for unknown numeric or textual values.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.2,
+        max_tokens: 2200
+      })
+
+      // Validate AI response - throw error to trigger retry/fallback
+      this.validateAIResponse(response, 'development_approaches', options)
+
+      const parsed = this.parseAIResponse(response.content)
+      
+      // Log if parsing returned empty object
+      if (!parsed || Object.keys(parsed).length === 0) {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object', {
+          contentLength: response.content.length,
+          contentPreview: response.content.substring(0, 500)
+        })
+        return []
+      }
+      
+      const approaches = (parsed.development_approaches || []).map((item: any) => ({
+        ...item,
+        ceremonies: this.ensureStringArray(item?.ceremonies),
+        artifacts: this.ensureStringArray(item?.artifacts),
+        iteration_length_weeks: this.safeInteger(item?.iteration_length_weeks)
+      }))
+
+      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Extracted ${approaches.length} development approaches`)
+
+      return approaches
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-DEVELOPMENT-APPROACH] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
+      })
+      // Re-throw to trigger Bull retry and provider fallback
+      throw error
+    }
+  }
+
+  /**
+   * Extract iterations/sprints/releases
+   */
+  private async extractProjectIterations(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<ProjectIteration[]> {
+    try {
+      logger.info('[EXTRACTION-ITERATIONS] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Extract **iterations / sprints / releases** described in the documentation.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+Output JSON:
+{
+  "project_iterations": [
+    {
+      "name": "Iteration / Sprint name",
+      "iteration_type": "sprint|iteration|program_increment|release|phase",
+      "sequence_number": integer or null,
+      "start_date": "YYYY-MM-DD or null",
+      "end_date": "YYYY-MM-DD or null",
+      "goals": ["Goal 1", "Goal 2"],
+      "planned_story_points": integer or null,
+      "completed_story_points": integer or null,
+      "velocity": integer or null,
+      "status": "planned|active|completed|cancelled",
+      "retrospective_summary": "Markdown summary or null",
+      "impediments": ["Impediment 1"],
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Rules:
+- Include schedule-based iterations (sprints, increments, phases).
+- Convert backlog goals or OKRs into the goals array.
+- Use null for unknown numeric values, and arrays for multi-item fields.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.2,
+        max_tokens: 2600
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const iterations = (parsed.project_iterations || []).map((iteration: any) => ({
+        ...iteration,
+        goals: this.ensureStringArray(iteration?.goals),
+        planned_story_points: this.safeInteger(iteration?.planned_story_points),
+        completed_story_points: this.safeInteger(iteration?.completed_story_points),
+        velocity: this.safeInteger(iteration?.velocity),
+        impediments: this.ensureStringArray(iteration?.impediments)
+      }))
+
+      logger.info(`[EXTRACTION-ITERATIONS] Extracted ${iterations.length} iterations`)
+
+      return iterations
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      const errorStack = error instanceof Error ? error.stack : undefined
+      logger.error('[EXTRACTION-ITERATIONS] Extraction failed', {
+        error: errorMessage,
+        stack: errorStack,
+        projectId,
+        provider: options.aiProvider,
+        model: options.aiModel,
+        documentCount: documents.length
+      })
+      // Return empty array instead of throwing to allow partial success
+      // The parent job will track this as a failed entity type
+      return []
+    }
+  }
+
+  /**
+   * Extract work items for Project Work Performance Domain
+   */
+  private async extractWorkItems(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<WorkItemRecord[]> {
+    try {
+      logger.info('[EXTRACTION-WORK-ITEMS] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Identify **work items / tasks / backlog items** with effort tracking details.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+JSON schema:
+{
+  "work_items": [
+    {
+      "name": "Work item title",
+      "description": "Markdown summary",
+      "activity_name": "Linked activity name if mentioned",
+      "assigned_to": "Person or role",
+      "estimated_hours": number or null,
+      "actual_hours": number or null,
+      "progress_percentage": number 0-100 or null,
+      "status": "todo|in_progress|review|done|blocked",
+      "blockers": ["Blocker 1"],
+      "completed_date": "YYYY-MM-DD or null",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Guidelines:
+- Include items with measurable effort or progress tracking.
+- Convert percentages like "65%" to numbers.
+- Use arrays for blockers even if single.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.25,
+        max_tokens: 2600
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const workItems = (parsed.work_items || []).map((item: any) => ({
+        ...item,
+        estimated_hours: this.safeNumber(item?.estimated_hours),
+        actual_hours: this.safeNumber(item?.actual_hours),
+        progress_percentage: this.safeNumber(item?.progress_percentage),
+        blockers: this.ensureStringArray(item?.blockers)
+      }))
+
+      logger.info(`[EXTRACTION-WORK-ITEMS] Extracted ${workItems.length} work items`)
+
+      return workItems
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-WORK-ITEMS] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract capacity plans (staffing plans, allocations)
+   */
+  private async extractCapacityPlans(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<CapacityPlan[]> {
+    try {
+      logger.info('[EXTRACTION-CAPACITY] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Extract **capacity plans / staffing allocations** for team members.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+JSON format:
+{
+  "capacity_plans": [
+    {
+      "team_member": "Name or role",
+      "role": "Role description",
+      "period_start": "YYYY-MM-DD",
+      "period_end": "YYYY-MM-DD",
+      "available_hours": number or null,
+      "allocated_hours": number or null,
+      "utilization_percentage": number or null,
+      "notes": "Markdown notes or null",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Rules:
+- Always include period_start and period_end (estimate if only month provided; use first/last day of month).
+- Convert utilization percentages (e.g., 75%) to numeric values.
+- Use null for unknown numeric values.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.25,
+        max_tokens: 2300
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const capacityPlans = (parsed.capacity_plans || []).map((plan: any) => ({
+        ...plan,
+        available_hours: this.safeNumber(plan?.available_hours),
+        allocated_hours: this.safeNumber(plan?.allocated_hours),
+        utilization_percentage: this.safeNumber(plan?.utilization_percentage)
+      }))
+
+      logger.info(`[EXTRACTION-CAPACITY] Extracted ${capacityPlans.length} capacity plan entries`)
+
+      return capacityPlans
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-CAPACITY] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract measurement actuals for success criteria
+   */
+  private async extractPerformanceMeasurements(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<PerformanceMeasurement[]> {
+    try {
+      logger.info('[EXTRACTION-PERFORMANCE-MEASUREMENTS] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Extract **actual performance measurements** for success criteria / KPIs.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+JSON schema:
+{
+  "performance_measurements": [
+    {
+      "success_criterion_name": "Name of criterion being measured",
+      "measurement_date": "YYYY-MM-DD",
+      "actual_value": number or null,
+      "target_value": number or null,
+      "units": "Units (%, days, USD, etc.) or null",
+      "variance": number or null,
+      "variance_percentage": number or null,
+      "trend": "improving|stable|declining|null",
+      "status": "on_track|at_risk|off_track",
+      "notes": "Markdown context or null",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Guidelines:
+- Convert values to numbers when possible (strip % or currency symbols).
+- If only textual comparison exists (e.g., "ahead by 5%"), compute variance when possible.
+- Use null where numbers aren't available.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.2,
+        max_tokens: 2600
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const measurements = (parsed.performance_measurements || []).map((item: any) => ({
+        ...item,
+        actual_value: this.safeNumber(item?.actual_value),
+        target_value: this.safeNumber(item?.target_value),
+        variance: this.safeNumber(item?.variance),
+        variance_percentage: this.safeNumber(item?.variance_percentage)
+      }))
+
+      logger.info(`[EXTRACTION-PERFORMANCE-MEASUREMENTS] Extracted ${measurements.length} measurements`)
+
+      return measurements
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-PERFORMANCE-MEASUREMENTS] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract earned value metrics
+   */
+  private async extractEarnedValueMetrics(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<EarnedValueMetric[]> {
+    try {
+      logger.info('[EXTRACTION-EVM] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Identify **Earned Value Management (EVM)** metrics reported in the documentation.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+Expected JSON:
+{
+  "earned_value_metrics": [
+    {
+      "measurement_date": "YYYY-MM-DD",
+      "planned_value": number or null,
+      "earned_value": number or null,
+      "actual_cost": number or null,
+      "schedule_variance": number or null,
+      "cost_variance": number or null,
+      "schedule_performance_index": number or null,
+      "cost_performance_index": number or null,
+      "estimate_at_completion": number or null,
+      "estimate_to_complete": number or null,
+      "notes": "Markdown commentary or null",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Rules:
+- Convert currency strings to numeric values (strip $ or commas).
+- Provide null when a metric isn't available rather than fabricating it.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.2,
+        max_tokens: 2500
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const evm = (parsed.earned_value_metrics || []).map((metric: any) => ({
+        ...metric,
+        planned_value: this.safeNumber(metric?.planned_value),
+        earned_value: this.safeNumber(metric?.earned_value),
+        actual_cost: this.safeNumber(metric?.actual_cost),
+        schedule_variance: this.safeNumber(metric?.schedule_variance),
+        cost_variance: this.safeNumber(metric?.cost_variance),
+        schedule_performance_index: this.safeNumber(metric?.schedule_performance_index),
+        cost_performance_index: this.safeNumber(metric?.cost_performance_index),
+        estimate_at_completion: this.safeNumber(metric?.estimate_at_completion),
+        estimate_to_complete: this.safeNumber(metric?.estimate_to_complete)
+      }))
+
+      logger.info(`[EXTRACTION-EVM] Extracted ${evm.length} earned value metric snapshots`)
+
+      return evm
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-EVM] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract opportunity records (positive risks)
+   */
+  private async extractOpportunities(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<OpportunityRecord[]> {
+    try {
+      logger.info('[EXTRACTION-OPPORTUNITIES] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Extract **opportunities (positive risks)** mentioned in the documentation.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+JSON schema:
+{
+  "opportunities": [
+    {
+      "title": "Opportunity name",
+      "description": "Markdown description",
+      "category": "Strategic, Technical, Market, etc.",
+      "probability": "very_high|high|medium|low|very_low",
+      "benefit_level": "very_high|high|medium|low|very_low",
+      "exploitation_strategy": "Plan to realize the opportunity",
+      "owner": "Person or role",
+      "status": "identified|planned|exploiting|realized|missed",
+      "expected_benefit": number or null,
+      "trigger_conditions": "What triggers action",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Rules:
+- Map qualitative terms to the enum values. For example "moderate" -> medium.
+- If quantitative benefit (e.g., $200k) is mentioned, convert to number.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.25,
+        max_tokens: 2400
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const opportunities = (parsed.opportunities || []).map((item: any) => ({
+        ...item,
+        expected_benefit: this.safeNumber(item?.expected_benefit)
+      }))
+
+      logger.info(`[EXTRACTION-OPPORTUNITIES] Extracted ${opportunities.length} opportunities`)
+
+      return opportunities
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-OPPORTUNITIES] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract risk response records
+   */
+  private async extractRiskResponses(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<RiskResponseRecord[]> {
+    try {
+      logger.info('[EXTRACTION-RISK-RESPONSES] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `Extract **risk response actions** described in the documentation.
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+JSON structure:
+{
+  "risk_responses": [
+    {
+      "risk_title": "Name of the risk being addressed",
+      "response_date": "YYYY-MM-DD or null",
+      "action_taken": "Markdown summary of response actions",
+      "effectiveness": "effective|partially_effective|ineffective",
+      "cost_of_response": number or null,
+      "residual_risk_level": "very_high|high|medium|low|very_low",
+      "owner": "Person or role responsible",
+      "notes": "Additional context or null",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Guidelines:
+- Include both preventative and corrective actions.
+- Use null for numeric values that are not given.
+- Map qualitative assessments (e.g., "moderate") to the nearest enum.
+- Return ONLY valid JSON.`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.25,
+        max_tokens: 2300
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const responses = (parsed.risk_responses || []).map((item: any) => ({
+        ...item,
+        cost_of_response: this.safeNumber(item?.cost_of_response)
+      }))
+
+      logger.info(`[EXTRACTION-RISK-RESPONSES] Extracted ${responses.length} risk responses`)
+
+      return responses
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-RISK-RESPONSES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
       })
       return []
@@ -1442,8 +2458,20 @@ Requirements:
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>
   ): string {
     const sections: string[] = []
+    
+    // Filter out documents with no content
+    const validDocuments = documents.filter(doc => doc.content && doc.content.trim().length > 0)
+    
+    if (validDocuments.length === 0) {
+      logger.warn('[EXTRACTION] No documents with valid content found')
+      return '[No document content available for extraction]'
+    }
+    
+    if (validDocuments.length < documents.length) {
+      logger.warn(`[EXTRACTION] Filtered out ${documents.length - validDocuments.length} documents with empty content`)
+    }
 
-    documents.forEach((doc, index) => {
+    validDocuments.forEach((doc, index) => {
       sections.push(`--- Document ${index + 1}: ${doc.title} ---`)
       sections.push(`Template: ${doc.template_name || 'Unknown'}`)
       sections.push('')
@@ -1456,7 +2484,9 @@ Requirements:
       sections.push('')
     })
 
-    return sections.join('\n')
+    const context = sections.join('\n')
+    logger.debug(`[EXTRACTION] Built document context: ${validDocuments.length} documents, ${context.length} characters`)
+    return context
   }
 
   /**
@@ -1499,6 +2529,133 @@ Requirements:
     }
     
     return result
+  }
+
+  private ensureStringArray(value: unknown): string[] {
+    if (Array.isArray(value)) {
+      return value
+        .map(item => (typeof item === 'string' ? item : String(item ?? '')).trim())
+        .filter(item => item.length > 0)
+    }
+
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return []
+      if (trimmed.includes(',') || trimmed.includes(';') || trimmed.includes('|')) {
+        return trimmed
+          .split(/[,;|]/)
+          .map(part => part.trim())
+          .filter(part => part.length > 0)
+      }
+      return [trimmed]
+    }
+
+    return []
+  }
+
+  private safeNumber(value: unknown): number | undefined {
+    if (value === null || value === undefined) {
+      return undefined
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : undefined
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim()
+      if (!trimmed) return undefined
+
+      const normalized = trimmed
+        .replace(/percent/gi, '')
+        .replace(/[%,$]/g, '')
+        .replace(/[^0-9.+\-]/g, ' ')
+        .trim()
+
+      if (!normalized) return undefined
+
+      const num = Number(normalized)
+      return Number.isFinite(num) ? num : undefined
+    }
+    return undefined
+  }
+
+  private safeInteger(value: unknown): number | undefined {
+    const num = this.safeNumber(value)
+    if (num === undefined) return undefined
+    const rounded = Math.round(num)
+    return Number.isFinite(rounded) ? rounded : undefined
+  }
+
+  private normalizeDate(value?: string | null): string | null {
+    if (!value) {
+      return null
+    }
+    const trimmed = value.toString().trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const quarterDate = convertQuarterDate(trimmed)
+    if (quarterDate) {
+      return quarterDate
+    }
+
+    if (isValidDate(trimmed)) {
+      return trimmed
+    }
+
+    // Attempt to parse simple Month YYYY formats (e.g., "March 2025")
+    const parsed = Date.parse(trimmed)
+    if (!Number.isNaN(parsed)) {
+      return new Date(parsed).toISOString().split('T')[0]
+    }
+
+    logger.warn(`[EXTRACTION] Unable to normalize date "${trimmed}", storing as null`)
+    return null
+  }
+
+  private async getActivityIdMap(client: PoolClient, projectId: string): Promise<Map<string, string>> {
+    const result = await client.query<{ id: string; activity_name: string | null }>(
+      `SELECT id, activity_name FROM activities WHERE project_id = $1`,
+      [projectId]
+    )
+    const map = new Map<string, string>()
+    result.rows.forEach(row => {
+      if (row.activity_name) {
+        map.set(row.activity_name.toLowerCase().trim(), row.id)
+      }
+    })
+    return map
+  }
+
+  private async getSuccessCriterionIdMap(
+    client: PoolClient,
+    projectId: string
+  ): Promise<Map<string, string>> {
+    const result = await client.query<{ id: string; name: string | null }>(
+      `SELECT id, name FROM success_criteria WHERE project_id = $1`,
+      [projectId]
+    )
+    const map = new Map<string, string>()
+    result.rows.forEach(row => {
+      if (row.name) {
+        map.set(row.name.toLowerCase().trim(), row.id)
+      }
+    })
+    return map
+  }
+
+  private async getRiskIdMap(client: PoolClient, projectId: string): Promise<Map<string, string>> {
+    const result = await client.query<{ id: string; name: string | null }>(
+      `SELECT id, name FROM risks WHERE project_id = $1`,
+      [projectId]
+    )
+    const map = new Map<string, string>()
+    result.rows.forEach(row => {
+      if (row.name) {
+        map.set(row.name.toLowerCase().trim(), row.id)
+      }
+    })
+    return map
   }
 
   /**
@@ -2180,9 +3337,9 @@ Requirements:
     const placeholders: string[] = []
 
     uniqueResources.forEach((r, index) => {
-      const offset = index * 7
+      const offset = index * 14
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
       )
       
       // Map AI resource types to database CHECK constraint values
@@ -2204,6 +3361,14 @@ Requirements:
         'facilities': 'facility'
       }
       const mappedType = typeMap[(r.type || 'material').toLowerCase()] || 'material'
+
+      const allowedCompetencies = new Set(['junior', 'intermediate', 'senior', 'expert'])
+      const competency = (r.competency_level || '').toLowerCase()
+      const competencyLevel = allowedCompetencies.has(competency) ? competency : null
+
+      const performanceRatingRaw = this.safeNumber(r.performance_rating)
+      const performanceRating =
+        performanceRatingRaw === undefined ? null : Math.max(0, Math.min(10, performanceRatingRaw))
       
       values.push(
         projectId,
@@ -2212,13 +3377,23 @@ Requirements:
         r.role || null,
         r.allocation || null,
         r.availability || null,
+        this.ensureStringArray(r.skills),
+        competencyLevel,
+        this.ensureStringArray(r.certifications),
+        this.ensureStringArray(r.training_needs),
+        r.team_assignment ? r.team_assignment.substring(0, 255) : null,
+        performanceRating,
+        r.development_plan || null,
+        // Align created_by as last column
         userId
       )
     })
 
     await client.query(`
       INSERT INTO resources (
-        project_id, name, type, role, allocation, availability, created_by
+        project_id, name, type, role, allocation, availability, skills,
+        competency_level, certifications, training_needs, team_assignment,
+        performance_rating, development_plan, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -2226,6 +3401,13 @@ Requirements:
         role = EXCLUDED.role,
         allocation = EXCLUDED.allocation,
         availability = EXCLUDED.availability,
+        skills = EXCLUDED.skills,
+        competency_level = EXCLUDED.competency_level,
+        certifications = EXCLUDED.certifications,
+        training_needs = EXCLUDED.training_needs,
+        team_assignment = EXCLUDED.team_assignment,
+        performance_rating = EXCLUDED.performance_rating,
+        development_plan = EXCLUDED.development_plan,
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -2608,6 +3790,903 @@ Requirements:
   }
 
   /**
+   * Save team agreements to database
+   */
+  private async saveTeamAgreements(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    teamAgreements: TeamAgreement[]
+  ): Promise<void> {
+    if (teamAgreements.length === 0) {
+      logger.info('[EXTRACTION] No team_agreements to save, skipping')
+      return
+    }
+
+    const allowedCategories = new Set([
+      'working_hours',
+      'communication',
+      'decision_making',
+      'conflict_resolution',
+      'quality_standards',
+      'meeting_norms',
+      'code_of_conduct',
+      'collaboration_tools',
+      'response_times',
+      'knowledge_sharing',
+      'other'
+    ])
+    const allowedStatuses = new Set(['draft', 'active', 'under_review', 'revised', 'deprecated'])
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    teamAgreements.forEach((agreement, index) => {
+      const offset = index * 17
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17})`
+      )
+
+      const rawCategory = (agreement.category || 'other').toString().toLowerCase().replace(/\s+/g, '_')
+      const category = allowedCategories.has(rawCategory) ? rawCategory : 'other'
+
+      const rawStatus = (agreement.status || 'active').toString().toLowerCase().replace(/\s+/g, '_')
+      const status = allowedStatuses.has(rawStatus) ? rawStatus : 'active'
+
+      const reviewFrequency = (() => {
+        const raw = (agreement.review_frequency || '').toString().toLowerCase()
+        if (!raw) return null
+        if (raw.includes('week')) return 'weekly'
+        if (raw.includes('month')) return 'monthly'
+        if (raw.includes('quarter')) return 'quarterly'
+        if (raw.includes('annual') || raw.includes('year')) return 'annually'
+        if (raw.includes('need')) return 'as_needed'
+        return null
+      })()
+
+      const adherenceScoreRaw = this.safeNumber(agreement.adherence_score)
+      const adherenceScore =
+        adherenceScoreRaw === undefined ? null : Math.max(0, Math.min(10, adherenceScoreRaw))
+
+      const violationsCountRaw = this.safeInteger(agreement.violations_count)
+      const violationsCount =
+        violationsCountRaw === undefined ? 0 : Math.max(0, violationsCountRaw)
+
+      const notesSegments = []
+      if (agreement.notes) {
+        notesSegments.push(agreement.notes)
+      }
+      if (agreement.source_document) {
+        notesSegments.push(`Source: ${agreement.source_document}`)
+      }
+      const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
+
+      values.push(
+        projectId,
+        agreement.title?.substring(0, 200) || 'Team Agreement',
+        agreement.description || null,
+        category,
+        this.ensureStringArray(agreement.agreed_by),
+        agreement.facilitated_by ? agreement.facilitated_by.substring(0, 255) : null,
+        this.normalizeDate(agreement.effective_date),
+        reviewFrequency,
+        this.normalizeDate(agreement.next_review_date),
+        status,
+        adherenceScore,
+        violationsCount,
+        this.normalizeDate(agreement.last_violation_date),
+        null, // source_document_id not resolved yet
+        notes,
+        userId,
+        userId
+      )
+    })
+
+    await client.query(
+      `
+      INSERT INTO team_agreements (
+        project_id, title, description, category, agreed_by, facilitated_by,
+        effective_date, review_frequency, next_review_date, status,
+        adherence_score, violations_count, last_violation_date,
+        source_document_id, notes, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, title) DO UPDATE SET
+        description = EXCLUDED.description,
+        category = EXCLUDED.category,
+        agreed_by = EXCLUDED.agreed_by,
+        facilitated_by = EXCLUDED.facilitated_by,
+        effective_date = EXCLUDED.effective_date,
+        review_frequency = EXCLUDED.review_frequency,
+        next_review_date = EXCLUDED.next_review_date,
+        status = EXCLUDED.status,
+        adherence_score = EXCLUDED.adherence_score,
+        violations_count = EXCLUDED.violations_count,
+        last_violation_date = EXCLUDED.last_violation_date,
+        notes = EXCLUDED.notes,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${teamAgreements.length} team agreements`)
+  }
+
+  /**
+   * Save development approaches to database
+   */
+  private async saveDevelopmentApproaches(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    developmentApproaches: DevelopmentApproach[]
+  ): Promise<void> {
+    if (developmentApproaches.length === 0) {
+      logger.info('[EXTRACTION] No development_approaches to save, skipping')
+      return
+    }
+
+    const allowedApproaches = new Set(['agile', 'waterfall', 'hybrid', 'iterative', 'custom'])
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    developmentApproaches.forEach((approach, index) => {
+      const offset = index * 12
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
+      )
+
+      const rawApproach = (approach.approach || 'custom').toString().toLowerCase()
+      const normalizedApproach = allowedApproaches.has(rawApproach) ? rawApproach : 'custom'
+      const framework = (approach.framework || '').trim() || 'unspecified'
+
+      values.push(
+        projectId,
+        normalizedApproach,
+        framework,
+        approach.lifecycle_model || null,
+        this.safeInteger(approach.iteration_length_weeks),
+        this.ensureStringArray(approach.ceremonies),
+        this.ensureStringArray(approach.artifacts),
+        approach.tailoring_decisions || null,
+        approach.governance_notes || null,
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    await client.query(
+      `
+      INSERT INTO development_approaches (
+        project_id, approach, framework, lifecycle_model, iteration_length_weeks,
+        ceremonies, artifacts, tailoring_decisions, governance_notes,
+        source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, approach, framework) DO UPDATE SET
+        lifecycle_model = EXCLUDED.lifecycle_model,
+        iteration_length_weeks = EXCLUDED.iteration_length_weeks,
+        ceremonies = EXCLUDED.ceremonies,
+        artifacts = EXCLUDED.artifacts,
+        tailoring_decisions = EXCLUDED.tailoring_decisions,
+        governance_notes = EXCLUDED.governance_notes,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, development_approaches.source_document_id),
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${developmentApproaches.length} development approaches`)
+  }
+
+  /**
+   * Save project iterations to database
+   */
+  private async saveProjectIterations(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    projectIterations: ProjectIteration[]
+  ): Promise<void> {
+    if (projectIterations.length === 0) {
+      logger.info('[EXTRACTION] No project_iterations to save, skipping')
+      return
+    }
+
+    const typeMap: Record<string, string> = {
+      sprint: 'sprint',
+      iteration: 'iteration',
+      increment: 'program_increment',
+      'program increment': 'program_increment',
+      release: 'release',
+      phase: 'phase'
+    }
+    const statusMap: Record<string, string> = {
+      planned: 'planned',
+      pending: 'planned',
+      active: 'active',
+      in_progress: 'active',
+      executing: 'active',
+      completed: 'completed',
+      done: 'completed',
+      finished: 'completed',
+      cancelled: 'cancelled',
+      canceled: 'cancelled'
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    projectIterations.forEach((iteration, index) => {
+      const offset = index * 16
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16})`
+      )
+
+      const rawType = (iteration.iteration_type || '').toLowerCase()
+      const iterationType = typeMap[rawType] || 'sprint'
+
+      const rawStatus = (iteration.status || 'planned').toLowerCase()
+      const status = statusMap[rawStatus] || 'planned'
+
+      values.push(
+        projectId,
+        iteration.name?.substring(0, 200) || 'Iteration',
+        iterationType,
+        this.safeInteger(iteration.sequence_number),
+        this.normalizeDate(iteration.start_date),
+        this.normalizeDate(iteration.end_date),
+        this.ensureStringArray(iteration.goals),
+        this.safeInteger(iteration.planned_story_points),
+        this.safeInteger(iteration.completed_story_points),
+        this.safeInteger(iteration.velocity),
+        status,
+        iteration.retrospective_summary || null,
+        this.ensureStringArray(iteration.impediments),
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    await client.query(
+      `
+      INSERT INTO project_iterations (
+        project_id, name, iteration_type, sequence_number, start_date, end_date,
+        goals, planned_story_points, completed_story_points, velocity, status,
+        retrospective_summary, impediments, source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        iteration_type = EXCLUDED.iteration_type,
+        sequence_number = EXCLUDED.sequence_number,
+        start_date = EXCLUDED.start_date,
+        end_date = EXCLUDED.end_date,
+        goals = EXCLUDED.goals,
+        planned_story_points = EXCLUDED.planned_story_points,
+        completed_story_points = EXCLUDED.completed_story_points,
+        velocity = EXCLUDED.velocity,
+        status = EXCLUDED.status,
+        retrospective_summary = EXCLUDED.retrospective_summary,
+        impediments = EXCLUDED.impediments,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${projectIterations.length} project iterations`)
+  }
+
+  /**
+   * Save work items to database
+   */
+  private async saveWorkItems(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    workItems: WorkItemRecord[]
+  ): Promise<void> {
+    if (workItems.length === 0) {
+      logger.info('[EXTRACTION] No work_items to save, skipping')
+      return
+    }
+
+    const statusMap: Record<string, string> = {
+      todo: 'todo',
+      'to_do': 'todo',
+      backlog: 'todo',
+      planned: 'todo',
+      in_progress: 'in_progress',
+      active: 'in_progress',
+      doing: 'in_progress',
+      review: 'review',
+      verifying: 'review',
+      done: 'done',
+      completed: 'done',
+      finished: 'done',
+      blocked: 'blocked',
+      impeded: 'blocked'
+    }
+
+    const activityMap = await this.getActivityIdMap(client, projectId)
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    workItems.forEach((item, index) => {
+      const offset = index * 15
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
+      )
+
+      const rawStatus = (item.status || 'todo').toLowerCase().replace(/\s+/g, '_')
+      const status = statusMap[rawStatus] || 'todo'
+
+      const progressRaw = this.safeNumber(item.progress_percentage)
+      const progressPercentage =
+        progressRaw === undefined
+          ? null
+          : Math.max(0, Math.min(100, progressRaw))
+
+      const activityName = item.activity_name ? item.activity_name.toLowerCase().trim() : ''
+      const activityId = activityName ? activityMap.get(activityName) || null : null
+
+      values.push(
+        projectId,
+        item.name?.substring(0, 255) || 'Work Item',
+        item.description || null,
+        item.activity_name || null,
+        activityId,
+        item.assigned_to ? item.assigned_to.substring(0, 255) : null,
+        this.safeNumber(item.estimated_hours),
+        this.safeNumber(item.actual_hours),
+        progressPercentage,
+        status,
+        this.ensureStringArray(item.blockers),
+        this.normalizeDate(item.completed_date),
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    await client.query(
+      `
+      INSERT INTO work_items (
+        project_id, name, description, activity_name, activity_id, assigned_to,
+        estimated_hours, actual_hours, progress_percentage, status, blockers,
+        completed_date, source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, name) DO UPDATE SET
+        description = EXCLUDED.description,
+        activity_name = EXCLUDED.activity_name,
+        activity_id = EXCLUDED.activity_id,
+        assigned_to = EXCLUDED.assigned_to,
+        estimated_hours = EXCLUDED.estimated_hours,
+        actual_hours = EXCLUDED.actual_hours,
+        progress_percentage = EXCLUDED.progress_percentage,
+        status = EXCLUDED.status,
+        blockers = EXCLUDED.blockers,
+        completed_date = EXCLUDED.completed_date,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${workItems.length} work items`)
+  }
+
+  /**
+   * Save capacity plans to database
+   */
+  private async saveCapacityPlans(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    capacityPlans: CapacityPlan[]
+  ): Promise<void> {
+    if (capacityPlans.length === 0) {
+      logger.info('[EXTRACTION] No capacity_plans to save, skipping')
+      return
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    capacityPlans.forEach(plan => {
+      const periodStart = this.normalizeDate(plan.period_start)
+      const periodEnd = this.normalizeDate(plan.period_end)
+
+      if (!periodStart || !periodEnd) {
+        logger.warn(
+          `[EXTRACTION] Skipping capacity plan for ${plan.team_member} due to invalid period (${plan.period_start} - ${plan.period_end})`
+        )
+        return
+      }
+
+      const rowIndex = placeholders.length
+      const offset = rowIndex * 12
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
+      )
+
+      const notesSegments = []
+      if (plan.notes) {
+        notesSegments.push(plan.notes)
+      }
+      if (plan.source_document) {
+        notesSegments.push(`Source: ${plan.source_document}`)
+      }
+      const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
+
+      values.push(
+        projectId,
+        plan.team_member?.substring(0, 255) || 'Team Member',
+        plan.role ? plan.role.substring(0, 255) : null,
+        periodStart,
+        periodEnd,
+        this.safeNumber(plan.available_hours),
+        this.safeNumber(plan.allocated_hours),
+        this.safeNumber(plan.utilization_percentage),
+        notes,
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    if (values.length === 0) {
+      logger.warn('[EXTRACTION] No valid capacity plans to store after validation')
+      return
+    }
+
+    await client.query(
+      `
+      INSERT INTO capacity_plans (
+        project_id, team_member, role, period_start, period_end,
+        available_hours, allocated_hours, utilization_percentage,
+        notes, source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, team_member, period_start, period_end) DO UPDATE SET
+        role = EXCLUDED.role,
+        available_hours = EXCLUDED.available_hours,
+        allocated_hours = EXCLUDED.allocated_hours,
+        utilization_percentage = EXCLUDED.utilization_percentage,
+        notes = EXCLUDED.notes,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${capacityPlans.length} capacity plan records`)
+  }
+
+  /**
+   * Save performance measurements to database
+   */
+  private async savePerformanceMeasurements(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    performanceMeasurements: PerformanceMeasurement[]
+  ): Promise<void> {
+    if (performanceMeasurements.length === 0) {
+      logger.info('[EXTRACTION] No performance_measurements to save, skipping')
+      return
+    }
+
+    const successCriteriaMap = await this.getSuccessCriterionIdMap(client, projectId)
+    const statusMap: Record<string, string> = {
+      on_track: 'on_track',
+      'on track': 'on_track',
+      at_risk: 'at_risk',
+      'at risk': 'at_risk',
+      off_track: 'off_track',
+      'off track': 'off_track'
+    }
+    const trendOptions = new Set(['improving', 'stable', 'declining'])
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    performanceMeasurements.forEach(measurement => {
+      const measurementDate = this.normalizeDate(measurement.measurement_date)
+      const criterionName = measurement.success_criterion_name?.trim()
+
+      if (!measurementDate || !criterionName) {
+        logger.warn(
+          `[EXTRACTION] Skipping measurement due to missing date or criterion (${measurement.measurement_date}, ${measurement.success_criterion_name})`
+        )
+        return
+      }
+
+      const rowIndex = placeholders.length
+      const offset = rowIndex * 15
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
+      )
+
+      const normalizedCriterionKey = criterionName.toLowerCase()
+      const criterionId = successCriteriaMap.get(normalizedCriterionKey) || null
+      if (!criterionId) {
+        logger.warn(`[EXTRACTION] No success criterion found for "${criterionName}", storing without linkage`)
+      }
+
+      const statusKey = (measurement.status || 'on_track').toLowerCase().replace(/\s+/g, '_')
+      const status = statusMap[statusKey] || 'on_track'
+      const trendKey = (measurement.trend || '').toLowerCase().trim()
+      const trend = trendOptions.has(trendKey) ? trendKey : null
+
+      const notesSegments = []
+      if (measurement.notes) {
+        notesSegments.push(measurement.notes)
+      }
+      if (measurement.source_document) {
+        notesSegments.push(`Source: ${measurement.source_document}`)
+      }
+      const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
+
+      values.push(
+        projectId,
+        criterionId,
+        criterionName.substring(0, 255),
+        measurementDate,
+        this.safeNumber(measurement.actual_value),
+        this.safeNumber(measurement.target_value),
+        measurement.units ? measurement.units.substring(0, 50) : null,
+        this.safeNumber(measurement.variance),
+        this.safeNumber(measurement.variance_percentage),
+        trend,
+        status,
+        notes,
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    if (values.length === 0) {
+      logger.warn('[EXTRACTION] No valid performance measurements to store after validation')
+      return
+    }
+
+    await client.query(
+      `
+      INSERT INTO performance_measurements (
+        project_id, success_criterion_id, success_criterion_name, measurement_date,
+        actual_value, target_value, units, variance, variance_percentage, trend,
+        status, notes, source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, success_criterion_name, measurement_date) DO UPDATE SET
+        success_criterion_id = COALESCE(EXCLUDED.success_criterion_id, performance_measurements.success_criterion_id),
+        actual_value = EXCLUDED.actual_value,
+        target_value = EXCLUDED.target_value,
+        units = EXCLUDED.units,
+        variance = EXCLUDED.variance,
+        variance_percentage = EXCLUDED.variance_percentage,
+        trend = EXCLUDED.trend,
+        status = EXCLUDED.status,
+        notes = EXCLUDED.notes,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${performanceMeasurements.length} performance measurements`)
+  }
+
+  /**
+   * Save earned value metrics to database
+   */
+  private async saveEarnedValueMetrics(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    earnedValueMetrics: EarnedValueMetric[]
+  ): Promise<void> {
+    if (earnedValueMetrics.length === 0) {
+      logger.info('[EXTRACTION] No earned_value_metrics to save, skipping')
+      return
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    earnedValueMetrics.forEach(metric => {
+      const measurementDate = this.normalizeDate(metric.measurement_date)
+      if (!measurementDate) {
+        logger.warn(`[EXTRACTION] Skipping EVM metric due to invalid date (${metric.measurement_date})`)
+        return
+      }
+
+      const rowIndex = placeholders.length
+      const offset = rowIndex * 15
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
+      )
+
+      const notesSegments = []
+      if (metric.notes) {
+        notesSegments.push(metric.notes)
+      }
+      if (metric.source_document) {
+        notesSegments.push(`Source: ${metric.source_document}`)
+      }
+      const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
+
+      values.push(
+        projectId,
+        measurementDate,
+        this.safeNumber(metric.planned_value),
+        this.safeNumber(metric.earned_value),
+        this.safeNumber(metric.actual_cost),
+        this.safeNumber(metric.schedule_variance),
+        this.safeNumber(metric.cost_variance),
+        this.safeNumber(metric.schedule_performance_index),
+        this.safeNumber(metric.cost_performance_index),
+        this.safeNumber(metric.estimate_at_completion),
+        this.safeNumber(metric.estimate_to_complete),
+        notes,
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    if (values.length === 0) {
+      logger.warn('[EXTRACTION] No valid earned value metrics to store after validation')
+      return
+    }
+
+    await client.query(
+      `
+      INSERT INTO earned_value_metrics (
+        project_id, measurement_date, planned_value, earned_value, actual_cost,
+        schedule_variance, cost_variance, schedule_performance_index, cost_performance_index,
+        estimate_at_completion, estimate_to_complete, notes, source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, measurement_date) DO UPDATE SET
+        planned_value = EXCLUDED.planned_value,
+        earned_value = EXCLUDED.earned_value,
+        actual_cost = EXCLUDED.actual_cost,
+        schedule_variance = EXCLUDED.schedule_variance,
+        cost_variance = EXCLUDED.cost_variance,
+        schedule_performance_index = EXCLUDED.schedule_performance_index,
+        cost_performance_index = EXCLUDED.cost_performance_index,
+        estimate_at_completion = EXCLUDED.estimate_at_completion,
+        estimate_to_complete = EXCLUDED.estimate_to_complete,
+        notes = EXCLUDED.notes,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${earnedValueMetrics.length} earned value metric snapshots`)
+  }
+
+  /**
+   * Save opportunities to database
+   */
+  private async saveOpportunities(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    opportunities: OpportunityRecord[]
+  ): Promise<void> {
+    if (opportunities.length === 0) {
+      logger.info('[EXTRACTION] No opportunities to save, skipping')
+      return
+    }
+
+    const scaleMap: Record<string, string> = {
+      very_high: 'very_high',
+      'very high': 'very_high',
+      high: 'high',
+      medium: 'medium',
+      moderate: 'medium',
+      low: 'low',
+      very_low: 'very_low',
+      'very low': 'very_low'
+    }
+    const statusMap: Record<string, string> = {
+      identified: 'identified',
+      planned: 'planned',
+      planning: 'planned',
+      exploiting: 'exploiting',
+      executing: 'exploiting',
+      realized: 'realized',
+      captured: 'realized',
+      won: 'realized',
+      missed: 'missed',
+      lost: 'missed'
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    opportunities.forEach((opportunity, index) => {
+      const offset = index * 14
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
+      )
+
+      const probabilityKey = (opportunity.probability || '').toLowerCase()
+      const benefitKey = (opportunity.benefit_level || '').toLowerCase()
+      const statusKey = (opportunity.status || 'identified').toLowerCase()
+
+      const notesSegments = []
+      if (opportunity.source_document) {
+        notesSegments.push(`Source: ${opportunity.source_document}`)
+      }
+
+      values.push(
+        projectId,
+        opportunity.title?.substring(0, 255) || 'Opportunity',
+        opportunity.description || null,
+        opportunity.category || null,
+        scaleMap[probabilityKey] || 'medium',
+        scaleMap[benefitKey] || 'medium',
+        opportunity.exploitation_strategy || null,
+        opportunity.owner ? opportunity.owner.substring(0, 255) : null,
+        statusMap[statusKey] || 'identified',
+        this.safeNumber(opportunity.expected_benefit),
+        opportunity.trigger_conditions || null,
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    await client.query(
+      `
+      INSERT INTO opportunities (
+        project_id, title, description, category, probability, benefit_level,
+        exploitation_strategy, owner, status, expected_benefit, trigger_conditions,
+        source_document_id, created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, title) DO UPDATE SET
+        description = EXCLUDED.description,
+        category = EXCLUDED.category,
+        probability = EXCLUDED.probability,
+        benefit_level = EXCLUDED.benefit_level,
+        exploitation_strategy = EXCLUDED.exploitation_strategy,
+        owner = EXCLUDED.owner,
+        status = EXCLUDED.status,
+        expected_benefit = EXCLUDED.expected_benefit,
+        trigger_conditions = EXCLUDED.trigger_conditions,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${opportunities.length} opportunities`)
+  }
+
+  /**
+   * Save risk responses to database
+   */
+  private async saveRiskResponses(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    riskResponses: RiskResponseRecord[]
+  ): Promise<void> {
+    if (riskResponses.length === 0) {
+      logger.info('[EXTRACTION] No risk_responses to save, skipping')
+      return
+    }
+
+    const effectivenessMap: Record<string, string> = {
+      effective: 'effective',
+      success: 'effective',
+      successful: 'effective',
+      partially_effective: 'partially_effective',
+      'partially effective': 'partially_effective',
+      partial: 'partially_effective',
+      ineffective: 'ineffective',
+      failed: 'ineffective'
+    }
+    const scaleMap: Record<string, string> = {
+      very_high: 'very_high',
+      'very high': 'very_high',
+      high: 'high',
+      medium: 'medium',
+      moderate: 'medium',
+      low: 'low',
+      very_low: 'very_low',
+      'very low': 'very_low'
+    }
+
+    const riskMap = await this.getRiskIdMap(client, projectId)
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    riskResponses.forEach((response, index) => {
+      const offset = index * 13
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
+      )
+
+      const normalizedRiskTitle = response.risk_title ? response.risk_title.toLowerCase().trim() : ''
+      const riskId = normalizedRiskTitle ? riskMap.get(normalizedRiskTitle) || null : null
+      if (!riskId && normalizedRiskTitle) {
+        logger.debug(`[EXTRACTION] No risk match for "${response.risk_title}", storing without linkage`)
+      }
+
+      const effectivenessKey = (response.effectiveness || '').toLowerCase().replace(/\s+/g, '_')
+      const effectiveness = effectivenessMap[effectivenessKey] || 'effective'
+
+      const residualKey = (response.residual_risk_level || '').toLowerCase()
+      const residualRiskLevel = scaleMap[residualKey] || null
+
+      const notesSegments = []
+      if (response.notes) {
+        notesSegments.push(response.notes)
+      }
+      if (response.source_document) {
+        notesSegments.push(`Source: ${response.source_document}`)
+      }
+      const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
+
+      values.push(
+        projectId,
+        riskId,
+        response.risk_title ? response.risk_title.substring(0, 255) : null,
+        this.normalizeDate(response.response_date),
+        response.action_taken || null,
+        effectiveness,
+        this.safeNumber(response.cost_of_response),
+        residualRiskLevel,
+        response.owner ? response.owner.substring(0, 255) : null,
+        notes,
+        null, // source_document_id placeholder
+        userId,
+        userId
+      )
+    })
+
+    await client.query(
+      `
+      INSERT INTO risk_responses (
+        project_id, risk_id, risk_title, response_date, action_taken, effectiveness,
+        cost_of_response, residual_risk_level, owner, notes, source_document_id,
+        created_by, updated_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, risk_title, response_date) DO UPDATE SET
+        risk_id = COALESCE(EXCLUDED.risk_id, risk_responses.risk_id),
+        action_taken = EXCLUDED.action_taken,
+        effectiveness = EXCLUDED.effectiveness,
+        cost_of_response = EXCLUDED.cost_of_response,
+        residual_risk_level = EXCLUDED.residual_risk_level,
+        owner = EXCLUDED.owner,
+        notes = EXCLUDED.notes,
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${riskResponses.length} risk responses`)
+  }
+
+  /**
    * Extract a single entity type (for resilient child job processing)
    */
   async extractSingleEntityType(
@@ -2620,10 +4699,34 @@ Requirements:
       documentIds?: string[]
     } = {}
   ): Promise<any[]> {
+    // Get best provider/model using centralized fallback mechanism
+    const { provider: bestProvider, model: bestModel } = await this.getBestAIProviderAndModel(
+      options.aiProvider,
+      options.aiModel
+    )
+    
+    // Override options with best provider/model
+    const extractionOptions = {
+      ...options,
+      aiProvider: bestProvider,
+      aiModel: bestModel
+    }
+    
     const documents = await this.getProjectDocuments(projectId, options.documentIds)
     
+    // Log document retrieval for debugging
+    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] Retrieved ${documents.length} documents for extraction`, {
+      projectId,
+      entityType,
+      documentIds: options.documentIds,
+      documentTitles: documents.map(d => d.title),
+      totalContentLength: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0),
+      provider: bestProvider,
+      model: bestModel
+    })
+    
     if (documents.length === 0) {
-      logger.warn(`[EXTRACTION] No documents found for ${entityType}`)
+      logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] No documents found - cannot extract entities`)
       return []
     }
 
@@ -2634,8 +4737,8 @@ Requirements:
       projectId,
       documentContext,
       entityType,
-      options.aiProvider,
-      options.aiModel
+      bestProvider,
+      bestModel
     )
     
     if (cached) {
@@ -2644,72 +4747,126 @@ Requirements:
     }
 
     // Cache miss - perform AI extraction
-    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ❌ Cache miss, calling AI...`)
+    logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ❌ Cache miss, calling AI...`, {
+      provider: bestProvider,
+      model: bestModel,
+      documentCount: documents.length,
+      totalContentChars: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0)
+    })
     
     let entities: any[]
     
-    // Map entity type to extraction method - pass documents array and options
-    switch (entityType) {
+    try {
+      // Map entity type to extraction method - pass documents array and extractionOptions
+      switch (entityType) {
       case 'stakeholders':
-        entities = await this.extractStakeholders(documents, projectId, options)
+        entities = await this.extractStakeholders(documents, projectId, extractionOptions)
         break
       case 'requirements':
-        entities = await this.extractRequirements(documents, projectId, options)
+        entities = await this.extractRequirements(documents, projectId, extractionOptions)
         break
       case 'risks':
-        entities = await this.extractRisks(documents, projectId, options)
+        entities = await this.extractRisks(documents, projectId, extractionOptions)
         break
       case 'milestones':
-        entities = await this.extractMilestones(documents, projectId, options)
+        entities = await this.extractMilestones(documents, projectId, extractionOptions)
         break
       case 'constraints':
-        entities = await this.extractConstraints(documents, projectId, options)
+        entities = await this.extractConstraints(documents, projectId, extractionOptions)
         break
       case 'success_criteria':
-        entities = await this.extractSuccessCriteria(documents, projectId, options)
+        entities = await this.extractSuccessCriteria(documents, projectId, extractionOptions)
         break
       case 'best_practices':
-        entities = await this.extractBestPractices(documents, projectId, options)
+        entities = await this.extractBestPractices(documents, projectId, extractionOptions)
         break
       case 'phases':
-        entities = await this.extractPhases(documents, projectId, options)
+        entities = await this.extractPhases(documents, projectId, extractionOptions)
         break
       case 'resources':
-        entities = await this.extractResources(documents, projectId, options)
+        entities = await this.extractResources(documents, projectId, extractionOptions)
         break
       case 'technologies':
-        entities = await this.extractTechnologies(documents, projectId, options)
+        entities = await this.extractTechnologies(documents, projectId, extractionOptions)
         break
       case 'quality_standards':
-        entities = await this.extractQualityStandards(documents, projectId, options)
+        entities = await this.extractQualityStandards(documents, projectId, extractionOptions)
         break
       case 'deliverables':
-        entities = await this.extractDeliverables(documents, projectId, options)
+        entities = await this.extractDeliverables(documents, projectId, extractionOptions)
         break
       case 'scope_items':
-        entities = await this.extractScopeItems(documents, projectId, options)
+        entities = await this.extractScopeItems(documents, projectId, extractionOptions)
         break
       case 'activities':
-        entities = await this.extractActivities(documents, projectId, options)
+        entities = await this.extractActivities(documents, projectId, extractionOptions)
+        break
+      case 'team_agreements':
+        entities = await this.extractTeamAgreements(documents, projectId, extractionOptions)
+        break
+      case 'development_approaches':
+        entities = await this.extractDevelopmentApproaches(documents, projectId, extractionOptions)
+        break
+      case 'project_iterations':
+        entities = await this.extractProjectIterations(documents, projectId, extractionOptions)
+        break
+      case 'work_items':
+        entities = await this.extractWorkItems(documents, projectId, extractionOptions)
+        break
+      case 'capacity_plans':
+        entities = await this.extractCapacityPlans(documents, projectId, extractionOptions)
+        break
+      case 'performance_measurements':
+        entities = await this.extractPerformanceMeasurements(documents, projectId, extractionOptions)
+        break
+      case 'earned_value_metrics':
+        entities = await this.extractEarnedValueMetrics(documents, projectId, extractionOptions)
+        break
+      case 'opportunities':
+        entities = await this.extractOpportunities(documents, projectId, extractionOptions)
+        break
+      case 'risk_responses':
+        entities = await this.extractRiskResponses(documents, projectId, extractionOptions)
         break
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
+      }
+    } catch (extractionError: any) {
+      const errorMessage = extractionError?.message || String(extractionError)
+      logger.error(`[EXTRACTION-${entityType.toUpperCase()}] Extraction failed: ${errorMessage}`, {
+        entityType,
+        projectId,
+        provider: bestProvider,
+        model: bestModel,
+        documentCount: documents.length,
+        error: errorMessage,
+        stack: extractionError?.stack,
+        code: extractionError?.code,
+        name: extractionError?.name
+      })
+      // Re-throw with more context so Bull can retry
+      throw new Error(`Failed to extract ${entityType}: ${errorMessage}`)
     }
     
     // Cache the result for future extractions (only if successful)
-    if (entities.length > 0) {
-      await aiCacheService.set(
-        projectId,
-        documentContext,
-        entityType,
-        entities,
-        options.aiProvider,
-        options.aiModel
-      )
-      logger.info(`[EXTRACTION-${entityType.toUpperCase()}] 💾 Cached ${entities.length} entities for future use`)
+    if (entities && entities.length > 0) {
+      try {
+        await aiCacheService.set(
+          projectId,
+          documentContext,
+          entityType,
+          entities,
+          bestProvider,
+          bestModel
+        )
+        logger.info(`[EXTRACTION-${entityType.toUpperCase()}] 💾 Cached ${entities.length} entities for future use`)
+      } catch (cacheError: any) {
+        // Don't fail extraction if caching fails
+        logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Failed to cache results: ${cacheError?.message || cacheError}`)
+      }
     }
     
-    return entities
+    return entities || []
   }
 
   /**
@@ -2779,6 +4936,33 @@ Requirements:
         case 'activities':
           await this.saveActivities(client, projectId, userId, entities)
           break
+        case 'team_agreements':
+          await this.saveTeamAgreements(client, projectId, userId, entities)
+          break
+        case 'development_approaches':
+          await this.saveDevelopmentApproaches(client, projectId, userId, entities)
+          break
+        case 'project_iterations':
+          await this.saveProjectIterations(client, projectId, userId, entities)
+          break
+        case 'work_items':
+          await this.saveWorkItems(client, projectId, userId, entities)
+          break
+        case 'capacity_plans':
+          await this.saveCapacityPlans(client, projectId, userId, entities)
+          break
+        case 'performance_measurements':
+          await this.savePerformanceMeasurements(client, projectId, userId, entities)
+          break
+        case 'earned_value_metrics':
+          await this.saveEarnedValueMetrics(client, projectId, userId, entities)
+          break
+        case 'opportunities':
+          await this.saveOpportunities(client, projectId, userId, entities)
+          break
+        case 'risk_responses':
+          await this.saveRiskResponses(client, projectId, userId, entities)
+          break
         default:
           throw new Error(`Unknown entity type: ${entityType}`)
       }
@@ -2786,11 +4970,21 @@ Requirements:
       await client.query('COMMIT')
       logger.info(`[EXTRACTION] Successfully saved ${entities.length} ${entityType}`)
       
-    } catch (error) {
+    } catch (error: any) {
       await client.query('ROLLBACK')
       const errorMessage = error instanceof Error ? error.message : String(error)
-      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${errorMessage}`)
-      throw error
+      logger.error(`[EXTRACTION] Failed to save ${entityType}: ${errorMessage}`, {
+        entityType,
+        projectId,
+        userId,
+        entityCount: entities.length,
+        error: errorMessage,
+        stack: error?.stack,
+        code: error?.code,
+        detail: error?.detail
+      })
+      // Re-throw with more context
+      throw new Error(`Failed to save ${entityType} (${entities.length} entities): ${errorMessage}`)
     } finally {
       client.release()
     }

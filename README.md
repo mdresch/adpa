@@ -540,3 +540,6 @@ For enterprise customers and commercial licensing:
 **Built with ❤️ by the ADPA Framework Team**
 
 *Empowering organizations with intelligent document automation and seamless enterprise integrations.*
+
+---
+*Last updated: 2024*

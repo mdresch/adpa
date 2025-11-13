@@ -23,6 +23,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import Link from "next/link"
 import { apiClient } from "@/lib/api"
+import { CreateApprovalDialog } from "./components/CreateApprovalDialog"
 
 interface ApprovalRequest {
   id: string
@@ -70,6 +71,7 @@ export default function ApprovalsPage() {
   const [stats, setStats] = useState<ApprovalStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'pending' | 'completed'>('pending')
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -81,11 +83,13 @@ export default function ApprovalsPage() {
   const fetchApprovals = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get('/approvals')
-      setApprovals(response.data.approvals || [])
+      const response = await apiClient.get<any>('/approvals')
+      // API returns { success: true, approvals: [...], count: ... }
+      setApprovals(response.approvals || [])
     } catch (error) {
       console.error('Error fetching approvals:', error)
       toast.error('Failed to load approvals')
+      setApprovals([]) // Set empty array on error
     } finally {
       setLoading(false)
     }
@@ -93,10 +97,13 @@ export default function ApprovalsPage() {
 
   const fetchStats = async () => {
     try {
-      const response = await apiClient.get('/approvals/stats/user')
-      setStats(response.data.stats)
+      const response = await apiClient.get<any>('/approvals/stats/user')
+      // API returns { success: true, stats: {...} } or direct stats object
+      setStats(response.stats || response)
     } catch (error) {
       console.error('Error fetching stats:', error)
+      // Set default stats on error
+      setStats({ pending: 0, approved: 0, rejected: 0, overdue: 0 })
     }
   }
 
@@ -115,19 +122,26 @@ export default function ApprovalsPage() {
   }
 
   return (
-    <AnimatedLayout>
+    <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header title="Approval Requests" />
-        <PageTransition>
-          <main className="flex-1 overflow-y-auto p-6 md:p-8">
-            {/* Header */}
-            <div className="mb-6">
-              <h1 className="text-3xl font-bold mb-2">Approval Requests</h1>
-              <p className="text-gray-600">
-                Review and manage approval requests for change requests and drift resolutions
-              </p>
-            </div>
+        <main className="flex-1 overflow-y-auto p-6 md:p-8">
+          <PageTransition>
+            <AnimatedLayout>
+              {/* Header */}
+              <div className="mb-6 flex items-start justify-between">
+                <div>
+                  <h1 className="text-3xl font-bold mb-2">Approval Requests</h1>
+                  <p className="text-muted-foreground">
+                    Review and manage approval requests for change requests and drift resolutions
+                  </p>
+                </div>
+                <Button onClick={() => setShowCreateDialog(true)}>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Create Approval Request
+                </Button>
+              </div>
 
             {/* Stats Cards */}
             {stats && (
@@ -191,7 +205,7 @@ export default function ApprovalsPage() {
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <FileText className="h-12 w-12 text-gray-400 mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No approval requests</h3>
-                  <p className="text-gray-600 text-center">
+                  <p className="text-muted-foreground text-center">
                     {filter === 'pending'
                       ? "You don't have any pending approval requests"
                       : filter === 'completed'
@@ -249,7 +263,7 @@ export default function ApprovalsPage() {
                           </CardHeader>
 
                           <CardContent>
-                            <div className="space-y-2 text-sm text-gray-600">
+                            <div className="space-y-2 text-sm text-muted-foreground">
                               <div className="flex items-center">
                                 <Calendar className="h-4 w-4 mr-2" />
                                 <span>
@@ -277,9 +291,19 @@ export default function ApprovalsPage() {
                 })}
               </AnimatedGrid>
             )}
-          </main>
-        </PageTransition>
+            </AnimatedLayout>
+          </PageTransition>
+        </main>
       </div>
-    </AnimatedLayout>
+
+      <CreateApprovalDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={() => {
+          void fetchApprovals()
+          void fetchStats()
+        }}
+      />
+    </div>
   )
 }

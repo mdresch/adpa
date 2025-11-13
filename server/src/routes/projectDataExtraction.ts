@@ -144,8 +144,9 @@ router.get(
     try {
       const { projectId } = req.params
 
-      // Initialize counts object
+      // Initialize counts object - includes PMBOK 8 performance domain entities
       const entityCounts: Record<string, number> = {
+        // Legacy entities (PMBOK 7 and earlier)
         stakeholders: 0,
         requirements: 0,
         risks: 0,
@@ -159,11 +160,22 @@ router.get(
         qualityStandards: 0,
         deliverables: 0,
         scopeItems: 0,
-        activities: 0
+        activities: 0,
+        // PMBOK 8 Performance Domain entities
+        teamAgreements: 0,
+        developmentApproaches: 0,
+        projectIterations: 0,
+        workItems: 0,
+        capacityPlans: 0,
+        performanceMeasurements: 0,
+        earnedValueMetrics: 0,
+        opportunities: 0,
+        riskResponses: 0
       }
 
       // Query each table individually to handle missing tables gracefully
       const tables = [
+        // Legacy entities
         { name: 'stakeholders', key: 'stakeholders' },
         { name: 'requirements', key: 'requirements' },
         { name: 'risks', key: 'risks' },
@@ -177,7 +189,17 @@ router.get(
         { name: 'quality_standards', key: 'qualityStandards' },
         { name: 'deliverables', key: 'deliverables' },
         { name: 'scope_items', key: 'scopeItems' },
-        { name: 'activities', key: 'activities' }
+        { name: 'activities', key: 'activities' },
+        // PMBOK 8 Performance Domain tables
+        { name: 'team_agreements', key: 'teamAgreements' },
+        { name: 'development_approaches', key: 'developmentApproaches' },
+        { name: 'project_iterations', key: 'projectIterations' },
+        { name: 'work_items', key: 'workItems' },
+        { name: 'capacity_plans', key: 'capacityPlans' },
+        { name: 'performance_measurements', key: 'performanceMeasurements' },
+        { name: 'earned_value_metrics', key: 'earnedValueMetrics' },
+        { name: 'opportunities', key: 'opportunities' },
+        { name: 'risk_responses', key: 'riskResponses' }
       ]
 
       for (const table of tables) {
@@ -198,11 +220,31 @@ router.get(
 
       const totalEntities = Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
 
+      // Calculate PMBOK 8 domain coverage metrics
+      const pmbok8DomainCounts = {
+        team: entityCounts.teamAgreements,
+        developmentApproach: entityCounts.developmentApproaches,
+        projectWork: entityCounts.workItems + entityCounts.projectIterations + entityCounts.capacityPlans,
+        measurement: entityCounts.performanceMeasurements + entityCounts.earnedValueMetrics,
+        uncertainty: entityCounts.opportunities + entityCounts.riskResponses
+      }
+
+      const pmbok8Total = Object.values(pmbok8DomainCounts).reduce((sum, count) => sum + count, 0)
+
       res.json({
         success: true,
         projectId,
         entityCounts,
-        totalEntities
+        totalEntities,
+        pmbok8DomainCounts,
+        pmbok8Total,
+        domainCoverage: {
+          team: pmbok8DomainCounts.team > 0,
+          developmentApproach: pmbok8DomainCounts.developmentApproach > 0,
+          projectWork: pmbok8DomainCounts.projectWork > 0,
+          measurement: pmbok8DomainCounts.measurement > 0,
+          uncertainty: pmbok8DomainCounts.uncertainty > 0
+        }
       })
     } catch (error: unknown) {
       logger.error('[EXTRACTION-API] Results fetch failed', {

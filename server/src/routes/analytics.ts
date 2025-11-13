@@ -378,4 +378,207 @@ router.get("/performance",
   }
 )
 
+/**
+ * GET /api/analytics/pmbok8-domains/:projectId
+ * Get PMBOK 8 Performance Domain analytics for a project
+ */
+router.get(
+  '/pmbok8-domains/:projectId',
+  authenticateToken,
+  async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { projectId } = req.params
+      const userId = req.user?.id
+
+      // Verify user has access to this project
+      const projectCheck = await pool.query(
+        'SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)',
+        [projectId, userId]
+      )
+
+      if (projectCheck.rows.length === 0) {
+        return res.status(403).json({ error: 'Access denied to this project' })
+      }
+
+      const cacheKey = `analytics:pmbok8:${projectId}`
+      const cached = await cache.get(cacheKey)
+      if (cached) {
+        return res.json(cached)
+      }
+
+      // Team Performance Domain metrics
+      const teamMetrics = await pool.query(`
+        SELECT 
+          COUNT(*) as total_agreements,
+          COUNT(*) FILTER (WHERE status = 'active') as active_agreements,
+          COUNT(*) FILTER (WHERE status = 'under_review') as under_review,
+          AVG(adherence_score) as avg_adherence_score,
+          SUM(violations_count) as total_violations,
+          COUNT(*) FILTER (WHERE violations_count > 0) as agreements_with_violations
+        FROM team_agreements
+        WHERE project_id = $1
+      `, [projectId])
+
+      // Development Approach & Life Cycle Domain metrics
+      const developmentMetrics = await pool.query(`
+        SELECT 
+          COUNT(DISTINCT da.id) as total_approaches,
+          COUNT(DISTINCT da.framework) as unique_frameworks,
+          COUNT(DISTINCT pi.id) as total_iterations,
+          COUNT(DISTINCT pi.id) FILTER (WHERE pi.status = 'completed') as completed_iterations,
+          AVG(pi.velocity) FILTER (WHERE pi.velocity IS NOT NULL) as avg_velocity,
+          AVG(pi.completed_story_points) FILTER (WHERE pi.completed_story_points IS NOT NULL) as avg_story_points
+        FROM development_approaches da
+        LEFT JOIN project_iterations pi ON pi.project_id = da.project_id
+        WHERE da.project_id = $1
+      `, [projectId])
+
+      // Project Work Performance Domain metrics
+      const workMetrics = await pool.query(`
+        SELECT 
+          COUNT(*) as total_work_items,
+          COUNT(*) FILTER (WHERE status = 'done') as completed_items,
+          COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress_items,
+          COUNT(*) FILTER (WHERE status = 'blocked') as blocked_items,
+          SUM(estimated_hours) as total_estimated_hours,
+          SUM(actual_hours) FILTER (WHERE actual_hours IS NOT NULL) as total_actual_hours,
+          AVG(progress_percentage) FILTER (WHERE progress_percentage IS NOT NULL) as avg_progress,
+          COUNT(DISTINCT assigned_to) FILTER (WHERE assigned_to IS NOT NULL) as unique_assignees
+        FROM work_items
+        WHERE project_id = $1
+      `, [projectId])
+
+      const capacityMetrics = await pool.query(`
+        SELECT 
+          COUNT(*) as total_capacity_plans,
+          AVG(utilization_percentage) FILTER (WHERE utilization_percentage IS NOT NULL) as avg_utilization,
+          SUM(available_hours) FILTER (WHERE available_hours IS NOT NULL) as total_available_hours,
+          SUM(allocated_hours) FILTER (WHERE allocated_hours IS NOT NULL) as total_allocated_hours
+        FROM capacity_plans
+        WHERE project_id = $1
+      `, [projectId])
+
+      // Measurement Performance Domain metrics
+      const measurementMetrics = await pool.query(`
+        SELECT 
+          COUNT(*) as total_measurements,
+          COUNT(*) FILTER (WHERE status = 'on_track') as on_track_count,
+          COUNT(*) FILTER (WHERE status = 'at_risk') as at_risk_count,
+          COUNT(*) FILTER (WHERE status = 'off_track') as off_track_count,
+          AVG(variance_percentage) FILTER (WHERE variance_percentage IS NOT NULL) as avg_variance,
+          COUNT(DISTINCT success_criterion_id) FILTER (WHERE success_criterion_id IS NOT NULL) as measured_criteria
+        FROM performance_measurements
+        WHERE project_id = $1
+      `, [projectId])
+
+      const evmMetrics = await pool.query(`
+        SELECT 
+          COUNT(*) as total_evm_records,
+          AVG(schedule_performance_index) FILTER (WHERE schedule_performance_index IS NOT NULL) as avg_spi,
+          AVG(cost_performance_index) FILTER (WHERE cost_performance_index IS NOT NULL) as avg_cpi,
+          AVG(schedule_variance) FILTER (WHERE schedule_variance IS NOT NULL) as avg_sv,
+          AVG(cost_variance) FILTER (WHERE cost_variance IS NOT NULL) as avg_cv,
+          MAX(measurement_date) as latest_measurement_date
+        FROM earned_value_metrics
+        WHERE project_id = $1
+      `, [projectId])
+
+      // Uncertainty Performance Domain metrics
+      const uncertaintyMetrics = await pool.query(`
+        SELECT 
+          COUNT(*) FILTER (WHERE o.id IS NOT NULL) as total_opportunities,
+          COUNT(*) FILTER (WHERE o.status = 'realized') as realized_opportunities,
+          COUNT(*) FILTER (WHERE o.status = 'exploiting') as exploiting_opportunities,
+          SUM(o.expected_benefit) FILTER (WHERE o.expected_benefit IS NOT NULL) as total_expected_benefit,
+          COUNT(*) FILTER (WHERE rr.id IS NOT NULL) as total_risk_responses,
+          COUNT(*) FILTER (WHERE rr.effectiveness = 'effective') as effective_responses,
+          COUNT(*) FILTER (WHERE rr.effectiveness = 'ineffective') as ineffective_responses,
+          AVG(rr.cost_of_response) FILTER (WHERE rr.cost_of_response IS NOT NULL) as avg_response_cost
+        FROM projects p
+        LEFT JOIN opportunities o ON o.project_id = p.id
+        LEFT JOIN risk_responses rr ON rr.project_id = p.id
+        WHERE p.id = $1
+        GROUP BY p.id
+      `, [projectId])
+
+      // Aggregate domain health scores
+      const domainHealth = {
+        team: {
+          score: teamMetrics.rows[0]?.avg_adherence_score 
+            ? Math.min(100, Math.max(0, (teamMetrics.rows[0].avg_adherence_score / 10) * 100))
+            : null,
+          status: teamMetrics.rows[0]?.total_violations > 0 ? 'needs_attention' : 'healthy'
+        },
+        developmentApproach: {
+          score: developmentMetrics.rows[0]?.avg_velocity 
+            ? Math.min(100, Math.max(0, (developmentMetrics.rows[0].avg_velocity / 50) * 100))
+            : null,
+          status: developmentMetrics.rows[0]?.total_iterations > 0 ? 'active' : 'inactive'
+        },
+        projectWork: {
+          score: workMetrics.rows[0]?.avg_progress || 0,
+          status: workMetrics.rows[0]?.blocked_items > 0 ? 'blocked' : 'active'
+        },
+        measurement: {
+          score: measurementMetrics.rows[0]?.on_track_count 
+            ? (measurementMetrics.rows[0].on_track_count / measurementMetrics.rows[0].total_measurements) * 100
+            : null,
+          status: measurementMetrics.rows[0]?.off_track_count > 0 ? 'at_risk' : 'on_track'
+        },
+        uncertainty: {
+          score: uncertaintyMetrics.rows[0]?.effective_responses 
+            ? (uncertaintyMetrics.rows[0].effective_responses / uncertaintyMetrics.rows[0].total_risk_responses) * 100
+            : null,
+          status: uncertaintyMetrics.rows[0]?.ineffective_responses > 0 ? 'needs_attention' : 'managed'
+        }
+      }
+
+      const analytics = {
+        projectId,
+        domains: {
+          team: {
+            ...teamMetrics.rows[0],
+            health: domainHealth.team
+          },
+          developmentApproach: {
+            ...developmentMetrics.rows[0],
+            health: domainHealth.developmentApproach
+          },
+          projectWork: {
+            workItems: workMetrics.rows[0],
+            capacity: capacityMetrics.rows[0],
+            health: domainHealth.projectWork
+          },
+          measurement: {
+            performance: measurementMetrics.rows[0],
+            evm: evmMetrics.rows[0],
+            health: domainHealth.measurement
+          },
+          uncertainty: {
+            ...uncertaintyMetrics.rows[0],
+            health: domainHealth.uncertainty
+          }
+        },
+        overallHealth: {
+          domainsCovered: Object.values(domainHealth).filter(d => d.score !== null).length,
+          averageScore: Object.values(domainHealth)
+            .map(d => d.score)
+            .filter((s): s is number => s !== null)
+            .reduce((sum, score, _, arr) => sum + score / arr.length, 0) || 0
+        },
+        generated_at: new Date().toISOString()
+      }
+
+      // Cache for 5 minutes
+      await cache.set(cacheKey, analytics, 300)
+
+      res.json(analytics)
+    } catch (error) {
+      log.error('PMBOK 8 domain analytics error:', error)
+      res.status(500).json({ error: 'Failed to fetch PMBOK 8 domain analytics' })
+    }
+  }
+)
+
 export default router

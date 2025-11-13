@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { PoolClient } from 'pg'
 import { DriftPoint } from './driftDetectionService'
 import { emailNotificationService, PositiveDriftEmailData } from './emailNotificationService'
+import { approvalWorkflowService } from './approvalWorkflowService'
 
 export interface PositiveDriftMetrics {
   costSavings?: number // $ saved
@@ -33,6 +34,7 @@ export interface OpportunityCRResult {
   crTitle: string
   estimatedValue: number
   replicationPotential: number
+  approvalRequestId?: string
 }
 
 export class PositiveDriftChangeRequestService {
@@ -272,6 +274,53 @@ export class PositiveDriftChangeRequestService {
         driftCategory: positiveDrift.driftCategory
       })
 
+      // Create approval workflow for positive drift opportunity
+      // TASK-745: Approval workflow integration
+      let approvalRequestId: string | undefined
+      try {
+        const totalValue = this.calculateTotalValue(positiveDrift.metrics)
+        const priority: 'low' | 'medium' | 'high' | 'critical' | 'emergency' = 
+          totalValue > 100000 ? 'high' : totalValue > 50000 ? 'medium' : 'low'
+        
+        const approvalRequest = await approvalWorkflowService.createApprovalRequest({
+          request_type: 'positive_drift',
+          change_request_id: changeRequestId,
+          drift_record_id: driftRecordId,
+          project_id: projectId,
+          title: `Approval Required: ${crTitle}`,
+          description: `Positive drift opportunity detected: ${positiveDrift.description}`,
+          impact_summary: {
+            drift_category: positiveDrift.driftCategory,
+            metrics: positiveDrift.metrics,
+            estimated_value: totalValue,
+            strategic_value: positiveDrift.strategicValue,
+            replication_potential: this.estimateReplicationPotential(positiveDrift),
+            requires_approval: true
+          },
+          priority,
+          severity: 'low', // Positive drift is typically low severity (opportunity, not risk)
+          requested_by: userId,
+          metadata: {
+            source: 'automatic_positive_drift_detection',
+            drift_category: positiveDrift.driftCategory,
+            document_id: documentId,
+            drift_points: driftPoints.length
+          }
+        })
+
+        approvalRequestId = approvalRequest.id
+
+        logger.info('[POSITIVE-DRIFT-CR] Approval workflow created', {
+          changeRequestId,
+          approvalRequestId,
+          priority
+        })
+      } catch (error) {
+        logger.error('[POSITIVE-DRIFT-CR] Error creating approval workflow:', error)
+        // Don't fail CR creation if approval workflow creation fails
+        // The change request will still exist and can be manually routed for approval
+      }
+
       // Send notification to sponsors about the opportunity
       this.sendOpportunityNotification(
         project_name,
@@ -288,7 +337,8 @@ export class PositiveDriftChangeRequestService {
         changeRequestId,
         crTitle,
         estimatedValue: this.calculateTotalValue(positiveDrift.metrics),
-        replicationPotential: this.estimateReplicationPotential(positiveDrift)
+        replicationPotential: this.estimateReplicationPotential(positiveDrift),
+        approvalRequestId
       }
     } catch (error) {
       await client.query('ROLLBACK')

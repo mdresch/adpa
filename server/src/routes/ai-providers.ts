@@ -47,28 +47,35 @@ router.get('/', async (req, res) => {
       ORDER BY priority ASC, name ASC
     `)
 
-    const providers = result.rows.map(row => ({
-      id: row.id,
-      name: row.name,
-      type: row.provider_type,
-      model: row.configuration?.model || getDefaultModel(row.provider_type),
-      status: row.is_active ? 'active' : 'inactive',
-      apiKey: '*********************', // Masked
-      endpoint: row.configuration?.endpoint || getDefaultEndpoint(row.provider_type),
-      priority: row.priority || 1,
-      enabled: row.is_active,
-      lastUsed: 'Never', // TODO: Add usage tracking
-      requestCount: 0, // TODO: Add usage tracking
-      errorRate: 0, // TODO: Add error tracking
-      is_active: row.is_active,
-      configuration: {
-        models: row.configuration?.models || [],
-        max_tokens: row.configuration?.max_tokens,
-        default_model: row.configuration?.default_model,
-        model: row.configuration?.model,
-        endpoint: row.configuration?.endpoint
+    const providers = result.rows.map(row => {
+      // Get configured models or fallback to defaults
+      const configuredModels = row.configuration?.models || []
+      const fallbackModels = getDefaultModels(row.provider_type)
+      const models = configuredModels.length > 0 ? configuredModels : fallbackModels
+      
+      return {
+        id: row.id,
+        name: row.name,
+        type: row.provider_type,
+        model: row.configuration?.model || getDefaultModel(row.provider_type),
+        status: row.is_active ? 'active' : 'inactive',
+        apiKey: '*********************', // Masked
+        endpoint: row.configuration?.endpoint || getDefaultEndpoint(row.provider_type),
+        priority: row.priority || 1,
+        enabled: row.is_active,
+        lastUsed: 'Never', // TODO: Add usage tracking
+        requestCount: 0, // TODO: Add usage tracking
+        errorRate: 0, // TODO: Add error tracking
+        is_active: row.is_active,
+        configuration: {
+          models: models, // Always include fallback models if none configured
+          max_tokens: row.configuration?.max_tokens,
+          default_model: row.configuration?.default_model || getDefaultModel(row.provider_type),
+          model: row.configuration?.model || getDefaultModel(row.provider_type),
+          endpoint: row.configuration?.endpoint || getDefaultEndpoint(row.provider_type)
+        }
       }
-    }))
+    })
 
     res.json(providers)
   } catch (error) {
@@ -302,14 +309,29 @@ router.post('/:name/test', authenticateToken, requireAdmin, async (req, res) => 
 // Helper functions
 function getDefaultModel(providerType: string): string {
   switch (providerType) {
-    case 'openai': return 'gpt-3.5-turbo'
-    case 'google': return 'gemini-pro'
+    case 'openai': return 'gpt-4-turbo-preview'
+    case 'google': return 'gemini-2.0-flash-exp'
     case 'azure': return 'gpt-35-turbo'
     case 'anthropic': return 'claude-3-sonnet'
+    case 'mistral': return 'mistral-large-latest'
+    case 'groq': return 'llama-3.3-70b-versatile'
+    case 'deepseek': return 'deepseek-chat'
+    case 'moonshot': return 'moonshot-v1-8k'
+    case 'xai': return 'grok-beta'
     case 'cohere': return 'command'
     case 'huggingface': return 'microsoft/DialoGPT-medium'
     default: return 'gpt-3.5-turbo'
   }
+}
+
+/**
+ * Get default models array for a provider type (fallback when none configured)
+ * Uses the centralized fallback system from aiService.ts
+ */
+function getDefaultModels(providerType: string): string[] {
+  // Use the centralized fallback system from aiService singleton
+  // This ensures consistency with the fallback system used throughout the app
+  return aiService.getModelsForProvider(providerType)
 }
 
 function getDefaultEndpoint(providerType: string): string {
