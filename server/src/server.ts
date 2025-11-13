@@ -86,6 +86,7 @@ import notificationsRoutes from "./routes/notifications"
 import emailNotificationsRoutes from "./routes/emailNotifications"
 import { knowledgeBaseRoutes } from "./modules/knowledgeBase"
 import approvalsRoutes from "./routes/approvals"
+import performanceActualsRoutes from "./routes/performanceActuals"
 
 const app = express()
 const server = createServer(app)
@@ -262,7 +263,8 @@ app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)
 app.use("/api/knowledge-base", knowledgeBaseRoutes)
 app.use("/api/approvals", approvalsRoutes)
-console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, and executive dashboard)")
+app.use("/api/performance-actuals", performanceActualsRoutes)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, and performance actuals)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {

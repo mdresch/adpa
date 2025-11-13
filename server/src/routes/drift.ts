@@ -71,29 +71,49 @@ router.post(
       projectId: Joi.string().uuid().required(),
       documentId: Joi.string().uuid().required(),
       driftRecordId: Joi.string().uuid().required(),
-      driftPoints: Joi.array().items(Joi.object()).required()
+      driftPoints: Joi.array().items(Joi.object()).required(),
+      forceGenerate: Joi.boolean().optional().default(false) // Allow forcing business case generation
     })
   ),
   async (req, res) => {
     try {
-      const { projectId, documentId, driftRecordId, driftPoints } = req.body
+      const { projectId, documentId, driftRecordId, driftPoints, forceGenerate } = req.body
       const userId = req.user?.id
 
       logger.info('[DRIFT-API] Analyzing for positive drift', {
         projectId,
         documentId,
         driftRecordId,
-        driftPointsCount: driftPoints.length
+        driftPointsCount: driftPoints.length,
+        forceGenerate
       })
 
       // Analyze drift for positive indicators
-      const positiveDrift = positiveDriftChangeRequestService.analyzePositiveDrift(driftPoints)
+      let positiveDrift = positiveDriftChangeRequestService.analyzePositiveDrift(driftPoints)
+
+      // If no positive drift detected but forceGenerate is true, create a generic positive drift classification
+      if (!positiveDrift.isPositive && forceGenerate) {
+        logger.info('[DRIFT-API] No positive drift detected, but forceGenerate=true. Creating generic business case opportunity.')
+        
+        // Create a generic positive drift classification for business case generation
+        positiveDrift = {
+          isPositive: true,
+          driftCategory: 'efficiency',
+          metrics: {
+            efficiencyGain: 5, // Estimate 5% efficiency gain
+            innovationValue: 10000 // Estimated value
+          },
+          description: 'Business case opportunity identified from drift analysis',
+          strategicValue: 'Potential strategic value identified through drift analysis. Further analysis recommended.'
+        }
+      }
 
       if (!positiveDrift.isPositive) {
         return res.json({
           success: true,
           isPositiveDrift: false,
-          message: 'No positive drift detected'
+          message: 'No positive drift detected. Set forceGenerate=true to generate a business case anyway.',
+          driftPointsCount: driftPoints.length
         })
       }
 
@@ -112,13 +132,14 @@ router.post(
         isPositiveDrift: true,
         positiveDrift,
         changeRequest: crResult,
-        message: 'Positive drift detected and opportunity change request created'
+        message: 'Business case generated successfully'
       })
     } catch (error) {
       logger.error('[DRIFT-API] Error analyzing positive drift:', error)
       res.status(500).json({
         success: false,
-        error: 'Failed to analyze positive drift'
+        error: 'Failed to analyze positive drift',
+        message: error instanceof Error ? error.message : 'Unknown error'
       })
     }
   }

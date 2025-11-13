@@ -242,7 +242,8 @@ router.get(
         { name: 'performance_measurements', key: 'performanceMeasurements' },
         { name: 'earned_value_metrics', key: 'earnedValueMetrics' },
         { name: 'opportunities', key: 'opportunities' },
-        { name: 'risk_responses', key: 'riskResponses' }
+        { name: 'risk_responses', key: 'riskResponses' },
+        { name: 'performance_actuals', key: 'performanceActuals' }
       ]
 
       for (const table of tables) {
@@ -268,7 +269,7 @@ router.get(
         team: entityCounts.teamAgreements,
         developmentApproach: entityCounts.developmentApproaches,
         projectWork: entityCounts.workItems + entityCounts.projectIterations + entityCounts.capacityPlans,
-        measurement: entityCounts.performanceMeasurements + entityCounts.earnedValueMetrics,
+        measurement: entityCounts.performanceMeasurements + entityCounts.earnedValueMetrics + entityCounts.performanceActuals,
         uncertainty: entityCounts.opportunities + entityCounts.riskResponses
       }
 
@@ -471,6 +472,7 @@ router.get(
         bestPractices: 'best_practices',
         phases: 'phases',
         resources: 'resources',
+        technologies: 'technologies',
         qualityStandards: 'quality_standards',
         deliverables: 'deliverables',
         scopeItems: 'scope_items',
@@ -484,7 +486,8 @@ router.get(
         performanceMeasurements: 'performance_measurements',
         earnedValueMetrics: 'earned_value_metrics',
         opportunities: 'opportunities',
-        riskResponses: 'risk_responses'
+        riskResponses: 'risk_responses',
+        performanceActuals: 'performance_actuals'
       }
 
       const tableName = tableMap[entityType]

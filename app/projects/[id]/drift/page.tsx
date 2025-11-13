@@ -55,9 +55,11 @@ interface DriftDetection {
   detection_date: string
   status: 'detected' | 'acknowledged' | 'investigating' | 'resolved' | 'false_positive'
   source_document_id?: string
+  document_id?: string
   document_name?: string
   detected_by: string
   ai_processing_metadata?: any
+  drift_points?: any[]
 }
 
 interface DriftCategory {
@@ -277,6 +279,11 @@ export default function DriftManagementPage() {
   }
 
   const handleGenerateBusinessCase = async (driftIds: string[]) => {
+    if (driftIds.length === 0) {
+      toast.error('No drift records selected')
+      return
+    }
+
     try {
       setActioningDrift(driftIds[0])
       
@@ -284,14 +291,80 @@ export default function DriftManagementPage() {
         description: 'AI is analyzing ROI and strategic value'
       })
       
-      // Placeholder
-      await new Promise(resolve => setTimeout(resolve, 1500))
+      // Get the drift record details
+      const drift = drifts.find(d => d.id === driftIds[0])
+      if (!drift) {
+        throw new Error('Drift record not found')
+      }
+
+      // Get drift points from the drift record
+      // drift_points may be in drift_points field or in drift_impact
+      let driftPoints: any[] = []
+      if (drift.drift_points && Array.isArray(drift.drift_points)) {
+        driftPoints = drift.drift_points
+      } else if (drift.drift_impact && Array.isArray(drift.drift_impact)) {
+        driftPoints = drift.drift_impact
+      } else if (drift.drift_impact && typeof drift.drift_impact === 'object' && drift.drift_impact.drift_points) {
+        driftPoints = drift.drift_impact.drift_points
+      }
       
-      toast.success('Business case generated!', {
-        description: 'Ready for executive review'
+      if (driftPoints.length === 0) {
+        // If no drift points found, create a basic one from the drift description
+        driftPoints = [{
+          entityType: drift.detection_type || 'unknown',
+          driftType: 'modified',
+          description: drift.drift_description,
+          severity: drift.drift_severity
+        }]
+      }
+
+      // Call API to generate opportunity change request (which includes business case)
+      // Set forceGenerate=true to generate business case even if positive drift isn't automatically detected
+      const response = await apiClient.request<{
+        success: boolean
+        isPositiveDrift?: boolean
+        changeRequest?: { changeRequestId: string; crTitle: string }
+        message: string
+      }>('/drift/analyze-positive', {
+        method: 'POST',
+        body: JSON.stringify({
+          projectId,
+          documentId: drift.document_id || drift.source_document_id || drift.baseline_id,
+          driftRecordId: drift.id,
+          driftPoints,
+          forceGenerate: true // Always generate business case
+        })
       })
-    } catch (error) {
-      toast.error('Failed to generate business case')
+
+      if (response.success && response.changeRequest) {
+        toast.success('Business case generated!', {
+          description: 'Ready for executive review',
+          action: {
+            label: 'View Document',
+            onClick: () => {
+              // Navigate to the change request document
+              window.open(`/projects/${projectId}/documents/${response.changeRequest!.changeRequestId}/view`, '_blank')
+            }
+          },
+          duration: 10000
+        })
+        
+        // Refresh drifts to update status
+        await fetchDrifts()
+      } else if (response.success && !response.isPositiveDrift) {
+        // If no positive drift detected, show informative message
+        toast.warning('Business case generation attempted', {
+          description: response.message || 'No positive drift automatically detected. Consider reviewing drift points manually.',
+          duration: 8000
+        })
+      } else {
+        throw new Error(response.message || 'Failed to generate business case')
+      }
+    } catch (error: any) {
+      console.error('Error generating business case:', error)
+      toast.error('Failed to generate business case', {
+        description: error.message || 'Please try again'
+      })
     } finally {
       setActioningDrift(null)
     }

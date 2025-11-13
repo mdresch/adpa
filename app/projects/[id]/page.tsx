@@ -15,6 +15,7 @@ import { Header } from "@/components/header"
 import { BaselineGanttChart } from "@/components/BaselineGanttChart"
 import { BaselineManagement } from "./components/BaselineManagement"
 import { ProjectDataExtraction } from "./components/ProjectDataExtraction"
+import { PerformanceDashboard } from "@/components/project/PerformanceDashboard"
 import { StakeholdersTab } from "./components/StakeholdersTab"
 import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
@@ -2835,6 +2836,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Database className="h-4 w-4 mr-2" />
                   AI Extraction
                 </TabsTrigger>
+                <TabsTrigger value="performance">
+                  <Activity className="h-4 w-4 mr-2" />
+                  Performance
+                </TabsTrigger>
                 <TabsTrigger value="stakeholders">Stakeholders</TabsTrigger>
                 <TabsTrigger value="baseline">Baseline</TabsTrigger>
                 <TabsTrigger value="financials">
@@ -2877,6 +2882,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsContent value="extraction" className="space-y-4">
                 {/* AI Project Data Extraction - NEW RAG Integration */}
                 <ProjectDataExtraction projectId={projectId} documents={documents} />
+              </TabsContent>
+
+              <TabsContent value="performance" className="space-y-4">
+                {/* Performance Dashboard - PMBOK 8 Measurement Domain */}
+                <PerformanceDashboard projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="stakeholders" className="space-y-4">

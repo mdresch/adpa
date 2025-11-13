@@ -121,8 +121,9 @@ export class ProjectSimilarityService {
   ): Promise<number> {
     try {
       // Get both projects
+      // Note: Removed 'currency' column as it may not exist in all database schemas
       const result = await pool.query(
-        `SELECT id, framework, description, budget, currency, status, metadata
+        `SELECT id, framework, description, budget, status, metadata
          FROM projects
          WHERE id IN ($1, $2)`,
         [projectId1, projectId2]

@@ -83,7 +83,8 @@ export default function ApprovalsPage() {
   const fetchApprovals = async () => {
     try {
       setLoading(true)
-      const response = await apiClient.get<any>('/approvals')
+      // Fetch all approvals - frontend will filter by status
+      const response = await apiClient.get<any>('/approvals?status=all')
       // API returns { success: true, approvals: [...], count: ... }
       setApprovals(response.approvals || [])
     } catch (error) {

@@ -1964,7 +1964,7 @@ export default function ProcessFlowWorkflow() {
                               <div className="flex-1">
                                 <h4 className="font-semibold text-base text-foreground mb-1">
                                   <Link 
-                                    href={`/documents/${doc.id}/view`}
+                                    href={selectedProject ? `/projects/${selectedProject}/documents/${doc.id}/view` : `/documents/${doc.id}/view`}
                                     className="text-primary hover:text-primary/80 hover:underline transition-colors"
                                   >
                                     {doc.name || doc.title || `Document ${index + 1}`}
@@ -2468,7 +2468,9 @@ export default function ProcessFlowWorkflow() {
               <Button
                 variant="outline"
                 onClick={() => {
-                  if (workflowResult?.savedDocument?.id) {
+                  if (workflowResult?.savedDocument?.id && selectedProject) {
+                    window.open(`/projects/${selectedProject}/documents/${workflowResult.savedDocument.id}/view`, '_blank')
+                  } else if (workflowResult?.savedDocument?.id) {
                     window.open(`/documents/${workflowResult.savedDocument.id}/view`, '_blank')
                   }
                 }}

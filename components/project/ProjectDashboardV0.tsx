@@ -182,13 +182,31 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
       // Get provider type and model (handle both formats)
       const providerType = activeProvider.type || activeProvider.provider_type
       const models = activeProvider.models || activeProvider.configuration?.models || []
-      const model = models[0] || activeProvider.configuration?.model || activeProvider.model
+      const modelObj = models[0] || activeProvider.configuration?.model || activeProvider.model
 
-      if (!providerType || !model) {
+      if (!providerType || !modelObj) {
         toast.error('Provider configuration incomplete. Please check AI provider settings.')
         setIsExtracting(false)
         return
       }
+
+      // Extract model ID string from model object (if it's an object) or use as-is (if already a string)
+      const modelId = typeof modelObj === 'string' ? modelObj : (modelObj.id || modelObj.name || modelObj.model_id || '')
+
+      if (!modelId) {
+        toast.error('Could not determine model ID. Please check AI provider settings.')
+        setIsExtracting(false)
+        return
+      }
+
+      // Build request body - omit documentIds if undefined (extract from all documents)
+      const requestBody: any = {
+        projectId,
+        aiProvider: providerType,
+        aiModel: modelId
+      }
+      // Only include documentIds if it's a valid array (not undefined/null)
+      // If undefined, omit it to extract from all documents
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/extract`, {
         method: 'POST',
@@ -196,12 +214,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         },
-        body: JSON.stringify({
-          projectId,
-          aiProvider: providerType,
-          aiModel: model,
-          documentIds: undefined // Extract from all documents
-        })
+        body: JSON.stringify(requestBody)
       })
 
       if (!response.ok) {

@@ -37,6 +37,7 @@ interface ExtractionResult {
   earned_value_metrics: EarnedValueMetric[]
   opportunities: OpportunityRecord[]
   risk_responses: RiskResponseRecord[]
+  performance_actuals: PerformanceActual[]
 }
 
 interface Stakeholder {
@@ -336,6 +337,25 @@ interface EarnedValueMetric {
   source_document?: string
 }
 
+interface PerformanceActual {
+  entity_type: 'milestone' | 'deliverable' | 'activity' | 'phase' | 'resource'
+  entity_id?: string // UUID - may not exist yet
+  entity_name: string // Cached name for reporting
+  planned_start_date?: string // ISO date string
+  actual_start_date?: string // ISO date string
+  planned_end_date?: string // ISO date string
+  actual_end_date?: string // ISO date string
+  planned_cost?: number
+  actual_cost?: number
+  planned_progress_percent?: number // 0-100
+  actual_progress_percent?: number // 0-100
+  quality_score?: number // 0-10
+  defects_found?: number
+  rework_hours?: number
+  notes?: string
+  source_document?: string
+}
+
 interface OpportunityRecord {
   title: string
   description?: string
@@ -502,7 +522,8 @@ export class ProjectDataExtractionService {
         performanceMeasurements,
         earnedValueMetrics,
         opportunities,
-        riskResponses
+        riskResponses,
+        performanceActuals
       ] = await Promise.all([
         this.extractStakeholders(documents, projectId, extractionOptions),
         this.extractRequirements(documents, projectId, extractionOptions),
@@ -526,7 +547,8 @@ export class ProjectDataExtractionService {
         this.extractPerformanceMeasurements(documents, projectId, extractionOptions),
         this.extractEarnedValueMetrics(documents, projectId, extractionOptions),
         this.extractOpportunities(documents, projectId, extractionOptions),
-        this.extractRiskResponses(documents, projectId, extractionOptions)
+        this.extractRiskResponses(documents, projectId, extractionOptions),
+        this.extractPerformanceActuals(documents, projectId, extractionOptions)
       ])
 
       const extractionTime = Date.now() - startTime
@@ -557,7 +579,8 @@ export class ProjectDataExtractionService {
           performanceMeasurements: performanceMeasurements.length,
           earnedValueMetrics: earnedValueMetrics.length,
           opportunities: opportunities.length,
-          riskResponses: riskResponses.length
+          riskResponses: riskResponses.length,
+          performanceActuals: performanceActuals.length
         }
       })
 
@@ -584,7 +607,8 @@ export class ProjectDataExtractionService {
         performance_measurements: performanceMeasurements,
         earned_value_metrics: earnedValueMetrics,
         opportunities,
-        risk_responses: riskResponses
+        risk_responses: riskResponses,
+        performance_actuals: performanceActuals
       }
     } catch (error: unknown) {
       logger.error('[EXTRACTION] Entity extraction failed', {
@@ -728,6 +752,11 @@ export class ProjectDataExtractionService {
         await this.saveRiskResponses(client, projectId, userId, entities.risk_responses)
       }
 
+      // Save performance actuals
+      if (entities.performance_actuals.length > 0) {
+        await this.savePerformanceActuals(client, projectId, userId, entities.performance_actuals)
+      }
+
       await client.query('COMMIT')
 
       logger.info('[EXTRACTION] All entities saved successfully', { projectId })
@@ -836,16 +865,22 @@ Requirements:
 - Extract expectations and concerns if mentioned
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
-      })
+        max_tokens: 4000 // Increased from 2000 to handle large documents
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
-      // Validate AI response - throw error to trigger retry/fallback
-      this.validateAIResponse(response, 'stakeholders', options)
+      // Note: response from generateWithFallback includes providerUsed, but validateAIResponse expects standard format
+      const standardResponse = {
+        content: response.content,
+        usage: response.usage,
+        model: response.model || options.aiModel
+      }
+      this.validateAIResponse(standardResponse, 'stakeholders', options)
 
       const parsed = this.parseAIResponse(response.content)
       
@@ -982,13 +1017,14 @@ Requirements:
 - Extract contingency plans if mentioned
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2500
-      })
+        max_tokens: 5000 // Increased from 2500 to handle large documents with many risks
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const risks = parsed.risks || []
@@ -1109,13 +1145,14 @@ Requirements:
 - Assess severity based on impact to project
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
-      })
+        max_tokens: 4000 // Increased from 2000 to handle large documents
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const constraints = parsed.constraints || []
@@ -1688,13 +1725,14 @@ Requirements:
 - Extract justification for scope decisions if mentioned
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2500
-      })
+        max_tokens: 5000 // Increased from 2500 to handle large documents with many scope items
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const scopeItems = parsed.scope_items || []
@@ -1828,13 +1866,14 @@ Rules:
 - If information is missing, use null or an empty array instead of inventing data.
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 2500
-      })
+        max_tokens: 4000 // Increased from 2500 to handle large documents with many team agreements
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const agreements = (parsed.team_agreements || []).map((agreement: any) => ({
@@ -2242,13 +2281,14 @@ Rules:
 - Use null for unknown numeric values.
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 2300
-      })
+        max_tokens: 4000 // Increased from 2300 to handle large documents
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const capacityPlans = (parsed.capacity_plans || []).map((plan: any) => ({
@@ -2458,13 +2498,14 @@ Rules:
 - If quantitative benefit (e.g., $200k) is mentioned, convert to number.
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 2400
-      })
+        max_tokens: 4000 // Increased from 2400 to handle large documents with many opportunities
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const opportunities = (parsed.opportunities || []).map((item: any) => ({
@@ -2544,6 +2585,125 @@ Guidelines:
     } catch (error: unknown) {
       logger.error('[EXTRACTION-RISK-RESPONSES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract performance actuals (actual vs. planned performance data)
+   * Tracks actual performance across schedule, cost, scope, and quality dimensions
+   */
+  private async extractPerformanceActuals(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string }
+  ): Promise<PerformanceActual[]> {
+    try {
+      logger.info('[EXTRACTION-PERFORMANCE-ACTUALS] Starting extraction (TASK-184)')
+
+      const documentContext = this.buildDocumentContext(documents)
+
+      const prompt = `You are analyzing project documents to extract PERFORMANCE ACTUALS - actual performance data that occurred during project execution.
+
+CRITICAL: Only extract ACTUAL performance data (what happened), NOT planned/future data.
+
+Look for:
+- "Actual start date: ...", "Actually started on ...", "Work began on ..."
+- "Actual end date: ...", "Completed on ...", "Finished on ..."
+- "Actual cost: $X", "Spent $X", "Incurred $X"
+- "Progress: X% complete", "X% done", "Completed X%"
+- "Behind schedule by X days", "Ahead of schedule", "Delayed by ..."
+- "Under budget by $X", "Over budget by $X"
+- Status updates, progress reports, actual vs. planned comparisons
+- Quality metrics: defects found, rework hours, quality scores
+
+SOURCE DOCUMENTS:
+${documentContext}
+
+Extract all performance actuals as a JSON array. For each actual found:
+
+{
+  "performance_actuals": [
+    {
+      "entity_type": "milestone" | "deliverable" | "activity" | "phase" | "resource",
+      "entity_name": "Name of the milestone/deliverable/activity",
+      "planned_start_date": "YYYY-MM-DD" (if mentioned),
+      "actual_start_date": "YYYY-MM-DD" (if mentioned),
+      "planned_end_date": "YYYY-MM-DD" (if mentioned),
+      "actual_end_date": "YYYY-MM-DD" (if mentioned),
+      "planned_cost": number (if mentioned),
+      "actual_cost": number (if mentioned),
+      "planned_progress_percent": number 0-100 (if mentioned),
+      "actual_progress_percent": number 0-100 (if mentioned),
+      "quality_score": number 0-10 (if mentioned),
+      "defects_found": number (if mentioned),
+      "rework_hours": number (if mentioned),
+      "notes": "Brief context from the document",
+      "source_document": "Document title"
+    }
+  ]
+}
+
+Guidelines:
+- ONLY include items with ACTUAL data (not just plans)
+- entity_type must be one of: milestone, deliverable, activity, phase, resource
+- Dates should be in YYYY-MM-DD format
+- Remove currency symbols and convert costs to numbers
+- Progress percentages should be 0-100
+- Quality scores should be 0-10
+- Return empty array if no actuals found
+- Return ONLY valid JSON array.
+
+Output valid JSON object with "performance_actuals" array only.`
+
+      // Use generateWithFallback for automatic provider fallback
+      const response = await aiService.generateWithFallback({
+        prompt,
+        provider: options.aiProvider || 'openai',
+        model: options.aiModel,
+        temperature: 0.3,
+        max_tokens: 4000
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+
+      this.validateAIResponse(response, 'performance_actuals', options)
+
+      const parsed = this.parseAIResponse(response.content)
+      const actuals = (parsed.performance_actuals || []).map((item: any) => ({
+        entity_type: item.entity_type || 'milestone',
+        entity_id: item.entity_id || null,
+        entity_name: item.entity_name || '',
+        planned_start_date: this.normalizeDate(item.planned_start_date),
+        actual_start_date: this.normalizeDate(item.actual_start_date),
+        planned_end_date: this.normalizeDate(item.planned_end_date),
+        actual_end_date: this.normalizeDate(item.actual_end_date),
+        planned_cost: this.safeNumber(item.planned_cost),
+        actual_cost: this.safeNumber(item.actual_cost),
+        planned_progress_percent: this.safeNumber(item.planned_progress_percent),
+        actual_progress_percent: this.safeNumber(item.actual_progress_percent),
+        quality_score: this.safeNumber(item.quality_score),
+        defects_found: this.safeInteger(item.defects_found),
+        rework_hours: this.safeNumber(item.rework_hours),
+        notes: item.notes || null,
+        source_document: item.source_document || null
+      })).filter((actual: PerformanceActual) => {
+        // Filter out invalid entries (must have at least entity_name and some actual data)
+        return actual.entity_name && (
+          actual.actual_start_date ||
+          actual.actual_end_date ||
+          actual.actual_cost !== null ||
+          actual.actual_progress_percent !== null ||
+          actual.quality_score !== null
+        )
+      })
+
+      logger.info(`[EXTRACTION-PERFORMANCE-ACTUALS] Extracted ${actuals.length} performance actuals`)
+
+      return actuals
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-PERFORMANCE-ACTUALS] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined
       })
       return []
     }
@@ -5593,6 +5753,134 @@ Guidelines:
   }
 
   /**
+   * Save performance actuals to database
+   * Variances are automatically calculated by database trigger
+   */
+  private async savePerformanceActuals(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    performanceActuals: PerformanceActual[]
+  ): Promise<void> {
+    if (performanceActuals.length === 0) {
+      logger.info('[EXTRACTION] No performance_actuals to save, skipping')
+      return
+    }
+
+    // Validate entity_type enum
+    const validEntityTypes = new Set(['milestone', 'deliverable', 'activity', 'phase', 'resource'])
+
+    const values: any[] = []
+    const placeholders: string[] = []
+    let validItemCount = 0 // Counter for valid items only (not forEach index)
+
+    performanceActuals.forEach((actual) => {
+      // Validate entity_type
+      const entityType = validEntityTypes.has(actual.entity_type) ? actual.entity_type : 'milestone'
+      
+      // Use current date as measurement_date if not provided
+      const measurementDate = actual.actual_end_date || actual.actual_start_date || new Date().toISOString().split('T')[0]
+      const normalizedMeasurementDate = this.normalizeDate(measurementDate)
+      
+      if (!normalizedMeasurementDate) {
+        logger.warn(`[EXTRACTION] Skipping performance actual due to invalid measurement date: ${measurementDate}`)
+        return
+      }
+
+      if (!actual.entity_name || actual.entity_name.trim().length === 0) {
+        logger.warn(`[EXTRACTION] Skipping performance actual due to missing entity_name`)
+        return
+      }
+
+      // Calculate offset based on valid item count (not forEach index)
+      const offset = validItemCount * 18
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18})`
+      )
+
+      const notesSegments = []
+      if (actual.notes) {
+        notesSegments.push(actual.notes)
+      }
+      if (actual.source_document) {
+        notesSegments.push(`Source: ${actual.source_document}`)
+      }
+      const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
+
+      values.push(
+        projectId,
+        entityType,
+        actual.entity_id || null,
+        actual.entity_name.substring(0, 500),
+        actual.planned_start_date ? this.normalizeDate(actual.planned_start_date) : null,
+        actual.actual_start_date ? this.normalizeDate(actual.actual_start_date) : null,
+        actual.planned_end_date ? this.normalizeDate(actual.planned_end_date) : null,
+        actual.actual_end_date ? this.normalizeDate(actual.actual_end_date) : null,
+        actual.planned_cost !== null && actual.planned_cost !== undefined ? actual.planned_cost : null,
+        actual.actual_cost !== null && actual.actual_cost !== undefined ? actual.actual_cost : null,
+        actual.planned_progress_percent !== null && actual.planned_progress_percent !== undefined ? actual.planned_progress_percent : null,
+        actual.actual_progress_percent !== null && actual.actual_progress_percent !== undefined ? actual.actual_progress_percent : null,
+        actual.quality_score !== null && actual.quality_score !== undefined ? actual.quality_score : null,
+        actual.defects_found !== null && actual.defects_found !== undefined ? actual.defects_found : null,
+        actual.rework_hours !== null && actual.rework_hours !== undefined ? actual.rework_hours : null,
+        normalizedMeasurementDate,
+        'extracted', // measurement_method
+        userId, // measured_by
+        notes
+      )
+
+      // Increment counter only after successfully adding a valid item
+      validItemCount++
+    })
+
+    if (values.length === 0) {
+      logger.warn('[EXTRACTION] No valid performance actuals to save after filtering')
+      return
+    }
+
+    // Verify alignment: values.length should equal placeholders.length * 18
+    if (values.length !== placeholders.length * 18) {
+      logger.error('[EXTRACTION] Placeholder/value misalignment detected', {
+        valuesLength: values.length,
+        placeholdersLength: placeholders.length,
+        expectedValuesLength: placeholders.length * 18
+      })
+      throw new Error(`Placeholder/value misalignment: ${values.length} values but ${placeholders.length} placeholders (expected ${placeholders.length * 18} values)`)
+    }
+
+    await client.query(
+      `
+      INSERT INTO performance_actuals (
+        project_id, entity_type, entity_id, entity_name,
+        planned_start_date, actual_start_date, planned_end_date, actual_end_date,
+        planned_cost, actual_cost,
+        planned_progress_percent, actual_progress_percent,
+        quality_score, defects_found, rework_hours,
+        measurement_date, measurement_method, measured_by, notes
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, entity_type, entity_id, entity_name, measurement_date) DO UPDATE SET
+        planned_start_date = COALESCE(EXCLUDED.planned_start_date, performance_actuals.planned_start_date),
+        actual_start_date = COALESCE(EXCLUDED.actual_start_date, performance_actuals.actual_start_date),
+        planned_end_date = COALESCE(EXCLUDED.planned_end_date, performance_actuals.planned_end_date),
+        actual_end_date = COALESCE(EXCLUDED.actual_end_date, performance_actuals.actual_end_date),
+        planned_cost = COALESCE(EXCLUDED.planned_cost, performance_actuals.planned_cost),
+        actual_cost = COALESCE(EXCLUDED.actual_cost, performance_actuals.actual_cost),
+        planned_progress_percent = COALESCE(EXCLUDED.planned_progress_percent, performance_actuals.planned_progress_percent),
+        actual_progress_percent = COALESCE(EXCLUDED.actual_progress_percent, performance_actuals.actual_progress_percent),
+        quality_score = COALESCE(EXCLUDED.quality_score, performance_actuals.quality_score),
+        defects_found = COALESCE(EXCLUDED.defects_found, performance_actuals.defects_found),
+        rework_hours = COALESCE(EXCLUDED.rework_hours, performance_actuals.rework_hours),
+        notes = COALESCE(EXCLUDED.notes, performance_actuals.notes),
+        updated_at = CURRENT_TIMESTAMP
+    `,
+      values
+    )
+
+    logger.info(`[EXTRACTION] Saved ${placeholders.length} performance actuals`)
+  }
+
+  /**
    * Extract a single entity type (for resilient child job processing)
    */
   async extractSingleEntityType(
@@ -5734,6 +6022,9 @@ Guidelines:
       case 'risk_responses':
         entities = await this.extractRiskResponses(documents, projectId, extractionOptions)
         break
+      case 'performance_actuals':
+        entities = await this.extractPerformanceActuals(documents, projectId, extractionOptions)
+        break
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
       }
@@ -5868,6 +6159,9 @@ Guidelines:
           break
         case 'risk_responses':
           await this.saveRiskResponses(client, projectId, userId, entities)
+          break
+        case 'performance_actuals':
+          await this.savePerformanceActuals(client, projectId, userId, entities)
           break
         default:
           throw new Error(`Unknown entity type: ${entityType}`)

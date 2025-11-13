@@ -7,6 +7,7 @@ import type { DocumentPriority } from "../types"
 interface DocumentsTabProps {
   isLoadingPriorities: boolean
   prioritizedDocuments: DocumentPriority[]
+  projectId?: string
 }
 
 // Format numbers consistently
@@ -30,7 +31,7 @@ const formatLastModified = (date: string | Date | undefined): string => {
   return `${Math.floor(days / 30)} months ago`
 }
 
-export function DocumentsTab({ isLoadingPriorities, prioritizedDocuments }: DocumentsTabProps) {
+export function DocumentsTab({ isLoadingPriorities, prioritizedDocuments, projectId }: DocumentsTabProps) {
   return (
     <div className="space-y-6">
       <Card>
@@ -66,7 +67,7 @@ export function DocumentsTab({ isLoadingPriorities, prioritizedDocuments }: Docu
                     <div className="flex-1">
                       <h4 className="font-semibold text-base text-foreground mb-1">
                         <Link 
-                          href={`/documents/${doc.id}/view`}
+                          href={projectId ? `/projects/${projectId}/documents/${doc.id}/view` : `/documents/${doc.id}/view`}
                           className="text-primary hover:text-primary/80 hover:underline transition-colors"
                         >
                           {doc.title || `Document ${index + 1}`}

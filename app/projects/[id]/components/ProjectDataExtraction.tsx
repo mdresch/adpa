@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered } from "@/components/ui/icons-shim"
-import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield } from "lucide-react"
+import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield, Activity } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
@@ -44,6 +44,7 @@ interface EntityCounts {
   earnedValueMetrics: number
   opportunities: number
   riskResponses: number
+  performanceActuals: number
 }
 
 export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtractionProps) {
@@ -597,7 +598,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     { key: 'performanceMeasurements', label: 'Performance Measurements', icon: BarChart3, color: 'text-indigo-600' },
     { key: 'earnedValueMetrics', label: 'Earned Value Metrics', icon: BarChart3, color: 'text-cyan-600' },
     { key: 'opportunities', label: 'Opportunities', icon: Zap, color: 'text-yellow-600' },
-    { key: 'riskResponses', label: 'Risk Responses', icon: Shield, color: 'text-red-600' }
+    { key: 'riskResponses', label: 'Risk Responses', icon: Shield, color: 'text-red-600' },
+    { key: 'performanceActuals', label: 'Performance Actuals', icon: Activity, color: 'text-emerald-600' }
   ]
 
   return (
@@ -817,7 +819,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               Extract Project Data with AI
             </DialogTitle>
             <DialogDescription>
-              AI will analyze your project documents and extract 23 types of structured entities (14 legacy + 9 PMBOK 8 Performance Domain entities).
+              AI will analyze your project documents and extract 24 types of structured entities (14 legacy + 10 PMBOK 8 Performance Domain entities).
             </DialogDescription>
           </DialogHeader>
 
@@ -1045,7 +1047,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   <li><strong>PMBOK 8 Domains:</strong> Team Agreements, Development Approach</li>
                   <li>Project Iterations, Work Items, Capacity Plans</li>
                   <li>Performance Measurements, Earned Value Metrics</li>
-                  <li>Opportunities, Risk Responses</li>
+                  <li>Opportunities, Risk Responses, Performance Actuals</li>
                 </ul>
               </div>
             </div>
