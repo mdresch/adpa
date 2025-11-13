@@ -2846,10 +2846,59 @@ Guidelines:
       
       // Try to fix common JSON issues
       try {
+        // Check if error is about control characters
+        const isControlCharError = parseError.message.includes('control character')
+        
         // Fix trailing commas in arrays and objects
         let fixed = cleanedContent
           .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas before } or ]
           .replace(/,(\s*,)/g, ',') // Remove duplicate commas
+        
+        // If control character error, fix unescaped control chars in string literals
+        if (isControlCharError) {
+          // Use a state machine to properly escape control characters only within string literals
+          let result = ''
+          let inString = false
+          let escapeNext = false
+          
+          for (let i = 0; i < fixed.length; i++) {
+            const char = fixed[i]
+            const charCode = char.charCodeAt(0)
+            
+            if (escapeNext) {
+              result += char
+              escapeNext = false
+              continue
+            }
+            
+            if (char === '\\') {
+              result += char
+              escapeNext = true
+              continue
+            }
+            
+            if (char === '"') {
+              inString = !inString
+              result += char
+              continue
+            }
+            
+            if (inString && charCode >= 0x00 && charCode <= 0x1F && char !== '\n' && char !== '\r' && char !== '\t') {
+              // Escape control characters (except common ones that might already be handled)
+              result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+            } else if (inString && char === '\n') {
+              result += '\\n'
+            } else if (inString && char === '\r') {
+              result += '\\r'
+            } else if (inString && char === '\t') {
+              result += '\\t'
+            } else {
+              result += char
+            }
+          }
+          
+          fixed = result
+        }
         
         // Try parsing fixed version
         return JSON.parse(fixed)

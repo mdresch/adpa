@@ -54,22 +54,24 @@ const milestones = [
   { name: "Production Deployment", date: "May 15", status: "not-started", note: "Upcoming" },
 ]
 
-const extractedEntities = [
-  { type: "Stakeholders", icon: "👥", count: 95, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Requirements", icon: "📋", count: 26, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Risks", icon: "⚠️", count: 43, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Milestones", icon: "🎯", count: 21, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Constraints", icon: "🚧", count: 15, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Success Criteria", icon: "✨", count: 8, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Best Practices", icon: "💡", count: 12, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Phases", icon: "📅", count: 7, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Resources", icon: "💰", count: 18, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Quality", icon: "✅", count: 14, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Deliverables", icon: "📦", count: 30, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Scope Items", icon: "📋", count: 22, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Activities", icon: "📊", count: 20, lastExtract: "2 hours ago", status: "fresh" },
-  { type: "Technologies", icon: "🔧", count: 22, lastExtract: "3 days ago", status: "stale" },
-]
+// Entity type mapping for display
+const ENTITY_TYPE_MAP: Record<string, { label: string; icon: string }> = {
+  stakeholders: { label: "Stakeholders", icon: "👥" },
+  requirements: { label: "Requirements", icon: "📋" },
+  risks: { label: "Risks", icon: "⚠️" },
+  milestones: { label: "Milestones", icon: "🎯" },
+  constraints: { label: "Constraints", icon: "🚧" },
+  successCriteria: { label: "Success Criteria", icon: "✨" },
+  bestPractices: { label: "Best Practices", icon: "💡" },
+  phases: { label: "Phases", icon: "📅" },
+  resources: { label: "Resources", icon: "💰" },
+  qualityStandards: { label: "Quality", icon: "✅" },
+  deliverables: { label: "Deliverables", icon: "📦" },
+  scopeItems: { label: "Scope Items", icon: "📋" },
+  activities: { label: "Activities", icon: "📊" },
+  technologies: { label: "Technologies", icon: "🔧" },
+  developmentApproaches: { label: "Development Approach", icon: "🔨" }
+}
 
 export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Props) {
   const router = useRouter()
@@ -86,6 +88,8 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionStatus, setExtractionStatus] = useState<string>("")
+  const [entityCounts, setEntityCounts] = useState<Record<string, number> | null>(null)
+  const [loadingEntities, setLoadingEntities] = useState(true)
 
   useEffect(() => {
     void fetchProjectData()
@@ -261,6 +265,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
 
   const fetchPMBOK8Summary = async () => {
     try {
+      setLoadingEntities(true)
       const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -273,11 +278,40 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
           domainCoverage: data.domainCoverage || {},
           overallHealth: null
         })
+        // Store entity counts for dynamic display
+        if (data.entityCounts) {
+          setEntityCounts(data.entityCounts)
+        }
       }
     } catch (error) {
       // Silently fail - PMBOK 8 data is optional
       console.debug('PMBOK 8 summary not available:', error)
+    } finally {
+      setLoadingEntities(false)
     }
+  }
+  
+  // Build extracted entities array from API data
+  const getExtractedEntities = () => {
+    if (!entityCounts) {
+      return []
+    }
+    
+    return Object.entries(entityCounts)
+      .filter(([key]) => ENTITY_TYPE_MAP[key])
+      .map(([key, count]) => {
+        const config = ENTITY_TYPE_MAP[key]
+        // Determine status based on count (fresh if > 0, stale if 0)
+        // Note: lastExtract would need to come from API if available
+        return {
+          type: config.label,
+          icon: config.icon,
+          count: count || 0,
+          lastExtract: "2 hours ago", // TODO: Fetch from API if available
+          status: count > 0 ? "fresh" : "stale" as "fresh" | "stale"
+        }
+      })
+      .sort((a, b) => b.count - a.count) // Sort by count descending
   }
 
   const filteredDocuments = documents.filter((doc) =>
@@ -317,7 +351,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
     }
   }
 
-  const totalEntities = extractedEntities.reduce((sum, e) => sum + e.count, 0)
+  const totalEntities = entityCounts ? Object.values(entityCounts).reduce((sum, count) => sum + (count || 0), 0) : 0
 
   if (!project) {
     return (
@@ -657,7 +691,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 <div className="rounded-lg border border-border p-6 bg-muted/50">
                   <h3 className="font-semibold text-foreground mb-4">Available Entities for Baseline</h3>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                    {extractedEntities.map((entity, idx) => (
+                    {getExtractedEntities().map((entity, idx) => (
                       <div key={idx} className="text-sm">
                         <span className="text-green-600">✓</span> {entity.count} {entity.type}
                       </div>
@@ -740,7 +774,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>AI Extraction Dashboard</CardTitle>
-                    <CardDescription>14 entity types extracted from PMBOK 8 standards</CardDescription>
+                    <CardDescription>23 entity types extracted from PMBOK 8 standards (14 legacy + 9 Performance Domain entities)</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     <Button 
@@ -798,7 +832,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                       </tr>
                     </thead>
                     <tbody>
-                      {extractedEntities.map((entity, idx) => (
+                      {getExtractedEntities().map((entity, idx) => (
                         <tr key={idx} className="border-t border-border hover:bg-muted/50">
                           <td className="p-3">
                             <span className="text-foreground">
