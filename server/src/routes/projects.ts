@@ -857,6 +857,7 @@ router.get("/:id/drift-detections", authenticateToken, async (req, res) => {
         bdd.status,
         bdd.source_document_id,
         bdd.detected_by,
+        bdd.ai_processing_metadata->'drift_points' as drift_points,
         d.name as document_name
       FROM baseline_drift_detection bdd
       LEFT JOIN documents d ON bdd.source_document_id = d.id

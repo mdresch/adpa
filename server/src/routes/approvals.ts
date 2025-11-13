@@ -26,19 +26,31 @@ router.use(authenticateToken)
 
 /**
  * GET /api/approvals
- * Get pending approvals for the current user
+ * Get approvals for the current user
+ * Query params:
+ *   - status: Filter by status (pending, in_progress, approved, rejected, all)
  */
 router.get('/', async (req, res) => {
   try {
     const userId = (req as any).user?.id
+    const { status } = req.query
 
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' })
     }
 
-    logger.info('[APPROVAL-API] Fetching pending approvals', { userId })
+    logger.info('[APPROVAL-API] Fetching approvals', { userId, status })
 
-    const approvals = await approvalWorkflowService.getPendingApprovalsForUser(userId)
+    let approvals = await approvalWorkflowService.getPendingApprovalsForUser(userId)
+
+    // Apply status filter if provided
+    if (status && status !== 'all') {
+      if (status === 'pending') {
+        approvals = approvals.filter(a => a.status === 'pending' || a.status === 'in_progress')
+      } else {
+        approvals = approvals.filter(a => a.status === status)
+      }
+    }
 
     res.json({
       success: true,
@@ -46,9 +58,9 @@ router.get('/', async (req, res) => {
       count: approvals.length
     })
   } catch (error) {
-    logger.error('[APPROVAL-API] Error fetching pending approvals:', error)
+    logger.error('[APPROVAL-API] Error fetching approvals:', error)
     res.status(500).json({ 
-      error: 'Failed to fetch pending approvals',
+      error: 'Failed to fetch approvals',
       message: error instanceof Error ? error.message : 'Unknown error'
     })
   }

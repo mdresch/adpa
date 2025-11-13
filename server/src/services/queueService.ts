@@ -1103,7 +1103,8 @@ const ENTITY_TYPES = [
   'technologies', 'quality_standards', 'deliverables', 'scope_items', 'activities',
   // PMBOK 8 Performance Domain entities
   'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
-  'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses'
+  'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
+  'performance_actuals'
 ] as const
 
 type EntityType = typeof ENTITY_TYPES[number]
@@ -1354,7 +1355,8 @@ async function finalizeExtractionJob(jobId: string, projectId: string, failedJob
       pool.query(`SELECT COUNT(*) as count FROM performance_measurements WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM earned_value_metrics WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM opportunities WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM risk_responses WHERE project_id = $1`, [projectId])
+      pool.query(`SELECT COUNT(*) as count FROM risk_responses WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM performance_actuals WHERE project_id = $1`, [projectId])
     ])
     
     const counts = {
@@ -1381,7 +1383,8 @@ async function finalizeExtractionJob(jobId: string, projectId: string, failedJob
       performanceMeasurements: parseInt(countQueries[19].rows[0].count),
       earnedValueMetrics: parseInt(countQueries[20].rows[0].count),
       opportunities: parseInt(countQueries[21].rows[0].count),
-      riskResponses: parseInt(countQueries[22].rows[0].count)
+      riskResponses: parseInt(countQueries[22].rows[0].count),
+      performanceActuals: parseInt(countQueries[23].rows[0].count)
     }
     
     const totalEntities = Object.values(counts).reduce((sum, count) => sum + count, 0)

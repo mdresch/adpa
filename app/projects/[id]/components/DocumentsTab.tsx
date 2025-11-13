@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -117,6 +118,8 @@ export function DocumentsTab({
   documentsPagination,
   setDocumentsPagination,
 }: DocumentsTabProps) {
+  const router = useRouter()
+  
   return (
     <div className="space-y-4">
       {/* Document Stats */}
@@ -178,10 +181,14 @@ export function DocumentsTab({
             className="pl-10"
           />
         </div>
+        <Button onClick={() => router.push(`/documents/new?projectId=${projectId}`)}>
+          <Plus className="h-4 w-4 mr-2" />
+          New Document
+        </Button>
         <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button variant="outline">
+              <FileText className="h-4 w-4 mr-2" />
               Generate Document
             </Button>
           </DialogTrigger>

@@ -143,7 +143,9 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
     },
     {
       domain: "Project Work",
-      score: analytics.domains.projectWork.health.score || 0,
+      score: analytics.domains.projectWork?.health?.score != null 
+        ? analytics.domains.projectWork.health.score 
+        : 0,
       fullMark: 100
     },
     {
@@ -228,7 +230,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       insights.push({
         type: 'success',
         domain: 'Team',
-        message: `Excellent team adherence score (${analytics.domains.team.avg_adherence_score.toFixed(1)}/10). Team agreements are well-followed.`,
+        message: `Excellent team adherence score (${(Number(analytics.domains.team.avg_adherence_score) || 0).toFixed(1)}/10). Team agreements are well-followed.`,
         icon: CheckCircle2,
         priority: 'low'
       })
@@ -239,7 +241,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       insights.push({
         type: 'info',
         domain: 'Development Approach',
-        message: `Low average velocity (${analytics.domains.developmentApproach.avg_velocity.toFixed(1)}). Consider process improvements or scope refinement.`,
+        message: `Low average velocity (${(Number(analytics.domains.developmentApproach.avg_velocity) || 0).toFixed(1)}). Consider process improvements or scope refinement.`,
         icon: Lightbulb,
         priority: 'medium'
       })
@@ -247,14 +249,14 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       insights.push({
         type: 'success',
         domain: 'Development Approach',
-        message: `Strong velocity (${analytics.domains.developmentApproach.avg_velocity.toFixed(1)}). Team is delivering consistently.`,
+        message: `Strong velocity (${(Number(analytics.domains.developmentApproach.avg_velocity) || 0).toFixed(1)}). Team is delivering consistently.`,
         icon: Zap,
         priority: 'low'
       })
     }
     
     // Project work insights
-    if (analytics.domains.projectWork.workItems.blocked_items > 0) {
+    if (analytics.domains.projectWork?.workItems?.blocked_items && analytics.domains.projectWork.workItems.blocked_items > 0) {
       insights.push({
         type: 'warning',
         domain: 'Project Work',
@@ -264,11 +266,11 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       })
     }
     
-    if (analytics.domains.projectWork.capacity.avg_utilization && analytics.domains.projectWork.capacity.avg_utilization > 90) {
+    if (analytics.domains.projectWork?.capacity?.avg_utilization && analytics.domains.projectWork.capacity.avg_utilization > 90) {
       insights.push({
         type: 'warning',
         domain: 'Project Work',
-        message: `High capacity utilization (${analytics.domains.projectWork.capacity.avg_utilization.toFixed(1)}%). Risk of burnout. Consider resource allocation.`,
+        message: `High capacity utilization (${(Number(analytics.domains.projectWork.capacity.avg_utilization) || 0).toFixed(1)}%). Risk of burnout. Consider resource allocation.`,
         icon: AlertTriangle,
         priority: 'medium'
       })
@@ -279,7 +281,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       insights.push({
         type: 'warning',
         domain: 'Measurement',
-        message: `Cost Performance Index (CPI) is ${analytics.domains.measurement.evm.avg_cpi.toFixed(2)}. Budget overrun risk. Review cost controls.`,
+        message: `Cost Performance Index (CPI) is ${(Number(analytics.domains.measurement.evm.avg_cpi) || 0).toFixed(2)}. Budget overrun risk. Review cost controls.`,
         icon: TrendingUp,
         priority: 'high'
       })
@@ -366,12 +368,14 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
             <CardContent>
               <div className="flex items-baseline gap-2">
                 <span className="text-4xl font-bold">
-                  {analytics.overallHealth.averageScore.toFixed(0)}
+                  {typeof analytics.overallHealth.averageScore === 'number' && !isNaN(analytics.overallHealth.averageScore)
+                    ? analytics.overallHealth.averageScore.toFixed(0)
+                    : (Number(analytics.overallHealth.averageScore) || 0).toFixed(0)}
                 </span>
                 <span className="text-muted-foreground">/ 100</span>
               </div>
               <Progress 
-                value={analytics.overallHealth.averageScore} 
+                value={typeof analytics.overallHealth.averageScore === 'number' ? analytics.overallHealth.averageScore : Number(analytics.overallHealth.averageScore) || 0} 
                 className="mt-3 h-2"
               />
               <p className="text-xs text-muted-foreground mt-2">
@@ -490,19 +494,42 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {domain.health.score !== null ? (
-                    <>
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-3xl font-bold">{domain.health.score.toFixed(0)}</span>
-                        <span className="text-muted-foreground text-sm">/ 100</span>
-                      </div>
-                      <Progress value={domain.health.score} className="h-2" />
-                    </>
-                  ) : (
-                    <div className="text-sm text-muted-foreground">
-                      No data available
-                    </div>
-                  )}
+                  {/* Check if domain has data - for Development Approach, check total_approaches */}
+                  {(() => {
+                    const hasData = key === 'developmentApproach' 
+                      ? (domain as any).total_approaches > 0
+                      : domain.health.score !== null && domain.health.score !== undefined
+                    
+                    if (!hasData) {
+                      return (
+                        <div className="text-sm text-muted-foreground">
+                          No data available
+                        </div>
+                      )
+                    }
+                    
+                    return (
+                      <>
+                        {domain.health.score !== null && domain.health.score !== undefined ? (
+                          <>
+                            <div className="flex items-baseline gap-2">
+                              <span className="text-3xl font-bold">
+                                {typeof domain.health.score === 'number' && !isNaN(domain.health.score)
+                                  ? domain.health.score.toFixed(0)
+                                  : Number(domain.health.score) || 0}
+                              </span>
+                              <span className="text-muted-foreground text-sm">/ 100</span>
+                            </div>
+                            <Progress value={typeof domain.health.score === 'number' ? domain.health.score : Number(domain.health.score) || 0} className="h-2" />
+                          </>
+                        ) : key === 'developmentApproach' ? (
+                          <div className="text-sm text-muted-foreground">
+                            Approach configured (no performance metrics yet)
+                          </div>
+                        ) : null}
+                      </>
+                    )
+                  })()}
                   
                   {/* Domain-specific metrics */}
                   <div className="pt-2 border-t space-y-1">
@@ -525,18 +552,49 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                     
                     {key === 'developmentApproach' && (
                       <>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Iterations:</span>
-                          <span className="font-medium">{domain.total_iterations}</span>
-                        </div>
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">Avg Velocity:</span>
-                          <span className="font-medium">
-                            {domain.avg_velocity != null && !isNaN(Number(domain.avg_velocity))
-                              ? Number(domain.avg_velocity).toFixed(1)
-                              : 'N/A'}
-                          </span>
-                        </div>
+                        {domain.approach && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Approach:</span>
+                            <span className="font-medium">{domain.approach}</span>
+                          </div>
+                        )}
+                        {domain.methodology && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Methodology:</span>
+                            <span className="font-medium">{domain.methodology}</span>
+                          </div>
+                        )}
+                        {domain.total_approaches > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Approaches:</span>
+                            <span className="font-medium">{domain.total_approaches}</span>
+                          </div>
+                        )}
+                        {domain.total_iterations != null && domain.total_iterations > 0 && (
+                          <>
+                            <div className="flex justify-between text-xs pt-1 border-t">
+                              <span className="text-muted-foreground">Iterations:</span>
+                              <span className="font-medium">{domain.total_iterations}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Completed:</span>
+                              <span className="font-medium">{domain.completed_iterations ?? 0}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Avg Velocity:</span>
+                              <span className="font-medium">
+                                {domain.avg_velocity != null && !isNaN(Number(domain.avg_velocity))
+                                  ? Number(domain.avg_velocity).toFixed(1)
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                        {(!domain.total_iterations || domain.total_iterations === 0) && (
+                          <div className="text-xs text-muted-foreground pt-1 border-t">
+                            No iterations tracked yet
+                          </div>
+                        )}
                       </>
                     )}
                     
@@ -544,23 +602,67 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                       <>
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">Work Items:</span>
-                          <span className="font-medium">{domain.workItems.total_work_items}</span>
+                          <span className="font-medium">
+                            {domain.workItems?.total_work_items ?? 0}
+                          </span>
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">Blocked:</span>
                           <span className="font-medium text-red-600">
-                            {domain.workItems.blocked_items}
+                            {domain.workItems?.blocked_items ?? 0}
                           </span>
                         </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">In Progress:</span>
+                          <span className="font-medium">
+                            {domain.workItems?.in_progress_items ?? 0}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Completed:</span>
+                          <span className="font-medium">
+                            {domain.workItems?.completed_items ?? 0}
+                          </span>
+                        </div>
+                        {domain.capacity && (
+                          <>
+                            <div className="flex justify-between text-xs pt-1 border-t">
+                              <span className="text-muted-foreground">Capacity Plans:</span>
+                              <span className="font-medium">
+                                {domain.capacity.total_capacity_plans ?? 0}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Avg Utilization:</span>
+                              <span className="font-medium">
+                                {domain.capacity.avg_utilization != null && !isNaN(Number(domain.capacity.avg_utilization))
+                                  ? `${Number(domain.capacity.avg_utilization).toFixed(1)}%`
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </>
                     )}
                     
                     {key === 'measurement' && (
                       <>
-                        <div className="flex justify-between text-xs">
+                        {domain.performance?.total_measurements != null && parseInt(domain.performance.total_measurements) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Measurements:</span>
+                            <span className="font-medium">{domain.performance.total_measurements}</span>
+                          </div>
+                        )}
+                        {domain.evm?.total_evm_records != null && parseInt(domain.evm.total_evm_records) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">EVM Records:</span>
+                            <span className="font-medium">{domain.evm.total_evm_records}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs pt-1 border-t">
                           <span className="text-muted-foreground">CPI:</span>
                           <span className="font-medium">
-                            {domain.evm.avg_cpi != null && !isNaN(Number(domain.evm.avg_cpi)) 
+                            {domain.evm?.avg_cpi != null && !isNaN(Number(domain.evm.avg_cpi)) 
                               ? Number(domain.evm.avg_cpi).toFixed(2) 
                               : 'N/A'}
                           </span>
@@ -568,24 +670,72 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">SPI:</span>
                           <span className="font-medium">
-                            {domain.evm.avg_spi != null && !isNaN(Number(domain.evm.avg_spi)) 
+                            {domain.evm?.avg_spi != null && !isNaN(Number(domain.evm.avg_spi)) 
                               ? Number(domain.evm.avg_spi).toFixed(2) 
                               : 'N/A'}
                           </span>
                         </div>
+                        {domain.performance?.on_track_count != null && parseInt(domain.performance.on_track_count) > 0 && (
+                          <div className="flex justify-between text-xs pt-1 border-t">
+                            <span className="text-muted-foreground">On Track:</span>
+                            <span className="font-medium text-green-600">{domain.performance.on_track_count}</span>
+                          </div>
+                        )}
+                        {domain.performance?.at_risk_count != null && parseInt(domain.performance.at_risk_count) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">At Risk:</span>
+                            <span className="font-medium text-yellow-600">{domain.performance.at_risk_count}</span>
+                          </div>
+                        )}
+                        {domain.performance?.off_track_count != null && parseInt(domain.performance.off_track_count) > 0 && (
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Off Track:</span>
+                            <span className="font-medium text-red-600">{domain.performance.off_track_count}</span>
+                          </div>
+                        )}
                       </>
                     )}
                     
                     {key === 'uncertainty' && (
                       <>
                         <div className="flex justify-between text-xs">
+                          <span className="text-muted-foreground">Total Entities:</span>
+                          <span className="font-medium">
+                            {(domain.total_opportunities || 0) + (domain.total_risk_responses || 0)}
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-xs pt-1 border-t">
                           <span className="text-muted-foreground">Opportunities:</span>
-                          <span className="font-medium">{domain.total_opportunities}</span>
+                          <span className="font-medium">{domain.total_opportunities || 0}</span>
                         </div>
-                        <div className="flex justify-between text-xs">
+                        {domain.realized_opportunities != null && parseInt(domain.realized_opportunities) > 0 && (
+                          <div className="flex justify-between text-xs pl-4">
+                            <span className="text-muted-foreground text-xs">Realized:</span>
+                            <span className="font-medium text-green-600">{domain.realized_opportunities}</span>
+                          </div>
+                        )}
+                        {domain.exploiting_opportunities != null && parseInt(domain.exploiting_opportunities) > 0 && (
+                          <div className="flex justify-between text-xs pl-4">
+                            <span className="text-muted-foreground text-xs">Exploiting:</span>
+                            <span className="font-medium text-blue-600">{domain.exploiting_opportunities}</span>
+                          </div>
+                        )}
+                        <div className="flex justify-between text-xs pt-1 border-t">
                           <span className="text-muted-foreground">Risk Responses:</span>
-                          <span className="font-medium">{domain.total_risk_responses}</span>
+                          <span className="font-medium">{domain.total_risk_responses || 0}</span>
                         </div>
+                        {domain.effective_responses != null && parseInt(domain.effective_responses) > 0 && (
+                          <div className="flex justify-between text-xs pl-4">
+                            <span className="text-muted-foreground text-xs">Effective:</span>
+                            <span className="font-medium text-green-600">{domain.effective_responses}</span>
+                          </div>
+                        )}
+                        {domain.ineffective_responses != null && parseInt(domain.ineffective_responses) > 0 && (
+                          <div className="flex justify-between text-xs pl-4">
+                            <span className="text-muted-foreground text-xs">Ineffective:</span>
+                            <span className="font-medium text-red-600">{domain.ineffective_responses}</span>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>

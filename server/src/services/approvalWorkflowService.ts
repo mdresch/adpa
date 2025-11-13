@@ -427,8 +427,7 @@ export class ApprovalWorkflowService {
       const result = await pool.query(
         `SELECT DISTINCT ar.*
          FROM approval_requests ar
-         WHERE ar.status IN ('pending', 'in_progress')
-           AND (
+         WHERE (
              -- Approvals assigned to the user (for approval)
              EXISTS (
                SELECT 1 FROM approval_steps astep
@@ -439,8 +438,15 @@ export class ApprovalWorkflowService {
              OR
              -- Approvals created by the user (for tracking)
              ar.requested_by = $1
+             OR
+             -- Approvals for projects owned/managed by the user
+             EXISTS (
+               SELECT 1 FROM projects p
+               WHERE p.id = ar.project_id
+                 AND p.owner_id = $1
+             )
            )
-         ORDER BY ar.priority DESC, ar.sla_deadline ASC`,
+         ORDER BY ar.priority DESC, ar.sla_deadline ASC, ar.created_at DESC`,
         [userId]
       )
 

@@ -294,45 +294,48 @@ export class PositiveDriftChangeRequestService {
 
       // Create change request document
       const changeRequestId = uuidv4()
+      const metadata = {
+        document_type: 'change_request',
+        change_request_type: 'positive_drift_opportunity',
+        source_document_id: documentId,
+        drift_record_id: driftRecordId,
+        drift_category: positiveDrift.driftCategory,
+        metrics: positiveDrift.metrics,
+        created_from: 'automatic_positive_drift_detection',
+        requires_approval: true,
+        urgency: 'medium',
+        estimated_value: this.calculateTotalValue(positiveDrift.metrics),
+        replication: {
+          similar_projects_found: similarProjects.length,
+          replication_records_created: replicationRecordsCreated,
+          similar_project_ids: similarProjectIds,
+          replication_potential: similarProjects.length > 0 ? similarProjects.length : this.estimateReplicationPotential(positiveDrift)
+        }
+      }
+      
       await client.query(
         `INSERT INTO documents (
-          id, project_id, name, content, status, type, created_by, updated_by,
+          id, project_id, name, content, status, created_by, updated_by,
           metadata, word_count, character_count, version, semantic_version
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $7, $8, $9, $10, 1, '1.0.0')`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, 1, '1.0.0')`,
         [
           changeRequestId,
           projectId,
           crTitle,
           crContent,
           'pending_approval',
-          'change_request',
           userId,
-          JSON.stringify({
-            change_request_type: 'positive_drift_opportunity',
-            source_document_id: documentId,
-            drift_record_id: driftRecordId,
-            drift_category: positiveDrift.driftCategory,
-            metrics: positiveDrift.metrics,
-            created_from: 'automatic_positive_drift_detection',
-            requires_approval: true,
-            urgency: 'medium',
-            estimated_value: this.calculateTotalValue(positiveDrift.metrics),
-            replication: {
-              similar_projects_found: similarProjects.length,
-              replication_records_created: replicationRecordsCreated,
-              similar_project_ids: similarProjectIds,
-              replication_potential: similarProjects.length > 0 ? similarProjects.length : this.estimateReplicationPotential(positiveDrift)
-            }
-          }),
+          JSON.stringify(metadata),
           crContent.split(/\s+/).filter(Boolean).length,
           crContent.length
         ]
       )
 
       // Link CR to drift record
+      // Note: status field is VARCHAR(20), so use 'resolved' instead of 'opportunity_cr_created' (22 chars)
       await client.query(
         `UPDATE baseline_drift_detection
-         SET status = 'opportunity_cr_created',
+         SET status = 'resolved',
              ai_processing_metadata = jsonb_set(
                COALESCE(ai_processing_metadata, '{}'::jsonb),
                '{change_request_id}',
@@ -343,9 +346,10 @@ export class PositiveDriftChangeRequestService {
       )
 
       // Create audit log
+      // Note: audit_logs table uses 'new_values' column, not 'details'
       await client.query(
         `INSERT INTO audit_logs (
-          user_id, action, resource_type, resource_id, details
+          user_id, action, resource_type, resource_id, new_values
         ) VALUES ($1, 'positive_drift_cr_created', 'change_request', $2, $3)`,
         [
           userId,

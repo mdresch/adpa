@@ -421,41 +421,73 @@ router.get(
       `, [projectId])
 
       // Development Approach & Life Cycle Domain metrics
+      // Note: Uses LEFT JOIN so we get a row even if no iterations exist
+      // Since project_id has UNIQUE constraint, we don't need GROUP BY
       const developmentMetrics = await pool.query(`
         SELECT 
-          COUNT(DISTINCT da.id) as total_approaches,
-          COUNT(DISTINCT da.framework) as unique_frameworks,
-          COUNT(DISTINCT pi.id) as total_iterations,
-          COUNT(DISTINCT pi.id) FILTER (WHERE pi.status = 'completed') as completed_iterations,
+          COUNT(DISTINCT da.id)::int as total_approaches,
+          COUNT(DISTINCT da.methodology)::int as unique_methodologies,
+          COUNT(DISTINCT pi.id)::int as total_iterations,
+          COUNT(DISTINCT pi.id) FILTER (WHERE pi.status = 'completed')::int as completed_iterations,
           AVG(pi.velocity) FILTER (WHERE pi.velocity IS NOT NULL) as avg_velocity,
-          AVG(pi.completed_story_points) FILTER (WHERE pi.completed_story_points IS NOT NULL) as avg_story_points
-        FROM development_approaches da
+          AVG(pi.completed_story_points) FILTER (WHERE pi.completed_story_points IS NOT NULL) as avg_story_points,
+          MAX(da.approach) as approach,
+          MAX(da.methodology) as methodology
+        FROM development_approach da
         LEFT JOIN project_iterations pi ON pi.project_id = da.project_id
         WHERE da.project_id = $1
       `, [projectId])
 
       // Project Work Performance Domain metrics
+      // Aggregate from activities, deliverables, milestones, work_items, project_iterations, and capacity_plans tables
+      // Activities: status IN ('not_started', 'in_progress', 'completed', 'blocked', 'cancelled')
+      // Deliverables: status IN ('not_started', 'in_progress', 'review', 'completed', 'delivered')
+      // Milestones: status IN ('planned', 'in_progress', 'completed', 'delayed')
+      // Work Items: status IN ('todo', 'in_progress', 'review', 'done', 'blocked')
+      // Project Iterations: status IN ('planned', 'in_progress', 'completed', 'on_hold')
+      // Capacity Plans: No status field (always active, treated as 'active' for counting)
+      // Note: deliverables.owner is VARCHAR (name), not UUID, so we use NULL for assigned_to
       const workMetrics = await pool.query(`
         SELECT 
-          COUNT(*) as total_work_items,
-          COUNT(*) FILTER (WHERE status = 'done') as completed_items,
-          COUNT(*) FILTER (WHERE status = 'in_progress') as in_progress_items,
-          COUNT(*) FILTER (WHERE status = 'blocked') as blocked_items,
-          SUM(estimated_hours) as total_estimated_hours,
-          SUM(actual_hours) FILTER (WHERE actual_hours IS NOT NULL) as total_actual_hours,
-          AVG(progress_percentage) FILTER (WHERE progress_percentage IS NOT NULL) as avg_progress,
-          COUNT(DISTINCT assigned_to) FILTER (WHERE assigned_to IS NOT NULL) as unique_assignees
-        FROM work_items
-        WHERE project_id = $1
+          COALESCE(COUNT(*), 0)::int as total_work_items,
+          COALESCE(COUNT(*) FILTER (WHERE status IN ('completed', 'delivered', 'done')), 0)::int as completed_items,
+          COALESCE(COUNT(*) FILTER (WHERE status IN ('in_progress', 'review')), 0)::int as in_progress_items,
+          COALESCE(COUNT(*) FILTER (WHERE status = 'blocked' OR status = 'delayed' OR status = 'on_hold'), 0)::int as blocked_items,
+          COALESCE(COUNT(DISTINCT assigned_to) FILTER (WHERE assigned_to IS NOT NULL), 0)::int as unique_assignees
+        FROM (
+          SELECT COALESCE(status, 'not_started') as status, assigned_to::text as assigned_to 
+          FROM activities 
+          WHERE project_id = $1
+          UNION ALL
+          SELECT COALESCE(status, 'not_started') as status, NULL::text as assigned_to 
+          FROM deliverables 
+          WHERE project_id = $1
+          UNION ALL
+          SELECT COALESCE(status, 'planned') as status, NULL::text as assigned_to 
+          FROM milestones 
+          WHERE project_id = $1 AND deleted_at IS NULL
+          UNION ALL
+          SELECT COALESCE(status, 'todo') as status, assigned_to::text as assigned_to 
+          FROM work_items 
+          WHERE project_id = $1
+          UNION ALL
+          SELECT COALESCE(status, 'planned') as status, NULL::text as assigned_to 
+          FROM project_iterations 
+          WHERE project_id = $1
+          UNION ALL
+          SELECT 'active' as status, NULL::text as assigned_to 
+          FROM capacity_plans 
+          WHERE project_id = $1
+        ) combined_work
       `, [projectId])
 
       const capacityMetrics = await pool.query(`
         SELECT 
-          COUNT(*) as total_capacity_plans,
-          AVG(utilization_percentage) FILTER (WHERE utilization_percentage IS NOT NULL) as avg_utilization,
-          SUM(available_hours) FILTER (WHERE available_hours IS NOT NULL) as total_available_hours,
-          SUM(allocated_hours) FILTER (WHERE allocated_hours IS NOT NULL) as total_allocated_hours
-        FROM capacity_plans
+          COALESCE(COUNT(*), 0)::int as total_capacity_plans,
+          AVG(allocation_percentage) FILTER (WHERE allocation_percentage IS NOT NULL) as avg_utilization,
+          COALESCE(COUNT(*) FILTER (WHERE availability IS NOT NULL), 0)::int as resources_with_availability,
+          COALESCE(SUM(allocation_percentage) FILTER (WHERE allocation_percentage IS NOT NULL), 0)::numeric as total_allocation_percentage
+        FROM resources
         WHERE project_id = $1
       `, [projectId])
 
@@ -485,21 +517,17 @@ router.get(
       `, [projectId])
 
       // Uncertainty Performance Domain metrics
+      // Note: Using separate subqueries to avoid Cartesian product from JOINing opportunities and risk_responses
       const uncertaintyMetrics = await pool.query(`
         SELECT 
-          COUNT(*) FILTER (WHERE o.id IS NOT NULL) as total_opportunities,
-          COUNT(*) FILTER (WHERE o.status = 'realized') as realized_opportunities,
-          COUNT(*) FILTER (WHERE o.status = 'exploiting') as exploiting_opportunities,
-          SUM(o.expected_benefit) FILTER (WHERE o.expected_benefit IS NOT NULL) as total_expected_benefit,
-          COUNT(*) FILTER (WHERE rr.id IS NOT NULL) as total_risk_responses,
-          COUNT(*) FILTER (WHERE rr.effectiveness = 'effective') as effective_responses,
-          COUNT(*) FILTER (WHERE rr.effectiveness = 'ineffective') as ineffective_responses,
-          AVG(rr.cost_of_response) FILTER (WHERE rr.cost_of_response IS NOT NULL) as avg_response_cost
-        FROM projects p
-        LEFT JOIN opportunities o ON o.project_id = p.id
-        LEFT JOIN risk_responses rr ON rr.project_id = p.id
-        WHERE p.id = $1
-        GROUP BY p.id
+          (SELECT COUNT(*)::int FROM opportunities WHERE project_id = $1) as total_opportunities,
+          (SELECT COUNT(*)::int FROM opportunities WHERE project_id = $1 AND status = 'realized') as realized_opportunities,
+          (SELECT COUNT(*)::int FROM opportunities WHERE project_id = $1 AND status = 'exploiting') as exploiting_opportunities,
+          (SELECT SUM(expected_benefit) FROM opportunities WHERE project_id = $1 AND expected_benefit IS NOT NULL) as total_expected_benefit,
+          (SELECT COUNT(*)::int FROM risk_responses WHERE project_id = $1) as total_risk_responses,
+          (SELECT COUNT(*)::int FROM risk_responses WHERE project_id = $1 AND effectiveness = 'effective') as effective_responses,
+          (SELECT COUNT(*)::int FROM risk_responses WHERE project_id = $1 AND effectiveness = 'ineffective') as ineffective_responses,
+          (SELECT AVG(cost_of_response) FROM risk_responses WHERE project_id = $1 AND cost_of_response IS NOT NULL) as avg_response_cost
       `, [projectId])
 
       // Aggregate domain health scores
@@ -513,12 +541,16 @@ router.get(
         developmentApproach: {
           score: developmentMetrics.rows[0]?.avg_velocity 
             ? Math.min(100, Math.max(0, (developmentMetrics.rows[0].avg_velocity / 50) * 100))
-            : null,
-          status: developmentMetrics.rows[0]?.total_iterations > 0 ? 'active' : 'inactive'
+            : (parseInt(developmentMetrics.rows[0]?.total_approaches || '0') > 0 ? 50 : null), // Default score if approach exists but no velocity data
+          status: parseInt(developmentMetrics.rows[0]?.total_approaches || '0') > 0 ? 'active' : 'inactive'
         },
         projectWork: {
-          score: workMetrics.rows[0]?.avg_progress || 0,
-          status: workMetrics.rows[0]?.blocked_items > 0 ? 'blocked' : 'active'
+          score: workMetrics.rows[0]?.total_work_items > 0 
+            ? ((workMetrics.rows[0]?.completed_items || 0) / workMetrics.rows[0].total_work_items) * 100
+            : null,
+          status: (workMetrics.rows[0]?.total_work_items || 0) > 0
+            ? (workMetrics.rows[0]?.blocked_items > 0 ? 'blocked' : 'active')
+            : 'inactive'
         },
         measurement: {
           score: measurementMetrics.rows[0]?.on_track_count 
@@ -542,7 +574,10 @@ router.get(
             health: domainHealth.team
           },
           developmentApproach: {
-            ...developmentMetrics.rows[0],
+            ...(developmentMetrics.rows[0] || {}),
+            total_approaches: parseInt(developmentMetrics.rows[0]?.total_approaches || '0'),
+            total_iterations: parseInt(developmentMetrics.rows[0]?.total_iterations || '0'),
+            completed_iterations: parseInt(developmentMetrics.rows[0]?.completed_iterations || '0'),
             health: domainHealth.developmentApproach
           },
           projectWork: {
