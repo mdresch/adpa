@@ -13,6 +13,7 @@ import { PoolClient } from 'pg'
 import { DriftPoint } from './driftDetectionService'
 import { emailNotificationService, PositiveDriftEmailData } from './emailNotificationService'
 import { approvalWorkflowService } from './approvalWorkflowService'
+import projectSimilarityService from './projectSimilarityService'
 
 export interface PositiveDriftMetrics {
   costSavings?: number // $ saved
@@ -35,6 +36,9 @@ export interface OpportunityCRResult {
   estimatedValue: number
   replicationPotential: number
   approvalRequestId?: string
+  similarProjectsFound?: number
+  replicationRecordsCreated?: number
+  similarProjectIds?: string[]
 }
 
 export class PositiveDriftChangeRequestService {
@@ -193,12 +197,96 @@ export class PositiveDriftChangeRequestService {
 
       const { project_name, document_name } = projectResult.rows[0]
 
-      // Build CR content
+      // TASK-748: Find similar projects for replication
+      logger.info('[POSITIVE-DRIFT-CR] Finding similar projects for replication', {
+        projectId
+      })
+
+      let similarProjects: any[] = []
+      let replicationRecordsCreated = 0
+      let similarProjectIds: string[] = []
+
+      try {
+        // Detect and store similar projects (minimum 0.5 similarity score)
+        similarProjects = await projectSimilarityService.detectAndStoreSimilarProjects(
+          projectId,
+          0.5
+        )
+
+        logger.info('[POSITIVE-DRIFT-CR] Found similar projects', {
+          projectId,
+          count: similarProjects.length
+        })
+
+        // Create replication records for each similar project
+        if (similarProjects.length > 0) {
+          const improvementTitle = this.generateCRTitle(positiveDrift)
+          const improvementDescription = positiveDrift.description
+          const improvementType = positiveDrift.driftCategory
+          const estimatedValue = {
+            cost_savings: positiveDrift.metrics.costSavings,
+            time_savings_days: positiveDrift.metrics.timeAcceleration,
+            quality_improvement_pct: positiveDrift.metrics.efficiencyGain,
+            innovation_value: positiveDrift.metrics.innovationValue
+          }
+
+          for (const similarity of similarProjects) {
+            try {
+              await projectSimilarityService.createReplication({
+                sourceProjectId: projectId,
+                targetProjectId: similarity.similarProjectId,
+                improvementType,
+                improvementTitle,
+                improvementDescription,
+                estimatedValue,
+                sourceDriftId: driftRecordId,
+                assignedTo: userId
+              })
+
+              replicationRecordsCreated++
+              similarProjectIds.push(similarity.similarProjectId)
+
+              logger.info('[POSITIVE-DRIFT-CR] Created replication record', {
+                sourceProjectId: projectId,
+                targetProjectId: similarity.similarProjectId,
+                similarityScore: similarity.similarityScore
+              })
+            } catch (replicationError: any) {
+              // Skip if replication already exists (duplicate constraint)
+              if (replicationError.code === '23505') {
+                logger.debug('[POSITIVE-DRIFT-CR] Replication already exists', {
+                  targetProjectId: similarity.similarProjectId
+                })
+                // Still count it as found
+                if (!similarProjectIds.includes(similarity.similarProjectId)) {
+                  similarProjectIds.push(similarity.similarProjectId)
+                }
+              } else {
+                logger.error('[POSITIVE-DRIFT-CR] Error creating replication record', {
+                  error: replicationError,
+                  targetProjectId: similarity.similarProjectId
+                })
+                // Don't fail CR creation if replication creation fails
+              }
+            }
+          }
+        }
+      } catch (similarityError) {
+        logger.error('[POSITIVE-DRIFT-CR] Error finding similar projects', {
+          error: similarityError,
+          projectId
+        })
+        // Don't fail CR creation if similarity detection fails
+        // Will use placeholder estimate instead
+      }
+
+      // Build CR content with similar project information
       const crContent = this.buildOpportunityCRContent(
         project_name,
         document_name,
         driftPoints,
-        positiveDrift
+        positiveDrift,
+        similarProjects
       )
 
       // Generate CR title
@@ -228,7 +316,13 @@ export class PositiveDriftChangeRequestService {
             created_from: 'automatic_positive_drift_detection',
             requires_approval: true,
             urgency: 'medium',
-            estimated_value: this.calculateTotalValue(positiveDrift.metrics)
+            estimated_value: this.calculateTotalValue(positiveDrift.metrics),
+            replication: {
+              similar_projects_found: similarProjects.length,
+              replication_records_created: replicationRecordsCreated,
+              similar_project_ids: similarProjectIds,
+              replication_potential: similarProjects.length > 0 ? similarProjects.length : this.estimateReplicationPotential(positiveDrift)
+            }
           }),
           crContent.split(/\s+/).filter(Boolean).length,
           crContent.length
@@ -337,8 +431,11 @@ export class PositiveDriftChangeRequestService {
         changeRequestId,
         crTitle,
         estimatedValue: this.calculateTotalValue(positiveDrift.metrics),
-        replicationPotential: this.estimateReplicationPotential(positiveDrift),
-        approvalRequestId
+        replicationPotential: similarProjects.length > 0 ? similarProjects.length : this.estimateReplicationPotential(positiveDrift),
+        approvalRequestId,
+        similarProjectsFound: similarProjects.length,
+        replicationRecordsCreated,
+        similarProjectIds
       }
     } catch (error) {
       await client.query('ROLLBACK')
@@ -377,7 +474,8 @@ export class PositiveDriftChangeRequestService {
     projectName: string,
     documentName: string,
     driftPoints: DriftPoint[],
-    positiveDrift: PositiveDriftClassification
+    positiveDrift: PositiveDriftClassification,
+    similarProjects: any[] = []
   ): string {
     const metrics = positiveDrift.metrics
     const totalValue = this.calculateTotalValue(metrics)
@@ -415,7 +513,7 @@ Current approach was based on baseline assumptions. The team has discovered a mo
 ### Proposed Solution
 1. **Formalize** the improvement in project documentation and baseline
 2. **Document** the approach for knowledge base and future projects
-3. **Replicate** to similar ongoing projects (estimated 3-5 candidates)
+3. **Replicate** to similar ongoing projects${similarProjects.length > 0 ? ` (${similarProjects.length} similar project${similarProjects.length !== 1 ? 's' : ''} identified)` : ' (similar projects will be identified)'}
 4. **Recognize** team for innovation and continuous improvement
 
 ### Strategic Alignment
@@ -431,8 +529,8 @@ Current approach was based on baseline assumptions. The team has discovered a mo
 ### In Scope
 - Update project baseline to reflect the improvement
 - Document the improved approach in knowledge base
-- Identify and apply to similar active projects
-${positiveDrift.driftCategory === 'innovation' ? '- Review for potential patent opportunity\n' : ''}- Recognize team members for innovation
+- ${similarProjects.length > 0 ? `Apply to ${similarProjects.length} identified similar project${similarProjects.length !== 1 ? 's' : ''}` : 'Identify and apply to similar active projects'}
+${similarProjects.length > 0 ? `\n\n**Similar Projects Identified**:\n${similarProjects.map((sp, i) => `${i + 1}. Project ID: ${sp.similarProjectId} (Similarity: ${(sp.similarityScore * 100).toFixed(0)}%)`).join('\n')}\n` : ''}${positiveDrift.driftCategory === 'innovation' ? '- Review for potential patent opportunity\n' : ''}- Recognize team members for innovation
 - Share lessons learned organization-wide
 
 ### Out of Scope
@@ -452,9 +550,9 @@ ${positiveDrift.driftCategory === 'innovation' ? '- Review for potential patent 
 
 ### Returns
 - **Current Project**: $${metrics.costSavings || 0}/year
-- **If Replicated** (3-5 projects): $${(metrics.costSavings || 0) * 4}/year
-- **Annual Value**: $${this.calculateAnnualValue(metrics)}/year
-- **ROI**: ${this.calculateROI(metrics)}x
+- **If Replicated**${similarProjects.length > 0 ? ` (${similarProjects.length} project${similarProjects.length !== 1 ? 's' : ''})` : ' (estimated 3-5 projects)'}: $${(metrics.costSavings || 0) * (similarProjects.length > 0 ? similarProjects.length : 4)}/year
+- **Annual Value**: $${this.calculateAnnualValue(metrics, similarProjects.length)}/year
+- **ROI**: ${this.calculateROI(metrics, similarProjects.length)}x
 
 ### Break-even Analysis
 Investment pays back in less than 1 month if replicated successfully.
@@ -482,7 +580,7 @@ ${drift.variance !== undefined ? `**Variance**: ${drift.variance > 0 ? '+' : ''}
 1. ✅ **Approve** - Formalize this improvement and replicate to similar projects
 2. 📋 **Update Baseline** - Reflect improvement in project baseline
 3. 📚 **Knowledge Base** - Document approach for future reference
-4. 🔄 **Replicate** - Apply to 3-5 similar active projects
+4. 🔄 **Replicate** - Apply to ${similarProjects.length > 0 ? `${similarProjects.length} identified similar project${similarProjects.length !== 1 ? 's' : ''}` : '3-5 similar active projects'}
 ${positiveDrift.driftCategory === 'innovation' ? '5. 🔬 **Patent Review** - Evaluate for IP protection potential\n' : ''}
 ${positiveDrift.driftCategory === 'cost_saving' ? '5. 📊 **Budget Reallocation** - Redirect savings to strategic initiatives\n' : ''}
 
@@ -539,26 +637,40 @@ This change request was automatically generated by the ADPA Baseline & Drift Det
   /**
    * Calculate annual value
    */
-  private calculateAnnualValue(metrics: PositiveDriftMetrics): number {
+  private calculateAnnualValue(metrics: PositiveDriftMetrics, replicationCount: number = 4): number {
     const baseValue = this.calculateTotalValue(metrics)
-    return baseValue * 4 // Assuming replication to 4 similar projects
+    const actualReplicationCount = replicationCount > 0 ? replicationCount : 4 // Default to 4 if not provided
+    return baseValue * actualReplicationCount
   }
 
   /**
    * Calculate ROI
    */
-  private calculateROI(metrics: PositiveDriftMetrics): number {
+  private calculateROI(metrics: PositiveDriftMetrics, replicationCount: number = 4): number {
     const investment = 5000 // Estimated documentation and replication cost
-    const annualValue = this.calculateAnnualValue(metrics)
+    const annualValue = this.calculateAnnualValue(metrics, replicationCount)
     return Math.round((annualValue / investment) * 10) / 10
   }
 
   /**
    * Estimate replication potential (number of similar projects)
+   * Used as fallback when similarity detection fails or returns no results
    */
   private estimateReplicationPotential(positiveDrift: PositiveDriftClassification): number {
-    // Placeholder - would query similar projects in production
-    return 4 // Conservative estimate
+    // Conservative estimate based on drift category
+    // In production, this would query similar projects
+    switch (positiveDrift.driftCategory) {
+      case 'cost_saving':
+        return 5 // Cost savings are highly replicable
+      case 'timeline_acceleration':
+        return 4 // Timeline improvements are moderately replicable
+      case 'efficiency':
+        return 6 // Efficiency gains are very replicable
+      case 'innovation':
+        return 3 // Innovations may be less replicable
+      default:
+        return 4 // Default conservative estimate
+    }
   }
 
   /**
@@ -589,7 +701,8 @@ This change request was automatically generated by the ADPA Baseline & Drift Det
           driftCategory: positiveDrift.driftCategory,
           strategicValue: positiveDrift.strategicValue,
           estimatedValue: this.calculateTotalValue(positiveDrift.metrics),
-          replicationPotential: this.estimateReplicationPotential(positiveDrift)
+          replicationPotential: this.estimateReplicationPotential(positiveDrift),
+          similarProjectsFound: 0 // Will be updated if similarity detection succeeds
         }
       }
 
