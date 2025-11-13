@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { toast } from "sonner"
 import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered } from "@/components/ui/icons-shim"
+import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield } from "lucide-react"
 import { apiClient } from "@/lib/api"
 
 interface ProjectDataExtractionProps {
@@ -18,6 +19,7 @@ interface ProjectDataExtractionProps {
 }
 
 interface EntityCounts {
+  // Legacy entities (PMBOK 7 and earlier)
   stakeholders: number
   requirements: number
   risks: number
@@ -32,6 +34,16 @@ interface EntityCounts {
   deliverables: number
   scopeItems: number
   activities: number
+  // PMBOK 8 Performance Domain entities
+  teamAgreements: number
+  developmentApproaches: number
+  projectIterations: number
+  workItems: number
+  capacityPlans: number
+  performanceMeasurements: number
+  earnedValueMetrics: number
+  opportunities: number
+  riskResponses: number
 }
 
 export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtractionProps) {
@@ -484,14 +496,74 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     )
   }
   
-  const renderEntityField = (key: string, value: any): string => {
-    if (value === null || value === undefined) return '-'
-    if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-    if (typeof value === 'object') return JSON.stringify(value, null, 2)
-    if (key.includes('date') || key.includes('Date')) {
-      return new Date(value).toLocaleDateString()
+  const renderEntityField = (key: string, value: any): React.ReactNode => {
+    if (value === null || value === undefined) return <span className="text-muted-foreground italic">-</span>
+    if (typeof value === 'boolean') return value ? <span className="text-green-600">Yes</span> : <span className="text-red-600">No</span>
+    
+    // Handle arrays (including JSONB arrays from PostgreSQL)
+    if (Array.isArray(value)) {
+      if (value.length === 0) {
+        return <span className="text-muted-foreground italic">None</span>
+      }
+      // Special handling for tailoring_decisions array
+      if (key === 'tailoring_decisions' && value.length > 0 && typeof value[0] === 'object') {
+        return (
+          <div className="space-y-2">
+            {value.map((decision: any, idx: number) => (
+              <div key={idx} className="border-l-2 border-primary pl-3 py-1">
+                <div className="font-medium text-foreground">{decision.area || `Decision ${idx + 1}`}</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  <div><strong>Standard:</strong> {decision.standard_process || '-'}</div>
+                  <div><strong>Tailored:</strong> {decision.tailored_process || '-'}</div>
+                  {decision.justification && (
+                    <div className="mt-1 italic">{decision.justification}</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      }
+      // Regular arrays - display as bullet list
+      return (
+        <ul className="list-disc list-inside space-y-1">
+          {value.map((item: any, idx: number) => (
+            <li key={idx} className="text-foreground">
+              {typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item)}
+            </li>
+          ))}
+        </ul>
+      )
     }
-    return String(value)
+    
+    // Handle objects (non-arrays)
+    if (typeof value === 'object') {
+      return (
+        <pre className="text-xs bg-muted p-2 rounded overflow-x-auto">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      )
+    }
+    
+    // Handle dates
+    if (key.includes('date') || key.includes('Date')) {
+      try {
+        return new Date(value).toLocaleDateString()
+      } catch {
+        return String(value)
+      }
+    }
+    
+    // Handle long text (like justification)
+    if (key === 'justification' && typeof value === 'string' && value.length > 200) {
+      return (
+        <div className="prose prose-sm max-w-none dark:prose-invert">
+          <div className="whitespace-pre-wrap text-foreground">{value}</div>
+        </div>
+      )
+    }
+    
+    return <span className="text-foreground">{String(value)}</span>
   }
   
   const getEntityTypeLabel = (entityType: string): string => {
@@ -501,6 +573,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const hasData = getTotalEntities() > 0
 
   const entityTypes = [
+    // Legacy entities (PMBOK 7 and earlier)
     { key: 'stakeholders', label: 'Stakeholders', icon: Users, color: 'text-blue-500' },
     { key: 'requirements', label: 'Requirements', icon: FileText, color: 'text-green-500' },
     { key: 'risks', label: 'Risks', icon: AlertTriangle, color: 'text-red-500' },
@@ -514,7 +587,17 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     { key: 'qualityStandards', label: 'Quality Standards', icon: CheckCircle, color: 'text-cyan-500' },
     { key: 'deliverables', label: 'Deliverables', icon: Archive, color: 'text-pink-500' },
     { key: 'scopeItems', label: 'Scope Items', icon: ListOrdered, color: 'text-violet-500' },
-    { key: 'activities', label: 'Activities', icon: Target, color: 'text-lime-500' }
+    { key: 'activities', label: 'Activities', icon: Target, color: 'text-lime-500' },
+    // PMBOK 8 Performance Domain entities
+    { key: 'teamAgreements', label: 'Team Agreements', icon: Users2, color: 'text-blue-600' },
+    { key: 'developmentApproaches', label: 'Development Approach', icon: Code, color: 'text-orange-500' },
+    { key: 'projectIterations', label: 'Project Iterations', icon: GitBranch, color: 'text-purple-600' },
+    { key: 'workItems', label: 'Work Items', icon: Briefcase, color: 'text-slate-600' },
+    { key: 'capacityPlans', label: 'Capacity Plans', icon: TrendingUp, color: 'text-green-600' },
+    { key: 'performanceMeasurements', label: 'Performance Measurements', icon: BarChart3, color: 'text-indigo-600' },
+    { key: 'earnedValueMetrics', label: 'Earned Value Metrics', icon: BarChart3, color: 'text-cyan-600' },
+    { key: 'opportunities', label: 'Opportunities', icon: Zap, color: 'text-yellow-600' },
+    { key: 'riskResponses', label: 'Risk Responses', icon: Shield, color: 'text-red-600' }
   ]
 
   return (
@@ -694,19 +777,22 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                         {entity.name || entity.title || entity.description?.substring(0, 50) || `${getEntityTypeLabel(selectedEntityType || '')} #${index + 1}`}
                       </CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-2">
+                    <CardContent className="space-y-3">
                       {Object.entries(entity)
                         .filter(([key]) => !['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata'].includes(key))
-                        .map(([key, value]) => (
-                          <div key={key} className="grid grid-cols-3 gap-2 text-sm">
-                            <span className="font-medium text-muted-foreground capitalize">
-                              {key.replace(/_/g, ' ')}:
-                            </span>
-                            <span className="col-span-2 break-words">
-                              {renderEntityField(key, value)}
-                            </span>
-                          </div>
-                        ))}
+                        .map(([key, value]) => {
+                          const isLongContent = key === 'justification' || (Array.isArray(value) && value.length > 0)
+                          return (
+                            <div key={key} className={isLongContent ? 'space-y-1' : 'grid grid-cols-3 gap-2 text-sm'}>
+                              <span className={`font-medium text-muted-foreground capitalize ${isLongContent ? 'block mb-1' : ''}`}>
+                                {key.replace(/_/g, ' ')}:
+                              </span>
+                              <div className={isLongContent ? 'w-full' : 'col-span-2 break-words'}>
+                                {renderEntityField(key, value)}
+                              </div>
+                            </div>
+                          )
+                        })}
                     </CardContent>
                   </Card>
                 ))}
@@ -731,7 +817,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
               Extract Project Data with AI
             </DialogTitle>
             <DialogDescription>
-              AI will analyze your project documents and extract 14 types of structured entities.
+              AI will analyze your project documents and extract 23 types of structured entities (14 legacy + 9 PMBOK 8 Performance Domain entities).
             </DialogDescription>
           </DialogHeader>
 
@@ -952,10 +1038,14 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                   What will be extracted:
                 </p>
                 <ul className="text-xs text-amber-800 dark:text-amber-200 space-y-1 ml-4 list-disc">
-                  <li>Stakeholders, Requirements, Risks, Milestones</li>
-                  <li>Constraints, Success Criteria, Best Practices</li>
-                  <li>Phases, Resources, Quality Standards</li>
-                  <li>Deliverables, Scope Items, Activities</li>
+                  <li><strong>Legacy Entities:</strong> Stakeholders, Requirements, Risks, Milestones</li>
+                  <li>Constraints, Success Criteria, Best Practices, Phases</li>
+                  <li>Resources, Technologies, Quality Standards, Deliverables</li>
+                  <li>Scope Items, Activities</li>
+                  <li><strong>PMBOK 8 Domains:</strong> Team Agreements, Development Approach</li>
+                  <li>Project Iterations, Work Items, Capacity Plans</li>
+                  <li>Performance Measurements, Earned Value Metrics</li>
+                  <li>Opportunities, Risk Responses</li>
                 </ul>
               </div>
             </div>
