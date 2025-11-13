@@ -287,7 +287,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       insights.push({
         type: 'info',
         domain: 'Measurement',
-        message: `CPI is ${analytics.domains.measurement.evm.avg_cpi.toFixed(2)}. Under budget. Consider reallocating savings.`,
+        message: `CPI is ${Number(analytics.domains.measurement.evm.avg_cpi).toFixed(2)}. Under budget. Consider reallocating savings.`,
         icon: TrendingUp,
         priority: 'low'
       })
@@ -297,7 +297,7 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       insights.push({
         type: 'warning',
         domain: 'Measurement',
-        message: `Schedule Performance Index (SPI) is ${analytics.domains.measurement.evm.avg_spi.toFixed(2)}. Behind schedule. Review timeline.`,
+        message: `Schedule Performance Index (SPI) is ${Number(analytics.domains.measurement.evm.avg_spi).toFixed(2)}. Behind schedule. Review timeline.`,
         icon: Clock,
         priority: 'high'
       })
@@ -515,7 +515,9 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">Adherence:</span>
                           <span className="font-medium">
-                            {domain.avg_adherence_score?.toFixed(1) || 'N/A'}/10
+                            {domain.avg_adherence_score != null && !isNaN(Number(domain.avg_adherence_score))
+                              ? Number(domain.avg_adherence_score).toFixed(1)
+                              : 'N/A'}/10
                           </span>
                         </div>
                       </>
@@ -530,7 +532,9 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">Avg Velocity:</span>
                           <span className="font-medium">
-                            {domain.avg_velocity?.toFixed(1) || 'N/A'}
+                            {domain.avg_velocity != null && !isNaN(Number(domain.avg_velocity))
+                              ? Number(domain.avg_velocity).toFixed(1)
+                              : 'N/A'}
                           </span>
                         </div>
                       </>
@@ -556,13 +560,17 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">CPI:</span>
                           <span className="font-medium">
-                            {domain.evm.avg_cpi?.toFixed(2) || 'N/A'}
+                            {domain.evm.avg_cpi != null && !isNaN(Number(domain.evm.avg_cpi)) 
+                              ? Number(domain.evm.avg_cpi).toFixed(2) 
+                              : 'N/A'}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs">
                           <span className="text-muted-foreground">SPI:</span>
                           <span className="font-medium">
-                            {domain.evm.avg_spi?.toFixed(2) || 'N/A'}
+                            {domain.evm.avg_spi != null && !isNaN(Number(domain.evm.avg_spi)) 
+                              ? Number(domain.evm.avg_spi).toFixed(2) 
+                              : 'N/A'}
                           </span>
                         </div>
                       </>
