@@ -2803,6 +2803,53 @@ Guidelines:
   }
 
   /**
+   * Close incomplete JSON object by adding missing closing braces/brackets
+   */
+  private closeIncompleteJsonObject(content: string): string {
+    let openBraces = 0
+    let openBrackets = 0
+    let inString = false
+    let escapeNext = false
+    
+    for (let i = 0; i < content.length; i++) {
+      const char = content[i]
+      
+      if (escapeNext) {
+        escapeNext = false
+        continue
+      }
+      
+      if (char === '\\') {
+        escapeNext = true
+        continue
+      }
+      
+      if (char === '"') {
+        inString = !inString
+        continue
+      }
+      
+      if (!inString) {
+        if (char === '{') openBraces++
+        if (char === '}') openBraces--
+        if (char === '[') openBrackets++
+        if (char === ']') openBrackets--
+      }
+    }
+    
+    // Add missing closing brackets/braces
+    let result = ''
+    if (openBrackets > 0) {
+      result += ']'.repeat(openBrackets)
+    }
+    if (openBraces > 0) {
+      result += '}'.repeat(openBraces)
+    }
+    
+    return result
+  }
+
+  /**
    * Parse AI response (handles both JSON and markdown-wrapped JSON)
    * Includes fixes for common JSON malformation issues
    */
@@ -2820,37 +2867,44 @@ Guidelines:
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
       logger.debug('[EXTRACTION-PARSE] Detected markdown code blocks, extracting JSON')
-      // Try regex first (most reliable for well-formed code blocks)
-      // Match ```json or ``` followed by optional whitespace/newline, then content, then closing ```
-      const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-      if (codeBlockMatch && codeBlockMatch[1]) {
-        cleanedContent = codeBlockMatch[1].trim()
-      } else {
-        // Fallback: manual extraction - find first ``` and last ```
-        const firstCodeBlockStart = cleanedContent.indexOf('```')
-        if (firstCodeBlockStart !== -1) {
-          // Find the end of the opening marker (```json or just ```)
-          let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
-          // Skip optional language identifier (json, etc.)
-          while (codeBlockStart < cleanedContent.length && 
-                 cleanedContent[codeBlockStart] !== '\n' && 
-                 cleanedContent[codeBlockStart] !== '`') {
-            codeBlockStart++
-          }
-          // Skip newline if present
-          if (codeBlockStart < cleanedContent.length && cleanedContent[codeBlockStart] === '\n') {
-            codeBlockStart++
-          }
-          
-          // Find the LAST closing ``` (in case there are multiple code blocks or escaped backticks)
-          let codeBlockEnd = cleanedContent.lastIndexOf('```')
-          if (codeBlockEnd !== -1 && codeBlockEnd > codeBlockStart) {
-            // Extract content between code block markers
-            cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
-          } else {
-            // No closing marker found, extract from start to end
-            cleanedContent = cleanedContent.substring(codeBlockStart).trim()
-          }
+      // Use manual extraction to find the LAST closing ``` (most reliable for long responses)
+      // This handles cases where the JSON is very long and might have escaped backticks
+      const firstCodeBlockStart = cleanedContent.indexOf('```')
+      if (firstCodeBlockStart !== -1) {
+        // Find the end of the opening marker (```json or just ```)
+        let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
+        // Skip optional language identifier (json, etc.)
+        while (codeBlockStart < cleanedContent.length && 
+               cleanedContent[codeBlockStart] !== '\n' && 
+               cleanedContent[codeBlockStart] !== '`') {
+          codeBlockStart++
+        }
+        // Skip newline if present
+        if (codeBlockStart < cleanedContent.length && cleanedContent[codeBlockStart] === '\n') {
+          codeBlockStart++
+        }
+        
+        // Find the LAST closing ``` (in case there are multiple code blocks or escaped backticks)
+        let codeBlockEnd = cleanedContent.lastIndexOf('```')
+        if (codeBlockEnd !== -1 && codeBlockEnd > codeBlockStart) {
+          // Extract content between code block markers
+          cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
+        } else {
+          // No closing marker found - might be incomplete JSON, extract from start to end
+          cleanedContent = cleanedContent.substring(codeBlockStart).trim()
+          logger.warn('[EXTRACTION-PARSE] No closing code block marker found - JSON may be incomplete', {
+            extractedLength: cleanedContent.length,
+            lastChars: cleanedContent.substring(Math.max(0, cleanedContent.length - 100))
+          })
+        }
+      }
+      
+      // Try regex as fallback if manual extraction left code blocks
+      if (cleanedContent.includes('```')) {
+        logger.debug('[EXTRACTION-PARSE] Manual extraction left code blocks, trying regex fallback')
+        const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+        if (codeBlockMatch && codeBlockMatch[1]) {
+          cleanedContent = codeBlockMatch[1].trim()
         }
       }
       
@@ -3194,6 +3248,79 @@ Guidelines:
                 error: retryError.message
               })
               throw retryError
+            }
+          }
+          
+          // Check if error is "Unterminated string" at the end - might be incomplete JSON
+          const isUnterminatedAtEnd = parseAfterFixError.message.includes('Unterminated string') &&
+                                      parseAfterFixError.message.match(/position (\d+)/)?.[1] &&
+                                      parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') >= fixed.length - 10
+          
+          if (isUnterminatedAtEnd) {
+            logger.warn('[EXTRACTION] Detected incomplete JSON (unterminated string at end) - attempting to close', {
+              error: parseAfterFixError.message,
+              fixedLength: fixed.length,
+              lastChars: fixed.substring(Math.max(0, fixed.length - 200))
+            })
+            
+            // Simple approach: close the unterminated string and any unclosed objects/arrays
+            // Check if we're inside a string (work backwards to find the last unclosed quote)
+            let inString = false
+            let escapeNext = false
+            
+            // Work backwards to determine if we're in a string
+            for (let i = fixed.length - 1; i >= 0; i--) {
+              const char = fixed[i]
+              
+              if (escapeNext) {
+                escapeNext = false
+                continue
+              }
+              
+              if (char === '\\') {
+                escapeNext = true
+                continue
+              }
+              
+              if (char === '"') {
+                // Check if this is a string delimiter (look backwards for : or , or { or [)
+                let lookBackPos = i - 1
+                while (lookBackPos >= 0 && /\s/.test(fixed[lookBackPos])) {
+                  lookBackPos--
+                }
+                if (lookBackPos >= 0 && (fixed[lookBackPos] === ':' || fixed[lookBackPos] === ',' || fixed[lookBackPos] === '{' || fixed[lookBackPos] === '[')) {
+                  // This is the start of an unterminated string - we're inside a string
+                  inString = true
+                  break
+                } else {
+                  // This might be the end of a string, but we're not sure
+                  // Assume we're in a string if we haven't found a clear delimiter
+                  inString = true
+                  break
+                }
+              }
+            }
+            
+            // Close the string and object
+            let closedJson = fixed
+            if (inString) {
+              closedJson += '"'
+            }
+            closedJson += this.closeIncompleteJsonObject(closedJson)
+            
+            try {
+              const parsed = JSON.parse(closedJson)
+              logger.info('[EXTRACTION] Successfully closed incomplete JSON', {
+                originalLength: fixed.length,
+                closedLength: closedJson.length,
+                keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+              })
+              return parsed
+            } catch (closeError) {
+              logger.warn('[EXTRACTION] Failed to close incomplete JSON', {
+                error: closeError instanceof Error ? closeError.message : String(closeError),
+                closedJsonPreview: closedJson.substring(Math.max(0, closedJson.length - 200))
+              })
             }
           }
           
