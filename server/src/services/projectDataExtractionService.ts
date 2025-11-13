@@ -2016,7 +2016,7 @@ Return JSON object only. Return null if no methodology information found.`
         organizational_maturity: approach.organizational_maturity || null,
         team_experience_level: approach.team_experience_level || null,
         regulatory_constraints: approach.regulatory_constraints || false,
-        life_cycle_phases: this.ensureStringArray(approach.life_cycle_phases || approach.lifecycle_model ? [approach.lifecycle_model] : []),
+        life_cycle_phases: this.ensureStringArray(approach.life_cycle_phases || (approach.lifecycle_model ? [approach.lifecycle_model] : [])),
         iteration_length: this.safeInteger(approach.iteration_length || approach.iteration_length_weeks ? (approach.iteration_length_weeks * 7) : null),
         iteration_unit: approach.iteration_unit || (approach.iteration_length_weeks ? 'weeks' : null),
         governance_approach: approach.governance_approach || null,
