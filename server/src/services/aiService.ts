@@ -647,13 +647,6 @@ class AIService {
         }
       }
       
-      // If AI Gateway is not configured, skip directly to fallback
-      if (!gatewayApiKey) {
-        logger.info(`🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ${providerType}`)
-        // Throw a special error to trigger fallback logic
-        throw new Error('AI_GATEWAY_NOT_CONFIGURED')
-      }
-      
       // Continue with AI Gateway for supported providers (OpenAI, Google, Groq, Mistral)
       // Build AI Gateway model ID (e.g., 'groq/llama-3.1-8b-instant')
       const gatewayModelId = await this.buildGatewayModelId(providerType, request.model)
@@ -685,6 +678,12 @@ class AIService {
       let gatewaySuccess = false
       
       try {
+        // If AI Gateway is not configured, skip directly to fallback
+        if (!gatewayApiKey) {
+          logger.info(`🔄 [AI-SERVICE] AI Gateway not configured - using direct provider API for ${providerType}`)
+          // Throw a special error to trigger fallback logic
+          throw new Error('AI_GATEWAY_NOT_CONFIGURED')
+        }
         // KISS: Use messages array if we have system message, otherwise use prompt
         if (systemMessage) {
           logger.info('📨 [AI-SERVICE-6/8] Using KISS architecture with system + user messages')
