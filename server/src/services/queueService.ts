@@ -5,6 +5,7 @@ import { pool } from "../database/connection"
 import { aiService } from "./aiService"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
+import { v4 as uuidv4 } from "uuid"
 
 // Helper function to parse Redis URL for Bull
 function parseBullRedisConfig() {
@@ -411,6 +412,65 @@ aiQueue.process("ai-generate", async (job) => {
           } catch (templateErr) {
             logger.error(`Failed to increment template usage for ${template_id}:`, templateErr)
             // Don't fail the job if template update fails
+          }
+        }
+
+        // 🚀 Automatic Entity Extraction: Trigger extraction for newly created document
+        // This runs asynchronously and doesn't block the AI generation job
+        if (projectId && docContent && docContent.trim().length > 0) {
+          try {
+            logger.info(`[AUTO-EXTRACTION] Triggering extraction for document ${createdDocumentId} in project ${projectId}`)
+            
+            // Create extraction job record
+            const extractionJobId = uuidv4()
+            const extractionJobResult = await pool.query(
+              `INSERT INTO jobs (
+                id, type, status, data, created_by, project_id
+              ) VALUES ($1, $2, $3, $4, $5, $6)
+              RETURNING id`,
+              [
+                extractionJobId,
+                'project-data-extraction',
+                'pending',
+                JSON.stringify({ 
+                  jobId: extractionJobId,
+                  projectId, 
+                  documentIds: [createdDocumentId], // Extract only from this newly created document
+                  autoTriggered: true,
+                  sourceDocumentId: createdDocumentId,
+                  sourceDocumentName: docName,
+                  sourceJobId: jobId // Link back to the AI generation job
+                }),
+                userId || null,
+                projectId
+              ]
+            )
+
+            // Enqueue extraction job
+            await extractionQueue.add('extract-project-data', {
+              jobId: extractionJobId,
+              projectId,
+              userId: userId || null,
+              documentIds: [createdDocumentId],
+              autoTriggered: true,
+              sourceDocumentId: createdDocumentId,
+              sourceDocumentName: docName,
+              sourceJobId: jobId
+            }, {
+              jobId: extractionJobId,
+              priority: 5 // Lower priority than manual extractions
+            })
+
+            logger.info(`✅ [AUTO-EXTRACTION] Extraction job ${extractionJobId} queued for document ${createdDocumentId}`)
+          } catch (extractionErr) {
+            logger.error(`❌ [AUTO-EXTRACTION] Failed to trigger extraction for document ${createdDocumentId}:`, extractionErr)
+            // Don't fail the AI generation job if extraction trigger fails
+          }
+        } else {
+          if (!projectId) {
+            logger.info(`[AUTO-EXTRACTION] Skipped: Document ${createdDocumentId} has no project_id`)
+          } else if (!docContent || docContent.trim().length === 0) {
+            logger.info(`[AUTO-EXTRACTION] Skipped: Document ${createdDocumentId} has no content`)
           }
         }
       }
@@ -1112,11 +1172,18 @@ type EntityType = typeof ENTITY_TYPES[number]
 /**
  * Parent Job: Orchestrate extraction by creating child jobs for each entity type
  */
+logger.info('[EXTRACTION-QUEUE] Registering extraction queue processor for "extract-project-data"')
 extractionQueue.process("extract-project-data", 1, async (job) => {
   const { jobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
 
   try {
-    logger.info(`[EXTRACTION-PARENT] Starting orchestration: ${jobId}`, { projectId })
+    logger.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, { 
+      projectId, 
+      userId,
+      documentIds,
+      autoTriggered: job.data.autoTriggered || false,
+      sourceDocumentId: job.data.sourceDocumentId
+    })
     
     await updateJobStatus(jobId, "processing", 5, WORKER_ID, "project-data-extraction")
     
@@ -1851,4 +1918,5 @@ export const queueService = {
   processFlowQueue,
   regenerationQueue,
   qualityAuditQueue,
+  extractionQueue, // Add extraction queue to exports
 }

@@ -5,6 +5,7 @@ import { logger, childLogger } from "../utils/logger"
 import projectService from "../services/projectService"
 import { v4 as uuidv4 } from "uuid"
 import { trackActivity } from "../middleware/analyticsMiddleware"
+import { extractionQueue } from "../services/queueService"
 
 const router = express.Router()
 
@@ -461,6 +462,59 @@ router.post("/:projectId/documents", authenticateToken, async (req, res) => {
       title,
       hasTemplate: !!template_id
     })
+
+    // 🚀 Automatic Entity Extraction: Trigger extraction for newly created document
+    // This runs asynchronously and doesn't block the response
+    if (content && typeof content === 'string' && content.trim().length > 0) {
+      try {
+        // Create extraction job record
+        const extractionJobResult = await pool.query(
+          `INSERT INTO jobs (
+            type, status, data, created_by, project_id
+          ) VALUES ($1, $2, $3, $4, $5)
+          RETURNING id`,
+          [
+            'project-data-extraction',
+            'pending',
+            JSON.stringify({ 
+              projectId, 
+              documentIds: [documentId], // Extract only from this newly created document
+              autoTriggered: true,
+              sourceDocumentId: documentId,
+              sourceDocumentName: title
+            }),
+            userId,
+            projectId
+          ]
+        )
+
+        const extractionJobId = extractionJobResult.rows[0].id
+
+        // Enqueue extraction job (non-blocking)
+        await extractionQueue.add('extract-project-data', {
+          jobId: extractionJobId,
+          projectId,
+          userId,
+          documentIds: [documentId], // Extract entities from this document only
+          aiProvider: undefined, // Use default provider
+          aiModel: undefined // Use default model
+        })
+
+        log.info('🚀 Automatic entity extraction triggered for new document', {
+          documentId,
+          documentName: title,
+          extractionJobId,
+          projectId
+        })
+      } catch (extractionError: any) {
+        // Don't fail document creation if extraction trigger fails
+        log.warn('⚠️ Failed to trigger automatic entity extraction', {
+          documentId,
+          error: extractionError.message,
+          stack: extractionError.stack
+        })
+      }
+    }
 
     res.json(result.rows[0])
   } catch (error) {

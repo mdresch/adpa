@@ -305,6 +305,61 @@ router.post("/generate",
             projectId: req.body.project_id,
             title: documentTitle
           })
+
+          // 🚀 Automatic Entity Extraction: Trigger extraction for newly created document
+          // This runs asynchronously and doesn't block the response
+          if (content && content.trim().length > 0) {
+            try {
+              const { extractionQueue } = await import('../services/queueService')
+              
+              // Create extraction job record
+              const extractionJobResult = await pool.query(
+                `INSERT INTO jobs (
+                  type, status, data, created_by, project_id
+                ) VALUES ($1, $2, $3, $4, $5)
+                RETURNING id`,
+                [
+                  'project-data-extraction',
+                  'pending',
+                  JSON.stringify({ 
+                    projectId: req.body.project_id, 
+                    documentIds: [documentId], // Extract only from this newly created document
+                    autoTriggered: true,
+                    sourceDocumentId: documentId,
+                    sourceDocumentName: documentTitle
+                  }),
+                  req.user?.id,
+                  req.body.project_id
+                ]
+              )
+
+              const extractionJobId = extractionJobResult.rows[0].id
+
+              // Enqueue extraction job (non-blocking)
+              await extractionQueue.add('extract-project-data', {
+                jobId: extractionJobId,
+                projectId: req.body.project_id,
+                userId: req.user?.id,
+                documentIds: [documentId], // Extract entities from this document only
+                aiProvider: undefined, // Use default provider
+                aiModel: undefined // Use default model
+              })
+
+              log.info('🚀 Automatic entity extraction triggered for AI-generated document', {
+                documentId,
+                documentName: documentTitle,
+                extractionJobId,
+                projectId: req.body.project_id
+              })
+            } catch (extractionError: any) {
+              // Don't fail document creation if extraction trigger fails
+              log.warn('⚠️ Failed to trigger automatic entity extraction', {
+                documentId,
+                error: extractionError.message,
+                stack: extractionError.stack
+              })
+            }
+          }
         } catch (saveError) {
           log.error('❌ [AUTO-SAVE] Failed to save document to project:', saveError)
           // Continue anyway - user can manually save if auto-save fails

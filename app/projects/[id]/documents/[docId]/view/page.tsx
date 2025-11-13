@@ -55,6 +55,7 @@ import { VersionListDialog } from "@/components/documents/VersionListDialog"
 import { DriftHighlighter } from "@/components/documents/DriftHighlighter"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { Sparkles } from "@/components/ui/icons-shim"
+import { DocumentEntityEditor } from "@/components/documents/DocumentEntityEditor"
 
 interface DocumentData {
   id: string
@@ -1113,6 +1114,11 @@ The ADPA system represents a significant advancement in document processing auto
                               </>
                             ) : (
                               <>
+                                <DocumentEntityEditor
+                                  projectId={projectId}
+                                  documentContent={editedContent}
+                                  onContentChange={setEditedContent}
+                                />
                                 <Button variant="outline" size="sm" onClick={cancelEdit}>
                                   Cancel
                                 </Button>

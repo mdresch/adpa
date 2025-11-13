@@ -9,6 +9,7 @@ import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
 import { trackActivity } from "../middleware/analyticsMiddleware"
 import AuditService from "../services/auditService"
+import { extractionQueue } from "../services/queueService"
 
 const router = express.Router()
 
@@ -959,6 +960,79 @@ router.post("/project/:projectId",
         reason: (req.headers['x-access-reason'] as string) || undefined,
         ctx: { userId: req.user?.id, ip: req.ip, userAgent: req.headers['user-agent'] as string, requestId: (req as any).requestId }
       })
+
+      // 🚀 Automatic Entity Extraction: Trigger extraction for newly created document
+      // This runs asynchronously and doesn't block the response
+      if (contentString && contentString.trim().length > 0) {
+        try {
+          log.info('🔍 [AUTO-EXTRACTION] Starting automatic extraction trigger', {
+            documentId: id,
+            documentName: name,
+            projectId,
+            contentLength: contentString.length,
+            hasContent: !!contentString.trim()
+          })
+
+          // Create extraction job record
+          const extractionJobResult = await pool.query(
+            `INSERT INTO jobs (
+              type, status, data, created_by, project_id
+            ) VALUES ($1, $2, $3, $4, $5)
+            RETURNING id`,
+            [
+              'project-data-extraction',
+              'pending',
+              JSON.stringify({ 
+                projectId, 
+                documentIds: [id], // Extract only from this newly created document
+                autoTriggered: true,
+                sourceDocumentId: id,
+                sourceDocumentName: name
+              }),
+              req.user?.id,
+              projectId
+            ]
+          )
+
+          const extractionJobId = extractionJobResult.rows[0].id
+          log.info('✅ [AUTO-EXTRACTION] Extraction job record created', { extractionJobId })
+
+          // Enqueue extraction job (non-blocking)
+          const bullJob = await extractionQueue.add('extract-project-data', {
+            jobId: extractionJobId,
+            projectId,
+            userId: req.user?.id,
+            documentIds: [id], // Extract entities from this document only
+            aiProvider: undefined, // Use default provider
+            aiModel: undefined // Use default model
+          })
+
+          log.info('🚀 [AUTO-EXTRACTION] Automatic entity extraction triggered for new document', {
+            documentId: id,
+            documentName: name,
+            extractionJobId,
+            bullJobId: bullJob.id,
+            projectId,
+            queueName: 'project-data-extraction'
+          })
+        } catch (extractionError: any) {
+          // Don't fail document creation if extraction trigger fails
+          log.error('❌ [AUTO-EXTRACTION] Failed to trigger automatic entity extraction', {
+            documentId: id,
+            documentName: name,
+            projectId,
+            error: extractionError.message,
+            stack: extractionError.stack,
+            errorType: extractionError.constructor?.name
+          })
+        }
+      } else {
+        log.info('⏭️ [AUTO-EXTRACTION] Skipping extraction - document has no content', {
+          documentId: id,
+          documentName: name,
+          contentLength: contentString?.length || 0
+        })
+      }
 
       return res.status(201).json({
         message: "Document created successfully",
