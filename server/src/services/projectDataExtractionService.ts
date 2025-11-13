@@ -4195,6 +4195,8 @@ Guidelines:
     const justification = approach.justification || approach.tailoring_decisions_text || 'No justification provided'
 
     // UPSERT into development_approach table (one per project)
+    // Note: Table uses defined_by (not created_by) and has no updated_by column
+    // created_at and updated_at are auto-managed by database
     await client.query(
       `
       INSERT INTO development_approach (
@@ -4203,10 +4205,9 @@ Guidelines:
         organizational_maturity, team_experience_level, regulatory_constraints,
         tailoring_decisions, life_cycle_phases, iteration_length, iteration_unit,
         governance_approach, review_gates,
-        source_document_id, defined_by, approved_by, effective_date,
-        created_by, updated_by
+        source_document_id, defined_by, approved_by, effective_date
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
       ON CONFLICT (project_id) DO UPDATE SET
         approach = EXCLUDED.approach,
         methodology = EXCLUDED.methodology,
@@ -4228,7 +4229,6 @@ Guidelines:
         defined_by = COALESCE(EXCLUDED.defined_by, development_approach.defined_by),
         approved_by = COALESCE(EXCLUDED.approved_by, development_approach.approved_by),
         effective_date = COALESCE(EXCLUDED.effective_date, development_approach.effective_date),
-        updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
       `,
       [
@@ -4252,9 +4252,7 @@ Guidelines:
         null, // source_document_id - would need to resolve from source_document name
         userId, // defined_by
         null, // approved_by - not extracted, would be set manually
-        null, // effective_date - not extracted, would be set manually
-        userId, // created_by
-        userId  // updated_by
+        null  // effective_date - not extracted, would be set manually
       ]
     )
 
