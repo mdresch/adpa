@@ -41,7 +41,8 @@
     "check-status": "tsx scripts/check-upload-status.ts",
     "reset-batches": "tsx scripts/reset-failed-batches.ts",
     "clear-jobs": "tsx scripts/clear-failed-jobs.ts",
-    "diagnose:extraction": "tsx scripts/diagnose-extraction.ts"
+    "diagnose:extraction": "tsx scripts/diagnose-extraction.ts",
+    "clear:adpa-drifts": "tsx scripts/clear-adpa-drifts.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",

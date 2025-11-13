@@ -2877,12 +2877,19 @@ Guidelines:
           .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas before } or ]
           .replace(/,(\s*,)/g, ',') // Remove duplicate commas
         
-        // If control character error, fix unescaped control chars in string literals
-        if (isControlCharError) {
-          logger.warn('[EXTRACTION] Fixing control characters in JSON', {
+        // Check if error is about unescaped quotes
+        const isUnescapedQuoteError = parseError.message.includes("Expected ',' or '}' after property value") || 
+                                      parseError.message.includes("Unterminated string") ||
+                                      parseError.message.includes("Unexpected token")
+        
+        // If control character error OR unescaped quote error, fix both in a single pass
+        if (isControlCharError || isUnescapedQuoteError) {
+          logger.warn('[EXTRACTION] Fixing control characters and/or unescaped quotes in JSON', {
             originalLength: fixed.length,
             errorPosition: parseError.message.match(/position (\d+)/)?.[1],
-            preview: fixed.substring(0, 500)
+            preview: fixed.substring(0, 500),
+            isControlCharError,
+            isUnescapedQuoteError
           })
           
           // Use a state machine to properly escape control characters only within string literals
@@ -2921,16 +2928,33 @@ Guidelines:
                 } else {
                   // Unescaped quote - check if it's the end of the string
                   // Look ahead to see if this is followed by : or , or } or ] or whitespace + one of those
+                  // Be conservative: only treat as delimiter if clearly followed by JSON structure markers
                   let isStringEnd = false
                   let lookAheadPos = i + 1
+                  
+                  // Skip whitespace
                   while (lookAheadPos < fixed.length && /\s/.test(fixed[lookAheadPos])) {
                     lookAheadPos++
                   }
+                  
                   if (lookAheadPos < fixed.length) {
                     const nextNonWhitespace = fixed[lookAheadPos]
+                    // Only treat as delimiter if followed by clear JSON structure markers
                     if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
-                        nextNonWhitespace === '}' || nextNonWhitespace === ']') {
+                        nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                        nextNonWhitespace === '\n') {
                       isStringEnd = true
+                    }
+                    // If followed by a quote (double quote), it's likely a delimiter
+                    else if (nextNonWhitespace === '"' && lookAheadPos < fixed.length - 1) {
+                      // Check if next quote is followed by : (property name delimiter)
+                      let nextNextPos = lookAheadPos + 1
+                      while (nextNextPos < fixed.length && /\s/.test(fixed[nextNextPos])) {
+                        nextNextPos++
+                      }
+                      if (nextNextPos < fixed.length && fixed[nextNextPos] === ':') {
+                        isStringEnd = true
+                      }
                     }
                   } else {
                     // End of string - this is the closing quote
@@ -2942,7 +2966,7 @@ Guidelines:
                     inString = false
                     result += char
                   } else {
-                    // This is an unescaped quote within string content - escape it
+                    // This is an unescaped quote within string content - escape it to be safe
                     result += '\\"'
                   }
                 }
@@ -2997,7 +3021,7 @@ Guidelines:
           return JSON.parse(fixed)
         } catch (parseAfterFixError: any) {
           // If still failing, log and try alternative approach
-          logger.warn('[EXTRACTION] JSON still invalid after control character fix', {
+          logger.warn('[EXTRACTION] JSON still invalid after control character/quote fix', {
             error: parseAfterFixError.message,
             errorPosition: parseAfterFixError.message.match(/position (\d+)/)?.[1],
             fixedPreview: fixed.substring(Math.max(0, (parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') - 100)), parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') + 100)
@@ -3025,8 +3049,12 @@ Guidelines:
             if (braceCount === 0) {
               let extracted = cleanedContent.substring(firstBrace, endPos)
               
-              // Apply control character fix to extracted JSON
-              if (parseError.message.includes('control character')) {
+              // Apply control character and quote fix to extracted JSON
+              const needsFix = parseError.message.includes('control character') ||
+                              parseError.message.includes("Expected ',' or '}' after property value") ||
+                              parseError.message.includes("Unterminated string") ||
+                              parseError.message.includes("Unexpected token")
+              if (needsFix) {
                 let result = ''
                 let inString = false
                 let escapeNext = false
@@ -3059,16 +3087,33 @@ Guidelines:
                       } else {
                         // Unescaped quote - check if it's the end of the string
                         // Look ahead to see if this is followed by : or , or } or ] or whitespace + one of those
+                        // Be conservative: only treat as delimiter if clearly followed by JSON structure markers
                         let isStringEnd = false
                         let lookAheadPos = i + 1
+                        
+                        // Skip whitespace
                         while (lookAheadPos < extracted.length && /\s/.test(extracted[lookAheadPos])) {
                           lookAheadPos++
                         }
+                        
                         if (lookAheadPos < extracted.length) {
                           const nextNonWhitespace = extracted[lookAheadPos]
+                          // Only treat as delimiter if followed by clear JSON structure markers
                           if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
-                              nextNonWhitespace === '}' || nextNonWhitespace === ']') {
+                              nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                              nextNonWhitespace === '\n') {
                             isStringEnd = true
+                          }
+                          // If followed by a quote (double quote), it's likely a delimiter
+                          else if (nextNonWhitespace === '"' && lookAheadPos < extracted.length - 1) {
+                            // Check if next quote is followed by : (property name delimiter)
+                            let nextNextPos = lookAheadPos + 1
+                            while (nextNextPos < extracted.length && /\s/.test(extracted[nextNextPos])) {
+                              nextNextPos++
+                            }
+                            if (nextNextPos < extracted.length && extracted[nextNextPos] === ':') {
+                              isStringEnd = true
+                            }
                           }
                         } else {
                           // End of string - this is the closing quote
@@ -3080,7 +3125,7 @@ Guidelines:
                           inString = false
                           result += char
                         } else {
-                          // This is an unescaped quote within string content - escape it
+                          // This is an unescaped quote within string content - escape it to be safe
                           result += '\\"'
                         }
                       }
