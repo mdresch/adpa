@@ -160,20 +160,13 @@ export class DriftResolutionService {
       // Prefer fast providers: Google Gemini 2.5 Flash, with fallback to OpenAI gpt-4o-mini
       const aiResponse = await Promise.race([
         // Try fast providers first with fallback
-        aiService.generateWithFallback ? aiService.generateWithFallback({
+        aiService.generateWithFallback({
           prompt,
           provider: 'google', // Prefer fast provider (Gemini 2.5 Flash)
           model: 'gemini-2.5-flash', // Optimized for speed
           temperature: 0.2, // Low temp for consistent, accurate resolution
           max_tokens: 3000 // Optimized for speed
-        }, ['google', 'openai', 'groq', 'mistral']) : aiService.generate({
-          prompt,
-          provider: 'openai', // Fallback to OpenAI for speed and reliability
-          model: 'gpt-4o-mini', // Fast and cost-effective model optimized for speed
-          temperature: 0.3, // Low temperature for consistent, focused output
-          maxTokens: 3000, // Optimized for speed - most resolutions need 1500-2500 tokens
-          max_tokens: 3000 // Alternative parameter name for compatibility
-        }),
+        }, ['google', 'openai', 'groq', 'mistral']),
         // Timeout after 5 seconds
         new Promise<never>((_, reject) => 
           setTimeout(() => reject(new Error('AI resolution timeout: exceeded 5 seconds')), 5000)
