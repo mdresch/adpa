@@ -1925,13 +1925,14 @@ Guidance:
 
 Return JSON object only. Return null if no methodology information found.`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback if requested provider is unavailable
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
         max_tokens: 2500
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       // Validate AI response - throw error to trigger retry/fallback
       // Note: response from generateWithFallback includes providerUsed, but validateAIResponse expects standard format
@@ -1940,6 +1941,9 @@ Return JSON object only. Return null if no methodology information found.`
         usage: response.usage
       }
       this.validateAIResponse(standardResponse, 'development_approach', options)
+      
+      // Log which provider was actually used
+      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Used provider: ${(response as any).providerUsed || options.aiProvider || 'unknown'}`)
 
       const parsed = this.parseAIResponse(response.content)
       
