@@ -955,13 +955,15 @@ Requirements:
 - Infer priority from context (must-have = critical, should-have = high, etc.)
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive requirements (was truncating)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 3000
-      })
+        max_tokens: 10000 // Increased from 3000 to handle very large requirement extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const requirements = parsed.requirements || []
@@ -1207,13 +1209,15 @@ Requirements:
 - Extract specific measurable targets if mentioned
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive success criteria (was truncating at ~9K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
-      })
+        max_tokens: 10000 // Increased from 2000 to handle very large success criteria extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const successCriteria = parsed.success_criteria || []
@@ -1326,13 +1330,15 @@ Requirements:
 - Infer status from context
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 8000 to handle large documents with many phases (was truncating)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 1500
-      })
+        max_tokens: 8000 // Increased from 1500 to handle large documents with many phases (was truncating)
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const phases = parsed.phases || []
@@ -1537,13 +1543,15 @@ QUALITY CHECKLIST:
 
 Return pure JSON only.`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive technology lists (was truncating at ~8.7K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
-      })
+        max_tokens: 10000 // Increased from 2000 to handle very large technology extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const technologies = parsed.technologies || []
@@ -1663,13 +1671,15 @@ Requirements:
 - Infer status from context
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 10000 to handle large documents with extensive deliverables (was truncating at ~10.7K chars)
+      const response = await aiService.generateWithFallback({
         prompt,
-        provider: options.aiProvider!,
+        provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2500
-      })
+        max_tokens: 10000 // Increased from 2500 to handle very large deliverables extractions
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const deliverables = parsed.deliverables || []
@@ -1726,12 +1736,13 @@ Requirements:
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
+      // Note: Increased to 12000 to handle very large documents with extensive scope analysis (40+ items)
       const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 5000 // Increased from 2500 to handle large documents with many scope items
+        max_tokens: 12000 // Increased from 5000 to handle very large scope extractions (was truncating at ~23K chars)
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -2332,7 +2343,7 @@ JSON schema:
   "performance_measurements": [
     {
       "success_criterion_name": "Name of criterion being measured",
-      "measurement_date": "YYYY-MM-DD",
+      "measurement_date": "YYYY-MM-DD (REQUIRED - use document date if measurement date not specified)",
       "actual_value": number or null,
       "target_value": number or null,
       "units": "Units (%, days, USD, etc.) or null",
@@ -2347,10 +2358,12 @@ JSON schema:
 }
 
 Guidelines:
-- Convert values to numbers when possible (strip % or currency symbols).
-- If only textual comparison exists (e.g., "ahead by 5%"), compute variance when possible.
-- Use null where numbers aren't available.
-- Return ONLY valid JSON.`
+- **measurement_date is REQUIRED**: Extract the date when measurement was taken, or use document date if not specified
+- Extract BOTH actual measurements (historical data) AND target/planned measurements (future goals)
+- Convert values to numbers when possible (strip % or currency symbols)
+- If only textual comparison exists (e.g., "ahead by 5%"), compute variance when possible
+- Use null where numbers aren't available
+- Return ONLY valid JSON`
 
       const response = await aiService.generate({
         prompt,
@@ -5365,14 +5378,24 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     performanceMeasurements.forEach(measurement => {
-      const measurementDate = this.normalizeDate(measurement.measurement_date)
       const criterionName = measurement.success_criterion_name?.trim()
-
-      if (!measurementDate || !criterionName) {
+      
+      if (!criterionName) {
         logger.warn(
-          `[EXTRACTION] Skipping measurement due to missing date or criterion (${measurement.measurement_date}, ${measurement.success_criterion_name})`
+          `[EXTRACTION] Skipping measurement due to missing criterion name (${measurement.success_criterion_name})`
         )
         return
+      }
+
+      // Use provided date, or fallback to current date if missing (for planned/target measurements)
+      // This allows storing success criteria even when actual measurements haven't been taken yet
+      let measurementDate = this.normalizeDate(measurement.measurement_date)
+      if (!measurementDate) {
+        // Fallback to current date for planned/target measurements
+        measurementDate = new Date().toISOString().split('T')[0]
+        logger.debug(
+          `[EXTRACTION] Using fallback date for measurement "${criterionName}" (no date provided, using today)`
+        )
       }
 
       const rowIndex = placeholders.length
