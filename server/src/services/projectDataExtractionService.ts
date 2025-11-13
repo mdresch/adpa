@@ -219,13 +219,48 @@ interface TeamAgreement {
 }
 
 interface DevelopmentApproach {
-  approach: 'agile' | 'waterfall' | 'hybrid' | 'iterative' | 'custom'
+  // Approach selection
+  approach: 'predictive' | 'adaptive' | 'hybrid' | 'incremental' | 'iterative'
+  methodology?: 'waterfall' | 'scrum' | 'kanban' | 'lean' | 'safe' | 'prince2' | 'custom'
+  
+  // Justification
+  justification: string
+  
+  // Context factors (PMBOK 8 Domain 3)
+  uncertainty_level?: 'low' | 'medium' | 'high'
+  requirements_stability?: 'stable' | 'evolving' | 'uncertain'
+  stakeholder_engagement_model?: string
+  delivery_cadence?: 'single' | 'iterative' | 'incremental' | 'continuous'
+  
+  // Organizational context
+  organizational_maturity?: 'low' | 'medium' | 'high'
+  team_experience_level?: 'junior' | 'mixed' | 'senior'
+  regulatory_constraints?: boolean
+  
+  // Tailoring decisions
+  tailoring_decisions?: Array<{
+    area: string
+    standard_process: string
+    tailored_process: string
+    justification: string
+  }>
+  
+  // Life cycle
+  life_cycle_phases?: string[]
+  iteration_length?: number
+  iteration_unit?: 'days' | 'weeks'
+  
+  // Governance
+  governance_approach?: 'lightweight' | 'standard' | 'formal'
+  review_gates?: string[]
+  
+  // Legacy fields (for backward compatibility with existing extraction)
   framework?: string
   lifecycle_model?: string
   iteration_length_weeks?: number
   ceremonies?: string[]
   artifacts?: string[]
-  tailoring_decisions?: string
+  tailoring_decisions_text?: string
   governance_notes?: string
   source_document?: string
 }
@@ -1823,76 +1858,146 @@ Rules:
   /**
    * Extract development approaches for PMBOK 8 Development Approach & Life Cycle Domain
    */
+  /**
+   * Extract development approach metadata (TASK-90)
+   * Returns a single DevelopmentApproach object (one per project)
+   */
   private async extractDevelopmentApproaches(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
     options: { aiProvider?: string; aiModel?: string }
   ): Promise<DevelopmentApproach[]> {
     try {
-      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Starting extraction')
+      logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Starting extraction (TASK-90)')
 
       const documentContext = this.buildDocumentContext(documents)
 
-      const prompt = `Identify the project's **Development Approach & Life Cycle** decisions and return them as JSON.
+      const prompt = `You are analyzing project documents to extract DEVELOPMENT APPROACH - the methodology selected for this project.
+This is project-level metadata (ONE record per project).
+
+Look for:
+- "Methodology: Agile/Scrum/Waterfall/Hybrid"
+- "Development approach: Predictive/Adaptive"
+- "Tailoring justification" or "Why we chose [methodology]"
+- Life cycle phases mentioned
+- Sprint/iteration lengths
+- Delivery cadence (single release vs incremental)
+- Governance approach (formal gates, agile ceremonies)
+- Context factors: uncertainty level, requirements stability, team experience
 
 SOURCE DOCUMENTS:
 ${documentContext}
 
-Schema:
+Extract as a single JSON object (not array - one per project):
+
 {
-  "development_approaches": [
+  "approach": "predictive" | "adaptive" | "hybrid" | "incremental" | "iterative",
+  "methodology": "waterfall" | "scrum" | "kanban" | "lean" | "safe" | "prince2" | "custom" | null,
+  "justification": "Full explanation of why this approach was selected (Markdown format)",
+  "uncertainty_level": "low" | "medium" | "high" | null,
+  "requirements_stability": "stable" | "evolving" | "uncertain" | null,
+  "stakeholder_engagement_model": "periodic" | "continuous" | null,
+  "delivery_cadence": "single" | "iterative" | "incremental" | "continuous" | null,
+  "organizational_maturity": "low" | "medium" | "high" | null,
+  "team_experience_level": "junior" | "mixed" | "senior" | null,
+  "regulatory_constraints": boolean | null,
+  "life_cycle_phases": ["Phase 1 name", "Phase 2 name", ...],
+  "iteration_length": number (if iterative) | null,
+  "iteration_unit": "days" | "weeks" | null,
+  "governance_approach": "lightweight" | "standard" | "formal" | null,
+  "review_gates": ["Gate 1", "Gate 2", ...],
+  "tailoring_decisions": [
     {
-      "approach": "agile|waterfall|hybrid|iterative|custom",
-      "framework": "Scrum, SAFe, Prince2, etc. or null",
-      "lifecycle_model": "Incremental, Iterative, Continuous Delivery, etc. or null",
-      "iteration_length_weeks": integer or null,
-      "ceremonies": ["Daily stand-up", "Retrospective"],
-      "artifacts": ["Product backlog", "Gantt chart"],
-      "tailoring_decisions": "Markdown summary of tailoring",
-      "governance_notes": "Governance/approval requirements or null",
-      "source_document": "Document title where this decision appears"
+      "area": "What was tailored",
+      "standard_process": "Normal org process",
+      "tailored_process": "How it was adapted",
+      "justification": "Why"
     }
   ]
 }
 
 Guidance:
-- Capture explicit methodology decisions, cadence, and key governance checkpoints.
-- Use arrays for ceremonies/artifacts.
-- Use null for unknown numeric or textual values.
-- Return ONLY valid JSON.`
+- Return a single object (not array) - this is project-level metadata
+- Use null for unknown values
+- Use arrays for phases, review_gates, tailoring_decisions
+- justification must be comprehensive Markdown explaining WHY the approach was chosen
+- If no methodology information found, return null
+
+Return JSON object only. Return null if no methodology information found.`
 
       const response = await aiService.generate({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
-        temperature: 0.2,
-        max_tokens: 2200
+        temperature: 0.3,
+        max_tokens: 2500
       })
 
       // Validate AI response - throw error to trigger retry/fallback
-      this.validateAIResponse(response, 'development_approaches', options)
+      this.validateAIResponse(response, 'development_approach', options)
 
       const parsed = this.parseAIResponse(response.content)
       
       // Log if parsing returned empty object
-      if (!parsed || Object.keys(parsed).length === 0) {
-        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object', {
+      if (!parsed || Object.keys(parsed).length === 0 || parsed === null) {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] AI response parsed to empty object or null', {
           contentLength: response.content.length,
           contentPreview: response.content.substring(0, 500)
         })
         return []
       }
       
-      const approaches = (parsed.development_approaches || []).map((item: any) => ({
-        ...item,
-        ceremonies: this.ensureStringArray(item?.ceremonies),
-        artifacts: this.ensureStringArray(item?.artifacts),
-        iteration_length_weeks: this.safeInteger(item?.iteration_length_weeks)
-      }))
+      // Handle both single object and array responses (for backward compatibility)
+      let approach: any
+      if (Array.isArray(parsed.development_approaches)) {
+        // Legacy format - take first one
+        approach = parsed.development_approaches[0]
+      } else if (parsed.approach) {
+        // New format - single object
+        approach = parsed
+      } else {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] No development approach found in response')
+        return []
+      }
 
-      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Extracted ${approaches.length} development approaches`)
+      if (!approach || !approach.approach) {
+        logger.warn('[EXTRACTION-DEVELOPMENT-APPROACH] Invalid approach object')
+        return []
+      }
 
-      return approaches
+      // Normalize the response
+      const normalized: DevelopmentApproach = {
+        approach: approach.approach,
+        methodology: approach.methodology || approach.framework || null,
+        justification: approach.justification || approach.tailoring_decisions_text || 'No justification provided',
+        uncertainty_level: approach.uncertainty_level || null,
+        requirements_stability: approach.requirements_stability || null,
+        stakeholder_engagement_model: approach.stakeholder_engagement_model || null,
+        delivery_cadence: approach.delivery_cadence || null,
+        organizational_maturity: approach.organizational_maturity || null,
+        team_experience_level: approach.team_experience_level || null,
+        regulatory_constraints: approach.regulatory_constraints || false,
+        life_cycle_phases: this.ensureStringArray(approach.life_cycle_phases || approach.lifecycle_model ? [approach.lifecycle_model] : []),
+        iteration_length: this.safeInteger(approach.iteration_length || approach.iteration_length_weeks ? (approach.iteration_length_weeks * 7) : null),
+        iteration_unit: approach.iteration_unit || (approach.iteration_length_weeks ? 'weeks' : null),
+        governance_approach: approach.governance_approach || null,
+        review_gates: this.ensureStringArray(approach.review_gates),
+        tailoring_decisions: Array.isArray(approach.tailoring_decisions) ? approach.tailoring_decisions : [],
+        // Legacy fields for backward compatibility
+        framework: approach.framework || approach.methodology || null,
+        lifecycle_model: approach.lifecycle_model || null,
+        iteration_length_weeks: this.safeInteger(approach.iteration_length_weeks || (approach.iteration_length && approach.iteration_unit === 'weeks' ? approach.iteration_length / 7 : null)),
+        ceremonies: this.ensureStringArray(approach.ceremonies),
+        artifacts: this.ensureStringArray(approach.artifacts),
+        tailoring_decisions_text: approach.tailoring_decisions_text || (Array.isArray(approach.tailoring_decisions) ? approach.tailoring_decisions.map((td: any) => `${td.area}: ${td.justification}`).join('\n') : null),
+        governance_notes: approach.governance_notes || null,
+        source_document: approach.source_document || null
+      }
+
+      logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Extracted development approach: ${normalized.approach} (${normalized.methodology || 'N/A'})`)
+
+      // Return as array (for consistency with other extraction methods) but should only have one item
+      return [normalized]
     } catch (error: unknown) {
       logger.error('[EXTRACTION-DEVELOPMENT-APPROACH] Extraction failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -3914,7 +4019,8 @@ Guidelines:
   }
 
   /**
-   * Save development approaches to database
+   * Save development approach to database (TASK-90)
+   * This is project-level metadata - ONE record per project (UPSERT)
    */
   private async saveDevelopmentApproaches(
     client: PoolClient,
@@ -3923,64 +4029,163 @@ Guidelines:
     developmentApproaches: DevelopmentApproach[]
   ): Promise<void> {
     if (developmentApproaches.length === 0) {
-      logger.info('[EXTRACTION] No development_approaches to save, skipping')
+      logger.info('[EXTRACTION] No development_approach to save, skipping')
       return
     }
 
-    const allowedApproaches = new Set(['agile', 'waterfall', 'hybrid', 'iterative', 'custom'])
+    // TASK-90: This is project-level metadata - take the first (and should be only) approach
+    const approach = developmentApproaches[0]
 
-    const values: any[] = []
-    const placeholders: string[] = []
+    // Normalize approach values
+    const allowedApproaches = new Set(['predictive', 'adaptive', 'hybrid', 'incremental', 'iterative'])
+    const rawApproach = (approach.approach || 'hybrid').toString().toLowerCase()
+    const normalizedApproach = allowedApproaches.has(rawApproach) ? rawApproach : 'hybrid'
 
-    developmentApproaches.forEach((approach, index) => {
-      const offset = index * 12
-      placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12})`
-      )
+    // Normalize methodology
+    const allowedMethodologies = new Set(['waterfall', 'scrum', 'kanban', 'lean', 'safe', 'prince2', 'custom'])
+    const rawMethodology = (approach.methodology || approach.framework || '').toString().toLowerCase()
+    const normalizedMethodology = allowedMethodologies.has(rawMethodology) ? rawMethodology : null
 
-      const rawApproach = (approach.approach || 'custom').toString().toLowerCase()
-      const normalizedApproach = allowedApproaches.has(rawApproach) ? rawApproach : 'custom'
-      const framework = (approach.framework || '').trim() || 'unspecified'
+    // Normalize other enum fields
+    const normalizeEnum = (value: any, allowed: Set<string>, defaultValue: string | null = null): string | null => {
+      if (!value) return defaultValue
+      const normalized = value.toString().toLowerCase()
+      return allowed.has(normalized) ? normalized : defaultValue
+    }
 
-      values.push(
-        projectId,
-        normalizedApproach,
-        framework,
-        approach.lifecycle_model || null,
-        this.safeInteger(approach.iteration_length_weeks),
-        this.ensureStringArray(approach.ceremonies),
-        this.ensureStringArray(approach.artifacts),
-        approach.tailoring_decisions || null,
-        approach.governance_notes || null,
-        null, // source_document_id placeholder
-        userId,
-        userId
-      )
-    })
-
-    await client.query(
-      `
-      INSERT INTO development_approaches (
-        project_id, approach, framework, lifecycle_model, iteration_length_weeks,
-        ceremonies, artifacts, tailoring_decisions, governance_notes,
-        source_document_id, created_by, updated_by
-      )
-      VALUES ${placeholders.join(', ')}
-      ON CONFLICT (project_id, approach, framework) DO UPDATE SET
-        lifecycle_model = EXCLUDED.lifecycle_model,
-        iteration_length_weeks = EXCLUDED.iteration_length_weeks,
-        ceremonies = EXCLUDED.ceremonies,
-        artifacts = EXCLUDED.artifacts,
-        tailoring_decisions = EXCLUDED.tailoring_decisions,
-        governance_notes = EXCLUDED.governance_notes,
-        source_document_id = COALESCE(EXCLUDED.source_document_id, development_approaches.source_document_id),
-        updated_by = EXCLUDED.updated_by,
-        updated_at = CURRENT_TIMESTAMP
-    `,
-      values
+    const uncertaintyLevel = normalizeEnum(
+      approach.uncertainty_level,
+      new Set(['low', 'medium', 'high']),
+      null
     )
 
-    logger.info(`[EXTRACTION] Saved ${developmentApproaches.length} development approaches`)
+    const requirementsStability = normalizeEnum(
+      approach.requirements_stability,
+      new Set(['stable', 'evolving', 'uncertain']),
+      null
+    )
+
+    const deliveryCadence = normalizeEnum(
+      approach.delivery_cadence,
+      new Set(['single', 'iterative', 'incremental', 'continuous']),
+      null
+    )
+
+    const organizationalMaturity = normalizeEnum(
+      approach.organizational_maturity,
+      new Set(['low', 'medium', 'high']),
+      null
+    )
+
+    const teamExperienceLevel = normalizeEnum(
+      approach.team_experience_level,
+      new Set(['junior', 'mixed', 'senior']),
+      null
+    )
+
+    const iterationUnit = normalizeEnum(
+      approach.iteration_unit,
+      new Set(['days', 'weeks']),
+      null
+    )
+
+    const governanceApproach = normalizeEnum(
+      approach.governance_approach,
+      new Set(['lightweight', 'standard', 'formal']),
+      null
+    )
+
+    // Prepare tailoring decisions JSONB
+    const tailoringDecisions = Array.isArray(approach.tailoring_decisions) && approach.tailoring_decisions.length > 0
+      ? JSON.stringify(approach.tailoring_decisions)
+      : '[]'
+
+    // Prepare life cycle phases JSONB
+    const lifeCyclePhases = Array.isArray(approach.life_cycle_phases) && approach.life_cycle_phases.length > 0
+      ? JSON.stringify(approach.life_cycle_phases)
+      : '[]'
+
+    // Prepare review gates JSONB
+    const reviewGates = Array.isArray(approach.review_gates) && approach.review_gates.length > 0
+      ? JSON.stringify(approach.review_gates)
+      : '[]'
+
+    // Calculate iteration_length (convert weeks to days if needed)
+    let iterationLength: number | null = null
+    if (approach.iteration_length) {
+      iterationLength = approach.iteration_length
+    } else if (approach.iteration_length_weeks) {
+      iterationLength = approach.iteration_length_weeks * 7 // Convert weeks to days
+    }
+
+    // Ensure justification is provided
+    const justification = approach.justification || approach.tailoring_decisions_text || 'No justification provided'
+
+    // UPSERT into development_approach table (one per project)
+    await client.query(
+      `
+      INSERT INTO development_approach (
+        project_id, approach, methodology, justification,
+        uncertainty_level, requirements_stability, stakeholder_engagement_model, delivery_cadence,
+        organizational_maturity, team_experience_level, regulatory_constraints,
+        tailoring_decisions, life_cycle_phases, iteration_length, iteration_unit,
+        governance_approach, review_gates,
+        source_document_id, defined_by, approved_by, effective_date,
+        created_by, updated_by
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+      ON CONFLICT (project_id) DO UPDATE SET
+        approach = EXCLUDED.approach,
+        methodology = EXCLUDED.methodology,
+        justification = EXCLUDED.justification,
+        uncertainty_level = EXCLUDED.uncertainty_level,
+        requirements_stability = EXCLUDED.requirements_stability,
+        stakeholder_engagement_model = EXCLUDED.stakeholder_engagement_model,
+        delivery_cadence = EXCLUDED.delivery_cadence,
+        organizational_maturity = EXCLUDED.organizational_maturity,
+        team_experience_level = EXCLUDED.team_experience_level,
+        regulatory_constraints = EXCLUDED.regulatory_constraints,
+        tailoring_decisions = EXCLUDED.tailoring_decisions,
+        life_cycle_phases = EXCLUDED.life_cycle_phases,
+        iteration_length = EXCLUDED.iteration_length,
+        iteration_unit = EXCLUDED.iteration_unit,
+        governance_approach = EXCLUDED.governance_approach,
+        review_gates = EXCLUDED.review_gates,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, development_approach.source_document_id),
+        defined_by = COALESCE(EXCLUDED.defined_by, development_approach.defined_by),
+        approved_by = COALESCE(EXCLUDED.approved_by, development_approach.approved_by),
+        effective_date = COALESCE(EXCLUDED.effective_date, development_approach.effective_date),
+        updated_by = EXCLUDED.updated_by,
+        updated_at = CURRENT_TIMESTAMP
+      `,
+      [
+        projectId,
+        normalizedApproach,
+        normalizedMethodology,
+        justification,
+        uncertaintyLevel,
+        requirementsStability,
+        approach.stakeholder_engagement_model || null,
+        deliveryCadence,
+        organizationalMaturity,
+        teamExperienceLevel,
+        approach.regulatory_constraints || false,
+        tailoringDecisions,
+        lifeCyclePhases,
+        iterationLength,
+        iterationUnit,
+        governanceApproach,
+        reviewGates,
+        null, // source_document_id - would need to resolve from source_document name
+        userId, // defined_by
+        null, // approved_by - not extracted, would be set manually
+        null, // effective_date - not extracted, would be set manually
+        userId, // created_by
+        userId  // updated_by
+      ]
+    )
+
+    logger.info(`[EXTRACTION] Saved development approach: ${normalizedApproach} (${normalizedMethodology || 'N/A'}) for project ${projectId}`)
   }
 
   /**
