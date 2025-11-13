@@ -2781,38 +2781,36 @@ Guidelines:
     
     // Remove markdown code blocks if present
     if (cleanedContent.includes('```')) {
-      // More robust extraction: find first ``` and matching closing ```
-      const firstCodeBlockStart = cleanedContent.indexOf('```')
-      if (firstCodeBlockStart !== -1) {
-        // Find the end of the opening marker (```json or just ```)
-        let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
-        // Skip optional language identifier (json, etc.)
-        while (codeBlockStart < cleanedContent.length && 
-               cleanedContent[codeBlockStart] !== '\n' && 
-               cleanedContent[codeBlockStart] !== '`') {
-          codeBlockStart++
-        }
-        // Skip newline if present
-        if (cleanedContent[codeBlockStart] === '\n') {
-          codeBlockStart++
-        }
-        
-        // Find the closing ```
-        const codeBlockEnd = cleanedContent.indexOf('```', codeBlockStart)
-        if (codeBlockEnd !== -1) {
-          // Extract content between code block markers
-          cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
-        } else {
-          // No closing marker found, extract from start to end
-          cleanedContent = cleanedContent.substring(codeBlockStart).trim()
-        }
-      }
-      
-      // Fallback: if still contains ```, try regex approach
-      if (cleanedContent.includes('```')) {
-        const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
-        if (codeBlockMatch && codeBlockMatch[1]) {
-          cleanedContent = codeBlockMatch[1].trim()
+      // Try regex first (most reliable for well-formed code blocks)
+      const codeBlockMatch = cleanedContent.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/)
+      if (codeBlockMatch && codeBlockMatch[1]) {
+        cleanedContent = codeBlockMatch[1].trim()
+      } else {
+        // Fallback: manual extraction
+        const firstCodeBlockStart = cleanedContent.indexOf('```')
+        if (firstCodeBlockStart !== -1) {
+          // Find the end of the opening marker (```json or just ```)
+          let codeBlockStart = firstCodeBlockStart + 3 // Skip opening ```
+          // Skip optional language identifier (json, etc.)
+          while (codeBlockStart < cleanedContent.length && 
+                 cleanedContent[codeBlockStart] !== '\n' && 
+                 cleanedContent[codeBlockStart] !== '`') {
+            codeBlockStart++
+          }
+          // Skip newline if present
+          if (codeBlockStart < cleanedContent.length && cleanedContent[codeBlockStart] === '\n') {
+            codeBlockStart++
+          }
+          
+          // Find the closing ```
+          const codeBlockEnd = cleanedContent.indexOf('```', codeBlockStart)
+          if (codeBlockEnd !== -1) {
+            // Extract content between code block markers
+            cleanedContent = cleanedContent.substring(codeBlockStart, codeBlockEnd).trim()
+          } else {
+            // No closing marker found, extract from start to end
+            cleanedContent = cleanedContent.substring(codeBlockStart).trim()
+          }
         }
       }
       
@@ -2827,7 +2825,8 @@ Guidelines:
       if (cleanedContent.length > 0) {
         logger.debug('[EXTRACTION] Extracted from code block', {
           preview: cleanedContent.substring(0, 200),
-          length: cleanedContent.length
+          length: cleanedContent.length,
+          hasCodeBlocks: cleanedContent.includes('```')
         })
       }
     }
@@ -2849,13 +2848,41 @@ Guidelines:
         // Check if error is about control characters
         const isControlCharError = parseError.message.includes('control character')
         
-        // Fix trailing commas in arrays and objects
+        // Ensure code block is extracted first (in case it wasn't caught earlier)
         let fixed = cleanedContent
+        if (fixed.includes('```')) {
+          const codeBlockStart = fixed.indexOf('```')
+          if (codeBlockStart !== -1) {
+            let start = codeBlockStart + 3
+            // Skip language identifier
+            while (start < fixed.length && fixed[start] !== '\n' && fixed[start] !== '`') {
+              start++
+            }
+            if (fixed[start] === '\n') start++
+            
+            const codeBlockEnd = fixed.indexOf('```', start)
+            if (codeBlockEnd !== -1) {
+              fixed = fixed.substring(start, codeBlockEnd).trim()
+            } else {
+              fixed = fixed.substring(start).trim()
+            }
+            // Clean up any remaining markdown artifacts
+            fixed = fixed.replace(/^```json\s*/i, '').replace(/```\s*$/, '').trim()
+          }
+        }
+        
+        // Fix trailing commas in arrays and objects
+        fixed = fixed
           .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas before } or ]
           .replace(/,(\s*,)/g, ',') // Remove duplicate commas
         
         // If control character error, fix unescaped control chars in string literals
         if (isControlCharError) {
+          logger.debug('[EXTRACTION] Fixing control characters in JSON', {
+            originalLength: fixed.length,
+            preview: fixed.substring(0, 200)
+          })
+          
           // Use a state machine to properly escape control characters only within string literals
           let result = ''
           let inString = false
@@ -2883,21 +2910,31 @@ Guidelines:
               continue
             }
             
-            if (inString && charCode >= 0x00 && charCode <= 0x1F && char !== '\n' && char !== '\r' && char !== '\t') {
-              // Escape control characters (except common ones that might already be handled)
-              result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
-            } else if (inString && char === '\n') {
-              result += '\\n'
-            } else if (inString && char === '\r') {
-              result += '\\r'
-            } else if (inString && char === '\t') {
-              result += '\\t'
+            // If we're inside a string and encounter a control character, escape it
+            if (inString) {
+              if (char === '\n') {
+                result += '\\n'
+              } else if (char === '\r') {
+                result += '\\r'
+              } else if (char === '\t') {
+                result += '\\t'
+              } else if (charCode >= 0x00 && charCode <= 0x1F) {
+                // Other control characters - escape as Unicode
+                result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+              } else {
+                result += char
+              }
             } else {
               result += char
             }
           }
           
           fixed = result
+          
+          logger.debug('[EXTRACTION] Fixed control characters', {
+            fixedLength: fixed.length,
+            preview: fixed.substring(0, 200)
+          })
         }
         
         // Try parsing fixed version
