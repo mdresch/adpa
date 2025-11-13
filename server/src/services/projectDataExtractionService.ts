@@ -1935,12 +1935,13 @@ Return JSON object only. Return null if no methodology information found.`
       })
 
       // Use generateWithFallback for automatic provider fallback if requested provider is unavailable
+      // Note: max_tokens increased to 5000 to accommodate comprehensive justification field (markdown format)
       const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2500
+        max_tokens: 5000 // Increased from 2500 to handle long justification markdown content
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       // Log the raw response BEFORE any parsing
