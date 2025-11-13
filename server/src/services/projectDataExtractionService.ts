@@ -1934,7 +1934,12 @@ Return JSON object only. Return null if no methodology information found.`
       })
 
       // Validate AI response - throw error to trigger retry/fallback
-      this.validateAIResponse(response, 'development_approach', options)
+      // Note: response from generateWithFallback includes providerUsed, but validateAIResponse expects standard format
+      const standardResponse = {
+        content: response.content,
+        usage: response.usage
+      }
+      this.validateAIResponse(standardResponse, 'development_approach', options)
 
       const parsed = this.parseAIResponse(response.content)
       
