@@ -2878,67 +2878,98 @@ Guidelines:
         
         // If control character error, fix unescaped control chars in string literals
         if (isControlCharError) {
-          logger.debug('[EXTRACTION] Fixing control characters in JSON', {
+          logger.warn('[EXTRACTION] Fixing control characters in JSON', {
             originalLength: fixed.length,
-            preview: fixed.substring(0, 200)
+            errorPosition: parseError.message.match(/position (\d+)/)?.[1],
+            preview: fixed.substring(0, 500)
           })
           
           // Use a state machine to properly escape control characters only within string literals
           let result = ''
           let inString = false
           let escapeNext = false
+          let lastChar = ''
           
           for (let i = 0; i < fixed.length; i++) {
             const char = fixed[i]
             const charCode = char.charCodeAt(0)
             
+            // Handle escape sequences
             if (escapeNext) {
               result += char
               escapeNext = false
+              lastChar = char
               continue
             }
             
+            // Check for backslash (start of escape sequence)
             if (char === '\\') {
               result += char
               escapeNext = true
+              lastChar = char
               continue
             }
             
+            // Check for quote (start/end of string)
             if (char === '"') {
-              inString = !inString
+              // Only toggle if not escaped
+              if (lastChar !== '\\') {
+                inString = !inString
+              }
               result += char
+              lastChar = char
               continue
             }
             
-            // If we're inside a string and encounter a control character, escape it
+            // If we're inside a string literal, escape control characters
             if (inString) {
-              if (char === '\n') {
-                result += '\\n'
-              } else if (char === '\r') {
-                result += '\\r'
-              } else if (char === '\t') {
-                result += '\\t'
-              } else if (charCode >= 0x00 && charCode <= 0x1F) {
-                // Other control characters - escape as Unicode
-                result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+              // Check for control characters (0x00-0x1F) except already escaped ones
+              if (charCode >= 0x00 && charCode <= 0x1F) {
+                // Escape common control characters
+                if (char === '\n') {
+                  result += '\\n'
+                } else if (char === '\r') {
+                  result += '\\r'
+                } else if (char === '\t') {
+                  result += '\\t'
+                } else if (char === '\b') {
+                  result += '\\b'
+                } else if (char === '\f') {
+                  result += '\\f'
+                } else {
+                  // Escape other control characters as Unicode
+                  result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+                }
               } else {
                 result += char
               }
             } else {
               result += char
             }
+            
+            lastChar = char
           }
           
           fixed = result
           
-          logger.debug('[EXTRACTION] Fixed control characters', {
+          logger.warn('[EXTRACTION] Fixed control characters', {
             fixedLength: fixed.length,
-            preview: fixed.substring(0, 200)
+            preview: fixed.substring(0, 500)
           })
         }
         
         // Try parsing fixed version
-        return JSON.parse(fixed)
+        try {
+          return JSON.parse(fixed)
+        } catch (parseAfterFixError: any) {
+          // If still failing, log and try alternative approach
+          logger.warn('[EXTRACTION] JSON still invalid after control character fix', {
+            error: parseAfterFixError.message,
+            errorPosition: parseAfterFixError.message.match(/position (\d+)/)?.[1],
+            fixedPreview: fixed.substring(Math.max(0, (parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') - 100)), parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') + 100)
+          })
+          throw parseAfterFixError // Re-throw to try next fallback
+        }
       } catch (fixError) {
         // Try extracting just the first complete JSON object
         try {
@@ -2958,7 +2989,66 @@ Guidelines:
             }
             
             if (braceCount === 0) {
-              const extracted = cleanedContent.substring(firstBrace, endPos)
+              let extracted = cleanedContent.substring(firstBrace, endPos)
+              
+              // Apply control character fix to extracted JSON
+              if (parseError.message.includes('control character')) {
+                let result = ''
+                let inString = false
+                let escapeNext = false
+                let lastChar = ''
+                
+                for (let i = 0; i < extracted.length; i++) {
+                  const char = extracted[i]
+                  const charCode = char.charCodeAt(0)
+                  
+                  if (escapeNext) {
+                    result += char
+                    escapeNext = false
+                    lastChar = char
+                    continue
+                  }
+                  
+                  if (char === '\\') {
+                    result += char
+                    escapeNext = true
+                    lastChar = char
+                    continue
+                  }
+                  
+                  if (char === '"') {
+                    if (lastChar !== '\\') {
+                      inString = !inString
+                    }
+                    result += char
+                    lastChar = char
+                    continue
+                  }
+                  
+                  if (inString && charCode >= 0x00 && charCode <= 0x1F) {
+                    if (char === '\n') {
+                      result += '\\n'
+                    } else if (char === '\r') {
+                      result += '\\r'
+                    } else if (char === '\t') {
+                      result += '\\t'
+                    } else if (char === '\b') {
+                      result += '\\b'
+                    } else if (char === '\f') {
+                      result += '\\f'
+                    } else {
+                      result += '\\u' + ('0000' + charCode.toString(16)).slice(-4)
+                    }
+                  } else {
+                    result += char
+                  }
+                  
+                  lastChar = char
+                }
+                
+                extracted = result
+              }
+              
               return JSON.parse(extracted)
             }
           }
