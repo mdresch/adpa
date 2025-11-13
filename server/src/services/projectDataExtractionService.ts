@@ -2774,27 +2774,89 @@ Guidelines:
 
   /**
    * Parse AI response (handles both JSON and markdown-wrapped JSON)
+   * Includes fixes for common JSON malformation issues
    */
   private parseAIResponse(content: string): any {
-    try {
-      // Try direct JSON parse
-      return JSON.parse(content)
-    } catch {
-      // Try extracting JSON from markdown code blocks
-      const jsonMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
+    let cleanedContent = content.trim()
+    
+    // Remove markdown code blocks if present
+    if (cleanedContent.includes('```')) {
+      const jsonMatch = cleanedContent.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/)
       if (jsonMatch) {
-        return JSON.parse(jsonMatch[1])
+        cleanedContent = jsonMatch[1]
+      } else {
+        // Try to extract JSON object from markdown
+        const objectMatch = cleanedContent.match(/\{[\s\S]*\}/)
+        if (objectMatch) {
+          cleanedContent = objectMatch[0]
+        }
       }
-      
-      // Try finding JSON object without markdown
-      const objectMatch = content.match(/\{[\s\S]*\}/)
-      if (objectMatch) {
-        return JSON.parse(objectMatch[0])
-      }
-      
-      logger.warn('[EXTRACTION] Failed to parse AI response as JSON')
-      return {}
     }
+    
+    // Try direct JSON parse first
+    try {
+      return JSON.parse(cleanedContent)
+    } catch (parseError: any) {
+      // Log the error for debugging
+      logger.warn('[EXTRACTION] JSON parse error, attempting fixes', {
+        error: parseError.message,
+        errorPosition: parseError.message.match(/position (\d+)/)?.[1],
+        contentLength: cleanedContent.length,
+        contentPreview: cleanedContent.substring(0, 500)
+      })
+      
+      // Try to fix common JSON issues
+      try {
+        // Fix trailing commas in arrays and objects
+        let fixed = cleanedContent
+          .replace(/,(\s*[}\]])/g, '$1') // Remove trailing commas before } or ]
+          .replace(/,(\s*,)/g, ',') // Remove duplicate commas
+        
+        // Try parsing fixed version
+        return JSON.parse(fixed)
+      } catch (fixError) {
+        // Try extracting just the first complete JSON object
+        try {
+          // Find the first { and try to match balanced braces
+          const firstBrace = cleanedContent.indexOf('{')
+          if (firstBrace !== -1) {
+            let braceCount = 0
+            let endPos = firstBrace
+            
+            for (let i = firstBrace; i < cleanedContent.length; i++) {
+              if (cleanedContent[i] === '{') braceCount++
+              if (cleanedContent[i] === '}') braceCount--
+              if (braceCount === 0) {
+                endPos = i + 1
+                break
+              }
+            }
+            
+            if (braceCount === 0) {
+              const extracted = cleanedContent.substring(firstBrace, endPos)
+              return JSON.parse(extracted)
+            }
+          }
+        } catch (extractError) {
+          // Last resort: try to find any JSON-like structure
+          logger.error('[EXTRACTION] All JSON parsing attempts failed', {
+            originalError: parseError.message,
+            fixError: fixError instanceof Error ? fixError.message : String(fixError),
+            extractError: extractError instanceof Error ? extractError.message : String(extractError),
+            contentLength: cleanedContent.length,
+            contentSample: cleanedContent.substring(0, 1000)
+          })
+          
+          // Return empty object to prevent complete failure
+          // The extraction method will handle empty response
+          return {}
+        }
+      }
+    }
+    
+    // Fallback: return empty object
+    logger.warn('[EXTRACTION] Failed to parse AI response as JSON, returning empty object')
+    return {}
   }
 
   // Database save methods continue in next message...
