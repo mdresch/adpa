@@ -3020,6 +3020,102 @@ Guidelines:
         try {
           return JSON.parse(fixed)
         } catch (parseAfterFixError: any) {
+          // Check if the new error is about unescaped quotes (might not have been caught in first pass)
+          const isNewUnescapedQuoteError = parseAfterFixError.message.includes("Expected ',' or '}' after property value") || 
+                                           parseAfterFixError.message.includes("Unterminated string") ||
+                                           parseAfterFixError.message.includes("Unexpected token")
+          
+          // If we fixed control chars but now have quote error, apply quote fix
+          if (isControlCharError && isNewUnescapedQuoteError && !isUnescapedQuoteError) {
+            logger.warn('[EXTRACTION] Applying quote fix after control character fix', {
+              originalError: parseError.message,
+              newError: parseAfterFixError.message
+            })
+            
+            // Apply quote fix to the already-fixed string
+            let result = ''
+            let inString = false
+            let escapeNext = false
+            let lastChar = ''
+            
+            for (let i = 0; i < fixed.length; i++) {
+              const char = fixed[i]
+              
+              if (escapeNext) {
+                result += char
+                escapeNext = false
+                lastChar = char
+                continue
+              }
+              
+              if (char === '\\') {
+                result += char
+                escapeNext = true
+                lastChar = char
+                continue
+              }
+              
+              if (char === '"') {
+                if (inString) {
+                  if (lastChar === '\\') {
+                    result += char
+                  } else {
+                    let isStringEnd = false
+                    let lookAheadPos = i + 1
+                    while (lookAheadPos < fixed.length && /\s/.test(fixed[lookAheadPos])) {
+                      lookAheadPos++
+                    }
+                    if (lookAheadPos < fixed.length) {
+                      const nextNonWhitespace = fixed[lookAheadPos]
+                      if (nextNonWhitespace === ':' || nextNonWhitespace === ',' || 
+                          nextNonWhitespace === '}' || nextNonWhitespace === ']' ||
+                          nextNonWhitespace === '\n') {
+                        isStringEnd = true
+                      } else if (nextNonWhitespace === '"' && lookAheadPos < fixed.length - 1) {
+                        let nextNextPos = lookAheadPos + 1
+                        while (nextNextPos < fixed.length && /\s/.test(fixed[nextNextPos])) {
+                          nextNextPos++
+                        }
+                        if (nextNextPos < fixed.length && fixed[nextNextPos] === ':') {
+                          isStringEnd = true
+                        }
+                      }
+                    } else {
+                      isStringEnd = true
+                    }
+                    
+                    if (isStringEnd) {
+                      inString = false
+                      result += char
+                    } else {
+                      result += '\\"'
+                    }
+                  }
+                } else {
+                  inString = true
+                  result += char
+                }
+                lastChar = char
+                continue
+              }
+              
+              result += char
+              lastChar = char
+            }
+            
+            fixed = result
+            
+            // Try parsing again
+            try {
+              return JSON.parse(fixed)
+            } catch (retryError: any) {
+              logger.warn('[EXTRACTION] JSON still invalid after quote fix retry', {
+                error: retryError.message
+              })
+              throw retryError
+            }
+          }
+          
           // If still failing, log and try alternative approach
           logger.warn('[EXTRACTION] JSON still invalid after control character/quote fix', {
             error: parseAfterFixError.message,
