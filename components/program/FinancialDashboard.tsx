@@ -190,11 +190,10 @@ export default function FinancialDashboard({
   const fetchFinancialData = async () => {
     setIsLoading(true)
     try {
-      // NEXT_PUBLIC_API_URL already includes /api, so don't add it again
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const { getApiUrl } = await import('@/lib/api-url')
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       
-      const response = await fetch(`${apiUrl}/programs/${programId}/financial-dashboard`, {
+      const response = await fetch(getApiUrl(`/programs/${programId}/financial-dashboard`), {
         headers: {
           'Authorization': `Bearer ${token}`
         }

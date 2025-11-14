@@ -167,8 +167,8 @@ export default function ProgramDetailPage() {
         
         // Fetch program metrics (use existing endpoint)
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
-          const metricsResponse = await fetch(`${apiUrl}/programs/${programId}/metrics`, {
+          const { getApiUrl } = await import('@/lib/api-url')
+          const metricsResponse = await fetch(getApiUrl(`/programs/${programId}/metrics`), {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }
@@ -270,7 +270,8 @@ export default function ProgramDetailPage() {
 
   const checkArchiveStatus = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/can-archive`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl(`/programs/${programId}/can-archive`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -293,7 +294,8 @@ export default function ProgramDetailPage() {
   const handleArchiveConfirm = async () => {
     try {
       setArchiving(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/archive`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl(`/programs/${programId}/archive`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -309,7 +311,8 @@ export default function ProgramDetailPage() {
       setShowArchiveDialog(false);
       
       // Refresh program data
-      const programResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -331,7 +334,8 @@ export default function ProgramDetailPage() {
   const handleUnarchive = async () => {
     try {
       setArchiving(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/unarchive`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl(`/programs/${programId}/unarchive`), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -345,7 +349,8 @@ export default function ProgramDetailPage() {
       toast.success('Program unarchived successfully');
       
       // Refresh program data
-      const programResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }

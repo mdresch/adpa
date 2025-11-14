@@ -117,8 +117,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const fetchEntityCounts = async () => {
     try {
       setLoading(true)
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
-      const response = await fetch(`${apiUrl}/project-data-extraction/results/${projectId}`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl(`/project-data-extraction/results/${projectId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -296,8 +296,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setExtractionProgress(0)
       setExtractionStatus("Starting extraction...")
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
-      const response = await fetch(`${apiUrl}/project-data-extraction/extract`, {
+      const { getApiUrl } = await import('@/lib/api-url')
+      const response = await fetch(getApiUrl('/project-data-extraction/extract'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -344,8 +344,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
-        const response = await fetch(`${apiUrl}/project-data-extraction/status/${jobId}`, {
+        const { getApiUrl } = await import('@/lib/api-url')
+        const response = await fetch(getApiUrl(`/project-data-extraction/status/${jobId}`), {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           }
@@ -400,8 +400,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setSelectedEntityType(entityType)
       setShowEntityDialog(true)
       
-      const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
-      const apiUrl = `${baseUrl}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`
+      const { getApiUrl } = await import('@/lib/api-url')
+      const apiUrl = getApiUrl(`/project-data-extraction/entities/${projectId}/${entityType}?limit=100`)
       console.log('[ENTITY-DETAILS] Fetching:', apiUrl)
       
       const response = await fetch(apiUrl, {
@@ -436,11 +436,11 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     try {
       setIsImportingWBS(true)
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const { getApiUrl } = await import('@/lib/api-url')
       const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
       
       // Import from extracted entities (project-level) instead of requiring specific document
-      const response = await fetch(`${apiUrl}/tasks/import-wbs`, {
+      const response = await fetch(getApiUrl('/tasks/import-wbs'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
