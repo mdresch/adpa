@@ -15,6 +15,7 @@ import { ProgramRisksTab } from '@/components/program/ProgramRisksTab';
 import { ProgramReportsTab } from '@/components/program/ProgramReportsTab';
 import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
+import { getApiUrl } from '@/lib/api-url';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -167,7 +168,6 @@ export default function ProgramDetailPage() {
         
         // Fetch program metrics (use existing endpoint)
         try {
-          const { getApiUrl } = await import('@/lib/api-url')
           const metricsResponse = await fetch(getApiUrl(`/programs/${programId}/metrics`), {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -270,7 +270,6 @@ export default function ProgramDetailPage() {
 
   const checkArchiveStatus = async () => {
     try {
-      const { getApiUrl } = await import('@/lib/api-url')
       const response = await fetch(getApiUrl(`/programs/${programId}/can-archive`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -294,7 +293,6 @@ export default function ProgramDetailPage() {
   const handleArchiveConfirm = async () => {
     try {
       setArchiving(true);
-      const { getApiUrl } = await import('@/lib/api-url')
       const response = await fetch(getApiUrl(`/programs/${programId}/archive`), {
         method: 'POST',
         headers: {
@@ -311,7 +309,6 @@ export default function ProgramDetailPage() {
       setShowArchiveDialog(false);
       
       // Refresh program data
-      const { getApiUrl } = await import('@/lib/api-url')
       const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -334,7 +331,6 @@ export default function ProgramDetailPage() {
   const handleUnarchive = async () => {
     try {
       setArchiving(true);
-      const { getApiUrl } = await import('@/lib/api-url')
       const response = await fetch(getApiUrl(`/programs/${programId}/unarchive`), {
         method: 'POST',
         headers: {
@@ -349,7 +345,6 @@ export default function ProgramDetailPage() {
       toast.success('Program unarchived successfully');
       
       // Refresh program data
-      const { getApiUrl } = await import('@/lib/api-url')
       const programResponse = await fetch(getApiUrl(`/programs/${programId}`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
