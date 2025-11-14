@@ -153,23 +153,17 @@ export default function ProgramDetailPage() {
   const [archiving, setArchiving] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
   const [archiveCheck, setArchiveCheck] = useState<{ canArchive: boolean; reason?: string; unarchivedCount?: number } | null>(null);
+  const [assignedProjects, setAssignedProjects] = useState<Array<{ id: string; name: string; status: string }>>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
 
   useEffect(() => {
     const fetchProgramData = async () => {
       try {
         setLoading(true);
         
-        // Fetch program details
-        const programResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-          }
-        });
-        
-        if (programResponse.ok) {
-          const programData = await programResponse.json();
-          setProgram(programData.data);
-        }
+        // Fetch program details using apiClient
+        const programData = await apiClient.getProgram(programId);
+        setProgram(programData);
         
         // Fetch program metrics (use existing endpoint)
         try {
@@ -181,12 +175,46 @@ export default function ProgramDetailPage() {
           
           if (metricsResponse.ok) {
             const metricsData = await metricsResponse.json();
-            setMetrics(metricsData.data);
+            console.log('[METRICS] Raw API response:', metricsData);
+            
+            if (metricsData.success && metricsData.data) {
+              const backendMetrics = metricsData.data;
+              
+              // Transform backend response to frontend format
+              const transformedMetrics: ProgramMetrics = {
+                budget: backendMetrics.budget || {
+                  planned: 0,
+                  actual: 0,
+                  forecast: 0,
+                  variance: 0,
+                  timeline: []
+                },
+                status: {
+                  total: backendMetrics.status?.total || backendMetrics.projects?.total || 0,
+                  breakdown: backendMetrics.status?.breakdown || {
+                    green: 0,
+                    amber: 0,
+                    red: 0
+                  }
+                },
+                risks: backendMetrics.risks || [],
+                milestones: backendMetrics.milestones || []
+              };
+              
+              console.log('[METRICS] Transformed metrics:', transformedMetrics);
+              setMetrics(transformedMetrics);
+            } else {
+              console.warn('[METRICS] Invalid response format, using mock data');
+              setMetrics(mockProgramMetrics);
+            }
           } else {
+            const errorText = await metricsResponse.text();
+            console.error('[METRICS] API error:', metricsResponse.status, errorText);
             // Fallback to mock data if metrics endpoint not ready
             setMetrics(mockProgramMetrics);
           }
         } catch (error) {
+          console.error('[METRICS] Failed to fetch metrics:', error);
           // Use mock data if metrics endpoint fails
           setMetrics(mockProgramMetrics);
         }
@@ -203,6 +231,41 @@ export default function ProgramDetailPage() {
       void fetchProgramData();
     }
   }, [programId]);
+
+  // Separate useEffect to fetch assigned projects independently
+  useEffect(() => {
+    if (programId) {
+      void fetchAssignedProjects();
+    }
+  }, [programId]);
+
+  const fetchAssignedProjects = async () => {
+    try {
+      setProjectsLoading(true);
+      const response = await apiClient.get<{
+        success: boolean
+        data: Array<{ id: string; name: string; status: string }>
+      }>(`/programs/${programId}/projects`);
+      
+      if (response && response.success && response.data) {
+        const projects = response.data.map((p: any) => ({
+          id: p.id,
+          name: p.name || 'Unnamed Project',
+          status: p.status || 'active'
+        }));
+        
+        console.log('[OVERVIEW] Mapped projects:', projects.length, 'projects');
+        setAssignedProjects(projects);
+      } else {
+        setAssignedProjects([]);
+      }
+    } catch (error) {
+      console.error('[OVERVIEW] Error fetching assigned projects:', error);
+      setAssignedProjects([]);
+    } finally {
+      setProjectsLoading(false);
+    }
+  };
 
   const checkArchiveStatus = async () => {
     try {
@@ -455,9 +518,10 @@ export default function ProgramDetailPage() {
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-5 lg:w-[750px]">
+                <TabsList className="grid w-full grid-cols-6 lg:w-[900px]">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="projects">Projects</TabsTrigger>
+                  <TabsTrigger value="prioritize">Prioritize</TabsTrigger>
                   <TabsTrigger value="finances">Finances</TabsTrigger>
                   <TabsTrigger value="risks">Risks</TabsTrigger>
                   <TabsTrigger value="reports">Reports</TabsTrigger>
@@ -465,26 +529,123 @@ export default function ProgramDetailPage() {
 
                 {/* Overview Tab with Metrics Dashboard */}
                 <TabsContent value="overview" className="mt-6">
-                  {metrics ? (
-                    <MetricsDashboard 
-                      metrics={metrics} 
-                      programId={programId}
-                      loading={loading}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-96">
-                      <div className="text-center">
-                        <Loader2 className="h-12 w-12 animate-spin text-blue-500 mx-auto mb-4" />
-                        <p className="text-muted-foreground">Loading program data...</p>
+                  <div className="space-y-6">
+                    {/* Assigned Projects Summary Card */}
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <CardTitle className="text-xl">Assigned Projects</CardTitle>
+                            <p className="text-sm text-muted-foreground mt-1">
+                              {projectsLoading ? 'Loading...' : `${assignedProjects.length} project${assignedProjects.length !== 1 ? 's' : ''} assigned to this program`}
+                            </p>
+                          </div>
+                          <Button 
+                            variant="outline" 
+                            onClick={() => setActiveTab('projects')}
+                            className="gap-2"
+                          >
+                            View All Projects
+                          </Button>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        {projectsLoading ? (
+                          <div className="flex items-center justify-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          </div>
+                        ) : assignedProjects.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                              {assignedProjects.slice(0, 6).map((project) => (
+                                <div
+                                  key={project.id}
+                                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                                  onClick={() => router.push(`/projects/${project.id}`)}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm truncate">{project.name}</p>
+                                    <Badge 
+                                      variant="outline" 
+                                      className="mt-1 text-xs"
+                                    >
+                                      {project.status === 'completed' ? '✅ Completed' :
+                                       project.status === 'active' ? '🔵 Active' :
+                                       project.status === 'at_risk' ? '⚠️ At Risk' :
+                                       project.status === 'on_hold' ? '⏸️ On Hold' :
+                                       project.status}
+                                    </Badge>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            {assignedProjects.length > 6 && (
+                              <div className="text-center pt-2">
+                                <Button 
+                                  variant="ghost" 
+                                  onClick={() => setActiveTab('projects')}
+                                  className="text-sm"
+                                >
+                                  View {assignedProjects.length - 6} more project{assignedProjects.length - 6 !== 1 ? 's' : ''} →
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-center py-8">
+                            <p className="text-muted-foreground mb-4">No projects assigned yet</p>
+                            <Button 
+                              variant="outline" 
+                              onClick={() => setActiveTab('projects')}
+                            >
+                              Assign Projects
+                            </Button>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Metrics Dashboard */}
+                    {metrics ? (
+                      <MetricsDashboard 
+                        metrics={metrics} 
+                        programId={programId}
+                        loading={loading}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-96">
+                        <div className="text-center">
+                          <Loader2 className="h-12 w-12 animate-spin text-blue-500 mx-auto mb-4" />
+                          <p className="text-muted-foreground">Loading program metrics...</p>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </TabsContent>
 
                 {/* Projects Tab - Full Implementation */}
                 <TabsContent value="projects" className="mt-6">
                   {programId ? (
                     <ProgramProjectsTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Prioritization Tab */}
+                <TabsContent value="prioritize" className="mt-6">
+                  {programId ? (
+                    <div className="flex flex-col items-center justify-center py-12">
+                      <h3 className="text-lg font-semibold mb-4">Portfolio Prioritization</h3>
+                      <p className="text-muted-foreground mb-6 text-center max-w-md">
+                        Score projects and view rankings to prioritize your portfolio based on strategic criteria.
+                      </p>
+                      <Button onClick={() => router.push(`/programs/${programId}/prioritize`)}>
+                        Open Prioritization Dashboard
+                      </Button>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-8 w-8 animate-spin" />

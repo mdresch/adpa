@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { toast } from 'sonner'
 import { ArrowLeft, Save, Trash2, Loader2, AlertTriangle } from 'lucide-react'
+import { apiClient } from '@/lib/api'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,17 +73,16 @@ export default function ProgramSettingsPage() {
   const fetchProgram = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      })
-
-      if (!response.ok) throw new Error('Failed to fetch program')
-
-      const data = await response.json()
-      const programData = data.data || data
-
+      // Use apiClient.getProgram() which handles the response format correctly
+      const programData = await apiClient.getProgram(programId)
+      
+      if (!programData) {
+        console.error('Program data is null or undefined')
+        setProgram(null)
+        toast.error('Program not found')
+        return
+      }
+      
       setProgram(programData)
       
       // Populate form with existing data
@@ -91,13 +91,20 @@ export default function ProgramSettingsPage() {
         description: programData.description || '',
         status: programData.status || programData.rag_status || 'green',
         budget: programData.budget?.toString() || '',
-        currency_code: programData.currency_code || 'USD',
+        currency_code: programData.currency_code || programData.currency || 'USD',
         start_date: programData.start_date ? programData.start_date.split('T')[0] : '',
         end_date: programData.end_date ? programData.end_date.split('T')[0] : '',
       })
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to fetch program:', error)
-      toast.error('Failed to load program settings')
+      setProgram(null) // Explicitly set to null on error
+      
+      // Check if it's a 404 error
+      if (error?.status === 404 || error?.response?.status === 404) {
+        toast.error('Program not found')
+      } else {
+        toast.error('Failed to load program settings')
+      }
     } finally {
       setLoading(false)
     }
@@ -122,25 +129,14 @@ export default function ProgramSettingsPage() {
         end_date: formData.end_date || null,
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        },
-        body: JSON.stringify(updateData)
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.message || 'Failed to update program')
-      }
+      // Use apiClient.updateProgram() which handles the response format correctly
+      await apiClient.updateProgram(programId, updateData)
 
       toast.success('Program updated successfully')
       router.push(`/programs/${programId}`)
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update program:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to update program')
+      toast.error(error?.message || 'Failed to update program')
     } finally {
       setSaving(false)
     }

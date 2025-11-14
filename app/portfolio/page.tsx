@@ -10,8 +10,10 @@ import { Input } from "@/components/ui/input"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { useAuth } from "@/contexts/AuthContext"
-import { ArrowUpRight, Search, Plus, FileText } from "lucide-react"
+import { ArrowUpRight, Search, Plus, FileText, BarChart3 } from "lucide-react"
+import { Target } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
+import { apiClient } from "@/lib/api"
 import {
   PieChart,
   Pie,
@@ -63,10 +65,23 @@ interface Program {
   owner_name?: string
 }
 
+interface ProjectRanking {
+  project_id: string
+  project_name: string
+  program_id?: string | null
+  program_name?: string | null
+  total_score: number
+  rank: number
+  priority_tier: 'Critical' | 'High' | 'Medium' | 'Low'
+  criteria_count: number
+  last_scored_at?: string | null
+}
+
 export default function PortfolioDashboard() {
   const router = useRouter()
   const { isAuthenticated, loading: authLoading } = useAuth()
   const [programs, setPrograms] = useState<Program[]>([])
+  const [projectRankings, setProjectRankings] = useState<ProjectRanking[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [sortColumn, setSortColumn] = useState<string | null>(null)
@@ -110,8 +125,29 @@ export default function PortfolioDashboard() {
 
     if (isAuthenticated) {
       void fetchPrograms()
+      void fetchProjectRankings()
     }
   }, [isAuthenticated, authLoading, router])
+
+  const fetchProjectRankings = async () => {
+    try {
+      const response = await apiClient.get<{
+        success: boolean
+        data: ProjectRanking[]
+        pagination: { total: number }
+      }>('/prioritization/rankings?limit=1000')
+
+      if (response && response.success && response.data) {
+        setProjectRankings(response.data)
+      } else {
+        setProjectRankings([])
+      }
+    } catch (error) {
+      console.error('Failed to fetch project rankings:', error)
+      setProjectRankings([]) // Ensure state is reset on error
+      // Don't show error toast - rankings might not be available yet
+    }
+  }
 
   const fetchPrograms = async () => {
     try {
@@ -234,6 +270,14 @@ export default function PortfolioDashboard() {
                   <p className="text-sm text-muted-foreground mt-1">Dashboard / Portfolio</p>
                 </div>
                 <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => router.push('/portfolio/prioritize')}>
+                    <Target className="h-4 w-4 mr-2" />
+                    Prioritize Projects
+                  </Button>
+                  <Button variant="outline" onClick={() => router.push('/portfolio/okrs')}>
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    OKRs
+                  </Button>
                   <Button variant="outline">
                     <FileText className="h-4 w-4 mr-2" />
                     Export Report
@@ -409,6 +453,85 @@ export default function PortfolioDashboard() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Project Prioritization Scatter Plot */}
+            {projectRankings.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Project Prioritization Matrix</CardTitle>
+                  <CardDescription>
+                    Total Score vs Rank (bubble size = criteria count, color = priority tier)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <ScatterChart margin={{ top: 20, right: 20, bottom: 60, left: 60 }}>
+                      <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                      <XAxis
+                        type="number"
+                        dataKey="total_score"
+                        name="Total Score"
+                        domain={[0, 5]}
+                        className="stroke-muted-foreground"
+                        label={{ value: "Total Priority Score →", position: "bottom", offset: 10 }}
+                      />
+                      <YAxis
+                        type="number"
+                        dataKey="rank"
+                        name="Rank"
+                        domain={(dataMin: number, dataMax: number) => [Math.max(0, dataMin - 1), dataMax + 1]}
+                        reversed
+                        className="stroke-muted-foreground"
+                        label={{ value: "Rank ↑", angle: -90, position: "left", offset: 10 }}
+                      />
+                      <ZAxis type="number" dataKey="criteria_count" range={[200, 1000]} />
+                      <Tooltip
+                        cursor={{ strokeDasharray: "3 3" }}
+                        content={({ active, payload }: any) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload as ProjectRanking & { criteria_count: number }
+                            return (
+                              <div className="bg-card border border-border rounded-lg p-3 shadow-lg">
+                                <p className="font-semibold text-foreground">{data.project_name}</p>
+                                {data.program_name && (
+                                  <p className="text-sm text-muted-foreground">Program: {data.program_name}</p>
+                                )}
+                                <p className="text-sm text-muted-foreground">Total Score: {parseFloat(String(data.total_score || 0)).toFixed(2)}</p>
+                                <p className="text-sm text-muted-foreground">Rank: #{data.rank}</p>
+                                <p className="text-sm text-muted-foreground">Priority Tier: {data.priority_tier}</p>
+                                <p className="text-sm text-muted-foreground">Criteria Count: {data.criteria_count}</p>
+                              </div>
+                            )
+                          }
+                          return null
+                        }}
+                      />
+                      <Scatter name="Projects" data={projectRankings.map(r => ({
+                        ...r,
+                        total_score: parseFloat(String(r.total_score || 0)),
+                        criteria_count: r.criteria_count || 0
+                      }))}>
+                        {projectRankings.map((entry, index) => {
+                          const colorMap = {
+                            'Critical': '#dc2626',
+                            'High': '#f97316',
+                            'Medium': '#eab308',
+                            'Low': '#22c55e'
+                          }
+                          return (
+                            <Cell
+                              key={`cell-${index}`}
+                              fill={colorMap[entry.priority_tier] || '#94a3b8'}
+                              className="cursor-pointer hover:opacity-80"
+                            />
+                          )
+                        })}
+                      </Scatter>
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Programs Overview Table */}
             <Card>

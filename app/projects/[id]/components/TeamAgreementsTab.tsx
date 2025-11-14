@@ -4,16 +4,28 @@ import React, { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Loader2, User, Clock, MessageSquare, AlertTriangle, CheckCircle, Code, Zap, MoreHorizontal, Calendar, Star, AlertCircle, Users } from "@/components/ui/icons-shim"
-import { BookOpen } from "lucide-react"
+import { Loader2, Plus, Edit, Trash2, TrendingUp, Star, AlertCircle, BookOpen } from "lucide-react"
+import { User, Clock, MessageSquare, AlertTriangle, CheckCircle, Code, Zap, MoreHorizontal, Calendar, Users } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
+import { TeamAgreementDialog } from "./TeamAgreementDialog"
+import { AdherenceDialog } from "./AdherenceDialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 interface TeamAgreement {
   id: string
   project_id: string
   title: string
-  description?: string
+  description: string
   category: 
     | 'working_hours'
     | 'communication'
@@ -127,6 +139,13 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
   const [agreements, setAgreements] = useState<TeamAgreement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editingAgreement, setEditingAgreement] = useState<TeamAgreement | null>(null)
+  const [adherenceDialogOpen, setAdherenceDialogOpen] = useState(false)
+  const [selectedAgreementForAdherence, setSelectedAgreementForAdherence] = useState<TeamAgreement | null>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingAgreementId, setDeletingAgreementId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     void fetchTeamAgreements()
@@ -137,10 +156,14 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
       setLoading(true)
       setError(null)
       
-      const response = await apiClient.get<any>(`/project-data-extraction/entities/${projectId}/teamAgreements?limit=1000&offset=0`)
+      const response = await apiClient.get<{
+        success: boolean
+        data: TeamAgreement[]
+        count: number
+      }>(`/team-agreements/project/${projectId}`)
       
-      if (response.success && response.entities) {
-        setAgreements(response.entities)
+      if (response.success && response.data) {
+        setAgreements(response.data)
       } else {
         setAgreements([])
       }
@@ -234,9 +257,21 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
             {agreements.length} agreement{agreements.length !== 1 ? 's' : ''} across {sortedCategories.length} categor{sortedCategories.length !== 1 ? 'ies' : 'y'}
           </p>
         </div>
-        <Button onClick={fetchTeamAgreements} variant="outline" size="sm">
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button 
+            onClick={() => {
+              setEditingAgreement(null)
+              setDialogOpen(true)
+            }} 
+            size="sm"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Agreement
+          </Button>
+          <Button onClick={fetchTeamAgreements} variant="outline" size="sm">
+            Refresh
+          </Button>
+        </div>
       </div>
 
       {sortedCategories.map((category) => {
@@ -293,6 +328,42 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
                           }
                           return null
                         })()}
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setEditingAgreement(agreement)
+                              setDialogOpen(true)
+                            }}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setSelectedAgreementForAdherence(agreement)
+                              setAdherenceDialogOpen(true)
+                            }}
+                            className="h-8 w-8 p-0"
+                            title="Record adherence"
+                          >
+                            <TrendingUp className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setDeletingAgreementId(agreement.id)
+                              setDeleteDialogOpen(true)
+                            }}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </div>
                     </div>
 
@@ -349,6 +420,86 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
           </Card>
         )
       })}
+
+      {/* Create/Edit Dialog */}
+      <TeamAgreementDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open)
+          if (!open) {
+            setEditingAgreement(null)
+          }
+        }}
+        projectId={projectId}
+        agreement={editingAgreement}
+        onSuccess={() => {
+          void fetchTeamAgreements()
+        }}
+      />
+
+      {/* Adherence Dialog */}
+      {selectedAgreementForAdherence && (
+        <AdherenceDialog
+          open={adherenceDialogOpen}
+          onOpenChange={(open) => {
+            setAdherenceDialogOpen(open)
+            if (!open) {
+              setSelectedAgreementForAdherence(null)
+            }
+          }}
+          agreementId={selectedAgreementForAdherence.id}
+          agreementTitle={selectedAgreementForAdherence.title}
+          currentScore={selectedAgreementForAdherence.adherence_score}
+          onSuccess={() => {
+            void fetchTeamAgreements()
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Team Agreement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the team agreement
+              and all associated adherence logs.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                if (!deletingAgreementId) return
+                
+                try {
+                  setDeleting(true)
+                  const response = await apiClient.delete(`/team-agreements/${deletingAgreementId}`)
+                  
+                  if (response.success) {
+                    toast.success('Team agreement deleted successfully')
+                    setDeleteDialogOpen(false)
+                    setDeletingAgreementId(null)
+                    void fetchTeamAgreements()
+                  } else {
+                    throw new Error('Failed to delete agreement')
+                  }
+                } catch (error: any) {
+                  console.error('Error deleting agreement:', error)
+                  toast.error(error.message || 'Failed to delete team agreement')
+                } finally {
+                  setDeleting(false)
+                }
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

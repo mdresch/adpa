@@ -44,8 +44,11 @@ const MILESTONE_COLORS = {
 export function MetricsDashboard({ metrics, programId, loading = false }: MetricsDashboardProps) {
   const [exporting, setExporting] = useState(false);
 
+  // Ensure risks is an array (backend returns array of risk objects)
+  const risksArray = Array.isArray(metrics.risks) ? metrics.risks : []
+
   // Transform budget data for line chart
-  const budgetData = metrics.budget.timeline.map((entry: BudgetTimelineEntry) => ({
+  const budgetData = (metrics.budget?.timeline || []).map((entry: BudgetTimelineEntry) => ({
     month: entry.month,
     planned: entry.planned / 1000000, // Convert to millions for readability
     actual: entry.actual / 1000000,
@@ -54,13 +57,13 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
 
   // Transform status data for pie chart
   const statusData = [
-    { name: 'Green', value: metrics.status.breakdown.green, fill: RAG_COLORS.green },
-    { name: 'Amber', value: metrics.status.breakdown.amber, fill: RAG_COLORS.amber },
-    { name: 'Red', value: metrics.status.breakdown.red, fill: RAG_COLORS.red }
+    { name: 'Green', value: metrics.status?.breakdown?.green || 0, fill: RAG_COLORS.green },
+    { name: 'Amber', value: metrics.status?.breakdown?.amber || 0, fill: RAG_COLORS.amber },
+    { name: 'Red', value: metrics.status?.breakdown?.red || 0, fill: RAG_COLORS.red }
   ].filter(item => item.value > 0); // Only show segments with data
 
   // Transform risk data for scatter chart
-  const riskData = metrics.risks.map((risk: Risk) => ({
+  const riskData = risksArray.map((risk: Risk) => ({
     x: risk.probability,
     y: risk.impact / 1000000, // Convert to millions
     z: risk.severity === 'critical' ? 400 : risk.severity === 'high' ? 300 : risk.severity === 'medium' ? 200 : 100,
@@ -71,7 +74,7 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
   }));
 
   // Transform milestone data for horizontal bar chart
-  const milestoneData = metrics.milestones.map((milestone: Milestone) => {
+  const milestoneData = (metrics.milestones || []).map((milestone: Milestone) => {
     const planned = new Date(milestone.plannedDate).getTime();
     const actual = milestone.actualDate ? new Date(milestone.actualDate).getTime() : new Date().getTime();
     const today = new Date().getTime();
@@ -117,7 +120,7 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
   // Custom tooltip for pie chart
   const CustomPieTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
-      const total = metrics.status.total;
+      const total = metrics.status?.total || 0;
       const percentage = ((payload[0].value / total) * 100).toFixed(1);
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
@@ -163,7 +166,7 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
   }
 
   // Empty state
-  if (metrics.status.total === 0 && metrics.risks.length === 0 && metrics.milestones.length === 0) {
+  if ((metrics.status?.total || 0) === 0 && risksArray.length === 0 && (metrics.milestones?.length || 0) === 0) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -395,28 +398,34 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">Total Projects</div>
-            <div className="text-2xl font-bold">{metrics.status.total}</div>
+            <div className="text-2xl font-bold">{metrics.status?.total || 0}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">Budget Variance</div>
-            <div className={`text-2xl font-bold ${metrics.budget.variance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {metrics.budget.variance >= 0 ? '+' : ''}{((metrics.budget.variance / metrics.budget.planned) * 100).toFixed(1)}%
+            <div className={`text-2xl font-bold ${(metrics.budget?.variance || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {(() => {
+                const variance = metrics.budget?.variance || 0
+                const planned = metrics.budget?.planned || 0
+                if (planned === 0) return 'N/A'
+                const variancePercent = ((variance / planned) * 100)
+                return `${variance >= 0 ? '+' : ''}${variancePercent.toFixed(1)}%`
+              })()}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">Active Risks</div>
-            <div className="text-2xl font-bold">{metrics.risks.length}</div>
+            <div className="text-2xl font-bold">{risksArray.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <div className="text-sm text-muted-foreground">Milestones</div>
             <div className="text-2xl font-bold">
-              {metrics.milestones.filter(m => m.status === 'completed').length}/{metrics.milestones.length}
+              {(metrics.milestones || []).filter(m => m.status === 'completed').length}/{(metrics.milestones || []).length}
             </div>
           </CardContent>
         </Card>

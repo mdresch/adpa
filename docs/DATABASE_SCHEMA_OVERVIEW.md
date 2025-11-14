@@ -24,13 +24,18 @@ API Request Logs:    61,179 rows (31 MB)
 
 ## 🗂️ **SCHEMA ORGANIZATION** (By Domain)
 
-### **1. Core Business Entities** (10 tables)
+### **1. Core Business Entities** (13 tables)
 
 #### **Portfolio & Program Management**:
 - ✅ `programs` - 10 rows, 168 KB (15 columns)
 - ✅ `projects` - 34 rows, 264 KB (20 columns)
 - ✅ `documents` - 345 rows, 7.4 MB (49 columns) ⭐ **LARGEST**
 - ✅ `templates` - 73 rows, 600 KB (34 columns)
+
+#### **Portfolio Prioritization** ⭐ **NEW** (TASK-280):
+- ✅ `prioritization_criteria` - 5 rows (default criteria) (13 columns)
+- ✅ `project_priority_scores` - 0 rows (project scoring data) (9 columns)
+- ✅ `project_priority_rankings` - View (computed rankings) (8 columns)
 
 #### **Users & Authentication**:
 - ✅ `users` - 5 rows, 240 KB (11 columns)
@@ -56,7 +61,11 @@ API Request Logs:    61,179 rows (31 MB)
 
 ---
 
-### **3. PMBOK 8 Entity Extraction** (14 tables) ⭐ **UNIQUE TO ADPA**
+### **3. PMBOK 8 Entity Extraction** (15 tables) ⭐ **UNIQUE TO ADPA**
+
+#### **Team Performance Domain** ⭐ **NEW** (TASK-138):
+- ✅ `team_agreements` - Team working norms and agreements (20 columns)
+- ✅ `team_agreement_adherence_log` - Historical adherence tracking (7 columns)
 
 **Extracted Entities** (444 total across projects):
 1. ✅ `stakeholders` - 193 rows, 248 KB (20 columns)
@@ -275,12 +284,20 @@ API Request Logs:    61,179 rows (31 MB)
 CREATE TABLE program_budgets (...)              -- Budget tracking
 CREATE TABLE program_cost_performance (...)     -- EVM metrics
 CREATE TABLE program_cost_items (...)           -- Cost details
-CREATE TABLE prioritization_criteria (...)      -- Scoring criteria
-CREATE TABLE project_priority_scores (...)      -- Project scores
-CREATE TABLE portfolio_priority_rankings (...)  -- Rankings
+CREATE TABLE prioritization_criteria (...)      -- Scoring criteria ✅ **COMPLETE** (Migration 328)
+CREATE TABLE project_priority_scores (...)      -- Project scores ✅ **COMPLETE** (Migration 328)
+CREATE VIEW project_priority_rankings (...)     -- Rankings view ✅ **COMPLETE** (Migration 328)
 CREATE TABLE portfolio_cost_constraints (...)   -- Constraints
 CREATE TABLE program_financial_transactions (...) -- Transactions
 ```
+
+**Prioritization System** ✅ **COMPLETE** (TASK-280):
+- ✅ `prioritization_criteria` - 5 default criteria pre-loaded (Strategic Alignment 30%, Value Contribution 25%, Risk Level 15%, Resource Availability 20%, Urgency 10%)
+- ✅ `project_priority_scores` - Stores individual criterion scores with auto-calculated weighted scores
+- ✅ `project_priority_rankings` - Computed view showing project rankings with priority tiers (Critical, High, Medium, Low)
+- ✅ Automatic weighted score calculation via trigger
+- ✅ Comprehensive indexes for performance
+- ✅ Full test coverage
 
 ### **Week 3: Resource Management** (6 new tables):
 ```sql
@@ -316,8 +333,8 @@ CREATE TABLE portfolio_policy_gates (...)
 
 ### **Week 9: Strategic Frameworks** (8 new tables):
 ```sql
-CREATE TABLE portfolio_okrs (...)
-CREATE TABLE portfolio_key_results (...)
+CREATE TABLE portfolio_okrs (...) ✅ **COMPLETE** (Migration 331, TASK-1281)
+CREATE TABLE portfolio_key_results (...) ✅ **COMPLETE** (Migration 331, TASK-1281)
 CREATE TABLE portfolio_kpis (...)
 CREATE TABLE portfolio_key_success_factors (...)
 CREATE TABLE portfolio_strategic_goals (...)
@@ -325,6 +342,16 @@ CREATE TABLE portfolio_objectives (...)
 CREATE TABLE portfolio_vision (...)
 CREATE TABLE business_drivers (...)
 ```
+
+**OKR System** ✅ **COMPLETE** (TASK-1281):
+- ✅ `portfolio_okrs` - Objectives at organization, portfolio, program, and project levels (18 columns)
+- ✅ `portfolio_key_results` - Measurable key results with auto-calculated progress (17 columns)
+- ✅ `portfolio_okr_summary` - View showing OKR summary with aggregated KR statistics
+- ✅ Auto-calculates key result progress percentage and status via trigger
+- ✅ Supports cascading OKRs (parent-child relationships)
+- ✅ Links to programs and projects via entity_id/entity_type
+- ✅ Comprehensive indexes for performance
+- ✅ Full test coverage
 
 **Total New Tables**: 75+  
 **Total After Week 12**: 195+ tables ⭐
