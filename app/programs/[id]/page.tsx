@@ -242,39 +242,23 @@ export default function ProgramDetailPage() {
   const fetchAssignedProjects = async () => {
     try {
       setProjectsLoading(true);
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/projects`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
-      });
+      const response = await apiClient.get<{
+        success: boolean
+        data: Array<{ id: string; name: string; status: string }>
+      }>(`/programs/${programId}/projects`);
       
-      if (!response.ok) {
-        console.error('[OVERVIEW] Failed to fetch assigned projects:', response.status, response.statusText);
+      if (response && response.success && response.data) {
+        const projects = response.data.map((p: any) => ({
+          id: p.id,
+          name: p.name || 'Unnamed Project',
+          status: p.status || 'active'
+        }));
+        
+        console.log('[OVERVIEW] Mapped projects:', projects.length, 'projects');
+        setAssignedProjects(projects);
+      } else {
         setAssignedProjects([]);
-        return;
       }
-      
-      const data = await response.json();
-      console.log('[OVERVIEW] Assigned projects API response:', data);
-      
-      // Backend returns { success: true, data: [...] } format
-      const projectsArray = data.data || [];
-      console.log('[OVERVIEW] Projects array:', projectsArray);
-      
-      if (!Array.isArray(projectsArray)) {
-        console.error('[OVERVIEW] Projects data is not an array:', projectsArray);
-        setAssignedProjects([]);
-        return;
-      }
-      
-      const projects = projectsArray.map((p: any) => ({
-        id: p.id,
-        name: p.name || 'Unnamed Project',
-        status: p.status || 'active'
-      }));
-      
-      console.log('[OVERVIEW] Mapped projects:', projects.length, 'projects');
-      setAssignedProjects(projects);
     } catch (error) {
       console.error('[OVERVIEW] Error fetching assigned projects:', error);
       setAssignedProjects([]);

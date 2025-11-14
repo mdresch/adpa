@@ -938,7 +938,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         return
       }
       
-      if (selectedTemplate && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedTemplate)) {
+      if (selectedTemplate && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/i.test(selectedTemplate)) {
         toast.error('Invalid template ID format')
         setCreatingDocument(false)
         return

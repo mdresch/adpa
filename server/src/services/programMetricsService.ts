@@ -307,7 +307,9 @@ async function getMilestoneMetrics(programId: string) {
         m.description,
         m.date,
         m.status,
-        m.project_id
+        m.project_id,
+        m.updated_at,
+        m.actual_date
       FROM milestones m
       JOIN projects p ON m.project_id = p.id
       WHERE p.program_id = $1
@@ -334,11 +336,23 @@ async function getMilestoneMetrics(programId: string) {
         status = 'on-track'
       }
 
+      // Use actual_date if available, otherwise use updated_at for completed milestones, fallback to planned date
+      let actualDate: string | undefined = undefined
+      if (row.status === 'completed') {
+        if (row.actual_date) {
+          actualDate = new Date(row.actual_date).toISOString()
+        } else if (row.updated_at) {
+          actualDate = new Date(row.updated_at).toISOString()
+        } else if (plannedDate) {
+          actualDate = new Date(plannedDate).toISOString()
+        }
+      }
+
       return {
         id: row.id,
         name: row.name || 'Unnamed Milestone',
         plannedDate: plannedDate ? new Date(plannedDate).toISOString() : new Date().toISOString(),
-        actualDate: row.status === 'completed' ? plannedDate ? new Date(plannedDate).toISOString() : undefined : undefined,
+        actualDate,
         status
       }
     })

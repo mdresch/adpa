@@ -139,9 +139,12 @@ export default function PortfolioDashboard() {
 
       if (response && response.success && response.data) {
         setProjectRankings(response.data)
+      } else {
+        setProjectRankings([])
       }
     } catch (error) {
       console.error('Failed to fetch project rankings:', error)
+      setProjectRankings([]) // Ensure state is reset on error
       // Don't show error toast - rankings might not be available yet
     }
   }
