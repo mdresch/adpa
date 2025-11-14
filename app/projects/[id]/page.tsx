@@ -925,35 +925,79 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       console.log('  ⚙️ Custom variables:', (hasSettings ? 'settings' : '') + (hasMetadata ? ' metadata' : '') || 'none')
       console.log('  📏 Estimated tokens:', Math.round(aiPrompt.length / 4))
 
+      // Validate required fields before sending
+      if (!selectedProvider || selectedProvider.trim() === '') {
+        toast.error('Please select an AI provider')
+        setCreatingDocument(false)
+        return
+      }
+      
+      if (!aiPrompt || aiPrompt.length < 10) {
+        toast.error('Prompt is too short (minimum 10 characters)')
+        setCreatingDocument(false)
+        return
+      }
+      
+      if (selectedTemplate && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(selectedTemplate)) {
+        toast.error('Invalid template ID format')
+        setCreatingDocument(false)
+        return
+      }
+      
+      if (aiTemperature < 0 || aiTemperature > 2) {
+        toast.error('Temperature must be between 0 and 2')
+        setCreatingDocument(false)
+        return
+      }
+
       // Enqueue AI generation job via jobs API
       let jobId: string | undefined
 
       try {
         console.log('🔄 [7/10] Attempting to enqueue job...')
+        console.log('📊 Request payload validation:', {
+          promptLength: aiPrompt.length,
+          provider: selectedProvider,
+          model: selectedModel,
+          temperature: aiTemperature,
+          templateId: selectedTemplate,
+          hasProjectId: !!projectId
+        })
+        
         const { getApiUrl } = await import('@/lib/api-url')
         const apiUrl = getApiUrl('/ai/generate')
         console.log('📡 API URL:', apiUrl)
+        
+        const requestBody = {
+          prompt: aiPrompt,
+          provider: selectedProvider,
+          model: selectedModel || undefined, // Only include if set
+          temperature: aiTemperature,
+          template_id: selectedTemplate || undefined, // Only include if set (valid UUID)
+          variables: {
+            project_id: projectId,
+            project_name: project?.name || 'Unknown Project',
+            template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Unknown Template',
+            framework: project?.framework || 'General'
+          },
+          project_id: projectId,
+          project_name: project?.name || 'Unknown Project',
+        }
+        
+        // Remove undefined values to avoid sending them
+        Object.keys(requestBody).forEach(key => {
+          if (requestBody[key as keyof typeof requestBody] === undefined) {
+            delete requestBody[key as keyof typeof requestBody]
+          }
+        })
+        
         const resp = await fetch(apiUrl, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           },
-          body: JSON.stringify({
-            prompt: aiPrompt,
-            provider: selectedProvider,
-            model: selectedModel,
-            temperature: aiTemperature,
-            template_id: selectedTemplate,
-            variables: {
-              project_id: projectId,
-              project_name: project?.name || 'Unknown Project',
-              template_name: templates.find(t => t.id === selectedTemplate)?.name || 'Unknown Template',
-              framework: project?.framework || 'General'
-            },
-            project_id: projectId,
-            project_name: project?.name || 'Unknown Project',
-          }),
+          body: JSON.stringify(requestBody),
         })
 
         if (resp.ok) {
@@ -977,12 +1021,16 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           
           return // EXIT - document will be created by background worker
         } else {
-          console.error('❌ Failed to enqueue job (status ' + resp.status + ')')
-          throw new Error(`Job queue returned ${resp.status}`)
+          const errorBody = await resp.json().catch(() => ({}))
+          console.error('❌ Failed to enqueue job (status ' + resp.status + ')', errorBody)
+          const errorMsg = errorBody.error || `Job queue returned ${resp.status}`
+          const details = errorBody.details ? `: ${JSON.stringify(errorBody.details)}` : ''
+          throw new Error(errorMsg + details)
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('❌ Failed to enqueue job:', err)
-        toast.error('Failed to start document generation. Please try again.')
+        const errorMessage = err.message || 'Failed to start document generation. Please try again.'
+        toast.error(errorMessage)
         setCreatingDocument(false)
         return // EXIT on error
       }
