@@ -73,7 +73,7 @@ export function PairwiseComparisonMatrix({
 }: PairwiseComparisonMatrixProps) {
   const [comparisons, setComparisons] = useState<Comparison[]>([])
   const [currentPairIndex, setCurrentPairIndex] = useState(0)
-  const [selectedWinner, setSelectedWinner] = useState<string | null>(null)
+  const [selectedWinner, setSelectedWinner] = useState<string | null | undefined>(undefined)
   const [confidence, setConfidence] = useState<number>(3)
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
@@ -111,7 +111,7 @@ export function PairwiseComparisonMatrix({
       setConfidence(currentComparison.confidence || 3)
       setNotes(currentComparison.notes || '')
     } else {
-      setSelectedWinner(null)
+      setSelectedWinner(undefined) // undefined = no selection made yet
       setConfidence(3)
       setNotes('')
     }
