@@ -8,6 +8,7 @@ import projectService from '../services/projectService'
 import * as programMetricsService from '../services/programMetricsService'
 import * as programFinancialService from '../services/programFinancialService'
 import * as evmCalculator from '../services/evmCalculator'
+import { pool } from '../database/connection'
 
 const router = express.Router()
 
@@ -86,6 +87,210 @@ router.get('/:id/projects', authenticateToken, requirePermission('programs.view'
   } catch (error) {
     log.error('Failed to list projects by program', error)
     res.status(500).json({ error: 'Failed to list projects by program' })
+  }
+})
+
+// Get program risks (aggregated from all projects in program)
+router.get('/:id/risks', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    
+    // Get all risks from projects in this program
+    const result = await pool.query(
+      `
+      SELECT 
+        r.id,
+        r.title,
+        r.description,
+        r.category,
+        r.probability,
+        r.impact,
+        r.risk_level,
+        r.mitigation_strategy,
+        r.owner,
+        COALESCE(r.status, 'open') as status,
+        r.created_at,
+        r.updated_at,
+        p.id as project_id,
+        p.name as project_name
+      FROM risks r
+      JOIN projects p ON r.project_id = p.id
+      WHERE p.program_id = $1
+      ORDER BY 
+        CASE r.risk_level
+          WHEN 'high' THEN 1
+          WHEN 'medium' THEN 2
+          WHEN 'low' THEN 3
+          ELSE 4
+        END,
+        r.probability DESC,
+        r.impact DESC
+      `,
+      [programId]
+    )
+
+    // Transform to match frontend Risk interface
+    const risks = result.rows.map((row: any) => {
+      // Map risk_level to severity
+      let severity: 'critical' | 'high' | 'medium' | 'low' = 'low'
+      const riskLevel = row.risk_level?.toLowerCase() || 'low'
+      if (riskLevel === 'critical') {
+        severity = 'critical'
+      } else if (riskLevel === 'high') {
+        severity = 'high'
+      } else if (riskLevel === 'medium') {
+        severity = 'medium'
+      } else if (riskLevel === 'low') {
+        severity = 'low'
+      }
+
+      // Convert probability to number (0-100)
+      let probability = 50
+      if (typeof row.probability === 'number') {
+        probability = row.probability
+      } else if (typeof row.probability === 'string') {
+        const probMap: Record<string, number> = { 'high': 75, 'medium': 50, 'low': 25 }
+        probability = probMap[row.probability.toLowerCase()] || 50
+      }
+
+      // Convert impact to number (1-5 scale)
+      let impact = 3
+      if (typeof row.impact === 'number') {
+        impact = Math.min(5, Math.max(1, row.impact))
+      } else if (typeof row.impact === 'string') {
+        const impactMap: Record<string, number> = { 'high': 5, 'medium': 3, 'low': 1 }
+        impact = impactMap[row.impact.toLowerCase()] || 3
+      }
+
+      return {
+        id: row.id,
+        title: row.title || 'Untitled Risk',
+        description: row.description || '',
+        probability,
+        impact,
+        severity,
+        status: (() => {
+          const dbStatus = (row.status || 'open')?.toLowerCase();
+          // Map database status values to expected frontend statuses
+          const statusMap: Record<string, 'open' | 'mitigating' | 'mitigated' | 'accepted' | 'closed'> = {
+            'open': 'open',
+            'mitigating': 'mitigating',
+            'mitigated': 'mitigated',
+            'accepted': 'accepted',
+            'closed': 'closed',
+            'active': 'open',
+            'in-progress': 'mitigating',
+            'resolved': 'mitigated',
+            'completed': 'closed'
+          };
+          return statusMap[dbStatus] || 'open';
+        })(),
+        category: row.category || 'technical',
+        owner: row.owner || null,
+        mitigation: row.mitigation_strategy || null,
+        createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
+        updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
+        projectId: row.project_id,
+        projectName: row.project_name
+      }
+    })
+
+    res.json({ success: true, data: risks })
+  } catch (error) {
+    log.error('Failed to fetch program risks', error)
+    res.status(500).json({ error: 'Failed to fetch program risks' })
+  }
+})
+
+// Get program reports
+router.get('/:id/reports', authenticateToken, requirePermission('programs.view'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const programId = req.params.id
+    
+    // Query documents that are reports for projects in this program
+    // For now, return empty array as reports are typically generated on-demand
+    // In the future, this could query a reports table or documents with type='report'
+    const result = await pool.query(
+      `
+      SELECT 
+        d.id,
+        d.name as title,
+        d.status,
+        d.created_at as "createdAt",
+        u.name as "generatedBy",
+        d.metadata->>'format' as format,
+        d.metadata->>'type' as type
+      FROM documents d
+      JOIN projects p ON d.project_id = p.id
+      LEFT JOIN users u ON d.created_by = u.id
+      WHERE p.program_id = $1
+        AND (d.metadata->>'type' = 'report' OR d.name ILIKE '%report%')
+      ORDER BY d.created_at DESC
+      LIMIT 50
+      `,
+      [programId]
+    )
+
+    // Transform to match frontend Report interface
+    const reports = result.rows.map((row: any) => {
+      // Determine report type from metadata or name
+      let type: 'executive' | 'financial' | 'status' | 'risk' | 'milestone' | 'custom' = 'custom'
+      const reportType = row.type?.toLowerCase() || ''
+      const title = (row.title || '').toLowerCase()
+      
+      if (reportType.includes('executive') || title.includes('executive')) {
+        type = 'executive'
+      } else if (reportType.includes('financial') || title.includes('financial') || title.includes('budget')) {
+        type = 'financial'
+      } else if (reportType.includes('status') || title.includes('status')) {
+        type = 'status'
+      } else if (reportType.includes('risk') || title.includes('risk')) {
+        type = 'risk'
+      } else if (reportType.includes('milestone') || title.includes('milestone')) {
+        type = 'milestone'
+      }
+
+      // Determine format
+      let format: 'pdf' | 'docx' | 'excel' | 'html' = 'pdf'
+      const reportFormat = row.format?.toLowerCase() || ''
+      if (reportFormat.includes('docx') || reportFormat.includes('word')) {
+        format = 'docx'
+      } else if (reportFormat.includes('excel') || reportFormat.includes('xlsx')) {
+        format = 'excel'
+      } else if (reportFormat.includes('html')) {
+        format = 'html'
+      }
+
+      // Determine status
+      let status: 'pending' | 'generating' | 'completed' | 'failed' = 'completed'
+      const docStatus = row.status?.toLowerCase() || ''
+      if (docStatus === 'draft') {
+        status = 'pending'
+      } else if (docStatus === 'review') {
+        status = 'generating'
+      } else if (docStatus === 'published' || docStatus === 'approved') {
+        status = 'completed'
+      }
+
+      return {
+        id: row.id,
+        title: row.title || 'Untitled Report',
+        type,
+        format,
+        status,
+        createdAt: row.createdAt || new Date().toISOString(),
+        generatedBy: row.generatedBy || 'System',
+        fileUrl: null, // Reports are stored as documents, URL would need to be generated
+        fileSize: null
+      }
+    })
+
+    res.json({ success: true, data: reports })
+  } catch (error) {
+    log.error('Failed to fetch program reports', error)
+    res.status(500).json({ error: 'Failed to fetch program reports' })
   }
 })
 

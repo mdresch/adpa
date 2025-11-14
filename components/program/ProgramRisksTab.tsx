@@ -66,6 +66,12 @@ const statusConfig = {
   mitigated: { label: 'Mitigated', color: 'bg-green-100 text-green-800' },
   accepted: { label: 'Accepted', color: 'bg-gray-100 text-gray-800' },
   closed: { label: 'Closed', color: 'bg-slate-100 text-slate-800' },
+} as const;
+
+// Helper function to get status config with fallback
+const getStatusConfig = (status: string) => {
+  const normalizedStatus = status?.toLowerCase() as keyof typeof statusConfig;
+  return statusConfig[normalizedStatus] || { label: status || 'Unknown', color: 'bg-gray-100 text-gray-800' };
 };
 
 export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
@@ -572,8 +578,8 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <TableCell>{risk.probability}%</TableCell>
                     <TableCell>{risk.impact}/5</TableCell>
                     <TableCell>
-                      <Badge className={statusConfig[risk.status].color}>
-                        {statusConfig[risk.status].label}
+                      <Badge className={getStatusConfig(risk.status).color}>
+                        {getStatusConfig(risk.status).label}
                       </Badge>
                     </TableCell>
                     <TableCell>{risk.owner || '-'}</TableCell>
