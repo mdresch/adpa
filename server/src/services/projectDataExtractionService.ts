@@ -4915,7 +4915,7 @@ Output valid JSON object with "performance_actuals" array only.`
         agreement.title?.substring(0, 200) || 'Team Agreement',
         agreement.description || null,
         category,
-        this.ensureStringArray(agreement.agreed_by),
+        this.ensureStringArray(agreement.agreed_by), // Pass array directly - pg library converts to JSONB automatically
         agreement.facilitated_by ? agreement.facilitated_by.substring(0, 255) : null,
         this.normalizeDate(agreement.effective_date),
         reviewFrequency,
