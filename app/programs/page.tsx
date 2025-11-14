@@ -60,10 +60,10 @@ export default function ProgramsPage() {
   const fetchPrograms = async () => {
     try {
       setLoading(true)
-      const data = await apiClient.request<{ success: boolean; data: Program[] }>('/programs')
-      console.log('[PROGRAMS] API Response:', data)
-      // FIX: Backend returns { success: true, data: programs }, not { programs: [] }
-      setPrograms(data.data || [])
+      // Use apiClient.getPrograms() which handles the response format correctly
+      const response = await apiClient.getPrograms()
+      console.log('[PROGRAMS] API Response:', response)
+      setPrograms(response.programs || [])
     } catch (error) {
       console.error("Failed to fetch programs:", error)
       toast.error("Failed to load programs")
@@ -98,17 +98,15 @@ export default function ProgramsPage() {
   const handleCreateProgram = async () => {
     try {
       setCreating(true)
-      const newProgram = await apiClient.request<Program>('/programs', {
-        method: 'POST',
-        body: JSON.stringify({
-          name: createForm.name,
-          description: createForm.description,
-          status: createForm.status,
-          start_date: createForm.start_date || null,
-          end_date: createForm.end_date || null,
-          budget: createForm.budget ? parseFloat(createForm.budget) : null,
-          currency: createForm.currency,
-        })
+      // Use apiClient.createProgram() which handles the response format correctly
+      const newProgram = await apiClient.createProgram({
+        name: createForm.name,
+        description: createForm.description,
+        status: createForm.status,
+        start_date: createForm.start_date || null,
+        end_date: createForm.end_date || null,
+        budget: createForm.budget ? parseFloat(createForm.budget) : null,
+        currency: createForm.currency,
       })
       toast.success('Program created successfully')
       setCreateDialogOpen(false)
@@ -177,12 +175,9 @@ export default function ProgramsPage() {
 
   const handleBulkStatusUpdate = async (newStatus: 'green' | 'amber' | 'red') => {
     try {
-      // Update all selected programs
+      // Update all selected programs using apiClient.updateProgram()
       for (const programId of selectedPrograms) {
-        await apiClient.request(`/programs/${programId}`, {
-          method: 'PUT',
-          body: JSON.stringify({ status: newStatus })
-        })
+        await apiClient.updateProgram(programId, { status: newStatus })
       }
       toast.success(`Updated ${selectedPrograms.length} program(s)`)
       setSelectedPrograms([])

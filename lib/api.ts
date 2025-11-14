@@ -627,31 +627,50 @@ class ApiClient {
       })
     }
 
-    const response = await this.request<{ programs: Program[]; pagination: any }>(
+    // Backend returns { success: true, data: Program[] }
+    const response = await this.request<{ success: boolean; data: Program[] }>(
       `/programs?${queryParams}`
     )
-    return response
+    // Transform to expected format for backward compatibility
+    return {
+      programs: response.data || [],
+      pagination: {} // Backend doesn't return pagination yet, but structure is ready
+    }
   }
 
   async getProgram(id: string): Promise<Program> {
-    const response = await this.request<{ program: Program }>(`/programs/${id}`)
-    return response.program
+    // Backend returns { success: true, data: Program } on success
+    // On 404, backend returns { error: 'Program not found' } and request() throws
+    try {
+      const response = await this.request<{ success: boolean; data: Program }>(`/programs/${id}`)
+      return response.data
+    } catch (error: any) {
+      // Re-throw with better context
+      if (error?.status === 404) {
+        const notFoundError = new Error('Program not found')
+        ;(notFoundError as any).status = 404
+        throw notFoundError
+      }
+      throw error
+    }
   }
 
   async createProgram(programData: Partial<Program>): Promise<Program> {
-    const response = await this.request<{ program: Program }>("/programs", {
+    // Backend returns { success: true, data: Program }
+    const response = await this.request<{ success: boolean; data: Program }>("/programs", {
       method: "POST",
       body: JSON.stringify(programData),
     })
-    return response.program
+    return response.data
   }
 
   async updateProgram(id: string, programData: Partial<Program>): Promise<Program> {
-    const response = await this.request<{ program: Program }>(`/programs/${id}`, {
+    // Backend returns { success: true, data: Program }
+    const response = await this.request<{ success: boolean; data: Program }>(`/programs/${id}`, {
       method: "PUT",
       body: JSON.stringify(programData),
     })
-    return response.program
+    return response.data
   }
 
   async deleteProgram(id: string): Promise<void> {
