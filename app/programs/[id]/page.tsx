@@ -167,7 +167,8 @@ export default function ProgramDetailPage() {
         
         // Fetch program metrics (use existing endpoint)
         try {
-          const metricsResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/metrics`, {
+          const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
+          const metricsResponse = await fetch(`${apiUrl}/programs/${programId}/metrics`, {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }

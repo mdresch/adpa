@@ -117,7 +117,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const fetchEntityCounts = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/results/${projectId}`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
+      const response = await fetch(`${apiUrl}/project-data-extraction/results/${projectId}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -295,7 +296,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setExtractionProgress(0)
       setExtractionStatus("Starting extraction...")
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/extract`, {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
+      const response = await fetch(`${apiUrl}/project-data-extraction/extract`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -342,7 +344,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const pollJobStatus = async (jobId: string) => {
     const pollInterval = setInterval(async () => {
       try {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/status/${jobId}`, {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
+        const response = await fetch(`${apiUrl}/project-data-extraction/status/${jobId}`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           }
@@ -397,7 +400,8 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       setSelectedEntityType(entityType)
       setShowEntityDialog(true)
       
-      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
+      const apiUrl = `${baseUrl}/project-data-extraction/entities/${projectId}/${entityType}?limit=100`
       console.log('[ENTITY-DETAILS] Fetching:', apiUrl)
       
       const response = await fetch(apiUrl, {

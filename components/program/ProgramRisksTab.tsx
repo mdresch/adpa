@@ -107,8 +107,9 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
   const fetchRisks = async () => {
     try {
       setLoading(true);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || 'http://localhost:5000/api'
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/risks`,
+        `${apiUrl}/programs/${programId}/risks`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
