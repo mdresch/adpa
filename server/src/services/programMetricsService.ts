@@ -31,6 +31,7 @@ function calculateOverallStatus(projectStatuses: string[]): string {
  */
 export async function getBudgetMetrics(programId: string) {
   try {
+    // Get total budget and actual cost
     const result = await pool.query(
       `
       SELECT 
@@ -42,16 +43,37 @@ export async function getBudgetMetrics(programId: string) {
       [programId]
     )
 
-    const totalBudget = parseFloat(result.rows[0]?.total_budget || '0')
-    const totalSpent = parseFloat(result.rows[0]?.total_spent || '0')
-    const remaining = totalBudget - totalSpent
-    const percentSpent = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0
+    const planned = parseFloat(result.rows[0]?.total_budget || '0')
+    const actual = parseFloat(result.rows[0]?.total_spent || '0')
+    const forecast = actual // Use actual as forecast for now
+    const variance = planned - actual
+
+    // Generate timeline data (last 6 months)
+    const timeline: Array<{ month: string; planned: number; actual: number; forecast?: number }> = []
+    const now = new Date()
+    
+    for (let i = 5; i >= 0; i--) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthName = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+      
+      // Distribute budget and actual across months proportionally
+      const monthPlanned = planned / 6
+      const monthActual = actual / 6
+      
+      timeline.push({
+        month: monthName,
+        planned: monthPlanned,
+        actual: monthActual,
+        forecast: i === 0 ? forecast / 6 : undefined // Only show forecast for current month
+      })
+    }
 
     return {
-      total: totalBudget,
-      spent: totalSpent,
-      remaining,
-      percentSpent: Math.round(percentSpent * 100) / 100
+      planned,
+      actual,
+      forecast,
+      variance,
+      timeline
     }
   } catch (error) {
     logger.error('Error getting budget metrics:', error)
@@ -110,44 +132,82 @@ export async function getScheduleMetrics(programId: string) {
 
 /**
  * Get risk metrics for a program
+ * Returns an array of risk objects for visualization
  */
 export async function getRiskMetrics(programId: string) {
   try {
     const result = await pool.query(
       `
       SELECT 
-        COALESCE(r.severity, 'low') as severity,
-        COUNT(*) as count
+        r.id,
+        r.title,
+        r.description,
+        r.risk_level,
+        r.probability,
+        r.impact,
+        r.category,
+        r.mitigation_strategy,
+        r.owner
       FROM risks r
       JOIN projects p ON r.project_id = p.id
       WHERE p.program_id = $1
-      GROUP BY COALESCE(r.severity, 'low')
+      ORDER BY 
+        CASE r.risk_level
+          WHEN 'high' THEN 1
+          WHEN 'medium' THEN 2
+          WHEN 'low' THEN 3
+          ELSE 4
+        END,
+        r.probability DESC,
+        r.impact DESC
       `,
       [programId]
     )
 
-    const riskCounts = {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0
-    }
+    // Transform database rows to Risk interface format
+    const risks = result.rows.map((row: any) => {
+      // Map risk_level to severity (frontend expects 'critical' | 'high' | 'medium' | 'low')
+      let severity: 'critical' | 'high' | 'medium' | 'low' = 'low'
+      const riskLevel = row.risk_level?.toLowerCase() || 'low'
+      if (riskLevel === 'critical') {
+        severity = 'critical'
+      } else if (riskLevel === 'high') {
+        severity = 'high'
+      } else if (riskLevel === 'medium') {
+        severity = 'medium'
+      } else if (riskLevel === 'low') {
+        severity = 'low'
+      }
 
-    result.rows.forEach((row: any) => {
-      const rawSeverity = row?.severity
-      const severity = typeof rawSeverity === 'string' ? rawSeverity.toLowerCase() : 'low'
-      if (severity in riskCounts) {
-        const countValue = Number.parseInt(String(row?.count), 10)
-        riskCounts[severity as keyof typeof riskCounts] = Number.isNaN(countValue) ? 0 : countValue
+      // Convert probability to number (0-100) if it's stored as string
+      let probability = 50 // default
+      if (typeof row.probability === 'number') {
+        probability = row.probability
+      } else if (typeof row.probability === 'string') {
+        const probMap: Record<string, number> = { 'high': 75, 'medium': 50, 'low': 25 }
+        probability = probMap[row.probability.toLowerCase()] || 50
+      }
+
+      // Convert impact to number (dollar amount) if it's stored as string
+      let impact = 0 // default
+      if (typeof row.impact === 'number') {
+        impact = row.impact
+      } else if (typeof row.impact === 'string') {
+        const impactMap: Record<string, number> = { 'high': 1000000, 'medium': 500000, 'low': 100000 }
+        impact = impactMap[row.impact.toLowerCase()] || 0
+      }
+
+      return {
+        id: row.id,
+        title: row.title || 'Untitled Risk',
+        description: row.description || '',
+        probability,
+        impact,
+        severity
       }
     })
 
-    const total = Object.values(riskCounts).reduce((sum, count) => sum + count, 0)
-
-    return {
-      total,
-      ...riskCounts
-    }
+    return risks
   } catch (error) {
     logger.error('Error getting risk metrics:', error)
     throw error
@@ -178,11 +238,14 @@ export async function getRAGStatus(programId: string) {
     }
 
     const statusSet: Set<string> = new Set()
+    let total = 0
 
     result.rows.forEach(row => {
       const status = row.status?.toLowerCase() || 'green'
+      const count = parseInt(row.count) || 0
+      total += count
       if (status in breakdown) {
-        breakdown[status as keyof typeof breakdown] = parseInt(row.count)
+        breakdown[status as keyof typeof breakdown] = count
         // Add status to set for overall calculation
         statusSet.add(status)
       }
@@ -192,6 +255,7 @@ export async function getRAGStatus(programId: string) {
 
     return {
       overall,
+      total,
       breakdown
     }
   } catch (error) {
@@ -229,6 +293,70 @@ async function getProjectMetrics(programId: string) {
 }
 
 /**
+ * Get milestone metrics for a program
+ * Aggregates milestones from all projects in the program
+ */
+async function getMilestoneMetrics(programId: string) {
+  try {
+    // Query milestones table - milestones are stored with 'date' column (not planned_date/actual_date)
+    const result = await pool.query(
+      `
+      SELECT 
+        m.id,
+        m.name,
+        m.description,
+        m.date,
+        m.status,
+        m.project_id
+      FROM milestones m
+      JOIN projects p ON m.project_id = p.id
+      WHERE p.program_id = $1
+        AND m.deleted_at IS NULL
+      ORDER BY m.date ASC
+      `,
+      [programId]
+    )
+
+    const milestones = result.rows.map((row: any) => {
+      const plannedDate = row.date
+      const today = new Date()
+      const planned = plannedDate ? new Date(plannedDate) : today
+
+      // Map database status to frontend status
+      // DB: planned, in_progress, completed, delayed
+      // Frontend: completed, on-track, overdue
+      let status: 'completed' | 'on-track' | 'overdue' = 'on-track'
+      if (row.status === 'completed') {
+        status = 'completed'
+      } else if (row.status === 'delayed' || (planned < today && row.status !== 'completed')) {
+        status = 'overdue'
+      } else {
+        status = 'on-track'
+      }
+
+      return {
+        id: row.id,
+        name: row.name || 'Unnamed Milestone',
+        plannedDate: plannedDate ? new Date(plannedDate).toISOString() : new Date().toISOString(),
+        actualDate: row.status === 'completed' ? plannedDate ? new Date(plannedDate).toISOString() : undefined : undefined,
+        status
+      }
+    })
+
+    logger.info(`[METRICS] Found ${milestones.length} milestones for program ${programId}`)
+    return milestones
+  } catch (error: any) {
+    // If milestones table doesn't exist or query fails, return empty array
+    if (error?.code === '42P01' || error?.message?.includes('does not exist')) {
+      logger.info('Milestones table does not exist, returning empty array')
+    } else {
+      logger.warn('Error getting milestone metrics:', error)
+    }
+    return []
+  }
+}
+
+/**
  * Calculate all metrics for a program
  */
 export async function calculateMetrics(programId: string) {
@@ -253,20 +381,28 @@ export async function calculateMetrics(programId: string) {
     logger.info(`Calculating metrics for program: ${programId}`)
 
     // Calculate all metrics in parallel
-    const [budget, schedule, status, risks, projects] = await Promise.all([
+    const [budget, schedule, status, risks, projects, milestones] = await Promise.all([
       getBudgetMetrics(programId),
       getScheduleMetrics(programId),
       getRAGStatus(programId),
       getRiskMetrics(programId),
-      getProjectMetrics(programId)
+      getProjectMetrics(programId),
+      getMilestoneMetrics(programId)
     ])
+
+    // Ensure status.total is set from projects.total if not already set
+    const statusWithTotal = {
+      ...status,
+      total: status.total || projects.total || 0
+    }
 
     const metrics = {
       programId,
       budget,
       schedule,
-      status,
+      status: statusWithTotal,
       risks,
+      milestones,
       projects,
       lastCalculated: new Date().toISOString(),
       cached: false
