@@ -651,7 +651,7 @@ export default function ProjectTeamPage({ params }: { params: { id: string } }) 
 
 ## ✅ Acceptance Criteria
 
-- [x] Database schema created ✅
+- [x] Database schema created ✅ **TASK-138 COMPLETE** (Migration 329)
 - [x] AI extraction working for team agreements ✅
 - [x] Agreements categorized correctly (>90% accuracy) ✅
 - [x] **Frontend displays agreements by category** ✅ **TASK-143 COMPLETE**
@@ -673,9 +673,13 @@ export default function ProjectTeamPage({ params }: { params: { id: string } }) 
 
 ### ✅ Completed (November 2025)
 
-1. **Database Schema** ✅
-   - `team_agreements` table created
-   - Migration applied successfully
+1. **Database Schema (TASK-138)** ✅ **COMPLETE**
+   - `team_agreements` table created/updated
+   - `team_agreement_adherence_log` table created
+   - Migration 329 applied successfully
+   - All constraints, indexes, and triggers verified
+   - Existing data migrated (ARRAY → JSONB, DATE → TIMESTAMP)
+   - Test suite created (`team-agreements-schema.test.ts`)
 
 2. **AI Extraction** ✅
    - Team agreements extraction implemented

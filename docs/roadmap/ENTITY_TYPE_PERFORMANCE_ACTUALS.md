@@ -651,7 +651,7 @@ export default router
 - [ ] Database schema created with proper indexes
 - [ ] AI extraction identifies actuals from documents
 - [ ] Variances calculated automatically
-- [ ] Performance dashboard displays SPI/CPI
+- [x] Performance dashboard displays SPI/CPI ✅ **COMPLETE** (TASK-132)
 - [ ] Manual entry of actuals works
 - [ ] API endpoints functional
 - [ ] Real-time variance alerts
