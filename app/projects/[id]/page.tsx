@@ -141,6 +141,7 @@ interface Stakeholder {
   stakeholder_category: 'primary' | 'secondary'
   expectations?: string
   potential_impact?: string
+  is_team_member?: boolean
   created_at: string
   updated_at: string
 }
@@ -204,6 +205,8 @@ export default function ProjectDetail() {
   const [documentName, setDocumentName] = useState("")
   const [documentDescription, setDocumentDescription] = useState("")
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
+  const [upgradeToProgramDialogOpen, setUpgradeToProgramDialogOpen] = useState(false)
+  const [upgrading, setUpgrading] = useState(false)
   
   // AI Provider selection for document generation
   const [aiProviders, setAiProviders] = useState<any[]>([])
@@ -249,7 +252,7 @@ export default function ProjectDetail() {
     end_date: string
     budget: string
     manager: string
-    team_members: string[]
+    team_members: string[] // Deprecated: kept for compatibility but not used
   }>({
     name: "",
     description: "",
@@ -260,7 +263,7 @@ export default function ProjectDetail() {
     end_date: "",
     budget: "",
     manager: "",
-    team_members: []
+    team_members: [] // Team members are now managed through stakeholders
   })
 
   // Stakeholder form state
@@ -278,6 +281,7 @@ export default function ProjectDetail() {
     stakeholder_category: 'primary' | 'secondary'
     expectations: string
     potential_impact: string
+    is_team_member: boolean
   }>({
     name: "",
     role: "",
@@ -291,7 +295,8 @@ export default function ProjectDetail() {
     stakeholder_type: "internal",
     stakeholder_category: "primary",
     expectations: "",
-    potential_impact: ""
+    potential_impact: "",
+    is_team_member: false
   })
 
   // Fetch project data
@@ -1589,6 +1594,57 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     }
   }
 
+  // Upgrade project to program
+  const handleUpgradeToProgram = async () => {
+    if (!project) {
+      toast.error("Project not found")
+      return
+    }
+
+    // Check if already assigned to a program (program_id may be in project data)
+    const projectWithProgram = project as Project & { program_id?: string }
+    if (projectWithProgram.program_id) {
+      toast.error("This project is already assigned to a program")
+      setUpgradeToProgramDialogOpen(false)
+      return
+    }
+
+    try {
+      setUpgrading(true)
+      
+      const response = await apiClient.post<{
+        success: boolean
+        data: {
+          program: { id: string; name: string }
+          project: any
+        }
+      }>(`/projects/${projectId}/upgrade-to-program`, {})
+
+      if (response.success && response.data) {
+        const { program } = response.data
+        
+        toast.success(`Project upgraded to program: ${program.name}`)
+        setUpgradeToProgramDialogOpen(false)
+        setEditProjectDialogOpen(false)
+        
+        // Navigate to the new program
+        router.push(`/programs/${program.id}`)
+      } else {
+        throw new Error("Failed to upgrade project")
+      }
+    } catch (error: any) {
+      console.error("Failed to upgrade project to program:", error)
+      
+      if (error.response?.data?.error === "Project is already assigned to a program") {
+        toast.error("This project is already assigned to a program")
+      } else {
+        toast.error(error.response?.data?.error || error.message || "Failed to upgrade project to program")
+      }
+    } finally {
+      setUpgrading(false)
+    }
+  }
+
   // Handle opening edit dialog
   const handleEditProject = () => {
     if (!project) return
@@ -1612,9 +1668,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       }
     }
     
-    // Extract manager from team_members (assuming first member is manager)
-    const manager = project.team_members && project.team_members.length > 0 ? project.team_members[0] : ""
-    const teamMembers = project.team_members || []
+    // Note: Manager and team members are now managed through stakeholders
+    // Extract manager name from project owner if available
+    const manager = (project as any).owner_name || ""
     
     setEditForm({
       name: project.name || "",
@@ -1626,7 +1682,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       end_date: formatDateForInput(project.end_date),
       budget: project.budget?.toString() || "",
       manager: manager,
-      team_members: teamMembers
+      team_members: [] // Team members are now managed through stakeholders
     })
     
     setEditProjectDialogOpen(true)
@@ -1660,12 +1716,6 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setUpdating(true)
       
-      // Prepare team members array (include manager as first member if specified)
-      let teamMembers = [...editForm.team_members]
-      if (editForm.manager && !teamMembers.includes(editForm.manager)) {
-        teamMembers = [editForm.manager, ...teamMembers]
-      }
-      
       const updateData = {
         name: editForm.name,
         description: editForm.description,
@@ -1674,8 +1724,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         priority: editForm.priority,
         start_date: editForm.start_date || undefined,
         end_date: editForm.end_date || undefined,
-        budget: editForm.budget ? parseFloat(editForm.budget) : undefined,
-        team_members: teamMembers
+        budget: editForm.budget ? parseFloat(editForm.budget) : undefined
+        // Note: team_members are now managed through stakeholders (is_team_member flag)
       }
       
       await apiClient.updateProject(projectId, updateData)
@@ -1691,33 +1741,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     }
   }
 
-  // Add team member
-  const handleAddTeamMember = () => {
-    const memberName = prompt("Enter team member name:")
-    if (memberName && memberName.trim()) {
-      const trimmedName = memberName.trim()
-      // Check if member already exists
-      if (editForm.team_members.includes(trimmedName)) {
-        toast.error("Team member already exists")
-        return
-      }
-      setEditForm(prev => ({
-        ...prev,
-        team_members: [...prev.team_members, trimmedName]
-      }))
-      toast.success("Team member added successfully")
-    }
-  }
-
-  // Remove team member
-  const handleRemoveTeamMember = (index: number) => {
-    const memberName = editForm.team_members[index]
-    setEditForm(prev => ({
-      ...prev,
-      team_members: prev.team_members.filter((_, i) => i !== index)
-    }))
-    toast.success(`Removed ${memberName} from team`)
-  }
+  // Note: Team members are now managed through stakeholders (is_team_member flag)
+  // Removed handleAddTeamMember and handleRemoveTeamMember functions
 
   // Handle opening new stakeholder dialog
   const handleAddStakeholder = () => {
@@ -1735,7 +1760,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       stakeholder_type: "internal",
       stakeholder_category: "primary",
       expectations: "",
-      potential_impact: ""
+      potential_impact: "",
+      is_team_member: false
     })
     setStakeholderDialogOpen(true)
   }
@@ -1759,7 +1785,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         stakeholder_type: "internal",
         stakeholder_category: "primary",
         expectations: "",
-        potential_impact: ""
+        potential_impact: "",
+        is_team_member: false
       })
     }
   }
@@ -1768,19 +1795,20 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   const handleEditStakeholder = (stakeholder: Stakeholder) => {
     setEditingStakeholder(stakeholder)
     setStakeholderForm({
-      name: stakeholder.name || "",
-      role: stakeholder.role,
-      department: stakeholder.department || "",
-      email: stakeholder.email,
-      phone: stakeholder.phone || "",
-      interest_level: stakeholder.interest_level,
-      influence_level: stakeholder.influence_level,
-      engagement_approach: stakeholder.engagement_approach,
-      communication_frequency: stakeholder.communication_frequency,
-      stakeholder_type: stakeholder.stakeholder_type,
-      stakeholder_category: stakeholder.stakeholder_category,
-      expectations: stakeholder.expectations || "",
-      potential_impact: stakeholder.potential_impact || ""
+      name: stakeholder.name ?? "",
+      role: stakeholder.role ?? "",
+      department: stakeholder.department ?? "",
+      email: stakeholder.email ?? "",
+      phone: stakeholder.phone ?? "",
+      interest_level: stakeholder.interest_level ?? "medium",
+      influence_level: stakeholder.influence_level ?? "medium",
+      engagement_approach: stakeholder.engagement_approach ?? "keep_informed",
+      communication_frequency: stakeholder.communication_frequency ?? "weekly",
+      stakeholder_type: stakeholder.stakeholder_type ?? "internal",
+      stakeholder_category: stakeholder.stakeholder_category ?? "primary",
+      expectations: stakeholder.expectations ?? "",
+      potential_impact: stakeholder.potential_impact ?? "",
+      is_team_member: (stakeholder as any).is_team_member ?? false
     })
     setStakeholderDialogOpen(true)
   }
@@ -1791,6 +1819,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     
     if (!stakeholderForm.role || !stakeholderForm.email) {
       toast.error("Please fill in required fields (Role, Email)")
+      return
+    }
+
+    // Validate: Only internal stakeholders can be team members
+    if (stakeholderForm.is_team_member && stakeholderForm.stakeholder_type !== 'internal') {
+      toast.error("Only internal stakeholders can be marked as team members")
       return
     }
 
@@ -2060,9 +2094,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
   const progress = getProjectProgress()
 
-  // Determine project manager and other members for Team tab ordering
-  const managerName = (project as any).owner_name || (project.team_members && project.team_members.length > 0 ? project.team_members[0] : 'Not assigned')
-  const otherMembers = project.team_members ? project.team_members.filter((m) => m !== managerName) : []
+  // Manager is now the project owner (creator)
+  // Team members are now fetched from stakeholders (filtered by is_team_member flag)
+  const managerName = (project as any).owner_name || 'Not assigned'
 
   return (
     <div className="flex h-screen bg-background">
@@ -2499,48 +2533,98 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                           />
                         </div>
 
-                        {/* Team Members */}
+                        {/* Team Members Info */}
                         <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <Label className="text-sm font-semibold">Team Members</Label>
-                            <Button type="button" variant="outline" size="sm" onClick={handleAddTeamMember}>
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add Member
-                            </Button>
-                          </div>
-                          <div className="space-y-2 max-h-32 overflow-y-auto">
-                            {editForm.team_members.map((member, index) => (
-                              <div key={index} className="flex items-center justify-between p-2 border rounded">
-                                <span className="text-sm">{member}</span>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleRemoveTeamMember(index)}
-                                  className="text-red-500 hover:text-red-700"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ))}
-                            {editForm.team_members.length === 0 && (
-                              <div className="text-center py-4 text-muted-foreground text-sm">
-                                No team members added yet
-                              </div>
-                            )}
-                          </div>
+                          <Label className="text-sm font-semibold">Team Members</Label>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Team members are managed through the Stakeholders tab. Mark internal stakeholders as "Team Member" to include them here.
+                          </p>
                         </div>
                       </div>
-                      <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setEditProjectDialogOpen(false)}>
-                          Cancel
-                        </Button>
-                        <Button type="submit" disabled={updating}>
-                          {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                          {updating ? "Updating..." : "Update Project"}
-                        </Button>
+                      <DialogFooter className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex-1">
+                          {!(project as Project & { program_id?: string })?.program_id && (
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={() => {
+                                setEditProjectDialogOpen(false)
+                                setUpgradeToProgramDialogOpen(true)
+                              }}
+                              className="w-full sm:w-auto"
+                            >
+                              <TrendingUp className="h-4 w-4 mr-2" />
+                              Upgrade to Program
+                            </Button>
+                          )}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button type="button" variant="outline" onClick={() => setEditProjectDialogOpen(false)}>
+                            Cancel
+                          </Button>
+                          <Button type="submit" disabled={updating}>
+                            {updating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            {updating ? "Updating..." : "Update Project"}
+                          </Button>
+                        </div>
                       </DialogFooter>
                     </form>
+                  </DialogContent>
+                </Dialog>
+
+                {/* Upgrade to Program Confirmation Dialog */}
+                <Dialog open={upgradeToProgramDialogOpen} onOpenChange={setUpgradeToProgramDialogOpen}>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                      <DialogTitle>Upgrade Project to Program</DialogTitle>
+                      <DialogDescription>
+                        This will create a new program from this project and link the project to it. 
+                        The program will be pre-populated with the project's details.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                      <div className="space-y-2">
+                        <p className="text-sm text-muted-foreground">
+                          <strong>Project:</strong> {project?.name}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          <strong>Program Name:</strong> {project?.name}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          <strong>Budget:</strong> {project?.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          <strong>Timeline:</strong> {project?.start_date && project?.end_date 
+                            ? `${new Date(project.start_date).toLocaleDateString()} - ${new Date(project.end_date).toLocaleDateString()}`
+                            : 'Not set'}
+                        </p>
+                      </div>
+                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          <strong>Note:</strong> After upgrading, you'll be redirected to the new program page. 
+                          The project will remain accessible and will be linked to the program.
+                        </p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => setUpgradeToProgramDialogOpen(false)}
+                        disabled={upgrading}
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        type="button" 
+                        onClick={handleUpgradeToProgram}
+                        disabled={upgrading}
+                        className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+                      >
+                        {upgrading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        {upgrading ? "Upgrading..." : "Upgrade to Program"}
+                      </Button>
+                    </DialogFooter>
                   </DialogContent>
                 </Dialog>
 
@@ -2583,7 +2667,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               id="stakeholder-name" 
                               placeholder="Enter stakeholder name (leave blank if to be recruited)" 
                               className="mt-2"
-                              value={stakeholderForm.name}
+                              value={stakeholderForm.name ?? ""}
                               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, name: e.target.value}))}
                             />
                           </div>
@@ -2598,7 +2682,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               id="stakeholder-department" 
                               placeholder="Enter department" 
                               className="mt-2"
-                              value={stakeholderForm.department}
+                              value={stakeholderForm.department ?? ""}
                               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, department: e.target.value}))}
                             />
                           </div>
@@ -2627,7 +2711,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               id="stakeholder-phone" 
                               placeholder="Enter phone number" 
                               className="mt-2"
-                              value={stakeholderForm.phone}
+                              value={stakeholderForm.phone ?? ""}
                               onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, phone: e.target.value}))}
                             />
                           </div>
@@ -2639,13 +2723,40 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               id="stakeholder-type"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={stakeholderForm.stakeholder_type}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, stakeholder_type: e.target.value as 'internal' | 'external'}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                                const newType = e.target.value as 'internal' | 'external'
+                                setStakeholderForm(prev => ({
+                                  ...prev, 
+                                  stakeholder_type: newType,
+                                  // Reset is_team_member if switching to external
+                                  is_team_member: newType === 'external' ? false : prev.is_team_member
+                                }))
+                              }}
                             >
                               <option value="internal">Internal</option>
                               <option value="external">External</option>
                             </select>
                           </div>
                         </div>
+
+                        {/* Team Member Checkbox - Only show for internal stakeholders */}
+                        {stakeholderForm.stakeholder_type === 'internal' && (
+                          <div className="flex items-center space-x-2 pt-2">
+                            <input
+                              type="checkbox"
+                              id="is-team-member"
+                              checked={stakeholderForm.is_team_member}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, is_team_member: e.target.checked}))}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <Label htmlFor="is-team-member" className="text-sm font-medium cursor-pointer">
+                              Mark as Team Member
+                            </Label>
+                            <span className="text-xs text-muted-foreground">
+                              (This stakeholder will appear in the project's team members list)
+                            </span>
+                          </div>
+                        )}
 
                         {/* PMBOK Parameters */}
                         <div className="border-t pt-4">
@@ -2751,7 +2862,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="expectations"
                                 placeholder="Describe what this stakeholder expects from the project"
                                 className="mt-2"
-                                value={stakeholderForm.expectations}
+                                value={stakeholderForm.expectations ?? ""}
                                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({...prev, expectations: e.target.value}))}
                                 rows={3}
                               />
@@ -2764,7 +2875,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="potential-impact"
                                 placeholder="Describe how this stakeholder can impact the project"
                                 className="mt-2"
-                                value={stakeholderForm.potential_impact}
+                                value={stakeholderForm.potential_impact ?? ""}
                                 onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({...prev, potential_impact: e.target.value}))}
                                 rows={3}
                               />
@@ -2878,10 +2989,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               </div>
             </div>
 
-            <Tabs defaultValue="documents" className="space-y-4">
+            <Tabs defaultValue="overview" className="space-y-4">
               <TabsList aria-label="Project management sections">
-                <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
+                <TabsTrigger value="documents">Documents</TabsTrigger>
                 <TabsTrigger value="extraction">
                   <Database className="h-4 w-4 mr-2" />
                   AI Extraction
@@ -2929,7 +3040,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   progress={progress} 
                   managerName={managerName} 
                   documentStats={documentStats} 
-                  stakeholders={stakeholders} 
+                  stakeholders={stakeholders}
+                  projectId={projectId}
                 />
               </TabsContent>
 
