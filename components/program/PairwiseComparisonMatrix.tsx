@@ -124,34 +124,45 @@ export function PairwiseComparisonMatrix({
       return
     }
 
-    // Count wins for each project
+    // Count wins and total confidence weights for each project
     const winCounts: Record<string, number> = {}
-    const totalComparisons: Record<string, number> = {}
+    const totalConfidenceWeights: Record<string, number> = {}
 
     projects.forEach(project => {
       winCounts[project.id] = 0
-      totalComparisons[project.id] = 0
+      totalConfidenceWeights[project.id] = 0
     })
 
     comparisons.forEach(comparison => {
+      const confidence = comparison.confidence || 1
+      
+      // Add confidence weight to both projects (they're both involved in this comparison)
+      totalConfidenceWeights[comparison.project1_id] = (totalConfidenceWeights[comparison.project1_id] || 0) + confidence
+      totalConfidenceWeights[comparison.project2_id] = (totalConfidenceWeights[comparison.project2_id] || 0) + confidence
+      
       if (comparison.winner_id) {
-        winCounts[comparison.winner_id] = (winCounts[comparison.winner_id] || 0) + (comparison.confidence || 1)
+        // Winner gets full confidence weight
+        winCounts[comparison.winner_id] = (winCounts[comparison.winner_id] || 0) + confidence
+      } else {
+        // Tie: both projects get 0.5 * confidence weight
+        const tieWeight = 0.5 * confidence
+        winCounts[comparison.project1_id] = (winCounts[comparison.project1_id] || 0) + tieWeight
+        winCounts[comparison.project2_id] = (winCounts[comparison.project2_id] || 0) + tieWeight
       }
-      totalComparisons[comparison.project1_id] = (totalComparisons[comparison.project1_id] || 0) + 1
-      totalComparisons[comparison.project2_id] = (totalComparisons[comparison.project2_id] || 0) + 1
     })
 
     // Calculate priority scores (win rate weighted by confidence)
     const scores = projects.map(project => {
       const wins = winCounts[project.id] || 0
-      const comparisonsCount = totalComparisons[project.id] || 1
-      // Calculate raw score (can be > 1.0 due to confidence weighting)
-      const rawScore = comparisonsCount > 0 ? wins / comparisonsCount : 0
+      const totalWeight = totalConfidenceWeights[project.id] || 1
+      // Calculate score: weighted wins / total confidence weight
+      // This ensures scores stay in a reasonable range (0-1 for win rate)
+      const rawScore = totalWeight > 0 ? wins / totalWeight : 0
       return {
         project_id: project.id,
         priority_score: rawScore,
         win_count: wins,
-        comparisons_count: comparisonsCount
+        comparisons_count: totalConfidenceWeights[project.id] || 0
       }
     })
 
