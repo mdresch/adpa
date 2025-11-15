@@ -155,6 +155,10 @@ export async function connectDatabase() {
     
     const testPool = new Pool(poolConfig)
     
+    // Increase max listeners to prevent MaxListenersExceededWarning
+    // This can happen when multiple connection attempts are made
+    testPool.setMaxListeners(20)
+    
     try {
       const client = await Promise.race([
         testPool.connect(),
@@ -187,6 +191,9 @@ export async function connectDatabase() {
     
     // Create a new pool for this connection method
     const testPool = createPool(method.host)
+    
+    // Increase max listeners to prevent MaxListenersExceededWarning
+    testPool.setMaxListeners(20)
     
     for (let attempt = 1; attempt <= maxRetriesPerMethod; attempt++) {
       try {
