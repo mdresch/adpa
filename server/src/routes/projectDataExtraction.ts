@@ -134,6 +134,149 @@ router.get(
 )
 
 /**
+ * GET /api/project-data-extraction/:projectId/summary
+ * Get extraction summary with PMBOK 8 domain counts for a project
+ */
+router.get(
+  '/:projectId/summary',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { projectId } = req.params
+      const userId = (req as any).user?.id
+      
+      logger.info('[EXTRACTION-SUMMARY-API] Request received', {
+        projectId,
+        userId
+      })
+      
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(projectId)) {
+        logger.warn('[EXTRACTION-SUMMARY-API] Invalid project ID format', { projectId })
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid project ID format'
+        })
+      }
+
+      // SECURITY: Verify user has access to this project
+      const userRole = (req as any).user?.role
+      if (userRole === 'admin') {
+        // Admin can access any project - verify project exists
+        const projectCheck = await pool!.query(
+          'SELECT id FROM projects WHERE id = $1',
+          [projectId]
+        )
+        if (projectCheck.rows.length === 0) {
+          return res.status(404).json({
+            success: false,
+            error: 'Project not found'
+          })
+        }
+      } else {
+        // Non-admin users must be project owner or member
+        const accessCheck = await pool!.query(
+          `SELECT p.id FROM projects p
+           WHERE p.id = $1 AND (p.owner_id = $2 OR p.created_by = $2)`,
+          [projectId, userId]
+        )
+        if (accessCheck.rows.length === 0) {
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied to this project'
+          })
+        }
+      }
+
+      // Get entity counts for all entity types
+      const entityCounts: Record<string, number> = {}
+      const entityTypes = [
+        { key: 'stakeholders', table: 'stakeholders' },
+        { key: 'requirements', table: 'requirements' },
+        { key: 'risks', table: 'risks' },
+        { key: 'milestones', table: 'milestones' },
+        { key: 'constraints', table: 'constraints' },
+        { key: 'successCriteria', table: 'success_criteria' },
+        { key: 'bestPractices', table: 'best_practices' },
+        { key: 'phases', table: 'phases' },
+        { key: 'resources', table: 'resources' },
+        { key: 'technologies', table: 'technologies' },
+        { key: 'qualityStandards', table: 'quality_standards' },
+        { key: 'deliverables', table: 'deliverables' },
+        { key: 'scopeItems', table: 'scope_items' },
+        { key: 'activities', table: 'activities' },
+        { key: 'teamAgreements', table: 'team_agreements' },
+        { key: 'developmentApproaches', table: 'development_approach' },
+        { key: 'projectIterations', table: 'project_iterations' },
+        { key: 'workItems', table: 'work_items' },
+        { key: 'capacityPlans', table: 'capacity_plans' },
+        { key: 'performanceMeasurements', table: 'performance_measurements' },
+        { key: 'earnedValueMetrics', table: 'earned_value_metrics' },
+        { key: 'opportunities', table: 'opportunities' },
+        { key: 'riskResponses', table: 'risk_responses' },
+        { key: 'performanceActuals', table: 'performance_actuals' }
+      ]
+
+      for (const { key, table } of entityTypes) {
+        try {
+          const result = await pool!.query(
+            `SELECT COUNT(*) as count FROM ${table} WHERE project_id = $1`,
+            [projectId]
+          )
+          entityCounts[key] = parseInt(result.rows[0].count) || 0
+        } catch (error) {
+          // Table might not exist, set count to 0
+          logger.debug(`[EXTRACTION-SUMMARY-API] Table ${table} not found or error`, { error })
+          entityCounts[key] = 0
+        }
+      }
+
+      // Calculate PMBOK 8 Performance Domain counts
+      const pmbok8DomainCounts = {
+        // Stakeholders Performance Domain
+        stakeholders: entityCounts.stakeholders || 0,
+        
+        // Team Performance Domain
+        team: entityCounts.teamAgreements || 0,
+        
+        // Development Approach & Life Cycle Performance Domain
+        developmentApproach: entityCounts.developmentApproaches || 0,
+        
+        // Planning Performance Domain
+        planning: (entityCounts.milestones || 0) + (entityCounts.requirements || 0),
+        
+        // Project Work Performance Domain
+        projectWork: (entityCounts.activities || 0) + (entityCounts.workItems || 0),
+        
+        // Delivery Performance Domain
+        delivery: (entityCounts.deliverables || 0) + (entityCounts.successCriteria || 0),
+        
+        // Measurement Performance Domain
+        measurement: (entityCounts.performanceMeasurements || 0) + (entityCounts.earnedValueMetrics || 0) + (entityCounts.performanceActuals || 0),
+        
+        // Uncertainty Performance Domain
+        uncertainty: (entityCounts.risks || 0) + (entityCounts.opportunities || 0) + (entityCounts.riskResponses || 0)
+      }
+
+      res.json({
+        success: true,
+        projectId,
+        entityCounts,
+        pmbok8DomainCounts,
+        totalEntities: Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
+      })
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-SUMMARY-API] Summary fetch failed', {
+        error: error instanceof Error ? error.message : String(error),
+        projectId: req.params.projectId
+      })
+      next(error)
+    }
+  }
+)
+
+/**
  * GET /api/project-data-extraction/results/:projectId
  * Get extraction results for a project
  */
