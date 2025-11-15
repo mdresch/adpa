@@ -125,13 +125,47 @@ router.get("/system",
       // Overall system statistics
       const systemStats = await pool.query(`
         SELECT 
+          (SELECT COUNT(*) FROM users) as total_users,
           (SELECT COUNT(*) FROM users WHERE is_active = true) as active_users,
           (SELECT COUNT(*) FROM projects) as total_projects,
           (SELECT COUNT(*) FROM documents) as total_documents,
+          (SELECT COUNT(*) FROM documents WHERE DATE(created_at) = CURRENT_DATE) as documents_today,
           (SELECT COUNT(*) FROM templates WHERE is_public = true) as public_templates,
           (SELECT COUNT(*) FROM jobs WHERE created_at >= NOW() - INTERVAL '${interval}') as jobs_period,
           (SELECT COUNT(*) FROM audit_logs WHERE action = 'ai_generate' AND created_at >= NOW() - INTERVAL '${interval}') as ai_generations_period
       `)
+
+      // Get total sessions from user_activity_logs (if table exists)
+      let totalSessions = 0
+      try {
+        const sessionsResult = await pool.query(`
+          SELECT COUNT(DISTINCT session_id) as total_sessions
+          FROM user_activity_logs
+          WHERE created_at >= NOW() - INTERVAL '${interval}'
+        `)
+        totalSessions = parseInt(sessionsResult.rows[0]?.total_sessions || '0', 10)
+      } catch (error: any) {
+        // Table might not exist, log and continue
+        if (error?.code !== '42P01') { // 42P01 = table does not exist
+          log.warn('Failed to query user_activity_logs for sessions:', error.message)
+        }
+      }
+
+      // Get API calls from api_request_logs (if table exists)
+      let apiCalls = 0
+      try {
+        const apiCallsResult = await pool.query(`
+          SELECT COUNT(*) as api_calls
+          FROM api_request_logs
+          WHERE created_at >= NOW() - INTERVAL '${interval}'
+        `)
+        apiCalls = parseInt(apiCallsResult.rows[0]?.api_calls || '0', 10)
+      } catch (error: any) {
+        // Table might not exist, log and continue
+        if (error?.code !== '42P01') { // 42P01 = table does not exist
+          log.warn('Failed to query api_request_logs for API calls:', error.message)
+        }
+      }
 
       // User growth over time
       const userGrowth = await pool.query(`
@@ -195,11 +229,24 @@ router.get("/system",
       `)
 
       const analytics = {
-        overview: systemStats.rows[0],
+        // Phase 1: Key Metrics (for frontend stat cards)
+        total_users: parseInt(systemStats.rows[0]?.total_users || '0', 10),
+        active_users: parseInt(systemStats.rows[0]?.active_users || '0', 10),
+        total_documents: parseInt(systemStats.rows[0]?.total_documents || '0', 10),
+        documents_today: parseInt(systemStats.rows[0]?.documents_today || '0', 10),
+        total_sessions: totalSessions,
+        api_calls: apiCalls,
+        // Existing data structure (for backward compatibility)
+        overview: {
+          ...systemStats.rows[0],
+          total_users: parseInt(systemStats.rows[0]?.total_users || '0', 10),
+          total_sessions: totalSessions,
+          api_calls: apiCalls,
+        },
         user_growth: userGrowth.rows,
         project_activity: projectActivity.rows,
         ai_usage_by_provider: aiUsageByProvider.rows,
-        active_users: activeUsers.rows,
+        active_users_list: activeUsers.rows, // Renamed to avoid conflict
         framework_usage: frameworkUsage.rows,
         period,
         generated_at: new Date().toISOString(),

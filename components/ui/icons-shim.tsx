@@ -221,6 +221,15 @@ export const PieChart = LucideIcons.PieChart
 export const Grid = LucideIcons.Grid
 export const Lightbulb = LucideIcons.Lightbulb
 export const Award = LucideIcons.Award
+export const Briefcase = LucideIcons.Briefcase
+export const Box = LucideIcons.Box
+export const ClipboardList = LucideIcons.ClipboardList
+export const Handshake = LucideIcons.Handshake
+export const IterationCw = LucideIcons.IterationCw
+export const Users2 = LucideIcons.Users2
+export const Gauge = LucideIcons.Gauge
+export const Rocket = LucideIcons.Rocket
+export const Wrench = LucideIcons.Wrench
 
 // Default export with all icons
 export default {
@@ -355,7 +364,16 @@ export default {
   PieChart,
   Grid,
   Lightbulb,
-  Award
+  Award,
+  Briefcase,
+  Box,
+  ClipboardList,
+  Handshake,
+  IterationCw,
+  Users2,
+  Gauge,
+  Rocket,
+  Wrench
 }
 
 // All icons are now properly exported above

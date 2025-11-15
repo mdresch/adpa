@@ -90,13 +90,21 @@ router.post("/", authenticateToken, requirePermission("stakeholders.create"), as
       stakeholder_type,
       stakeholder_category,
       expectations,
-      potential_impact
+      potential_impact,
+      is_team_member
     } = req.body
 
     // Validate required fields
     if (!project_id || !role || !email) {
       return res.status(400).json({ 
         error: "Missing required fields: project_id, role, email" 
+      })
+    }
+
+    // Validate: Only internal stakeholders can be team members
+    if (is_team_member && stakeholder_type !== 'internal') {
+      return res.status(400).json({ 
+        error: "Only internal stakeholders can be marked as team members" 
       })
     }
 
@@ -119,16 +127,16 @@ router.post("/", authenticateToken, requirePermission("stakeholders.create"), as
         id, project_id, name, role, department, email, phone,
         interest_level, influence_level, engagement_approach, communication_frequency,
         stakeholder_type, stakeholder_category, expectations, potential_impact,
-        created_by, updated_by
+        is_team_member, created_by, updated_by
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
       RETURNING *
       `,
       [
         id, project_id, name, role, department, email, phone,
         interest_level, influence_level, engagement_approach, communication_frequency,
         stakeholder_type, stakeholder_category, expectations, potential_impact,
-        userId, userId
+        is_team_member || false, userId, userId
       ]
     )
 
@@ -162,8 +170,16 @@ router.put("/:id", authenticateToken, requirePermission("stakeholders.update"), 
       stakeholder_type,
       stakeholder_category,
       expectations,
-      potential_impact
+      potential_impact,
+      is_team_member
     } = req.body
+
+    // Validate: Only internal stakeholders can be team members
+    if (is_team_member && stakeholder_type !== 'internal') {
+      return res.status(400).json({ 
+        error: "Only internal stakeholders can be marked as team members" 
+      })
+    }
 
     const userId = req.user?.id
 
@@ -173,16 +189,16 @@ router.put("/:id", authenticateToken, requirePermission("stakeholders.update"), 
       SET name = $1, role = $2, department = $3, email = $4, phone = $5,
           interest_level = $6, influence_level = $7, engagement_approach = $8, 
           communication_frequency = $9, stakeholder_type = $10, stakeholder_category = $11,
-          expectations = $12, potential_impact = $13, updated_by = $14,
+          expectations = $12, potential_impact = $13, is_team_member = $14, updated_by = $15,
           updated_at = CURRENT_TIMESTAMP
-      WHERE id = $15
+      WHERE id = $16
       RETURNING *
       `,
       [
         name, role, department, email, phone,
         interest_level, influence_level, engagement_approach,
         communication_frequency, stakeholder_type, stakeholder_category,
-        expectations, potential_impact, userId, id
+        expectations, potential_impact, is_team_member || false, userId, id
       ]
     )
 

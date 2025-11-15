@@ -98,6 +98,8 @@ import {
   Crosshair,
   ChevronRight,
 } from "@/components/ui/icons-shim"
+import { FileSignature } from "lucide-react"
+import { SignatureRequestDialog, SignatureStatusBadge } from "@/components/signature"
 import {
   Dialog,
   DialogContent,
@@ -221,6 +223,10 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
   })
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
   const [analyzingTemplate, setAnalyzingTemplate] = useState(false)
+  const [showSignatureRequestDialog, setShowSignatureRequestDialog] = useState(false)
+  const [signatureRequest, setSignatureRequest] = useState<any>(null)
+  const [signatureRecipients, setSignatureRecipients] = useState<any[]>([])
+  const [templateCategory, setTemplateCategory] = useState<string | null>(null)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -242,12 +248,76 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     custom_fields: {}
   })
 
+  // Fetch signature request status and recipients
+  const fetchSignatureRequest = async () => {
+    try {
+      const response = await apiClient.get(`/signatures/requests?documentId=${docId}`)
+      if (response.data && response.data.length > 0) {
+        const request = response.data[0]
+        setSignatureRequest(request)
+        
+        // Fetch signed recipients (reviewers)
+        if (request.recipients) {
+          const signedRecipients = request.recipients.filter((r: any) => r.status === 'signed')
+          setSignatureRecipients(signedRecipients)
+        }
+      }
+      
+      // Also try to get signature status directly
+      try {
+        const statusResponse = await apiClient.get(`/signatures/document/${docId}`)
+        if (statusResponse.data && statusResponse.data.recipients) {
+          const signedRecipients = statusResponse.data.recipients.filter((r: any) => r.status === 'signed')
+          setSignatureRecipients(signedRecipients)
+        }
+      } catch (statusError) {
+        // No signature status, that's okay
+      }
+    } catch (error) {
+      // No signature request yet, that's okay
+      console.log('No signature request found')
+    }
+  }
+  
+  // Fetch template category
+  const fetchTemplateCategory = async (templateId: string | undefined) => {
+    if (!templateId) {
+      setTemplateCategory(null)
+      return
+    }
+    
+    try {
+      const template = templates.find(t => t.id === templateId)
+      if (template && (template as any).category) {
+        setTemplateCategory((template as any).category)
+      } else {
+        // Try to fetch template details if not in local state
+        try {
+          const templateResponse = await apiClient.get(`/templates/${templateId}`)
+          if (templateResponse.category) {
+            setTemplateCategory(templateResponse.category)
+          }
+        } catch (error) {
+          console.log('Could not fetch template category')
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch template category:', error)
+    }
+  }
+
   // Fetch document data
   const fetchDocument = async () => {
     try {
       setLoading(true)
       const documentData = await apiClient.getDocument(docId)
       setDocument(documentData)
+      await fetchSignatureRequest()
+      
+      // Fetch template category if template_id exists
+      if (documentData.template_id) {
+        await fetchTemplateCategory(documentData.template_id)
+      }
       
       // Populate metadata form
       setMetadataForm({
@@ -610,6 +680,13 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       })
     }
   }, [isAuthenticated, docId, projectId])
+  
+  // Update template category when templates are loaded or document template changes
+  useEffect(() => {
+    if (document?.template_id && templates.length > 0) {
+      fetchTemplateCategory(document.template_id)
+    }
+  }, [document?.template_id, templates])
 
   if (!isAuthenticated) {
     return (
@@ -704,6 +781,13 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       </Button>
                       <Button 
                         variant="outline" 
+                        onClick={() => router.push(`/projects/${projectId}/documents/${docId}/entities`)}
+                      >
+                        <Database className="h-4 w-4 mr-2" />
+                        View Entities
+                      </Button>
+                      <Button 
+                        variant="outline" 
                         onClick={() => setFeedbackDialogOpen(true)}
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />
@@ -791,7 +875,9 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         {/* Custom Metadata Fields - Always Show */}
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Category</Label>
-                          <p className="text-sm">{document?.metadata?.category || <span className="text-muted-foreground italic">Not set</span>}</p>
+                          <p className="text-sm">
+                            {templateCategory || document?.metadata?.category || <span className="text-muted-foreground italic">Not set</span>}
+                          </p>
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Priority</Label>
@@ -805,11 +891,31 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Author</Label>
-                          <p className="text-sm">{document?.metadata?.author || <span className="text-muted-foreground italic">Not set</span>}</p>
+                          <p className="text-sm">
+                            {(document as any)?.created_by_name || document?.metadata?.author || document?.created_by || <span className="text-muted-foreground italic">Not set</span>}
+                          </p>
                         </div>
                         <div>
-                          <Label className="text-sm font-medium text-muted-foreground">Reviewer</Label>
-                          <p className="text-sm">{document?.metadata?.reviewer || <span className="text-muted-foreground italic">Not set</span>}</p>
+                          <Label className="text-sm font-medium text-muted-foreground">Reviewers</Label>
+                          {signatureRecipients.length > 0 ? (
+                            <div className="space-y-1 mt-1">
+                              {signatureRecipients.map((recipient: any, index: number) => (
+                                <div key={recipient.id || index} className="flex items-center space-x-2">
+                                  <CheckCircle className="h-3 w-3 text-green-500" />
+                                  <p className="text-sm">
+                                    {recipient.name || recipient.email}
+                                    {recipient.signed_at && (
+                                      <span className="text-xs text-muted-foreground ml-2">
+                                        ({new Date(recipient.signed_at).toLocaleDateString()})
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground italic">No reviewers yet</p>
+                          )}
                         </div>
                         <div>
                           <Label className="text-sm font-medium text-muted-foreground">Due Date</Label>
@@ -858,6 +964,14 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={() => router.push(`/documents/${docId}/sign`)}
+                      >
+                        <FileSignature className="h-4 w-4 mr-2" />
+                        Sign Document
+                      </Button>
                       <Button variant="outline" className="w-full justify-start">
                         <Download className="h-4 w-4 mr-2" />
                         Download Document
@@ -2271,6 +2385,26 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
         result={result}
         onClose={resetRegeneration}
         documentId={docId}
+      />
+
+      {/* Signature Request Dialog */}
+      <SignatureRequestDialog
+        open={showSignatureRequestDialog}
+        onOpenChange={setShowSignatureRequestDialog}
+        onSubmit={async (data) => {
+          try {
+            const response = await apiClient.post('/signatures/initiate', {
+              documentId: docId,
+              ...data,
+            })
+            toast.success('Signature request sent successfully!')
+            await fetchSignatureRequest()
+          } catch (error: any) {
+            toast.error(error.response?.data?.error || 'Failed to send signature request')
+            throw error
+          }
+        }}
+        documentTitle={document?.name}
       />
     </div>
   )

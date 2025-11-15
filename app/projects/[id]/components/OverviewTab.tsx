@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -10,14 +11,25 @@ import {
   FileText, 
   PieChart as PieChartIcon, 
   BarChart3, 
-  Target 
+  Target,
+  CheckCircle,
+  AlertTriangle,
+  TrendingUp,
+  Shield,
+  Zap,
+  Layers,
+  Gauge,
+  Award
 } from "lucide-react"
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts'
-import { Project } from "@/lib/api"
+import { Project, apiClient } from "@/lib/api"
+import { getApiUrl } from "@/lib/api-url"
 
 interface Stakeholder {
   id: string
   engagement_approach: string
+  stakeholder_type: 'internal' | 'external'
+  is_team_member?: boolean
   [key: string]: any
 }
 
@@ -31,12 +43,30 @@ interface DocumentStats {
   }
 }
 
+interface PMBOK8DomainMetrics {
+  team: number
+  developmentApproach: number
+  projectWork: number
+  measurement: number
+  uncertainty: number
+  stakeholders: number
+  planning: number
+  delivery: number
+}
+
+interface DocumentQualityMetrics {
+  averageCompliance: number
+  averageGrade: string
+  totalAssessed: number
+}
+
 interface OverviewTabProps {
   project: Project
   progress: number
   managerName: string
   documentStats: DocumentStats
   stakeholders: Stakeholder[]
+  projectId: string
 }
 
 export function OverviewTab({ 
@@ -44,8 +74,119 @@ export function OverviewTab({
   progress, 
   managerName, 
   documentStats, 
-  stakeholders 
+  stakeholders,
+  projectId
 }: OverviewTabProps) {
+  const [pmbok8Metrics, setPmbok8Metrics] = useState<PMBOK8DomainMetrics | null>(null)
+  const [qualityMetrics, setQualityMetrics] = useState<DocumentQualityMetrics | null>(null)
+  const [loadingMetrics, setLoadingMetrics] = useState(true)
+
+  // Calculate team members count from stakeholders
+  const teamMembers = stakeholders.filter(s => 
+    s.stakeholder_type === 'internal' && s.is_team_member === true
+  )
+
+  // Fetch PMBOK 8 domain metrics and document quality metrics
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        setLoadingMetrics(true)
+        
+        // Fetch PMBOK 8 domain metrics from extraction API
+        const token = localStorage.getItem('auth_token')
+        const extractionResponse = await fetch(getApiUrl(`/project-data-extraction/${projectId}/summary`), {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
+        if (extractionResponse.ok) {
+          const extractionData = await extractionResponse.json()
+          if (extractionData.success && extractionData.pmbok8DomainCounts) {
+            setPmbok8Metrics({
+              team: extractionData.pmbok8DomainCounts.team || 0,
+              developmentApproach: extractionData.pmbok8DomainCounts.developmentApproach || 0,
+              projectWork: extractionData.pmbok8DomainCounts.projectWork || 0,
+              measurement: extractionData.pmbok8DomainCounts.measurement || 0,
+              uncertainty: extractionData.pmbok8DomainCounts.uncertainty || 0,
+              stakeholders: extractionData.entityCounts?.stakeholders || 0,
+              planning: (extractionData.entityCounts?.milestones || 0) + (extractionData.entityCounts?.requirements || 0),
+              delivery: (extractionData.entityCounts?.deliverables || 0) + (extractionData.entityCounts?.successCriteria || 0)
+            })
+          }
+        }
+
+        // Fetch document quality metrics
+        const documentsResponse = await apiClient.getProjectDocuments(projectId, { limit: 1000 })
+        const documents = documentsResponse.documents || []
+        
+        let totalCompliance = 0
+        let assessedCount = 0
+        const grades: string[] = []
+
+        documents.forEach((doc: any) => {
+          const qualityMetrics = doc.generation_metadata?.qualityMetrics
+          if (qualityMetrics) {
+            // Calculate compliance from standardsCompliance or overallQuality
+            const compliance = qualityMetrics.standardsCompliance || qualityMetrics.overallQuality || 0
+            if (compliance > 0) {
+              totalCompliance += compliance
+              assessedCount++
+              
+              // Determine grade
+              if (compliance >= 90) grades.push('A')
+              else if (compliance >= 80) grades.push('B')
+              else if (compliance >= 70) grades.push('C')
+              else if (compliance >= 60) grades.push('D')
+              else grades.push('F')
+            }
+          }
+        })
+
+        if (assessedCount > 0) {
+          const avgCompliance = totalCompliance / assessedCount
+          // Calculate average grade
+          const gradeCounts: Record<string, number> = { A: 0, B: 0, C: 0, D: 0, F: 0 }
+          grades.forEach(g => gradeCounts[g]++)
+          const avgGradeIndex = Math.round(avgCompliance / 20) // 0-4 scale
+          const gradeOrder = ['F', 'D', 'C', 'B', 'A']
+          const avgGrade = gradeOrder[Math.min(avgGradeIndex, 4)]
+
+          setQualityMetrics({
+            averageCompliance: Math.round(avgCompliance),
+            averageGrade: avgGrade,
+            totalAssessed: assessedCount
+          })
+        }
+      } catch (error) {
+        console.error('Failed to fetch metrics:', error)
+      } finally {
+        setLoadingMetrics(false)
+      }
+    }
+
+    fetchMetrics()
+  }, [projectId])
+
+  // Calculate PMBOK 8 domain coverage percentage
+  const calculateDomainCoverage = () => {
+    if (!pmbok8Metrics) return 0
+    const domains = [
+      pmbok8Metrics.stakeholders > 0,
+      pmbok8Metrics.team > 0,
+      pmbok8Metrics.developmentApproach > 0,
+      pmbok8Metrics.planning > 0,
+      pmbok8Metrics.projectWork > 0,
+      pmbok8Metrics.delivery > 0,
+      pmbok8Metrics.measurement > 0,
+      pmbok8Metrics.uncertainty > 0
+    ]
+    const coveredDomains = domains.filter(Boolean).length
+    return Math.round((coveredDomains / 8) * 100)
+  }
+
+  const domainCoverage = calculateDomainCoverage()
+
   return (
     <div className="space-y-4">
       {/* Key Metrics */}
@@ -87,12 +228,14 @@ export function OverviewTab({
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Team Size</CardTitle>
+            <CardTitle className="text-sm font-medium">Team Members</CardTitle>
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{project.team_members?.length || 0}</div>
-            <p className="text-xs text-muted-foreground">Team members</p>
+            <div className="text-2xl font-bold">{teamMembers.length}</div>
+            <p className="text-xs text-muted-foreground">
+              {stakeholders.length > 0 ? `${stakeholders.length} total stakeholders` : 'No stakeholders'}
+            </p>
           </CardContent>
         </Card>
 
@@ -104,6 +247,186 @@ export function OverviewTab({
           <CardContent>
             <div className="text-2xl font-bold">{documentStats.totalDocuments}</div>
             <p className="text-xs text-muted-foreground">Generated docs</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* PMBOK 8 Performance Domains & Document Quality */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* PMBOK 8 Performance Domains */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Layers className="h-5 w-5 text-primary" />
+              PMBOK 8th Edition Performance Domains
+            </CardTitle>
+            <CardDescription>Coverage across 8 performance domains</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadingMetrics ? (
+              <div className="text-center py-4 text-muted-foreground">Loading domain metrics...</div>
+            ) : pmbok8Metrics ? (
+              <>
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium">Overall Domain Coverage</span>
+                    <Badge variant={domainCoverage >= 75 ? "default" : domainCoverage >= 50 ? "secondary" : "outline"}>
+                      {domainCoverage}%
+                    </Badge>
+                  </div>
+                  <Progress value={domainCoverage} className="h-2" />
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Users className="h-4 w-4 text-blue-500" />
+                      <span>Stakeholders Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.stakeholders > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.stakeholders} entities
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Shield className="h-4 w-4 text-green-500" />
+                      <span>Team Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.team > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.team} agreements
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Zap className="h-4 w-4 text-purple-500" />
+                      <span>Development Approach</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.developmentApproach > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.developmentApproach} approaches
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Target className="h-4 w-4 text-orange-500" />
+                      <span>Planning Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.planning > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.planning} items
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Activity className="h-4 w-4 text-cyan-500" />
+                      <span>Project Work Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.projectWork > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.projectWork} items
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-emerald-500" />
+                      <span>Delivery Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.delivery > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.delivery} items
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <Gauge className="h-4 w-4 text-indigo-500" />
+                      <span>Measurement Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.measurement > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.measurement} metrics
+                    </Badge>
+                  </div>
+
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-red-500" />
+                      <span>Uncertainty Domain</span>
+                    </div>
+                    <Badge variant={pmbok8Metrics.uncertainty > 0 ? "default" : "outline"}>
+                      {pmbok8Metrics.uncertainty} items
+                    </Badge>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                No domain metrics available. Run AI extraction to populate.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Document Quality Metrics */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Award className="h-5 w-5 text-primary" />
+              Document Quality Assessment
+            </CardTitle>
+            <CardDescription>Average compliance and grade based on quality assessments</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadingMetrics ? (
+              <div className="text-center py-4 text-muted-foreground">Loading quality metrics...</div>
+            ) : qualityMetrics ? (
+              <>
+                <div className="text-center py-6">
+                  <div className="text-5xl font-bold mb-2" style={{
+                    color: qualityMetrics.averageGrade === 'A' ? '#10b981' :
+                           qualityMetrics.averageGrade === 'B' ? '#3b82f6' :
+                           qualityMetrics.averageGrade === 'C' ? '#f59e0b' :
+                           qualityMetrics.averageGrade === 'D' ? '#ef4444' : '#6b7280'
+                  }}>
+                    {qualityMetrics.averageGrade}
+                  </div>
+                  <p className="text-sm text-muted-foreground">Average Grade</p>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium">Average Compliance</span>
+                      <Badge variant={qualityMetrics.averageCompliance >= 80 ? "default" : qualityMetrics.averageCompliance >= 60 ? "secondary" : "destructive"}>
+                        {qualityMetrics.averageCompliance}%
+                      </Badge>
+                    </div>
+                    <Progress 
+                      value={qualityMetrics.averageCompliance} 
+                      className="h-2"
+                    />
+                  </div>
+
+                  <div className="pt-2 border-t">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Documents Assessed</span>
+                      <span className="font-medium">{qualityMetrics.totalAssessed} / {documentStats.totalDocuments}</span>
+                    </div>
+                    {qualityMetrics.totalAssessed < documentStats.totalDocuments && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {documentStats.totalDocuments - qualityMetrics.totalAssessed} documents pending assessment
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-4 text-muted-foreground">
+                <Award className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No quality assessments available</p>
+                <p className="text-xs mt-1">Quality metrics are calculated from document generation metadata</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -301,22 +624,27 @@ export function OverviewTab({
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {project.team_members && project.team_members.length > 0 ? (
+            {teamMembers.length > 0 ? (
               <div className="space-y-2">
-                {project.team_members.map((member, index) => (
-                  <div key={index} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                {teamMembers.map((member) => (
+                  <div key={member.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                       <Users className="h-4 w-4 text-primary" />
                     </div>
                     <div>
-                      <p className="text-sm font-medium">{member}</p>
-                      <p className="text-xs text-muted-foreground">Team Member</p>
+                      <p className="text-sm font-medium">{member.name || member.role}</p>
+                      <p className="text-xs text-muted-foreground">{member.role}</p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">No team members assigned</p>
+              <div className="text-center py-4">
+                <p className="text-sm text-muted-foreground mb-2">No team members assigned</p>
+                <p className="text-xs text-muted-foreground">
+                  Mark internal stakeholders as "Team Member" in the Stakeholders tab
+                </p>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -324,4 +652,3 @@ export function OverviewTab({
     </div>
   )
 }
-

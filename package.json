@@ -30,6 +30,7 @@
     "@adobe/pdfservices-node-sdk": "4.0.1",
     "@emotion/is-prop-valid": "latest",
     "@google/generative-ai": "latest",
+    "@hookform/resolvers": "^5.2.2",
     "@neondatabase/serverless": "^1.0.1",
     "@octokit/rest": "^20.1.2",
     "@radix-ui/react-accordion": "latest",
@@ -70,6 +71,7 @@
     "clsx": "^2.1.1",
     "cmdk": "latest",
     "cors": "latest",
+    "date-fns": "^3.6.0",
     "diff": "^8.0.2",
     "docx": "^9.5.1",
     "dotenv": "^17.2.0",
@@ -90,6 +92,7 @@
     "lucide-react": "^0.454.0",
     "next": "^14.2.32",
     "next-themes": "^0.2.1",
+    "perfect-freehand": "^1.2.2",
     "pg": "^8.16.3",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.0",
@@ -110,7 +113,8 @@
     "tailwindcss-animate": "^1.0.7",
     "unidiff": "^1.0.4",
     "utf-8-validate": "^6.0.5",
-    "vaul": "^0.9.0"
+    "vaul": "^0.9.0",
+    "zod": "^4.1.12"
   },
   "devDependencies": {
     "@jest/globals": "^30.0.5",

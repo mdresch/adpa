@@ -90,6 +90,7 @@ import performanceActualsRoutes from "./routes/performanceActuals"
 import prioritizationRoutes from "./routes/prioritizationRoutes"
 import teamAgreementsRoutes from "./routes/teamAgreementsRoutes"
 import okrRoutes from "./routes/okrRoutes"
+import signatureRoutes from "./routes/signatures"
 
 const app = express()
 const server = createServer(app)
@@ -270,7 +271,8 @@ app.use("/api/performance-actuals", performanceActualsRoutes)
 app.use("/api/prioritization", prioritizationRoutes)
 app.use("/api/team-agreements", teamAgreementsRoutes)
 app.use("/api/okrs", okrRoutes)
-console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, and OKRs)")
+app.use("/api/signatures", signatureRoutes)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, and signatures)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {

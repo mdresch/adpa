@@ -103,7 +103,7 @@ export default function AnalyticsPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
 
-  const [timeRange, setTimeRange] = useState<"1d" | "7d" | "30d" | "90d">("7d")
+  const [timeRange, setTimeRange] = useState<"7d" | "30d" | "90d" | "1y">("7d")
   const [analyticsData, setAnalyticsData] = useState<{
     total_users?: number
     active_users?: number
@@ -143,16 +143,16 @@ export default function AnalyticsPage() {
     void fetchAnalytics()
   }, [timeRange, hasPermission])
 
-  // Mock stats with real-time capability
+  // Stats with real data from API (fallback to mock if unavailable)
   const stats = {
-    totalUsers: analyticsData?.total_users || 12450,
-    activeUsers: analyticsData?.active_users || 3280,
-    totalDocuments: 45680,
-    documentsToday: 234,
-    totalSessions: 89340,
-    avgSessionTime: "12m 34s",
-    systemUptime: "99.8%",
-    apiCalls: 234567,
+    totalUsers: analyticsData?.total_users || 0,
+    activeUsers: analyticsData?.active_users || 0,
+    totalDocuments: analyticsData?.total_documents || 0,
+    documentsToday: analyticsData?.documents_today || 0,
+    totalSessions: analyticsData?.total_sessions || 0,
+    avgSessionTime: analyticsData?.avg_session_time || "0m 0s", // TODO: Calculate from user_activity_logs
+    systemUptime: analyticsData?.system_uptime || "N/A", // TODO: Calculate from system metrics
+    apiCalls: analyticsData?.api_calls || 0,
   }
 
   const growth = {
@@ -216,10 +216,10 @@ export default function AnalyticsPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="24h">Last 24h</SelectItem>
                         <SelectItem value="7d">Last 7 days</SelectItem>
                         <SelectItem value="30d">Last 30 days</SelectItem>
                         <SelectItem value="90d">Last 90 days</SelectItem>
+                        <SelectItem value="1y">Last year</SelectItem>
                       </SelectContent>
                     </Select>
                     <Button onClick={fetchAnalytics} variant="outline" size="sm">
@@ -241,11 +241,19 @@ export default function AnalyticsPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Total Users</p>
-                            <p className="text-2xl font-bold">{stats.totalUsers.toLocaleString()}</p>
-                            <div className="flex items-center mt-2">
-                              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                              <span className="text-sm text-green-600">+{growth.users}%</span>
-                            </div>
+                            {loading ? (
+                              <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-1" />
+                            ) : (
+                              <>
+                                <p className="text-2xl font-bold">{stats.totalUsers.toLocaleString()}</p>
+                                {analyticsData && (
+                                  <div className="flex items-center mt-2">
+                                    <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                                    <span className="text-sm text-green-600">Active: {stats.activeUsers.toLocaleString()}</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                           <Users className="h-8 w-8 text-blue-500" />
                         </div>
@@ -259,11 +267,19 @@ export default function AnalyticsPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Documents</p>
-                            <p className="text-2xl font-bold">{stats.totalDocuments.toLocaleString()}</p>
-                            <div className="flex items-center mt-2">
-                              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                              <span className="text-sm text-green-600">+{growth.documents}%</span>
-                            </div>
+                            {loading ? (
+                              <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-1" />
+                            ) : (
+                              <>
+                                <p className="text-2xl font-bold">{stats.totalDocuments.toLocaleString()}</p>
+                                {analyticsData && stats.documentsToday > 0 && (
+                                  <div className="flex items-center mt-2">
+                                    <FileText className="h-4 w-4 text-purple-500 mr-1" />
+                                    <span className="text-sm text-muted-foreground">{stats.documentsToday} today</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                           <FileText className="h-8 w-8 text-purple-500" />
                         </div>
@@ -277,11 +293,19 @@ export default function AnalyticsPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">Active Sessions</p>
-                            <p className="text-2xl font-bold">{stats.totalSessions.toLocaleString()}</p>
-                            <div className="flex items-center mt-2">
-                              <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
-                              <span className="text-sm text-green-600">+{growth.sessions}%</span>
-                            </div>
+                            {loading ? (
+                              <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-1" />
+                            ) : (
+                              <>
+                                <p className="text-2xl font-bold">{stats.totalSessions.toLocaleString()}</p>
+                                {analyticsData && stats.apiCalls > 0 && (
+                                  <div className="flex items-center mt-2">
+                                    <Zap className="h-4 w-4 text-yellow-500 mr-1" />
+                                    <span className="text-sm text-muted-foreground">{stats.apiCalls.toLocaleString()} API calls</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                           <Activity className="h-8 w-8 text-cyan-500" />
                         </div>
@@ -295,11 +319,19 @@ export default function AnalyticsPage() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-muted-foreground">System Uptime</p>
-                            <p className="text-2xl font-bold">{stats.systemUptime}</p>
-                            <div className="flex items-center mt-2">
-                              <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
-                              <span className="text-sm text-red-600">{growth.performance}%</span>
-                            </div>
+                            {loading ? (
+                              <div className="h-8 w-24 bg-slate-200 dark:bg-slate-700 animate-pulse rounded mt-1" />
+                            ) : (
+                              <>
+                                <p className="text-2xl font-bold">{stats.systemUptime}</p>
+                                {analyticsData && analyticsData.system_uptime && analyticsData.system_uptime !== "N/A" && (
+                                  <div className="flex items-center mt-2">
+                                    <Server className="h-4 w-4 text-green-500 mr-1" />
+                                    <span className="text-sm text-muted-foreground">Monitoring active</span>
+                                  </div>
+                                )}
+                              </>
+                            )}
                           </div>
                           <Server className="h-8 w-8 text-green-500" />
                         </div>

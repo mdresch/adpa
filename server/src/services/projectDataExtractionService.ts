@@ -320,6 +320,7 @@ interface PerformanceMeasurement {
   status?: 'on_track' | 'at_risk' | 'off_track'
   notes?: string
   source_document?: string
+  source_document_id?: string
 }
 
 interface EarnedValueMetric {
@@ -498,7 +499,11 @@ export class ProjectDataExtractionService {
 
       logger.info(`[EXTRACTION] Processing ${documents.length} documents`)
 
-      // Step 2: Extract entities using AI (parallel execution for speed)
+      // Step 2: Build document map for source_document_id resolution
+      const documentMap = this.buildDocumentMap(documents)
+      const documentList = this.buildDocumentList(documents)
+
+      // Step 3: Extract entities using AI (parallel execution for speed)
       const [
         stakeholders,
         requirements,
@@ -525,30 +530,30 @@ export class ProjectDataExtractionService {
         riskResponses,
         performanceActuals
       ] = await Promise.all([
-        this.extractStakeholders(documents, projectId, extractionOptions),
-        this.extractRequirements(documents, projectId, extractionOptions),
-        this.extractRisks(documents, projectId, extractionOptions),
-        this.extractMilestones(documents, projectId, extractionOptions),
-        this.extractConstraints(documents, projectId, extractionOptions),
-        this.extractSuccessCriteria(documents, projectId, extractionOptions),
-        this.extractBestPractices(documents, projectId, extractionOptions),
-        this.extractPhases(documents, projectId, extractionOptions),
-        this.extractResources(documents, projectId, extractionOptions),
-        this.extractTechnologies(documents, projectId, extractionOptions),
-        this.extractQualityStandards(documents, projectId, extractionOptions),
-        this.extractDeliverables(documents, projectId, extractionOptions),
-        this.extractScopeItems(documents, projectId, extractionOptions),
-        this.extractActivities(documents, projectId, extractionOptions),
-        this.extractTeamAgreements(documents, projectId, extractionOptions),
-        this.extractDevelopmentApproaches(documents, projectId, extractionOptions),
-        this.extractProjectIterations(documents, projectId, extractionOptions),
-        this.extractWorkItems(documents, projectId, extractionOptions),
-        this.extractCapacityPlans(documents, projectId, extractionOptions),
-        this.extractPerformanceMeasurements(documents, projectId, extractionOptions),
-        this.extractEarnedValueMetrics(documents, projectId, extractionOptions),
-        this.extractOpportunities(documents, projectId, extractionOptions),
-        this.extractRiskResponses(documents, projectId, extractionOptions),
-        this.extractPerformanceActuals(documents, projectId, extractionOptions)
+        this.extractStakeholders(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractRequirements(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractRisks(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractMilestones(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractConstraints(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractSuccessCriteria(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractBestPractices(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractPhases(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractResources(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractTechnologies(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractQualityStandards(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractDeliverables(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractScopeItems(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractActivities(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractTeamAgreements(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractDevelopmentApproaches(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractProjectIterations(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractWorkItems(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractCapacityPlans(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractPerformanceMeasurements(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractEarnedValueMetrics(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractOpportunities(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractRiskResponses(documents, projectId, extractionOptions, documentMap, documentList),
+        this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
       ])
 
       const extractionTime = Date.now() - startTime
@@ -789,7 +794,7 @@ export class ProjectDataExtractionService {
       let query = `
         SELECT 
           d.id,
-          d.title,
+          COALESCE(d.title, t.name, 'Untitled Document ' || SUBSTRING(d.id::text, 1, 8)) as title,
           d.content,
           t.name as template_name
         FROM documents d
@@ -830,7 +835,9 @@ export class ProjectDataExtractionService {
   private async extractStakeholders(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Stakeholder[]> {
     try {
       logger.info('[EXTRACTION-STAKEHOLDERS] Starting extraction')
@@ -841,6 +848,9 @@ export class ProjectDataExtractionService {
 
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract stakeholders in JSON format with the following structure:
 {
   "stakeholders": [
@@ -850,7 +860,8 @@ Extract stakeholders in JSON format with the following structure:
       "interest_level": "high|medium|low",
       "influence_level": "high|medium|low",
       "expectations": "What they expect from the project",
-      "concerns": "Any concerns they have"
+      "concerns": "Any concerns they have",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -863,6 +874,7 @@ Requirements:
 - For roles without names, use the role title (e.g., "CISO", not "IT Security (CISO)")
 - Infer interest and influence levels from context
 - Extract expectations and concerns if mentioned
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -895,16 +907,40 @@ Requirements:
       
       const rawStakeholders = parsed.stakeholders || []
 
-      // Deduplicate stakeholders by normalized name
-      const stakeholders = this.deduplicateStakeholders(rawStakeholders)
+      // Deduplicate stakeholders within the extracted batch (no DB check here)
+      const stakeholders = this.deduplicateStakeholdersBatch(rawStakeholders)
       
       if (rawStakeholders.length !== stakeholders.length) {
-        logger.info(`[EXTRACTION-STAKEHOLDERS] Removed ${rawStakeholders.length - stakeholders.length} duplicates`)
+        logger.info(`[EXTRACTION-STAKEHOLDERS] Removed ${rawStakeholders.length - stakeholders.length} duplicates within batch`)
       }
 
-      logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${stakeholders.length} stakeholders`)
+      // Resolve source_document_id for each stakeholder (STRICT: reject if missing)
+      const validStakeholders: Stakeholder[] = []
+      let rejectedCount = 0
+      
+      stakeholders.forEach(stakeholder => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          stakeholder,
+          documentMap,
+          documents,
+          'STAKEHOLDERS',
+          stakeholder.name || 'Unnamed Stakeholder'
+        )
+        
+        if (isValid) {
+          validStakeholders.push(stakeholder)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return stakeholders
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-STAKEHOLDERS] REJECTED ${rejectedCount} stakeholders without valid source_document_id (out of ${stakeholders.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-STAKEHOLDERS] Extracted ${validStakeholders.length} stakeholders with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validStakeholders
     } catch (error: unknown) {
       logger.error('[EXTRACTION-STAKEHOLDERS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -921,7 +957,9 @@ Requirements:
   private async extractRequirements(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Requirement[]> {
     try {
       logger.info('[EXTRACTION-REQUIREMENTS] Starting extraction')
@@ -932,6 +970,9 @@ Requirements:
 
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract requirements in JSON format with the following structure:
 {
   "requirements": [
@@ -941,7 +982,8 @@ Extract requirements in JSON format with the following structure:
       "type": "functional|non-functional|business|technical",
       "priority": "critical|high|medium|low",
       "status": "proposed|approved|in_progress|completed",
-      "acceptance_criteria": "How to verify this requirement"
+      "acceptance_criteria": "How to verify this requirement",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -953,6 +995,7 @@ Requirements:
 - Include technical requirements (architecture, technology)
 - Classify each requirement appropriately
 - Infer priority from context (must-have = critical, should-have = high, etc.)
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -968,9 +1011,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const requirements = parsed.requirements || []
 
-      logger.info(`[EXTRACTION-REQUIREMENTS] Extracted ${requirements.length} requirements`)
+      // Resolve source_document_id for each requirement (STRICT: reject if missing)
+      const validRequirements: Requirement[] = []
+      let rejectedCount = 0
+      
+      requirements.forEach((req: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          req,
+          documentMap,
+          documents,
+          'REQUIREMENTS',
+          req.title || req.name || 'Unnamed Requirement'
+        )
+        
+        if (isValid) {
+          validRequirements.push(req)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return requirements
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-REQUIREMENTS] REJECTED ${rejectedCount} requirements without valid source_document_id (out of ${requirements.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-REQUIREMENTS] Extracted ${validRequirements.length} requirements with valid source_document_id (${rejectedCount} rejected)`)
+      
+      return validRequirements
     } catch (error: unknown) {
       logger.error('[EXTRACTION-REQUIREMENTS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -985,7 +1052,9 @@ Requirements:
   private async extractRisks(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Risk[]> {
     try {
       logger.info('[EXTRACTION-RISKS] Starting extraction')
@@ -995,6 +1064,9 @@ Requirements:
       const prompt = `Analyze the following project documents and extract ALL risks mentioned.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract risks in JSON format with the following structure:
 {
@@ -1006,7 +1078,8 @@ Extract risks in JSON format with the following structure:
       "probability": "high|medium|low",
       "impact": "high|medium|low",
       "mitigation_strategy": "How to prevent or reduce this risk",
-      "contingency_plan": "What to do if the risk occurs"
+      "contingency_plan": "What to do if the risk occurs",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1017,6 +1090,7 @@ Requirements:
 - Assess probability and impact from context
 - Extract mitigation strategies if mentioned
 - Extract contingency plans if mentioned
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1031,9 +1105,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const risks = parsed.risks || []
 
-      logger.info(`[EXTRACTION-RISKS] Extracted ${risks.length} risks`)
+      // Resolve source_document_id for each risk (STRICT: reject if missing)
+      const validRisks: Risk[] = []
+      let rejectedCount = 0
+      
+      risks.forEach((risk: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          risk,
+          documentMap,
+          documents,
+          'RISKS',
+          risk.title || 'Unnamed Risk'
+        )
+        
+        if (isValid) {
+          validRisks.push(risk)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return risks
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-RISKS] REJECTED ${rejectedCount} risks without valid source_document_id (out of ${risks.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-RISKS] Extracted ${validRisks.length} risks with valid source_document_id (${rejectedCount} rejected)`)
+      
+      return validRisks
     } catch (error: unknown) {
       logger.error('[EXTRACTION-RISKS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1048,7 +1146,9 @@ Requirements:
   private async extractMilestones(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Milestone[]> {
     try {
       logger.info('[EXTRACTION-MILESTONES] Starting extraction')
@@ -1058,6 +1158,9 @@ Requirements:
       const prompt = `Analyze the following project documents and extract ONLY major project milestones.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 **IMPORTANT: Milestones vs Activities:**
 - **MILESTONE** = Zero-duration checkpoint marking completion of a major deliverable or phase (e.g., "MVP Launch", "CSRD Deadline", "Project Kickoff", "Go-Live")
@@ -1072,7 +1175,8 @@ Extract milestones in JSON format with the following structure:
       "description": "What this milestone represents (major checkpoint or deliverable completion)",
       "due_date": "YYYY-MM-DD or Quarter/Year if specific date not mentioned",
       "status": "pending|in_progress|completed|delayed",
-      "deliverables": ["Deliverable 1", "Deliverable 2"]
+      "deliverables": ["Deliverable 1", "Deliverable 2"],
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1085,6 +1189,7 @@ Requirements:
 - Extract deliverables associated with each milestone
 - If exact dates aren't mentioned, use relative dates like "2025-Q1" or "Month 3"
 - Infer status from context (future = pending, past = completed)
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       const response = await aiService.generate({
@@ -1098,9 +1203,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const milestones = parsed.milestones || []
 
-      logger.info(`[EXTRACTION-MILESTONES] Extracted ${milestones.length} milestones`)
+      // Resolve source_document_id for each milestone (STRICT: reject if missing)
+      const validMilestones: Milestone[] = []
+      let rejectedCount = 0
+      
+      milestones.forEach((milestone: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          milestone,
+          documentMap,
+          documents,
+          'MILESTONES',
+          milestone.name || 'Unnamed Milestone'
+        )
+        
+        if (isValid) {
+          validMilestones.push(milestone)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return milestones
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-MILESTONES] REJECTED ${rejectedCount} milestones without valid source_document_id (out of ${milestones.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-MILESTONES] Extracted ${validMilestones.length} milestones with valid source_document_id (${rejectedCount} rejected)`)
+      
+      return validMilestones
     } catch (error: unknown) {
       logger.error('[EXTRACTION-MILESTONES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1115,7 +1244,9 @@ Requirements:
   private async extractConstraints(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Constraint[]> {
     try {
       logger.info('[EXTRACTION-CONSTRAINTS] Starting extraction')
@@ -1126,6 +1257,9 @@ Requirements:
 
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract constraints in JSON format with the following structure:
 {
   "constraints": [
@@ -1134,7 +1268,8 @@ Extract constraints in JSON format with the following structure:
       "description": "Detailed description",
       "type": "scope|time|cost|quality|resource|technical|regulatory",
       "severity": "high|medium|low",
-      "impact_area": "Which area of the project is affected"
+      "impact_area": "Which area of the project is affected",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1145,6 +1280,7 @@ Requirements:
 - Include regulatory/compliance constraints
 - Include scope constraints (what's out of scope)
 - Assess severity based on impact to project
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1159,9 +1295,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const constraints = parsed.constraints || []
 
-      logger.info(`[EXTRACTION-CONSTRAINTS] Extracted ${constraints.length} constraints`)
+      // Resolve source_document_id for each constraint (STRICT: reject if missing)
+      const validConstraints: Constraint[] = []
+      let rejectedCount = 0
+      
+      constraints.forEach((constraint: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          constraint,
+          documentMap,
+          documents,
+          'CONSTRAINTS',
+          constraint.title || 'Unnamed Constraint'
+        )
+        
+        if (isValid) {
+          validConstraints.push(constraint)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return constraints
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-CONSTRAINTS] REJECTED ${rejectedCount} constraints without valid source_document_id (out of ${constraints.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-CONSTRAINTS] Extracted ${validConstraints.length} constraints with valid source_document_id (${rejectedCount} rejected)`)
+      
+      return validConstraints
     } catch (error: unknown) {
       logger.error('[EXTRACTION-CONSTRAINTS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1176,7 +1336,9 @@ Requirements:
   private async extractSuccessCriteria(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<SuccessCriterion[]> {
     try {
       logger.info('[EXTRACTION-SUCCESS-CRITERIA] Starting extraction')
@@ -1187,6 +1349,9 @@ Requirements:
 
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract success criteria in JSON format with the following structure:
 {
   "success_criteria": [
@@ -1196,7 +1361,8 @@ Extract success criteria in JSON format with the following structure:
       "metric": "The measurable metric",
       "target_value": "The target value to achieve",
       "measurement_method": "How this will be measured",
-      "priority": "critical|high|medium|low"
+      "priority": "critical|high|medium|low",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1207,6 +1373,7 @@ Requirements:
 - Include quality gates
 - Include success metrics (time, cost, quality, satisfaction)
 - Extract specific measurable targets if mentioned
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1222,9 +1389,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const successCriteria = parsed.success_criteria || []
 
-      logger.info(`[EXTRACTION-SUCCESS-CRITERIA] Extracted ${successCriteria.length} success criteria`)
+      // Resolve source_document_id for each success criterion (STRICT: reject if missing)
+      const validSuccessCriteria: SuccessCriterion[] = []
+      let rejectedCount = 0
+      
+      successCriteria.forEach((criterion: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          criterion,
+          documentMap,
+          documents,
+          'SUCCESS-CRITERIA',
+          criterion.title || 'Unnamed Success Criterion'
+        )
+        
+        if (isValid) {
+          validSuccessCriteria.push(criterion)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return successCriteria
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-SUCCESS-CRITERIA] REJECTED ${rejectedCount} success criteria without valid source_document_id (out of ${successCriteria.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-SUCCESS-CRITERIA] Extracted ${validSuccessCriteria.length} success criteria with valid source_document_id (${rejectedCount} rejected)`)
+      
+      return validSuccessCriteria
     } catch (error: unknown) {
       logger.error('[EXTRACTION-SUCCESS-CRITERIA] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1239,7 +1430,9 @@ Requirements:
   private async extractBestPractices(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<BestPractice[]> {
     try {
       logger.info('[EXTRACTION-BEST-PRACTICES] Starting extraction')
@@ -1250,6 +1443,9 @@ Requirements:
 
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract best practices in JSON format with the following structure:
 {
   "best_practices": [
@@ -1257,7 +1453,8 @@ Extract best practices in JSON format with the following structure:
       "title": "Best Practice Title",
       "description": "Detailed description",
       "category": "Category (e.g., Development, Testing, Communication)",
-      "applicability": "When/where this applies"
+      "applicability": "When/where this applies",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1267,6 +1464,7 @@ Requirements:
 - Include lessons learned
 - Include recommendations for future projects
 - Categorize appropriately
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       const response = await aiService.generate({
@@ -1280,9 +1478,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const bestPractices = parsed.best_practices || []
 
-      logger.info(`[EXTRACTION-BEST-PRACTICES] Extracted ${bestPractices.length} best practices`)
+      // Resolve source_document_id for each best practice (STRICT: reject if missing)
+      const validBestPractices: BestPractice[] = []
+      let rejectedCount = 0
+      
+      bestPractices.forEach((practice: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          practice,
+          documentMap,
+          documents,
+          'BEST-PRACTICES',
+          practice.title || 'Unnamed Best Practice'
+        )
+        
+        if (isValid) {
+          validBestPractices.push(practice)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return bestPractices
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-BEST-PRACTICES] REJECTED ${rejectedCount} best practices without valid source_document_id (out of ${bestPractices.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-BEST-PRACTICES] Extracted ${validBestPractices.length} best practices with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validBestPractices
     } catch (error: unknown) {
       logger.error('[EXTRACTION-BEST-PRACTICES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1297,7 +1519,9 @@ Requirements:
   private async extractPhases(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Phase[]> {
     try {
       logger.info('[EXTRACTION-PHASES] Starting extraction')
@@ -1307,6 +1531,9 @@ Requirements:
       const prompt = `Analyze the following project documents and extract ALL project phases mentioned.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract phases in JSON format with the following structure:
 {
@@ -1318,7 +1545,8 @@ Extract phases in JSON format with the following structure:
       "end_date": "YYYY-MM-DD or relative date",
       "status": "planned|active|completed",
       "deliverables": ["Deliverable 1", "Deliverable 2"],
-      "key_activities": ["Activity 1", "Activity 2"]
+      "key_activities": ["Activity 1", "Activity 2"],
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1328,6 +1556,7 @@ Requirements:
 - Extract deliverables for each phase
 - Extract key activities
 - Infer status from context
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1343,9 +1572,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const phases = parsed.phases || []
 
-      logger.info(`[EXTRACTION-PHASES] Extracted ${phases.length} phases`)
+      // Resolve source_document_id for each phase (STRICT: reject if missing)
+      const validPhases: Phase[] = []
+      let rejectedCount = 0
+      
+      phases.forEach((phase: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          phase,
+          documentMap,
+          documents,
+          'PHASES',
+          phase.name || 'Unnamed Phase'
+        )
+        
+        if (isValid) {
+          validPhases.push(phase)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return phases
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-PHASES] REJECTED ${rejectedCount} phases without valid source_document_id (out of ${phases.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-PHASES] Extracted ${validPhases.length} phases with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validPhases
     } catch (error: unknown) {
       logger.error('[EXTRACTION-PHASES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1360,7 +1613,9 @@ Requirements:
   private async extractResources(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Resource[]> {
     try {
       logger.info('[EXTRACTION-RESOURCES] Starting extraction')
@@ -1370,6 +1625,9 @@ Requirements:
       const prompt = `Analyze the following project documents and extract ALL resources mentioned.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract resources in JSON format with the following structure:
 {
@@ -1386,7 +1644,8 @@ Extract resources in JSON format with the following structure:
       "training_needs": ["Training need 1"],
       "team_assignment": "Team or squad name",
       "performance_rating": 0-10 number,
-      "development_plan": "Summary of development actions"
+      "development_plan": "Summary of development actions",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1398,6 +1657,7 @@ Requirements:
 - Extract allocation and availability if mentioned
 - For human resources, include skills, competency, certifications, training needs, and performance indicators
 - If a value is not provided in documents, use null or an empty array
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       const response = await aiService.generate({
@@ -1428,9 +1688,33 @@ Requirements:
             : []
       }))
 
-      logger.info(`[EXTRACTION-RESOURCES] Extracted ${resources.length} resources`)
+      // Resolve source_document_id for each resource (with fallback)
+      const validResources: Resource[] = []
+      let rejectedCount = 0
+      
+      resources.forEach((resource: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          resource,
+          documentMap,
+          documents,
+          'RESOURCES',
+          resource.name || 'Unnamed Resource'
+        )
+        
+        if (isValid) {
+          validResources.push(resource)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return resources
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-RESOURCES] REJECTED ${rejectedCount} resources without valid source_document_id (out of ${resources.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-RESOURCES] Extracted ${validResources.length} resources with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validResources
     } catch (error: unknown) {
       logger.error('[EXTRACTION-RESOURCES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1445,7 +1729,9 @@ Requirements:
   private async extractTechnologies(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Technology[]> {
     try {
       logger.info('[EXTRACTION-TECHNOLOGIES] Starting extraction')
@@ -1504,6 +1790,9 @@ Extract ALL technologies mentioned across these layers:
    - Metrics: Prometheus, Grafana, InfluxDB
    - Error Tracking: Sentry, Rollbar, Bugsnag
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 OUTPUT FORMAT:
 {
   "technologies": [
@@ -1515,7 +1804,8 @@ OUTPUT FORMAT:
       "purpose": "Why this technology was chosen for the project",
       "license": "License type (MIT, Apache 2.0, BSD, Proprietary, Commercial, Open Source)",
       "vendor": "Provider (AWS, Microsoft, Google, HashiCorp, Open Source Community, etc.)",
-      "deployment_environment": "Where deployed (production, staging, development, all, cloud, on-premises)"
+      "deployment_environment": "Where deployed (production, staging, development, all, cloud, on-premises)",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1527,6 +1817,7 @@ CRITICAL RULES:
 - Infer purpose from context if not explicitly stated
 - For open-source: use "Open Source" as vendor
 - For cloud services: use cloud provider as vendor (AWS, Azure, GCP)
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown formatting, no explanations, no comments
 - If a technology serves multiple purposes, include it in the most relevant category
 - Extract both primary and supporting technologies (databases, caches, queues, monitoring, etc.)
@@ -1556,9 +1847,33 @@ Return pure JSON only.`
       const parsed = this.parseAIResponse(response.content)
       const technologies = parsed.technologies || []
 
-      logger.info(`[EXTRACTION-TECHNOLOGIES] Extracted ${technologies.length} technologies`)
+      // Resolve source_document_id for each technology (STRICT: reject if missing)
+      const validTechnologies: Technology[] = []
+      let rejectedCount = 0
       
-      return technologies
+      technologies.forEach((tech: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          tech,
+          documentMap,
+          documents,
+          'TECHNOLOGIES',
+          tech.name || 'Unnamed Technology'
+        )
+        
+        if (isValid) {
+          validTechnologies.push(tech)
+        } else {
+          rejectedCount++
+        }
+      })
+
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-TECHNOLOGIES] REJECTED ${rejectedCount} technologies without valid source_document_id (out of ${technologies.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-TECHNOLOGIES] Extracted ${validTechnologies.length} technologies with valid source_document_id (${rejectedCount} rejected)`)
+      
+      return validTechnologies
     } catch (error) {
       logger.error('[EXTRACTION-TECHNOLOGIES] Extraction failed', { error })
       return []
@@ -1571,7 +1886,9 @@ Return pure JSON only.`
   private async extractQualityStandards(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<QualityStandard[]> {
     try {
       logger.info('[EXTRACTION-QUALITY] Starting extraction')
@@ -1581,6 +1898,9 @@ Return pure JSON only.`
       const prompt = `Analyze the following project documents and extract ALL quality standards and requirements mentioned.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract quality standards in JSON format with the following structure:
 {
@@ -1592,7 +1912,8 @@ Extract quality standards in JSON format with the following structure:
       "standard_type": "ISO|PMBOK|internal|industry|regulatory|other",
       "requirements": "Specific requirements",
       "measurement_criteria": "How compliance is measured",
-      "compliance_level": "mandatory|recommended|optional"
+      "compliance_level": "mandatory|recommended|optional",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1605,6 +1926,7 @@ Requirements:
 - Include regulatory/compliance requirements (GDPR, HIPAA, SOX, etc.)
 - Include code quality standards (coding conventions, test coverage, etc.)
 - Classify each standard appropriately
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       const response = await aiService.generate({
@@ -1618,9 +1940,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const qualityStandards = parsed.quality_standards || []
 
-      logger.info(`[EXTRACTION-QUALITY] Extracted ${qualityStandards.length} quality standards`)
+      // Resolve source_document_id for each quality standard (STRICT: reject if missing)
+      const validQualityStandards: QualityStandard[] = []
+      let rejectedCount = 0
+      
+      qualityStandards.forEach((standard: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          standard,
+          documentMap,
+          documents,
+          'QUALITY-STANDARDS',
+          standard.title || standard.standard_name || 'Unnamed Quality Standard'
+        )
+        
+        if (isValid) {
+          validQualityStandards.push(standard)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return qualityStandards
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-QUALITY-STANDARDS] REJECTED ${rejectedCount} quality standards without valid source_document_id (out of ${qualityStandards.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-QUALITY-STANDARDS] Extracted ${validQualityStandards.length} quality standards with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validQualityStandards
     } catch (error: unknown) {
       logger.error('[EXTRACTION-QUALITY] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1635,7 +1981,9 @@ Requirements:
   private async extractDeliverables(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Deliverable[]> {
     try {
       logger.info('[EXTRACTION-DELIVERABLES] Starting extraction')
@@ -1645,6 +1993,9 @@ Requirements:
       const prompt = `Analyze the following project documents and extract ALL deliverables mentioned.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract deliverables in JSON format with the following structure:
 {
@@ -1657,7 +2008,8 @@ Extract deliverables in JSON format with the following structure:
       "status": "planned|in_progress|completed|delayed|cancelled",
       "owner": "Who is responsible",
       "acceptance_criteria": "How we know it's done",
-      "phase": "Which phase it belongs to"
+      "phase": "Which phase it belongs to",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1669,6 +2021,7 @@ Requirements:
 - Extract ownership if mentioned
 - Associate with project phases if mentioned
 - Infer status from context
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1684,9 +2037,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const deliverables = parsed.deliverables || []
 
-      logger.info(`[EXTRACTION-DELIVERABLES] Extracted ${deliverables.length} deliverables`)
+      // Resolve source_document_id for each deliverable (STRICT: reject if missing)
+      const validDeliverables: Deliverable[] = []
+      let rejectedCount = 0
+      
+      deliverables.forEach((deliverable: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          deliverable,
+          documentMap,
+          documents,
+          'DELIVERABLES',
+          deliverable.name || 'Unnamed Deliverable'
+        )
+        
+        if (isValid) {
+          validDeliverables.push(deliverable)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return deliverables
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-DELIVERABLES] REJECTED ${rejectedCount} deliverables without valid source_document_id (out of ${deliverables.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-DELIVERABLES] Extracted ${validDeliverables.length} deliverables with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validDeliverables
     } catch (error: unknown) {
       logger.error('[EXTRACTION-DELIVERABLES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1701,7 +2078,9 @@ Requirements:
   private async extractScopeItems(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<ScopeItem[]> {
     try {
       logger.info('[EXTRACTION-SCOPE] Starting extraction')
@@ -1712,6 +2091,9 @@ Requirements:
 
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract scope items in JSON format with the following structure:
 {
   "scope_items": [
@@ -1721,7 +2103,8 @@ Extract scope items in JSON format with the following structure:
       "is_in_scope": true|false,
       "category": "Category (feature, function, module, etc.)",
       "justification": "Why it's in or out of scope",
-      "priority": "must_have|should_have|could_have|wont_have"
+      "priority": "must_have|should_have|could_have|wont_have",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1733,6 +2116,7 @@ Requirements:
 - Include features, functions, modules that are explicitly EXCLUDED
 - Classify using MoSCoW prioritization (Must/Should/Could/Won't have)
 - Extract justification for scope decisions if mentioned
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1748,9 +2132,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const scopeItems = parsed.scope_items || []
 
-      logger.info(`[EXTRACTION-SCOPE] Extracted ${scopeItems.length} scope items`)
+      // Resolve source_document_id for each scope item (STRICT: reject if missing)
+      const validScopeItems: ScopeItem[] = []
+      let rejectedCount = 0
+      
+      scopeItems.forEach((item: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          item,
+          documentMap,
+          documents,
+          'SCOPE-ITEMS',
+          item.title || item.item_name || 'Unnamed Scope Item'
+        )
+        
+        if (isValid) {
+          validScopeItems.push(item)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return scopeItems
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-SCOPE-ITEMS] REJECTED ${rejectedCount} scope items without valid source_document_id (out of ${scopeItems.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-SCOPE-ITEMS] Extracted ${validScopeItems.length} scope items with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validScopeItems
     } catch (error: unknown) {
       logger.error('[EXTRACTION-SCOPE] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1765,7 +2173,9 @@ Requirements:
   private async extractActivities(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<Activity[]> {
     try {
       logger.info('[EXTRACTION-ACTIVITIES] Starting extraction')
@@ -1775,6 +2185,9 @@ Requirements:
       const prompt = `Analyze the following project documents and extract ALL activities, tasks, and work packages mentioned.
 
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract activities in JSON format with the following structure:
 {
@@ -1793,7 +2206,8 @@ Extract activities in JSON format with the following structure:
       "dependencies": ["Activity 1", "Activity 2"],
       "deliverable": "Related deliverable",
       "effort_estimate": 40,
-      "effort_unit": "hours|days|story_points"
+      "effort_unit": "hours|days|story_points",
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1807,6 +2221,7 @@ Requirements:
 - Link to deliverables if mentioned
 - Extract effort estimates if mentioned
 - Infer status from context (future = planned, ongoing = in_progress, past = completed)
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1822,9 +2237,33 @@ Requirements:
       const parsed = this.parseAIResponse(response.content)
       const activities = parsed.activities || []
 
-      logger.info(`[EXTRACTION-ACTIVITIES] Extracted ${activities.length} activities`)
+      // Resolve source_document_id for each activity (STRICT: reject if missing)
+      const validActivities: Activity[] = []
+      let rejectedCount = 0
+      
+      activities.forEach((activity: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          activity,
+          documentMap,
+          documents,
+          'ACTIVITIES',
+          activity.name || 'Unnamed Activity'
+        )
+        
+        if (isValid) {
+          validActivities.push(activity)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return activities
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-ACTIVITIES] REJECTED ${rejectedCount} activities without valid source_document_id (out of ${activities.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-ACTIVITIES] Extracted ${validActivities.length} activities with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validActivities
     } catch (error: unknown) {
       logger.error('[EXTRACTION-ACTIVITIES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1839,7 +2278,9 @@ Requirements:
   private async extractTeamAgreements(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<TeamAgreement[]> {
     try {
       logger.info('[EXTRACTION-TEAM-AGREEMENTS] Starting extraction')
@@ -1850,6 +2291,9 @@ Requirements:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Use the following JSON schema exactly:
 {
@@ -1868,7 +2312,7 @@ Use the following JSON schema exactly:
       "violations_count": integer,
       "last_violation_date": "YYYY-MM-DD or null",
       "notes": "Additional context or null",
-      "source_document": "Document title where this was found"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -1877,6 +2321,7 @@ Rules:
 - Capture explicit or implied team working agreements, norms, or ground rules.
 - Use arrays for agreed_by even if a single name is mentioned.
 - If information is missing, use null or an empty array instead of inventing data.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -1896,9 +2341,33 @@ Rules:
         violations_count: this.safeInteger(agreement?.violations_count)
       }))
 
-      logger.info(`[EXTRACTION-TEAM-AGREEMENTS] Extracted ${agreements.length} team agreements`)
+      // Resolve source_document_id for each team agreement (STRICT: reject if missing)
+      const validAgreements: TeamAgreement[] = []
+      let rejectedCount = 0
+      
+      agreements.forEach((agreement: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          agreement,
+          documentMap,
+          documents,
+          'TEAM-AGREEMENTS',
+          agreement.title || 'Unnamed Team Agreement'
+        )
+        
+        if (isValid) {
+          validAgreements.push(agreement)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return agreements
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-TEAM-AGREEMENTS] REJECTED ${rejectedCount} team agreements without valid source_document_id (out of ${agreements.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-TEAM-AGREEMENTS] Extracted ${validAgreements.length} team agreements with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validAgreements
     } catch (error: unknown) {
       logger.error('[EXTRACTION-TEAM-AGREEMENTS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -1917,7 +2386,9 @@ Rules:
   private async extractDevelopmentApproaches(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<DevelopmentApproach[]> {
     try {
       logger.info('[EXTRACTION-DEVELOPMENT-APPROACH] Starting extraction (TASK-90)')
@@ -1939,6 +2410,9 @@ Look for:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Extract as a single JSON object (not array - one per project):
 
@@ -2085,6 +2559,20 @@ Return JSON object only. Return null if no methodology information found.`
         source_document: approach.source_document || null
       }
 
+      // Resolve source_document_id (STRICT: reject if missing)
+      const isValid = this.resolveSourceDocumentIdStrict(
+        normalized,
+        documentMap,
+        documents,
+        'DEVELOPMENT-APPROACHES',
+        normalized.approach || 'Unnamed Development Approach'
+      )
+
+      if (!isValid) {
+        logger.warn(`[EXTRACTION-DEVELOPMENT-APPROACHES] REJECTED development approach "${normalized.approach || 'Unnamed'}" - no valid source_document_id`)
+        return []
+      }
+
       logger.info(`[EXTRACTION-DEVELOPMENT-APPROACH] Extracted development approach: ${normalized.approach} (${normalized.methodology || 'N/A'})`)
 
       // Return as array (for consistency with other extraction methods) but should only have one item
@@ -2105,7 +2593,9 @@ Return JSON object only. Return null if no methodology information found.`
   private async extractProjectIterations(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<ProjectIteration[]> {
     try {
       logger.info('[EXTRACTION-ITERATIONS] Starting extraction')
@@ -2116,6 +2606,9 @@ Return JSON object only. Return null if no methodology information found.`
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Output JSON:
 {
@@ -2133,7 +2626,7 @@ Output JSON:
       "status": "planned|active|completed|cancelled",
       "retrospective_summary": "Markdown summary or null",
       "impediments": ["Impediment 1"],
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2142,6 +2635,7 @@ Rules:
 - Include schedule-based iterations (sprints, increments, phases).
 - Convert backlog goals or OKRs into the goals array.
 - Use null for unknown numeric values, and arrays for multi-item fields.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       const response = await aiService.generate({
@@ -2162,9 +2656,33 @@ Rules:
         impediments: this.ensureStringArray(iteration?.impediments)
       }))
 
-      logger.info(`[EXTRACTION-ITERATIONS] Extracted ${iterations.length} iterations`)
+      // Resolve source_document_id for each iteration (STRICT: reject if missing)
+      const validIterations: ProjectIteration[] = []
+      let rejectedCount = 0
+      
+      iterations.forEach((iteration: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          iteration,
+          documentMap,
+          documents,
+          'PROJECT-ITERATIONS',
+          iteration.name || 'Unnamed Iteration'
+        )
+        
+        if (isValid) {
+          validIterations.push(iteration)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return iterations
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-PROJECT-ITERATIONS] REJECTED ${rejectedCount} iterations without valid source_document_id (out of ${iterations.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-PROJECT-ITERATIONS] Extracted ${validIterations.length} iterations with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validIterations
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       const errorStack = error instanceof Error ? error.stack : undefined
@@ -2188,7 +2706,9 @@ Rules:
   private async extractWorkItems(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<WorkItemRecord[]> {
     try {
       logger.info('[EXTRACTION-WORK-ITEMS] Starting extraction')
@@ -2199,6 +2719,9 @@ Rules:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 JSON schema:
 {
@@ -2214,7 +2737,7 @@ JSON schema:
       "status": "todo|in_progress|review|done|blocked",
       "blockers": ["Blocker 1"],
       "completed_date": "YYYY-MM-DD or null",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2223,6 +2746,7 @@ Guidelines:
 - Include items with measurable effort or progress tracking.
 - Convert percentages like "65%" to numbers.
 - Use arrays for blockers even if single.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       const response = await aiService.generate({
@@ -2242,9 +2766,33 @@ Guidelines:
         blockers: this.ensureStringArray(item?.blockers)
       }))
 
-      logger.info(`[EXTRACTION-WORK-ITEMS] Extracted ${workItems.length} work items`)
+      // Resolve source_document_id for each work item (STRICT: reject if missing)
+      const validWorkItems: WorkItemRecord[] = []
+      let rejectedCount = 0
+      
+      workItems.forEach((item: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          item,
+          documentMap,
+          documents,
+          'WORK-ITEMS',
+          item.name || 'Unnamed Work Item'
+        )
+        
+        if (isValid) {
+          validWorkItems.push(item)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return workItems
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-WORK-ITEMS] REJECTED ${rejectedCount} work items without valid source_document_id (out of ${workItems.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-WORK-ITEMS] Extracted ${validWorkItems.length} work items with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validWorkItems
     } catch (error: unknown) {
       logger.error('[EXTRACTION-WORK-ITEMS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -2259,7 +2807,9 @@ Guidelines:
   private async extractCapacityPlans(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<CapacityPlan[]> {
     try {
       logger.info('[EXTRACTION-CAPACITY] Starting extraction')
@@ -2270,6 +2820,9 @@ Guidelines:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 JSON format:
 {
@@ -2283,7 +2836,7 @@ JSON format:
       "allocated_hours": number or null,
       "utilization_percentage": number or null,
       "notes": "Markdown notes or null",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2292,6 +2845,7 @@ Rules:
 - Always include period_start and period_end (estimate if only month provided; use first/last day of month).
 - Convert utilization percentages (e.g., 75%) to numeric values.
 - Use null for unknown numeric values.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -2311,9 +2865,33 @@ Rules:
         utilization_percentage: this.safeNumber(plan?.utilization_percentage)
       }))
 
-      logger.info(`[EXTRACTION-CAPACITY] Extracted ${capacityPlans.length} capacity plan entries`)
+      // Resolve source_document_id for each capacity plan (STRICT: reject if missing)
+      const validCapacityPlans: CapacityPlan[] = []
+      let rejectedCount = 0
+      
+      capacityPlans.forEach((plan: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          plan,
+          documentMap,
+          documents,
+          'CAPACITY-PLANS',
+          plan.team_member || 'Unnamed Capacity Plan'
+        )
+        
+        if (isValid) {
+          validCapacityPlans.push(plan)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return capacityPlans
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-CAPACITY-PLANS] REJECTED ${rejectedCount} capacity plans without valid source_document_id (out of ${capacityPlans.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-CAPACITY-PLANS] Extracted ${validCapacityPlans.length} capacity plans with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validCapacityPlans
     } catch (error: unknown) {
       logger.error('[EXTRACTION-CAPACITY] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -2328,7 +2906,9 @@ Rules:
   private async extractPerformanceMeasurements(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<PerformanceMeasurement[]> {
     try {
       logger.info('[EXTRACTION-PERFORMANCE-MEASUREMENTS] Starting extraction')
@@ -2340,11 +2920,14 @@ Rules:
 SOURCE DOCUMENTS:
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 JSON schema:
 {
   "performance_measurements": [
     {
-      "success_criterion_name": "Name of criterion being measured",
+      "success_criterion_name": "Name of criterion being measured (MUST match existing success criterion name exactly)",
       "measurement_date": "YYYY-MM-DD (REQUIRED - use document date if measurement date not specified)",
       "actual_value": number or null,
       "target_value": number or null,
@@ -2354,13 +2937,14 @@ JSON schema:
       "trend": "improving|stable|declining|null",
       "status": "on_track|at_risk|off_track",
       "notes": "Markdown context or null",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
 
 Guidelines:
 - **measurement_date is REQUIRED**: Extract the date when measurement was taken, or use document date if not specified
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Extract BOTH actual measurements (historical data) AND target/planned measurements (future goals)
 - Convert values to numbers when possible (strip % or currency symbols)
 - If only textual comparison exists (e.g., "ahead by 5%"), compute variance when possible
@@ -2372,8 +2956,23 @@ Guidelines:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
-        max_tokens: 2600
+        max_tokens: 8000 // Increased for large performance measurement extractions (was 2600)
       })
+
+      // Check if response was truncated (common with large extractions)
+      const responseContent = response.content || ''
+      const isTruncated = responseContent.length > 0 && (
+        !responseContent.trim().endsWith('}') && 
+        !responseContent.trim().endsWith(']') &&
+        !responseContent.includes('```') // If it's in a code block, check for closing marker
+      )
+      
+      if (isTruncated) {
+        logger.warn('[EXTRACTION-PERFORMANCE-MEASUREMENTS] Response appears truncated - may have incomplete data', {
+          responseLength: responseContent.length,
+          lastChars: responseContent.substring(Math.max(0, responseContent.length - 100))
+        })
+      }
 
       const parsed = this.parseAIResponse(response.content)
       const measurements = (parsed.performance_measurements || []).map((item: any) => ({
@@ -2384,9 +2983,33 @@ Guidelines:
         variance_percentage: this.safeNumber(item?.variance_percentage)
       }))
 
-      logger.info(`[EXTRACTION-PERFORMANCE-MEASUREMENTS] Extracted ${measurements.length} measurements`)
+      // Resolve source_document_id for each measurement (STRICT: reject if missing)
+      const validMeasurements: PerformanceMeasurement[] = []
+      let rejectedCount = 0
+      
+      measurements.forEach((measurement: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          measurement,
+          documentMap,
+          documents,
+          'PERFORMANCE-MEASUREMENTS',
+          measurement.success_criterion_name || 'Unnamed Measurement'
+        )
+        
+        if (isValid) {
+          validMeasurements.push(measurement)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return measurements
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-PERFORMANCE-MEASUREMENTS] REJECTED ${rejectedCount} measurements without valid source_document_id (out of ${measurements.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-PERFORMANCE-MEASUREMENTS] Extracted ${validMeasurements.length} measurements with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validMeasurements
     } catch (error: unknown) {
       logger.error('[EXTRACTION-PERFORMANCE-MEASUREMENTS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -2401,7 +3024,9 @@ Guidelines:
   private async extractEarnedValueMetrics(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<EarnedValueMetric[]> {
     try {
       logger.info('[EXTRACTION-EVM] Starting extraction')
@@ -2412,6 +3037,9 @@ Guidelines:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 Expected JSON:
 {
@@ -2428,7 +3056,7 @@ Expected JSON:
       "estimate_at_completion": number or null,
       "estimate_to_complete": number or null,
       "notes": "Markdown commentary or null",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2436,6 +3064,7 @@ Expected JSON:
 Rules:
 - Convert currency strings to numeric values (strip $ or commas).
 - Provide null when a metric isn't available rather than fabricating it.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       const response = await aiService.generate({
@@ -2460,9 +3089,33 @@ Rules:
         estimate_to_complete: this.safeNumber(metric?.estimate_to_complete)
       }))
 
-      logger.info(`[EXTRACTION-EVM] Extracted ${evm.length} earned value metric snapshots`)
+      // Resolve source_document_id for each EVM metric (STRICT: reject if missing)
+      const validEVM: EarnedValueMetric[] = []
+      let rejectedCount = 0
+      
+      evm.forEach((metric: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          metric,
+          documentMap,
+          documents,
+          'EARNED-VALUE-METRICS',
+          `EVM Metric ${metric.measurement_date || 'Unknown Date'}`
+        )
+        
+        if (isValid) {
+          validEVM.push(metric)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return evm
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-EARNED-VALUE-METRICS] REJECTED ${rejectedCount} EVM metrics without valid source_document_id (out of ${evm.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-EARNED-VALUE-METRICS] Extracted ${validEVM.length} EVM metrics with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validEVM
     } catch (error: unknown) {
       logger.error('[EXTRACTION-EVM] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -2477,7 +3130,9 @@ Rules:
   private async extractOpportunities(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<OpportunityRecord[]> {
     try {
       logger.info('[EXTRACTION-OPPORTUNITIES] Starting extraction')
@@ -2488,6 +3143,9 @@ Rules:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 JSON schema:
 {
@@ -2503,7 +3161,7 @@ JSON schema:
       "status": "identified|planned|exploiting|realized|missed",
       "expected_benefit": number or null,
       "trigger_conditions": "What triggers action",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2511,6 +3169,7 @@ JSON schema:
 Rules:
 - Map qualitative terms to the enum values. For example "moderate" -> medium.
 - If quantitative benefit (e.g., $200k) is mentioned, convert to number.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       // Use generateWithFallback for automatic provider fallback and increased token limit
@@ -2528,9 +3187,33 @@ Rules:
         expected_benefit: this.safeNumber(item?.expected_benefit)
       }))
 
-      logger.info(`[EXTRACTION-OPPORTUNITIES] Extracted ${opportunities.length} opportunities`)
+      // Resolve source_document_id for each opportunity (STRICT: reject if missing)
+      const validOpportunities: OpportunityRecord[] = []
+      let rejectedCount = 0
+      
+      opportunities.forEach((opportunity: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          opportunity,
+          documentMap,
+          documents,
+          'OPPORTUNITIES',
+          opportunity.title || opportunity.name || 'Unnamed Opportunity'
+        )
+        
+        if (isValid) {
+          validOpportunities.push(opportunity)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return opportunities
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-OPPORTUNITIES] REJECTED ${rejectedCount} opportunities without valid source_document_id (out of ${opportunities.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-OPPORTUNITIES] Extracted ${validOpportunities.length} opportunities with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validOpportunities
     } catch (error: unknown) {
       logger.error('[EXTRACTION-OPPORTUNITIES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -2545,7 +3228,9 @@ Rules:
   private async extractRiskResponses(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<RiskResponseRecord[]> {
     try {
       logger.info('[EXTRACTION-RISK-RESPONSES] Starting extraction')
@@ -2556,6 +3241,9 @@ Rules:
 
 SOURCE DOCUMENTS:
 ${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
 
 JSON structure:
 {
@@ -2569,7 +3257,7 @@ JSON structure:
       "residual_risk_level": "very_high|high|medium|low|very_low",
       "owner": "Person or role responsible",
       "notes": "Additional context or null",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2578,6 +3266,7 @@ Guidelines:
 - Include both preventative and corrective actions.
 - Use null for numeric values that are not given.
 - Map qualitative assessments (e.g., "moderate") to the nearest enum.
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
       const response = await aiService.generate({
@@ -2594,9 +3283,33 @@ Guidelines:
         cost_of_response: this.safeNumber(item?.cost_of_response)
       }))
 
-      logger.info(`[EXTRACTION-RISK-RESPONSES] Extracted ${responses.length} risk responses`)
+      // Resolve source_document_id for each risk response (STRICT: reject if missing)
+      const validResponses: RiskResponseRecord[] = []
+      let rejectedCount = 0
+      
+      responses.forEach((response: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          response,
+          documentMap,
+          documents,
+          'RISK-RESPONSES',
+          response.risk_title || 'Unnamed Risk Response'
+        )
+        
+        if (isValid) {
+          validResponses.push(response)
+        } else {
+          rejectedCount++
+        }
+      })
 
-      return responses
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-RISK-RESPONSES] REJECTED ${rejectedCount} risk responses without valid source_document_id (out of ${responses.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-RISK-RESPONSES] Extracted ${validResponses.length} risk responses with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validResponses
     } catch (error: unknown) {
       logger.error('[EXTRACTION-RISK-RESPONSES] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
@@ -2612,7 +3325,9 @@ Guidelines:
   private async extractPerformanceActuals(
     documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
     projectId: string,
-    options: { aiProvider?: string; aiModel?: string }
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
   ): Promise<PerformanceActual[]> {
     try {
       logger.info('[EXTRACTION-PERFORMANCE-ACTUALS] Starting extraction (TASK-184)')
@@ -2636,6 +3351,9 @@ Look for:
 SOURCE DOCUMENTS:
 ${documentContext}
 
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
 Extract all performance actuals as a JSON array. For each actual found:
 
 {
@@ -2655,7 +3373,7 @@ Extract all performance actuals as a JSON array. For each actual found:
       "defects_found": number (if mentioned),
       "rework_hours": number (if mentioned),
       "notes": "Brief context from the document",
-      "source_document": "Document title"
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
     }
   ]
 }
@@ -2668,6 +3386,7 @@ Guidelines:
 - Progress percentages should be 0-100
 - Quality scores should be 0-10
 - Return empty array if no actuals found
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON array.
 
 Output valid JSON object with "performance_actuals" array only.`
@@ -2701,8 +3420,34 @@ Output valid JSON object with "performance_actuals" array only.`
         rework_hours: this.safeNumber(item.rework_hours),
         notes: item.notes || null,
         source_document: item.source_document || null
-      })).filter((actual: PerformanceActual) => {
-        // Filter out invalid entries (must have at least entity_name and some actual data)
+      }))
+
+      // Resolve source_document_id for each performance actual (STRICT: reject if missing)
+      const validActuals: PerformanceActual[] = []
+      let rejectedCount = 0
+      
+      actuals.forEach((actual: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          actual,
+          documentMap,
+          documents,
+          'PERFORMANCE-ACTUALS',
+          actual.entity_name || `Performance Actual ${actual.entity_type || 'Unknown'}`
+        )
+        
+        if (isValid) {
+          validActuals.push(actual)
+        } else {
+          rejectedCount++
+        }
+      })
+
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-PERFORMANCE-ACTUALS] REJECTED ${rejectedCount} performance actuals without valid source_document_id (out of ${actuals.length} total)`)
+      }
+
+      // Filter out invalid entries (must have at least entity_name and some actual data)
+      const filteredActuals = validActuals.filter((actual: PerformanceActual) => {
         return actual.entity_name && (
           actual.actual_start_date ||
           actual.actual_end_date ||
@@ -2712,9 +3457,9 @@ Output valid JSON object with "performance_actuals" array only.`
         )
       })
 
-      logger.info(`[EXTRACTION-PERFORMANCE-ACTUALS] Extracted ${actuals.length} performance actuals`)
+      logger.info(`[EXTRACTION-PERFORMANCE-ACTUALS] Extracted ${filteredActuals.length} performance actuals`)
 
-      return actuals
+      return filteredActuals
     } catch (error: unknown) {
       logger.error('[EXTRACTION-PERFORMANCE-ACTUALS] Extraction failed', {
         error: error instanceof Error ? error.message : String(error),
@@ -2725,19 +3470,28 @@ Output valid JSON object with "performance_actuals" array only.`
   }
 
   /**
-   * Deduplicate stakeholders by normalized name
+   * Normalize stakeholder name for deduplication
    * Handles variations like "John Smith", "John Smith (PM)", "john smith"
    */
-  private deduplicateStakeholders(stakeholders: Stakeholder[]): Stakeholder[] {
+  private normalizeStakeholderName(name: string): string {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/\s*\([^)]*\)\s*$/, '') // Remove trailing (role) suffix
+      .replace(/\s+/g, ' ') // Normalize whitespace
+      .replace(/[^\w\s]/g, '') // Remove special characters for better matching
+  }
+
+  /**
+   * Deduplicate stakeholders within the extracted batch only
+   * Handles variations like "John Smith", "John Smith (PM)", "john smith"
+   */
+  private deduplicateStakeholdersBatch(stakeholders: Stakeholder[]): Stakeholder[] {
     const seen = new Map<string, Stakeholder>()
     
     stakeholders.forEach(stakeholder => {
       // Normalize name: lowercase, trim, remove parenthetical suffixes
-      const normalized = stakeholder.name
-        .toLowerCase()
-        .trim()
-        .replace(/\s*\([^)]*\)\s*$/, '') // Remove trailing (role) suffix
-        .replace(/\s+/g, ' ') // Normalize whitespace
+      const normalized = this.normalizeStakeholderName(stakeholder.name)
       
       if (!seen.has(normalized)) {
         // First occurrence - keep it
@@ -2763,7 +3517,7 @@ Output valid JSON object with "performance_actuals" array only.`
         if (stakeholder.interest_level === 'high') existing.interest_level = 'high'
         if (stakeholder.influence_level === 'high') existing.influence_level = 'high'
         
-        logger.debug(`[DEDUP] Merged "${stakeholder.name}" into "${existing.name}"`)
+        logger.debug(`[DEDUP-BATCH] Merged "${stakeholder.name}" into "${existing.name}"`)
       }
     })
     
@@ -2806,6 +3560,126 @@ Output valid JSON object with "performance_actuals" array only.`
     const context = sections.join('\n')
     logger.debug(`[EXTRACTION] Built document context: ${validDocuments.length} documents, ${context.length} characters`)
     return context
+  }
+
+  /**
+   * Build document title-to-ID mapping for source document resolution
+   */
+  private buildDocumentMap(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>
+  ): Map<string, string> {
+    const documentMap = new Map<string, string>()
+    documents.forEach(doc => {
+      // Use title, fallback to template_name, fallback to document ID prefix
+      const displayTitle = doc.title || doc.template_name || `Document ${doc.id.substring(0, 8)}`
+      
+      if (displayTitle && doc.id) {
+        // Exact match (normalized)
+        documentMap.set(displayTitle.toLowerCase().trim(), doc.id)
+        // Normalized version (remove special chars for fuzzy matching)
+        const normalizedTitle = displayTitle.toLowerCase().trim().replace(/[^\w\s]/g, '')
+        if (normalizedTitle !== displayTitle.toLowerCase().trim()) {
+          documentMap.set(normalizedTitle, doc.id)
+        }
+        
+        // Also add template_name if different from title (for better matching)
+        if (doc.template_name && doc.template_name !== displayTitle) {
+          const normalizedTemplate = doc.template_name.toLowerCase().trim()
+          documentMap.set(normalizedTemplate, doc.id)
+        }
+      }
+    })
+    return documentMap
+  }
+
+  /**
+   * Resolve source_document_id from source_document title
+   * Returns the resolved document ID, or undefined if not found
+   */
+  private resolveSourceDocumentId(
+    sourceDocument: string | undefined,
+    documentMap: Map<string, string>
+  ): string | undefined {
+    if (!sourceDocument) return undefined
+    
+    const docTitle = sourceDocument.trim()
+    if (!docTitle) return undefined
+    
+    // Try exact match first
+    let sourceDocumentId = documentMap.get(docTitle.toLowerCase()) || 
+                          documentMap.get(docTitle.toLowerCase().replace(/[^\w\s]/g, ''))
+    
+    // If not found, try fuzzy matching
+    if (!sourceDocumentId) {
+      for (const [title, id] of documentMap.entries()) {
+        if (docTitle.toLowerCase().includes(title) || title.includes(docTitle.toLowerCase())) {
+          sourceDocumentId = id
+          logger.debug(`[EXTRACTION] Fuzzy matched document "${docTitle}" to "${title}" (ID: ${id})`)
+          break
+        }
+      }
+    }
+    
+    if (!sourceDocumentId) {
+      logger.warn(`[EXTRACTION] Could not resolve source_document_id for "${docTitle}"`)
+    }
+    
+    return sourceDocumentId
+  }
+
+  /**
+   * Resolve source_document_id - STRICT MODE with fallback: Entities without valid source_document_id use fallback
+   * This ensures full traceability - entities always have a traceable source document
+   * If AI doesn't provide source_document, uses the first document as fallback
+   * 
+   * @returns true if source_document_id was successfully resolved (or fallback applied), false otherwise
+   */
+  private resolveSourceDocumentIdStrict(
+    entity: any,
+    documentMap: Map<string, string>,
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    entityType: string,
+    entityName: string
+  ): boolean {
+    // Try to resolve from AI-provided source_document
+    if (entity.source_document) {
+      entity.source_document_id = this.resolveSourceDocumentId(entity.source_document, documentMap)
+      
+      if (entity.source_document_id) {
+        logger.debug(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Resolved source_document_id for "${entityName}" from "${entity.source_document}" → ${entity.source_document_id}`)
+        return true
+      } else {
+        logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Could not resolve source_document_id for "${entityName}" from "${entity.source_document}" - using fallback`)
+        logger.debug(`[EXTRACTION-${entityType.toUpperCase()}] Available documents: ${Array.from(documentMap.keys()).join(', ')}`)
+      }
+    } else {
+      logger.debug(`[EXTRACTION-${entityType.toUpperCase()}] Entity "${entityName}" has no source_document field - using fallback to first document`)
+    }
+    
+    // Fallback: Use first document if available
+    if (documents.length > 0 && documents[0].id) {
+      entity.source_document_id = documents[0].id
+      entity.source_document = documents[0].title || documents[0].template_name || `Document ${documents[0].id.substring(0, 8)}`
+      logger.info(`[EXTRACTION-${entityType.toUpperCase()}] ✅ Applied fallback source_document_id for "${entityName}" → ${entity.source_document_id} (${entity.source_document})`)
+      return true
+    }
+    
+    // No documents available - reject entity
+    logger.error(`[EXTRACTION-${entityType.toUpperCase()}] REJECTED: Entity "${entityName}" - no source_document provided and no documents available for fallback`)
+    return false
+  }
+
+  /**
+   * Build document list string for AI prompts (for source_document matching)
+   */
+  private buildDocumentList(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>
+  ): string {
+    return documents.map((doc, idx) => {
+      // Use title, fallback to template_name, fallback to document ID prefix
+      const displayTitle = doc.title || doc.template_name || `Document ${doc.id.substring(0, 8)}`
+      return `- Document ${idx + 1}: "${displayTitle}"`
+    }).join('\n')
   }
 
   /**
@@ -3006,10 +3880,66 @@ Output valid JSON object with "performance_actuals" array only.`
     const map = new Map<string, string>()
     result.rows.forEach(row => {
       if (row.name) {
-        map.set(row.name.toLowerCase().trim(), row.id)
+        const normalizedName = row.name.toLowerCase().trim()
+        // Store exact match
+        map.set(normalizedName, row.id)
+        // Store normalized version (remove special chars, extra spaces)
+        const cleaned = normalizedName.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ')
+        if (cleaned !== normalizedName) {
+          map.set(cleaned, row.id)
+        }
+        // Store key words for partial matching
+        const words = cleaned.split(/\s+/).filter(w => w.length > 3)
+        words.forEach(word => {
+          if (!map.has(`partial:${word}`)) {
+            map.set(`partial:${word}`, row.id)
+          }
+        })
       }
     })
     return map
+  }
+
+  /**
+   * Find success criterion ID using fuzzy matching
+   */
+  private findSuccessCriterionId(
+    criterionName: string,
+    successCriteriaMap: Map<string, string>
+  ): string | null {
+    if (!criterionName) return null
+    
+    const normalized = criterionName.toLowerCase().trim()
+    
+    // Try exact match first
+    let criterionId = successCriteriaMap.get(normalized)
+    if (criterionId) return criterionId
+    
+    // Try cleaned version (remove special chars)
+    const cleaned = normalized.replace(/[^\w\s]/g, '').replace(/\s+/g, ' ')
+    criterionId = successCriteriaMap.get(cleaned)
+    if (criterionId) return criterionId
+    
+    // Try partial matching using key words
+    const words = cleaned.split(/\s+/).filter(w => w.length > 3)
+    for (const word of words) {
+      criterionId = successCriteriaMap.get(`partial:${word}`)
+      if (criterionId) {
+        logger.debug(`[EXTRACTION] Partial matched criterion "${criterionName}" using word "${word}"`)
+        return criterionId
+      }
+    }
+    
+    // Try substring matching (criterion name contains or is contained by map key)
+    for (const [key, id] of successCriteriaMap.entries()) {
+      if (key.startsWith('partial:')) continue // Skip partial keys
+      if (normalized.includes(key) || key.includes(normalized)) {
+        logger.debug(`[EXTRACTION] Substring matched criterion "${criterionName}" to "${key}"`)
+        return id
+      }
+    }
+    
+    return null
   }
 
   private async getRiskIdMap(client: PoolClient, projectId: string): Promise<Map<string, string>> {
@@ -3475,60 +4405,88 @@ Output valid JSON object with "performance_actuals" array only.`
             }
           }
           
-          // Check if error is "Unterminated string" at the end - might be incomplete JSON
+          // Check if error is "Unterminated string" at the end - might be incomplete JSON (truncated response)
+          const errorPosMatch = parseAfterFixError.message.match(/position (\d+)/)
+          const errorPosition = errorPosMatch ? parseInt(errorPosMatch[1]) : null
           const isUnterminatedAtEnd = parseAfterFixError.message.includes('Unterminated string') &&
-                                      parseAfterFixError.message.match(/position (\d+)/)?.[1] &&
-                                      parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') >= fixed.length - 10
+                                      errorPosition !== null &&
+                                      errorPosition >= fixed.length - 50 // Within last 50 chars
           
           if (isUnterminatedAtEnd) {
             logger.warn('[EXTRACTION] Detected incomplete JSON (unterminated string at end) - attempting to close', {
               error: parseAfterFixError.message,
+              errorPosition,
               fixedLength: fixed.length,
               lastChars: fixed.substring(Math.max(0, fixed.length - 200))
             })
             
-            // Simple approach: close the unterminated string and any unclosed objects/arrays
-            // Check if we're inside a string (work backwards to find the last unclosed quote)
-            let inString = false
-            let escapeNext = false
-            
-            // Work backwards to determine if we're in a string
-            for (let i = fixed.length - 1; i >= 0; i--) {
-              const char = fixed[i]
-              
-              if (escapeNext) {
-                escapeNext = false
-                continue
-              }
-              
-              if (char === '\\') {
-                escapeNext = true
-                continue
-              }
-              
-              if (char === '"') {
-                // Check if this is a string delimiter (look backwards for : or , or { or [)
-                let lookBackPos = i - 1
-                while (lookBackPos >= 0 && /\s/.test(fixed[lookBackPos])) {
-                  lookBackPos--
+            // Try to salvage partial data by closing the incomplete string and array/object
+            let salvaged = fixed
+            // Find the last incomplete string (starts with " but doesn't end with ")
+            const lastQuoteIndex = salvaged.lastIndexOf('"')
+            if (lastQuoteIndex > 0 && lastQuoteIndex >= salvaged.length - 50) {
+              // Check if we're inside a string (count quotes before this position)
+              let quoteCount = 0
+              for (let i = 0; i < lastQuoteIndex; i++) {
+                if (salvaged[i] === '"' && (i === 0 || salvaged[i - 1] !== '\\')) {
+                  quoteCount++
                 }
-                if (lookBackPos >= 0 && (fixed[lookBackPos] === ':' || fixed[lookBackPos] === ',' || fixed[lookBackPos] === '{' || fixed[lookBackPos] === '[')) {
-                  // This is the start of an unterminated string - we're inside a string
-                  inString = true
-                  break
-                } else {
-                  // This might be the end of a string, but we're not sure
-                  // Assume we're in a string if we haven't found a clear delimiter
-                  inString = true
-                  break
+              }
+              // If odd number of quotes, we're inside an incomplete string
+              if (quoteCount % 2 === 1) {
+                // Close the string
+                salvaged = salvaged.substring(0, lastQuoteIndex + 1)
+                // Find the last incomplete object/array and close it
+                let openBraces = 0
+                let openBrackets = 0
+                for (let i = 0; i < salvaged.length; i++) {
+                  if (salvaged[i] === '{' && (i === 0 || salvaged[i - 1] !== '\\')) openBraces++
+                  if (salvaged[i] === '}' && (i === 0 || salvaged[i - 1] !== '\\')) openBraces--
+                  if (salvaged[i] === '[' && (i === 0 || salvaged[i - 1] !== '\\')) openBrackets++
+                  if (salvaged[i] === ']' && (i === 0 || salvaged[i - 1] !== '\\')) openBrackets--
+                }
+                // Close arrays first, then objects
+                while (openBrackets > 0) {
+                  salvaged += ']'
+                  openBrackets--
+                }
+                while (openBraces > 0) {
+                  salvaged += '}'
+                  openBraces--
+                }
+                
+                logger.info('[EXTRACTION] Attempting to parse salvaged JSON', {
+                  salvagedLength: salvaged.length,
+                  lastChars: salvaged.substring(Math.max(0, salvaged.length - 100))
+                })
+                
+                try {
+                  const salvagedParsed = JSON.parse(salvaged)
+                  logger.warn('[EXTRACTION] Successfully parsed salvaged JSON - some data may be incomplete', {
+                    keys: salvagedParsed && typeof salvagedParsed === 'object' ? Object.keys(salvagedParsed) : []
+                  })
+                  return salvagedParsed
+                } catch (salvageError: any) {
+                  logger.warn('[EXTRACTION] Failed to parse salvaged JSON', {
+                    error: salvageError.message
+                  })
                 }
               }
             }
             
-            // Close the string and object
+            // Fallback: Use the existing closeIncompleteJsonObject method
             let closedJson = fixed
-            if (inString) {
-              closedJson += '"'
+            // If we detected an incomplete string, close it first
+            if (lastQuoteIndex > 0 && lastQuoteIndex >= fixed.length - 50) {
+              let quoteCount = 0
+              for (let i = 0; i < lastQuoteIndex; i++) {
+                if (fixed[i] === '"' && (i === 0 || fixed[i - 1] !== '\\')) {
+                  quoteCount++
+                }
+              }
+              if (quoteCount % 2 === 1) {
+                closedJson = fixed.substring(0, lastQuoteIndex + 1) + '"'
+              }
             }
             closedJson += this.closeIncompleteJsonObject(closedJson)
             
@@ -3718,6 +4676,7 @@ Output valid JSON object with "performance_actuals" array only.`
   // Database save methods continue in next message...
   /**
    * Save stakeholders to database
+   * Includes deduplication against existing database records
    */
   private async saveStakeholders(
     client: PoolClient,
@@ -3730,13 +4689,64 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Step 1: Check existing stakeholders in database and filter out duplicates
+    let stakeholdersToSave = stakeholders
+    try {
+      const existingStakeholdersResult = await client.query(
+        `SELECT name FROM stakeholders WHERE project_id = $1`,
+        [projectId]
+      )
+      
+      const existingStakeholders = existingStakeholdersResult.rows
+      
+      if (existingStakeholders.length > 0) {
+        // Create a set of normalized existing stakeholder names
+        const existingNormalized = new Set<string>()
+        existingStakeholders.forEach(existing => {
+          const normalized = this.normalizeStakeholderName(existing.name)
+          existingNormalized.add(normalized)
+        })
+        
+        // Filter out stakeholders that match existing ones
+        const newStakeholders: Stakeholder[] = []
+        let skippedCount = 0
+        
+        stakeholders.forEach(stakeholder => {
+          const normalized = this.normalizeStakeholderName(stakeholder.name)
+          
+          if (existingNormalized.has(normalized)) {
+            // Match found - skip this stakeholder (already exists)
+            skippedCount++
+            logger.debug(`[DEDUP-DB] Skipping "${stakeholder.name}" - matches existing stakeholder`)
+          } else {
+            // New stakeholder - keep it
+            newStakeholders.push(stakeholder)
+          }
+        })
+        
+        if (skippedCount > 0) {
+          logger.info(`[DEDUP-DB] Skipped ${skippedCount} stakeholders that already exist in database (normalized name match)`)
+        }
+        
+        stakeholdersToSave = newStakeholders
+      }
+    } catch (error) {
+      logger.warn(`[DEDUP-DB] Failed to check existing stakeholders, proceeding with all extracted stakeholders:`, error)
+      // If database check fails, proceed with all stakeholders (ON CONFLICT will handle exact duplicates)
+    }
+
+    if (stakeholdersToSave.length === 0) {
+      logger.info('[EXTRACTION] All stakeholders already exist in database, nothing to save')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    stakeholders.forEach((s, index) => {
-      const offset = index * 9
+    stakeholdersToSave.forEach((s, index) => {
+      const offset = index * 10
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
       
       // Truncate fields to match database constraints
@@ -3760,6 +4770,9 @@ Output valid JSON object with "performance_actuals" array only.`
       const interestLevel = normalizeLevel(s.interest_level)
       const influenceLevel = normalizeLevel(s.influence_level)
       
+      // Resolve source_document_id if available
+      const sourceDocumentId = (s as any).source_document_id || null
+      
       // Log if truncation occurred
       if (s.name && s.name.length > 255) {
         logger.warn(`[EXTRACTION] Stakeholder name truncated from ${s.name.length} to 255 chars: "${s.name.substring(0, 50)}..."`)
@@ -3777,6 +4790,7 @@ Output valid JSON object with "performance_actuals" array only.`
         influenceLevel,
         s.expectations || null,
         s.concerns || null,
+        sourceDocumentId,
         userId
       )
     })
@@ -3784,7 +4798,7 @@ Output valid JSON object with "performance_actuals" array only.`
     await client.query(`
       INSERT INTO stakeholders (
         project_id, name, role, email, interest_level, influence_level, 
-        expectations, concerns, created_by
+        expectations, concerns, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -3794,10 +4808,11 @@ Output valid JSON object with "performance_actuals" array only.`
         influence_level = EXCLUDED.influence_level,
         expectations = EXCLUDED.expectations,
         concerns = EXCLUDED.concerns,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, stakeholders.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${stakeholders.length} stakeholders`)
+    logger.info(`[EXTRACTION] Saved ${stakeholdersToSave.length} stakeholders (${stakeholders.length - stakeholdersToSave.length} duplicates skipped)`)
   }
 
   /**
@@ -3818,9 +4833,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     requirements.forEach((r, index) => {
-      const offset = index * 9
+      const offset = index * 10
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
       
       // Convert acceptance_criteria string to array if it exists
@@ -3868,6 +4883,9 @@ Output valid JSON object with "performance_actuals" array only.`
       }
       const mappedType = typeMap[(r.type || 'functional').toLowerCase()] || 'functional'
       
+      // Resolve source_document_id
+      const sourceDocumentId = (r as any).source_document_id || null
+      
       values.push(
         projectId,
         r.title,        // For title column
@@ -3877,6 +4895,7 @@ Output valid JSON object with "performance_actuals" array only.`
         mappedPriority, // Use mapped priority value
         mappedStatus,   // Use mapped status value
         acceptanceCriteria,
+        sourceDocumentId,
         userId
       )
     })
@@ -3884,7 +4903,7 @@ Output valid JSON object with "performance_actuals" array only.`
     await client.query(`
       INSERT INTO requirements (
         project_id, title, name, description, type, priority, status, 
-        acceptance_criteria, created_by
+        acceptance_criteria, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -3894,6 +4913,7 @@ Output valid JSON object with "performance_actuals" array only.`
         priority = EXCLUDED.priority,
         status = EXCLUDED.status,
         acceptance_criteria = EXCLUDED.acceptance_criteria,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, requirements.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -3950,9 +4970,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueRisks.forEach((r, index) => {
-      const offset = index * 10
+      const offset = index * 11
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
       
       // Map AI impact values to database CHECK constraint values
@@ -3968,6 +4988,9 @@ Output valid JSON object with "performance_actuals" array only.`
       }
       const mappedImpact = impactMap[(r.impact || 'medium').toLowerCase()] || 'medium'
       
+      // Resolve source_document_id
+      const sourceDocumentId = (r as any).source_document_id || null
+      
       values.push(
         projectId,
         r.title,        // For title column
@@ -3978,6 +5001,7 @@ Output valid JSON object with "performance_actuals" array only.`
         mappedImpact,   // Use mapped impact value
         r.mitigation_strategy || null,
         r.contingency_plan || null,
+        sourceDocumentId,
         userId
       )
     })
@@ -3985,7 +5009,7 @@ Output valid JSON object with "performance_actuals" array only.`
     await client.query(`
       INSERT INTO risks (
         project_id, title, name, description, category, probability, impact,
-        mitigation_strategy, contingency_plan, created_by
+        mitigation_strategy, contingency_plan, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -3996,6 +5020,7 @@ Output valid JSON object with "performance_actuals" array only.`
         impact = EXCLUDED.impact,
         mitigation_strategy = EXCLUDED.mitigation_strategy,
         contingency_plan = EXCLUDED.contingency_plan,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, risks.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4020,9 +5045,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     milestones.forEach((m, index) => {
-      const offset = index * 6
+      const offset = index * 7
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
       
       // Convert quarter dates like '2025-Q4' to actual dates using utility function
@@ -4043,25 +5068,30 @@ Output valid JSON object with "performance_actuals" array only.`
       }
       const mappedStatus = statusMap[(m.status || 'planned').toLowerCase()] || 'planned'
       
+      // Resolve source_document_id
+      const sourceDocumentId = (m as any).source_document_id || null
+      
       values.push(
         projectId,
         m.name,
         m.description,
         dueDate,
         mappedStatus,  // Use mapped status value
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO milestones (
-        project_id, name, description, due_date, status, created_by
+        project_id, name, description, due_date, status, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
         description = EXCLUDED.description,
         due_date = EXCLUDED.due_date,
         status = EXCLUDED.status,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, milestones.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4095,9 +5125,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueConstraints.forEach((c, index) => {
-      const offset = index * 6  // Changed from 7 to 6 (removed severity)
+      const offset = index * 7
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
       )
       
       // Map AI type values to database CHECK constraint values
@@ -4118,24 +5148,29 @@ Output valid JSON object with "performance_actuals" array only.`
       }
       const mappedType = typeMap[(c.type || 'business').toLowerCase()] || 'business'
       
+      // Resolve source_document_id
+      const sourceDocumentId = (c as any).source_document_id || null
+      
       values.push(
         projectId,
         c.title,        // For title column
         c.title,        // For name column (NOT NULL)
         c.description,
         mappedType,     // Use mapped type value
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO constraints (
-        project_id, title, name, description, type, created_by
+        project_id, title, name, description, type, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
         title = EXCLUDED.title,
         description = EXCLUDED.description,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, constraints.source_document_id),
         type = EXCLUDED.type,
         updated_at = CURRENT_TIMESTAMP
     `, values)
@@ -4170,9 +5205,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueCriteria.forEach((sc, index) => {
-      const offset = index * 8
+      const offset = index * 9
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
       
       // Extract numeric value using improved safeNumber logic
@@ -4190,6 +5225,9 @@ Output valid JSON object with "performance_actuals" array only.`
       
       const targetValue = extractNumeric(sc.target_value)
       
+      // Resolve source_document_id
+      const sourceDocumentId = (sc as any).source_document_id || null
+      
       values.push(
         projectId,
         sc.title,        // For title column
@@ -4198,13 +5236,14 @@ Output valid JSON object with "performance_actuals" array only.`
         sc.metric,
         targetValue,     // Use extracted numeric value
         sc.measurement_method,
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO success_criteria (
-        project_id, title, name, description, metric, target_value, measurement_method, created_by
+        project_id, title, name, description, metric, target_value, measurement_method, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -4213,6 +5252,7 @@ Output valid JSON object with "performance_actuals" array only.`
         metric = EXCLUDED.metric,
         target_value = EXCLUDED.target_value,
         measurement_method = EXCLUDED.measurement_method,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, success_criteria.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4265,27 +5305,33 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueBestPractices.forEach((bp, index) => {
-      const offset = index * 5
+      const offset = index * 6
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`
       )
+      
+      // Resolve source_document_id
+      const sourceDocumentId = (bp as any).source_document_id || null
+      
       values.push(
         projectId,
         bp.title,
         bp.description,
         bp.category,
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO best_practices (
-        project_id, title, description, category, created_by
+        project_id, title, description, category, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, title) DO UPDATE SET
         description = EXCLUDED.description,
         category = EXCLUDED.category,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, best_practices.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4310,9 +5356,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     phases.forEach((p, index) => {
-      const offset = index * 7
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
       
       // Validate and sanitize dates using utility functions
@@ -4332,6 +5378,9 @@ Output valid JSON object with "performance_actuals" array only.`
         logger.warn(`[EXTRACTION] Phase "${p.name}" missing end_date, defaulting to ${endDate}`)
       }
       
+      // Resolve source_document_id
+      const sourceDocumentId = (p as any).source_document_id || null
+      
       values.push(
         projectId,
         p.name,
@@ -4339,13 +5388,14 @@ Output valid JSON object with "performance_actuals" array only.`
         startDate,
         endDate,
         p.status,
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO phases (
-        project_id, name, description, start_date, end_date, status, created_by
+        project_id, name, description, start_date, end_date, status, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -4353,6 +5403,7 @@ Output valid JSON object with "performance_actuals" array only.`
         start_date = EXCLUDED.start_date,
         end_date = EXCLUDED.end_date,
         status = EXCLUDED.status,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, phases.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4386,9 +5437,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueResources.forEach((r, index) => {
-      const offset = index * 14
+      const offset = index * 15
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
       )
       
       // Map AI resource types to database CHECK constraint values
@@ -4419,6 +5470,9 @@ Output valid JSON object with "performance_actuals" array only.`
       const performanceRating =
         performanceRatingRaw === undefined ? null : Math.max(0, Math.min(10, performanceRatingRaw))
       
+      // Resolve source_document_id
+      const sourceDocumentId = (r as any).source_document_id || null
+      
       values.push(
         projectId,
         r.name,
@@ -4433,6 +5487,7 @@ Output valid JSON object with "performance_actuals" array only.`
         r.team_assignment ? r.team_assignment.substring(0, 255) : null,
         performanceRating,
         r.development_plan || null,
+        sourceDocumentId,
         // Align created_by as last column
         userId
       )
@@ -4442,7 +5497,7 @@ Output valid JSON object with "performance_actuals" array only.`
       INSERT INTO resources (
         project_id, name, type, role, allocation, availability, skills,
         competency_level, certifications, training_needs, team_assignment,
-        performance_rating, development_plan, created_by
+        performance_rating, development_plan, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -4457,6 +5512,7 @@ Output valid JSON object with "performance_actuals" array only.`
         team_assignment = EXCLUDED.team_assignment,
         performance_rating = EXCLUDED.performance_rating,
         development_plan = EXCLUDED.development_plan,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, resources.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4490,10 +5546,13 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueTechnologies.forEach((t, index) => {
-      const offset = index * 9
+      const offset = index * 10
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
       )
+      
+      // Resolve source_document_id
+      const sourceDocumentId = (t as any).source_document_id || null
       
       values.push(
         projectId,
@@ -4504,13 +5563,14 @@ Output valid JSON object with "performance_actuals" array only.`
         t.purpose || null,
         t.license || null,
         t.vendor || null,
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO technologies (
-        project_id, name, category, description, version, purpose, license, vendor, created_by
+        project_id, name, category, description, version, purpose, license, vendor, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -4520,6 +5580,7 @@ Output valid JSON object with "performance_actuals" array only.`
         purpose = EXCLUDED.purpose,
         license = EXCLUDED.license,
         vendor = EXCLUDED.vendor,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, technologies.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4544,10 +5605,14 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     qualityStandards.forEach((qs, index) => {
-      const offset = index * 7  // Changed from 8 to 7 (removed standard_type and requirements)
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
+      
+      // Resolve source_document_id
+      const sourceDocumentId = (qs as any).source_document_id || null
+      
       values.push(
         projectId,
         qs.title,        // For title column
@@ -4555,6 +5620,7 @@ Output valid JSON object with "performance_actuals" array only.`
         qs.description,
         qs.category,
         qs.measurement_criteria || null,
+        sourceDocumentId,
         userId
       )
     })
@@ -4562,7 +5628,7 @@ Output valid JSON object with "performance_actuals" array only.`
     await client.query(`
       INSERT INTO quality_standards (
         project_id, title, standard_name, description, category, 
-        measurement_criteria, created_by
+        measurement_criteria, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, standard_name) DO UPDATE SET
@@ -4570,6 +5636,7 @@ Output valid JSON object with "performance_actuals" array only.`
         description = EXCLUDED.description,
         category = EXCLUDED.category,
         measurement_criteria = EXCLUDED.measurement_criteria,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, quality_standards.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4594,9 +5661,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     deliverables.forEach((d, index) => {
-      const offset = index * 8
+      const offset = index * 9
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
       )
       
       // Map AI status values to database CHECK constraint values
@@ -4633,6 +5700,9 @@ Output valid JSON object with "performance_actuals" array only.`
         }
       }
 
+      // Resolve source_document_id
+      const sourceDocumentId = (d as any).source_document_id || null
+
       values.push(
         projectId,
         d.name,
@@ -4641,6 +5711,7 @@ Output valid JSON object with "performance_actuals" array only.`
         parsedDueDate,
         mappedStatus,  // Use mapped status value
         d.owner || null,
+        sourceDocumentId,
         userId
       )
     })
@@ -4648,7 +5719,7 @@ Output valid JSON object with "performance_actuals" array only.`
     await client.query(`
       INSERT INTO deliverables (
         project_id, name, description, type, due_date, status, 
-        owner, created_by
+        owner, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -4657,6 +5728,7 @@ Output valid JSON object with "performance_actuals" array only.`
         due_date = EXCLUDED.due_date,
         status = EXCLUDED.status,
         owner = EXCLUDED.owner,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, deliverables.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4681,12 +5753,15 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     scopeItems.forEach((si, index) => {
-      const offset = index * 7  // Changed from 8 to 7 (removed priority)
+      const offset = index * 8
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
       )
       // Map is_in_scope boolean to inclusion_status text
       const inclusionStatus = si.is_in_scope ? 'in_scope' : 'out_of_scope'
+      
+      // Resolve source_document_id
+      const sourceDocumentId = (si as any).source_document_id || null
       
       values.push(
         projectId,
@@ -4695,13 +5770,14 @@ Output valid JSON object with "performance_actuals" array only.`
         si.description,
         inclusionStatus, // Map to inclusion_status column
         si.category || null,
+        sourceDocumentId,
         userId
       )
     })
 
     await client.query(`
       INSERT INTO scope_items (
-        project_id, title, item_name, description, inclusion_status, category, created_by
+        project_id, title, item_name, description, inclusion_status, category, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, item_name) DO UPDATE SET
@@ -4709,6 +5785,7 @@ Output valid JSON object with "performance_actuals" array only.`
         description = EXCLUDED.description,
         inclusion_status = EXCLUDED.inclusion_status,
         category = EXCLUDED.category,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, scope_items.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4764,9 +5841,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueActivities.forEach((a, index) => {
-      const offset = index * 10  // Changed from 11 to 10 (removed phase, duration, effort_estimate)
+      const offset = index * 11  // 11 columns: project_id, name, activity_name, description, category, start_date, end_date, status, assigned_to, source_document_id, created_by
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
       
       // assigned_to must be UUID, not a name string
@@ -4804,6 +5881,9 @@ Output valid JSON object with "performance_actuals" array only.`
       const startDate = a.start_date ? convertQuarterDate(a.start_date) : null
       const endDate = a.end_date ? convertQuarterDate(a.end_date) : null
       
+      // Resolve source_document_id
+      const sourceDocumentId = (a as any).source_document_id || null
+      
       values.push(
         projectId,
         a.name,          // For name column
@@ -4814,6 +5894,7 @@ Output valid JSON object with "performance_actuals" array only.`
         endDate,
         mappedStatus,    // Use mapped status value
         assignedTo,      // Use validated UUID or null
+        sourceDocumentId,
         userId
       )
     })
@@ -4821,7 +5902,7 @@ Output valid JSON object with "performance_actuals" array only.`
     await client.query(`
       INSERT INTO activities (
         project_id, name, activity_name, description, category, start_date, 
-        end_date, status, assigned_to, created_by
+        end_date, status, assigned_to, source_document_id, created_by
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, activity_name) DO UPDATE SET
@@ -4832,6 +5913,7 @@ Output valid JSON object with "performance_actuals" array only.`
         end_date = EXCLUDED.end_date,
         status = EXCLUDED.status,
         assigned_to = EXCLUDED.assigned_to,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, activities.source_document_id),
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
@@ -4910,12 +5992,20 @@ Output valid JSON object with "performance_actuals" array only.`
       }
       const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
 
+      // Resolve source_document_id
+      const sourceDocumentId = (agreement as any).source_document_id || null
+
+      // Ensure agreed_by is properly formatted as JSONB
+      // Handle edge cases: null, undefined, empty arrays, and ensure valid JSON
+      const agreedByArray = this.ensureStringArray(agreement.agreed_by || [])
+      const agreedByJson = JSON.stringify(agreedByArray) // Always stringify, even if empty array
+
       values.push(
         projectId,
         agreement.title?.substring(0, 200) || 'Team Agreement',
         agreement.description || null,
         category,
-        this.ensureStringArray(agreement.agreed_by), // Pass array directly - pg library converts to JSONB automatically
+        agreedByJson, // Explicitly stringified JSON for JSONB column
         agreement.facilitated_by ? agreement.facilitated_by.substring(0, 255) : null,
         this.normalizeDate(agreement.effective_date),
         reviewFrequency,
@@ -4924,7 +6014,7 @@ Output valid JSON object with "performance_actuals" array only.`
         adherenceScore,
         violationsCount,
         this.normalizeDate(agreement.last_violation_date),
-        null, // source_document_id not resolved yet
+        sourceDocumentId,
         notes,
         userId,
         userId
@@ -4952,6 +6042,7 @@ Output valid JSON object with "performance_actuals" array only.`
         adherence_score = EXCLUDED.adherence_score,
         violations_count = EXCLUDED.violations_count,
         last_violation_date = EXCLUDED.last_violation_date,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, team_agreements.source_document_id),
         notes = EXCLUDED.notes,
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
@@ -5120,7 +6211,7 @@ Output valid JSON object with "performance_actuals" array only.`
         iterationUnit,
         governanceApproach,
         reviewGates,
-        null, // source_document_id - would need to resolve from source_document name
+        (approach as any).source_document_id || null, // Resolve source_document_id
         userId, // defined_by
         null, // approved_by - not extracted, would be set manually
         null  // effective_date - not extracted, would be set manually
@@ -5194,7 +6285,7 @@ Output valid JSON object with "performance_actuals" array only.`
         status,
         iteration.retrospective_summary || null,
         this.ensureStringArray(iteration.impediments),
-        null, // source_document_id placeholder
+        (iteration as any).source_document_id || null, // Resolve source_document_id
         userId,
         userId
       )
@@ -5220,6 +6311,7 @@ Output valid JSON object with "performance_actuals" array only.`
         status = EXCLUDED.status,
         retrospective_summary = EXCLUDED.retrospective_summary,
         impediments = EXCLUDED.impediments,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, project_iterations.source_document_id),
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -5296,7 +6388,7 @@ Output valid JSON object with "performance_actuals" array only.`
         status,
         this.ensureStringArray(item.blockers),
         this.normalizeDate(item.completed_date),
-        null, // source_document_id placeholder
+        (item as any).source_document_id || null, // Resolve source_document_id
         userId,
         userId
       )
@@ -5321,6 +6413,7 @@ Output valid JSON object with "performance_actuals" array only.`
         status = EXCLUDED.status,
         blockers = EXCLUDED.blockers,
         completed_date = EXCLUDED.completed_date,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, work_items.source_document_id),
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -5383,7 +6476,7 @@ Output valid JSON object with "performance_actuals" array only.`
         this.safeNumber(plan.allocated_hours),
         this.safeNumber(plan.utilization_percentage),
         notes,
-        null, // source_document_id placeholder
+        (plan as any).source_document_id || null, // Resolve source_document_id
         userId,
         userId
       )
@@ -5408,6 +6501,7 @@ Output valid JSON object with "performance_actuals" array only.`
         allocated_hours = EXCLUDED.allocated_hours,
         utilization_percentage = EXCLUDED.utilization_percentage,
         notes = EXCLUDED.notes,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, capacity_plans.source_document_id),
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -5432,6 +6526,24 @@ Output valid JSON object with "performance_actuals" array only.`
     }
 
     const successCriteriaMap = await this.getSuccessCriterionIdMap(client, projectId)
+    
+    // Build document title-to-ID map for source document resolution
+    const documentResult = await client.query<{ id: string; title: string }>(
+      `SELECT id, title FROM documents WHERE project_id = $1`,
+      [projectId]
+    )
+    const documentMap = new Map<string, string>()
+    documentResult.rows.forEach(row => {
+      if (row.title && row.id) {
+        documentMap.set(row.title.toLowerCase().trim(), row.id)
+        // Also map normalized version for fuzzy matching
+        const normalizedTitle = row.title.toLowerCase().trim().replace(/[^\w\s]/g, '')
+        if (normalizedTitle !== row.title.toLowerCase().trim()) {
+          documentMap.set(normalizedTitle, row.id)
+        }
+      }
+    })
+    
     const statusMap: Record<string, string> = {
       on_track: 'on_track',
       'on track': 'on_track',
@@ -5472,10 +6584,39 @@ Output valid JSON object with "performance_actuals" array only.`
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
       )
 
-      const normalizedCriterionKey = criterionName.toLowerCase()
-      const criterionId = successCriteriaMap.get(normalizedCriterionKey) || null
+      // Use fuzzy matching to find success criterion ID
+      const criterionId = this.findSuccessCriterionId(criterionName, successCriteriaMap)
       if (!criterionId) {
         logger.warn(`[EXTRACTION] No success criterion found for "${criterionName}", storing without linkage`)
+      } else {
+        logger.debug(`[EXTRACTION] Matched criterion "${criterionName}" to ID ${criterionId}`)
+      }
+      
+      // Resolve source_document_id
+      let sourceDocumentId: string | null = null
+      if (measurement.source_document_id) {
+        // Already resolved during extraction
+        sourceDocumentId = measurement.source_document_id
+      } else if (measurement.source_document) {
+        // Try to resolve from document title
+        const docTitle = measurement.source_document.trim()
+        sourceDocumentId = documentMap.get(docTitle.toLowerCase()) || 
+                          documentMap.get(docTitle.toLowerCase().replace(/[^\w\s]/g, '')) || null
+        
+        // Try fuzzy matching if exact match failed
+        if (!sourceDocumentId) {
+          for (const [title, id] of documentMap.entries()) {
+            if (docTitle.toLowerCase().includes(title) || title.includes(docTitle.toLowerCase())) {
+              sourceDocumentId = id
+              logger.debug(`[EXTRACTION] Fuzzy matched document "${docTitle}" to "${title}" (ID: ${id})`)
+              break
+            }
+          }
+        }
+        
+        if (!sourceDocumentId) {
+          logger.warn(`[EXTRACTION] Could not resolve source_document_id for "${docTitle}"`)
+        }
       }
 
       const statusKey = (measurement.status || 'on_track').toLowerCase().replace(/\s+/g, '_')
@@ -5487,7 +6628,8 @@ Output valid JSON object with "performance_actuals" array only.`
       if (measurement.notes) {
         notesSegments.push(measurement.notes)
       }
-      if (measurement.source_document) {
+      if (measurement.source_document && !sourceDocumentId) {
+        // Only add source document to notes if we couldn't resolve the ID
         notesSegments.push(`Source: ${measurement.source_document}`)
       }
       const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
@@ -5505,7 +6647,7 @@ Output valid JSON object with "performance_actuals" array only.`
         trend,
         status,
         notes,
-        null, // source_document_id placeholder
+        sourceDocumentId, // Now properly resolved
         userId,
         userId
       )
@@ -5534,7 +6676,8 @@ Output valid JSON object with "performance_actuals" array only.`
         trend = EXCLUDED.trend,
         status = EXCLUDED.status,
         notes = EXCLUDED.notes,
-        updated_by = EXCLUDED.updated_by,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, performance_measurements.source_document_id),
+        updated_by = COALESCE(EXCLUDED.updated_by, performance_measurements.updated_by, EXCLUDED.created_by),
         updated_at = CURRENT_TIMESTAMP
     `,
       values
@@ -5595,7 +6738,7 @@ Output valid JSON object with "performance_actuals" array only.`
         this.safeNumber(metric.estimate_at_completion),
         this.safeNumber(metric.estimate_to_complete),
         notes,
-        null, // source_document_id placeholder
+        (metric as any).source_document_id || null, // Resolve source_document_id
         userId,
         userId
       )
@@ -5625,6 +6768,7 @@ Output valid JSON object with "performance_actuals" array only.`
         estimate_at_completion = EXCLUDED.estimate_at_completion,
         estimate_to_complete = EXCLUDED.estimate_to_complete,
         notes = EXCLUDED.notes,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, earned_value_metrics.source_document_id),
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -5701,7 +6845,7 @@ Output valid JSON object with "performance_actuals" array only.`
         statusMap[statusKey] || 'identified',
         this.safeNumber(opportunity.expected_benefit),
         opportunity.trigger_conditions || null,
-        null, // source_document_id placeholder
+        (opportunity as any).source_document_id || null, // Resolve source_document_id
         userId,
         userId
       )
@@ -5725,6 +6869,7 @@ Output valid JSON object with "performance_actuals" array only.`
         status = EXCLUDED.status,
         expected_benefit = EXCLUDED.expected_benefit,
         trigger_conditions = EXCLUDED.trigger_conditions,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, opportunities.source_document_id),
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -5812,7 +6957,7 @@ Output valid JSON object with "performance_actuals" array only.`
         residualRiskLevel,
         response.owner ? response.owner.substring(0, 255) : null,
         notes,
-        null, // source_document_id placeholder
+        (response as any).source_document_id || null, // Resolve source_document_id
         userId,
         userId
       )
@@ -5834,6 +6979,7 @@ Output valid JSON object with "performance_actuals" array only.`
         residual_risk_level = EXCLUDED.residual_risk_level,
         owner = EXCLUDED.owner,
         notes = EXCLUDED.notes,
+        source_document_id = COALESCE(EXCLUDED.source_document_id, risk_responses.source_document_id),
         updated_by = EXCLUDED.updated_by,
         updated_at = CURRENT_TIMESTAMP
     `,
@@ -6039,82 +7185,86 @@ Output valid JSON object with "performance_actuals" array only.`
       totalContentChars: documents.reduce((sum, d) => sum + (d.content?.length || 0), 0)
     })
     
+    // Build documentMap and documentList for source document traceability
+    const documentMap = this.buildDocumentMap(documents)
+    const documentList = this.buildDocumentList(documents)
+    
     let entities: any[]
     
     try {
-      // Map entity type to extraction method - pass documents array and extractionOptions
+      // Map entity type to extraction method - pass documents array, extractionOptions, documentMap, and documentList
       switch (entityType) {
       case 'stakeholders':
-        entities = await this.extractStakeholders(documents, projectId, extractionOptions)
+        entities = await this.extractStakeholders(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'requirements':
-        entities = await this.extractRequirements(documents, projectId, extractionOptions)
+        entities = await this.extractRequirements(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'risks':
-        entities = await this.extractRisks(documents, projectId, extractionOptions)
+        entities = await this.extractRisks(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'milestones':
-        entities = await this.extractMilestones(documents, projectId, extractionOptions)
+        entities = await this.extractMilestones(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'constraints':
-        entities = await this.extractConstraints(documents, projectId, extractionOptions)
+        entities = await this.extractConstraints(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'success_criteria':
-        entities = await this.extractSuccessCriteria(documents, projectId, extractionOptions)
+        entities = await this.extractSuccessCriteria(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'best_practices':
-        entities = await this.extractBestPractices(documents, projectId, extractionOptions)
+        entities = await this.extractBestPractices(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'phases':
-        entities = await this.extractPhases(documents, projectId, extractionOptions)
+        entities = await this.extractPhases(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'resources':
-        entities = await this.extractResources(documents, projectId, extractionOptions)
+        entities = await this.extractResources(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'technologies':
-        entities = await this.extractTechnologies(documents, projectId, extractionOptions)
+        entities = await this.extractTechnologies(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'quality_standards':
-        entities = await this.extractQualityStandards(documents, projectId, extractionOptions)
+        entities = await this.extractQualityStandards(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'deliverables':
-        entities = await this.extractDeliverables(documents, projectId, extractionOptions)
+        entities = await this.extractDeliverables(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'scope_items':
-        entities = await this.extractScopeItems(documents, projectId, extractionOptions)
+        entities = await this.extractScopeItems(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'activities':
-        entities = await this.extractActivities(documents, projectId, extractionOptions)
+        entities = await this.extractActivities(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'team_agreements':
-        entities = await this.extractTeamAgreements(documents, projectId, extractionOptions)
+        entities = await this.extractTeamAgreements(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'development_approaches':
-        entities = await this.extractDevelopmentApproaches(documents, projectId, extractionOptions)
+        entities = await this.extractDevelopmentApproaches(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'project_iterations':
-        entities = await this.extractProjectIterations(documents, projectId, extractionOptions)
+        entities = await this.extractProjectIterations(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'work_items':
-        entities = await this.extractWorkItems(documents, projectId, extractionOptions)
+        entities = await this.extractWorkItems(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'capacity_plans':
-        entities = await this.extractCapacityPlans(documents, projectId, extractionOptions)
+        entities = await this.extractCapacityPlans(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'performance_measurements':
-        entities = await this.extractPerformanceMeasurements(documents, projectId, extractionOptions)
+        entities = await this.extractPerformanceMeasurements(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'earned_value_metrics':
-        entities = await this.extractEarnedValueMetrics(documents, projectId, extractionOptions)
+        entities = await this.extractEarnedValueMetrics(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'opportunities':
-        entities = await this.extractOpportunities(documents, projectId, extractionOptions)
+        entities = await this.extractOpportunities(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'risk_responses':
-        entities = await this.extractRiskResponses(documents, projectId, extractionOptions)
+        entities = await this.extractRiskResponses(documents, projectId, extractionOptions, documentMap, documentList)
         break
       case 'performance_actuals':
-        entities = await this.extractPerformanceActuals(documents, projectId, extractionOptions)
+        entities = await this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
         break
       default:
         throw new Error(`Unknown entity type: ${entityType}`)

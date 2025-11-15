@@ -1,11 +1,14 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -17,6 +20,8 @@ import {
 import { ProjectSearchDialog, SearchableItem } from '@/components/ui/search-dialog'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
+import { apiClient } from '@/lib/api'
+import { getApiUrl } from '@/lib/api-url'
 import { 
   Plus, 
   Loader2, 
@@ -48,15 +53,29 @@ interface ProgramProjectsTabProps {
 }
 
 export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
+  const router = useRouter()
   const [assignedProjects, setAssignedProjects] = useState<Project[]>([])
   const [allProjects, setAllProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [assignDialogOpen, setAssignDialogOpen] = useState(false)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [projectSearchOpen, setProjectSearchOpen] = useState(false)
   const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [selectedProject, setSelectedProject] = useState<SearchableItem | null>(null)
   const [assigning, setAssigning] = useState(false)
+  const [creating, setCreating] = useState(false)
   const [removing, setRemoving] = useState<string | null>(null)
+  
+  // Create project form state
+  const [newProject, setNewProject] = useState({
+    name: '',
+    description: '',
+    framework: '',
+    priority: 'medium',
+    start_date: '',
+    end_date: '',
+    budget: '',
+  })
 
   useEffect(() => {
     void fetchProgramProjects()
@@ -66,7 +85,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
   const fetchProgramProjects = async () => {
     try {
       setLoading(true)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/projects`, {
+      const response = await fetch(getApiUrl(`/programs/${programId}/projects`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -89,7 +108,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
   const fetchAllProjects = async () => {
     try {
       // Request all projects with high limit (no pagination for dropdown)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/projects?limit=1000`, {
+      const response = await fetch(getApiUrl(`/projects?limit=1000`), {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
         }
@@ -118,7 +137,7 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
     try {
       setAssigning(true)
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/add-project`, {
+      const response = await fetch(getApiUrl(`/programs/${programId}/add-project`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -146,13 +165,81 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
     }
   }
 
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (!newProject.name || !newProject.framework) {
+      toast.error('Please fill in required fields (Name and Framework)')
+      return
+    }
+
+    // Validate dates if provided
+    if (newProject.start_date && newProject.end_date) {
+      const startDate = new Date(newProject.start_date)
+      const endDate = new Date(newProject.end_date)
+      if (endDate <= startDate) {
+        toast.error('End date must be after start date')
+        return
+      }
+    }
+
+    // Validate budget if provided
+    if (newProject.budget && isNaN(parseFloat(newProject.budget))) {
+      toast.error('Please enter a valid budget amount')
+      return
+    }
+
+    try {
+      setCreating(true)
+      
+      const projectData = {
+        name: newProject.name,
+        description: newProject.description || undefined,
+        framework: newProject.framework,
+        priority: newProject.priority,
+        start_date: newProject.start_date || undefined,
+        end_date: newProject.end_date || undefined,
+        budget: newProject.budget ? parseFloat(newProject.budget) : undefined,
+        program_id: programId, // Automatically assign to this program
+      }
+      
+      const createdProject = await apiClient.createProject(projectData)
+      
+      toast.success('Project created and assigned to program successfully!')
+      setCreateDialogOpen(false)
+      setNewProject({
+        name: '',
+        description: '',
+        framework: '',
+        priority: 'medium',
+        start_date: '',
+        end_date: '',
+        budget: '',
+      })
+      
+      // Refresh projects list
+      await fetchProgramProjects()
+      await fetchAllProjects()
+      
+      // Navigate to the newly created project
+      if (createdProject?.id) {
+        router.push(`/projects/${createdProject.id}`)
+      }
+    } catch (error) {
+      console.error('Failed to create project:', error)
+      toast.error('Failed to create project. Please try again.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const handleRemoveProject = async (projectId: string, projectName: string) => {
     if (!confirm(`Remove "${projectName}" from this program?`)) return
     
     try {
       setRemoving(projectId)
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/remove-project/${projectId}`, {
+      const response = await fetch(getApiUrl(`/programs/${programId}/remove-project/${projectId}`), {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
@@ -206,10 +293,19 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
                 {assignedProjects.length} projects assigned to this program
               </CardDescription>
             </div>
-            <Button onClick={() => setAssignDialogOpen(true)} disabled={unassignedProjects.length === 0}>
-              <Plus className="h-4 w-4 mr-2" />
-              Assign Project
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                onClick={() => setCreateDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create New Project
+              </Button>
+              <Button onClick={() => setAssignDialogOpen(true)} disabled={unassignedProjects.length === 0}>
+                <Plus className="h-4 w-4 mr-2" />
+                Assign Project
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
@@ -421,6 +517,153 @@ export function ProgramProjectsTab({ programId }: ProgramProjectsTabProps) {
               )}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create New Project Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleCreateProject}>
+            <DialogHeader>
+              <DialogTitle>Create New Project</DialogTitle>
+              <DialogDescription>
+                Create a new project and automatically assign it to this program.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="grid gap-6 py-4">
+              {/* Name and Priority */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-project-name" className="text-sm font-semibold">
+                    Project Name *
+                  </Label>
+                  <Input
+                    id="create-project-name"
+                    placeholder="Enter project name"
+                    value={newProject.name}
+                    onChange={(e) => setNewProject({ ...newProject, name: e.target.value })}
+                    className="mt-2"
+                    required
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-priority" className="text-sm font-semibold">
+                    Priority
+                  </Label>
+                  <select
+                    id="create-priority"
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                    value={newProject.priority}
+                    onChange={(e) => setNewProject({ ...newProject, priority: e.target.value })}
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Framework */}
+              <div>
+                <Label htmlFor="create-framework" className="text-sm font-semibold">
+                  Framework *
+                </Label>
+                <select
+                  id="create-framework"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                  value={newProject.framework}
+                  onChange={(e) => setNewProject({ ...newProject, framework: e.target.value })}
+                  required
+                >
+                  <option value="">Select framework</option>
+                  <option value="BABOK v3">BABOK v3</option>
+                  <option value="PMBOK 7">PMBOK 7</option>
+                  <option value="DMBOK 2.0">DMBOK 2.0</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <Label htmlFor="create-description" className="text-sm font-semibold">
+                  Description
+                </Label>
+                <Textarea
+                  id="create-description"
+                  placeholder="Describe the project objectives and scope"
+                  className="mt-2"
+                  value={newProject.description}
+                  onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+                  rows={3}
+                />
+              </div>
+
+              {/* Timeline and Budget */}
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="create-start-date" className="text-sm font-semibold">
+                    Start Date
+                  </Label>
+                  <Input
+                    id="create-start-date"
+                    type="date"
+                    className="mt-2"
+                    value={newProject.start_date}
+                    onChange={(e) => setNewProject({ ...newProject, start_date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-end-date" className="text-sm font-semibold">
+                    End Date
+                  </Label>
+                  <Input
+                    id="create-end-date"
+                    type="date"
+                    className="mt-2"
+                    value={newProject.end_date}
+                    onChange={(e) => setNewProject({ ...newProject, end_date: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-budget" className="text-sm font-semibold">
+                    Budget
+                  </Label>
+                  <Input
+                    id="create-budget"
+                    type="number"
+                    placeholder="0"
+                    className="mt-2"
+                    value={newProject.budget}
+                    onChange={(e) => setNewProject({ ...newProject, budget: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => setCreateDialogOpen(false)}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={creating}>
+                {creating ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Creating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Project
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

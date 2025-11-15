@@ -3,6 +3,7 @@ import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
 import projectService from "../services/projectService"
+import * as programService from "../services/programService"
 import { v4 as uuidv4 } from "uuid"
 import { trackActivity } from "../middleware/analyticsMiddleware"
 import { extractionQueue } from "../services/queueService"
@@ -261,6 +262,7 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
       end_date,
       budget,
       team_members = [],
+      program_id,
     } = req.body
 
     const id = uuidv4()
@@ -270,10 +272,19 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
     const endDateValue = end_date && end_date.trim() !== '' ? end_date : null
     const budgetValue = budget && budget !== '' ? parseFloat(budget) : null
 
+    // Validate program_id if provided
+    let programIdValue = program_id || null
+    if (programIdValue) {
+      const programCheck = await pool.query('SELECT id FROM programs WHERE id = $1', [programIdValue])
+      if (programCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'Invalid program_id: Program not found' })
+      }
+    }
+
     const result = await pool.query(
       `
-      INSERT INTO projects (id, name, description, framework, priority, start_date, end_date, budget, owner_id, team_members)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      INSERT INTO projects (id, name, description, framework, priority, start_date, end_date, budget, owner_id, team_members, program_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       RETURNING *
     `,
       [
@@ -287,6 +298,7 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
         budgetValue,
         req.user?.id,
         JSON.stringify(team_members),
+        programIdValue,
       ],
     )
 
@@ -956,6 +968,105 @@ router.get("/:id/drift-detections", authenticateToken, async (req, res) => {
   } catch (error) {
     log.error("Error fetching drift detections:", error)
     res.status(500).json({ error: "Failed to fetch drift detections" })
+  }
+})
+
+// Upgrade project to program (must be before /:id route)
+router.post("/:id/upgrade-to-program", authenticateToken, requirePermission("programs.manage"), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id } = req.params
+    const projectId = id
+    const userId = (req as any).user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    // Get project details
+    const projectResult = await pool.query(
+      `SELECT p.*, u.name as owner_name 
+       FROM projects p
+       LEFT JOIN users u ON p.owner_id = u.id
+       WHERE p.id = $1`,
+      [projectId]
+    )
+
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    const project = projectResult.rows[0]
+
+    // Check if project is already assigned to a program
+    if (project.program_id) {
+      return res.status(400).json({ 
+        error: "Project is already assigned to a program",
+        program_id: project.program_id
+      })
+    }
+
+    // Map project fields to program fields
+    // Convert project dates to DATE format (remove time component)
+    const startDate = project.start_date ? new Date(project.start_date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]
+    const endDate = project.end_date ? new Date(project.end_date).toISOString().split('T')[0] : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // Default to 1 year from now
+
+    // Map project status to program RAG status
+    const statusMap: Record<string, 'green' | 'amber' | 'red'> = {
+      'active': 'green',
+      'on-hold': 'amber',
+      'at_risk': 'amber',
+      'completed': 'green',
+      'archived': 'green',
+      'planning': 'green'
+    }
+    const programStatus = statusMap[project.status?.toLowerCase()] || 'green'
+
+    // Create program from project data
+    const programData = {
+      name: project.name || `Program: ${project.name}`,
+      description: project.description || `Program created from project: ${project.name}`,
+      budget: project.budget ? parseFloat(project.budget.toString()) : null,
+      currency: 'USD', // Default currency
+      start_date: startDate,
+      end_date: endDate,
+      status: programStatus,
+      owner_id: project.owner_id || userId,
+      created_by: userId
+    }
+
+    const newProgram = await programService.createProgram(programData)
+
+    // Link project to the new program
+    await programService.assignProject(newProgram.id, projectId)
+
+    log.info(`Project upgraded to program`, { 
+      projectId, 
+      programId: newProgram.id,
+      userId 
+    })
+
+    res.json({
+      success: true,
+      data: {
+        program: newProgram,
+        project: {
+          ...project,
+          program_id: newProgram.id
+        }
+      }
+    })
+  } catch (error: any) {
+    log.error("Failed to upgrade project to program:", error)
+    
+    if (error.code === 'PROGRAM_NOT_FOUND' || error.message?.includes('not found')) {
+      return res.status(404).json({ error: error.message || "Resource not found" })
+    }
+    
+    res.status(500).json({ 
+      error: "Failed to upgrade project to program",
+      details: error.message 
+    })
   }
 })
 

@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.1.0] - 2025-01-14
+
+### ✨ Added
+
+#### **Source Document Traceability**
+- **Full Entity Traceability**: Every AI-extracted entity now includes `source_document_id` linking back to the original document
+- **Click-Through Navigation**: One-click access to view source documents from entity detail pages
+- **Automatic Resolution**: AI-provided document titles automatically resolve to document IDs with fuzzy matching
+- **Fallback Protection**: Graceful fallback ensures 100% coverage even if AI doesn't specify source document
+- **Comprehensive Coverage**: Implemented across all 23 entity types (stakeholders, requirements, risks, milestones, constraints, success criteria, best practices, phases, resources, technologies, quality standards, deliverables, scope items, activities, team agreements, development approaches, project iterations, work items, capacity plans, performance measurements, earned value metrics, opportunities, risk responses, performance actuals)
+- **Database Migration**: Migration 334 adds `source_document_id` column to all entity tables with proper indexes
+- **Backfill Script**: Script to backfill `source_document_id` for existing entities using content matching
+- **Enhanced Logging**: Comprehensive logging for resolution success, failures, and fallback usage
+
+#### **Document Title Handling Improvements**
+- **Null Title Handling**: SQL query uses `COALESCE` to ensure documents always have displayable titles
+- **Template Name Fallback**: Falls back to template name if document title is null
+- **Document ID Fallback**: Uses document ID prefix as last resort for untitled documents
+- **Fuzzy Matching**: Enhanced matching handles document title variations and special characters
+
+#### **Developer Experience**
+- **Centralized Helper Method**: `resolveSourceDocumentIdWithFallback()` ensures consistent behavior across all extraction methods
+- **Type Safety**: Proper TypeScript types for all entity interfaces
+- **Error Handling**: Robust error handling prevents data loss during extraction
+- **Debug Logging**: Detailed logs help troubleshoot resolution issues
+
+### 🔧 Changed
+
+- **Extraction Service**: All 23 extraction methods now use centralized `resolveSourceDocumentIdWithFallback()` helper
+- **Document Query**: Enhanced SQL query to handle null titles with `COALESCE`
+- **Document Mapping**: Improved `buildDocumentMap()` to include template names and handle null titles
+- **Document List Building**: Enhanced `buildDocumentList()` to show meaningful titles even when null
+
+### 📚 Documentation
+
+- **Release Notes**: Comprehensive release notes document (`SOURCE_DOCUMENT_TRACEABILITY_RELEASE_NOTES.md`)
+- **Migration Guide**: Step-by-step migration instructions
+- **Troubleshooting Guide**: Common issues and solutions
+- **Use Case Examples**: Real-world scenarios demonstrating the feature
+
+---
+
 ## [2.0.0] - 2025-10-14
 
 ### 🚀 Major Release: AI-Powered Document Generation with Enterprise Metadata Tracking
