@@ -84,58 +84,9 @@ router.post(
 )
 
 /**
- * GET /api/project-data-extraction/status/:jobId
- * Check extraction job status
- */
-router.get(
-  '/status/:jobId',
-  authenticateToken,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { jobId } = req.params
-
-      const result = await pool!.query(
-        `SELECT id, type, status, progress, result, error_message, created_at, started_at, completed_at
-         FROM jobs
-         WHERE id = $1`,
-        [jobId]
-      )
-
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          error: 'Job not found'
-        })
-      }
-
-      const job = result.rows[0]
-
-      res.json({
-        success: true,
-        job: {
-          id: job.id,
-          type: job.type,
-          status: job.status,
-          progress: job.progress,
-          result: job.result,
-          error: job.error_message,
-          createdAt: job.created_at,
-          startedAt: job.started_at,
-          completedAt: job.completed_at
-        }
-      })
-    } catch (error: unknown) {
-      logger.error('[EXTRACTION-API] Status check failed', {
-        error: error instanceof Error ? error.message : String(error)
-      })
-      next(error)
-    }
-  }
-)
-
-/**
  * GET /api/project-data-extraction/:projectId/summary
  * Get extraction summary with PMBOK 8 domain counts for a project
+ * NOTE: Must be defined BEFORE /status/:jobId to avoid route conflicts
  */
 router.get(
   '/:projectId/summary',
@@ -270,6 +221,56 @@ router.get(
       logger.error('[EXTRACTION-SUMMARY-API] Summary fetch failed', {
         error: error instanceof Error ? error.message : String(error),
         projectId: req.params.projectId
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/project-data-extraction/status/:jobId
+ * Check extraction job status
+ */
+router.get(
+  '/status/:jobId',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { jobId } = req.params
+
+      const result = await pool!.query(
+        `SELECT id, type, status, progress, result, error_message, created_at, started_at, completed_at
+         FROM jobs
+         WHERE id = $1`,
+        [jobId]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Job not found'
+        })
+      }
+
+      const job = result.rows[0]
+
+      res.json({
+        success: true,
+        job: {
+          id: job.id,
+          type: job.type,
+          status: job.status,
+          progress: job.progress,
+          result: job.result,
+          error: job.error_message,
+          createdAt: job.created_at,
+          startedAt: job.started_at,
+          completedAt: job.completed_at
+        }
+      })
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-API] Status check failed', {
+        error: error instanceof Error ? error.message : String(error)
       })
       next(error)
     }

@@ -490,6 +490,85 @@ router.get(
 )
 
 /**
+ * GET /api/signatures/requests
+ * Get signature requests (optionally filtered by documentId query parameter)
+ */
+router.get(
+  "/requests",
+  requirePermission("documents.read"),
+  async (req: express.Request, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { documentId } = req.query
+
+      let query = `
+        SELECT 
+          ds.id,
+          ds.document_id,
+          ds.title,
+          ds.status,
+          ds.created_at,
+          ds.updated_at,
+          ds.signing_deadline,
+          ds.require_all_signatures,
+          json_agg(
+            json_build_object(
+              'id', sr.id,
+              'email', sr.email,
+              'name', sr.name,
+              'role', sr.role,
+              'status', sr.status,
+              'signing_order', sr.signing_order,
+              'signed_at', sr.signed_at,
+              'invitation_token', sr.invitation_token
+            )
+          ) FILTER (WHERE sr.id IS NOT NULL) as recipients
+        FROM document_signatures ds
+        LEFT JOIN signature_recipients sr ON ds.id = sr.document_signature_id
+        WHERE 1=1
+      `
+      const queryParams: any[] = []
+      
+      if (documentId) {
+        query += ` AND ds.document_id = $1`
+        queryParams.push(documentId)
+      }
+      
+      query += `
+        GROUP BY ds.id, ds.document_id, ds.title, ds.status, ds.created_at, ds.updated_at, ds.signing_deadline, ds.require_all_signatures
+        ORDER BY ds.created_at DESC
+      `
+
+      const result = await pool.query(query, queryParams)
+
+      const requests = result.rows.map((row) => ({
+        id: row.id,
+        documentId: row.document_id,
+        title: row.title,
+        status: row.status,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        signingDeadline: row.signing_deadline,
+        requireAllSignatures: row.require_all_signatures,
+        recipients: row.recipients || [],
+        fields: [] // Fields are fetched separately via /documents/:documentId/fields
+      }))
+
+      res.json({
+        success: true,
+        data: requests,
+      })
+    } catch (error: any) {
+      log.error("Error getting signature requests:", error)
+      res.status(500).json({
+        success: false,
+        error: error.message || "Failed to get signature requests",
+      })
+    }
+  }
+)
+
+/**
  * GET /api/signatures/document/:documentId
  * Get signature status for a document
  */
