@@ -704,6 +704,13 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       </Button>
                       <Button 
                         variant="outline" 
+                        onClick={() => router.push(`/projects/${projectId}/documents/${docId}/entities`)}
+                      >
+                        <Database className="h-4 w-4 mr-2" />
+                        View Entities
+                      </Button>
+                      <Button 
+                        variant="outline" 
                         onClick={() => setFeedbackDialogOpen(true)}
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />

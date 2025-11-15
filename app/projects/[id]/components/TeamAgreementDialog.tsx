@@ -98,16 +98,24 @@ export function TeamAgreementDialog({
     try {
       setLoading(true)
 
-      const payload = {
+      const payload: any = {
         project_id: projectId,
         title: formData.title,
         description: formData.description,
         category: formData.category,
         effective_date: new Date(formData.effective_date).toISOString(),
-        review_frequency: formData.review_frequency || undefined,
-        next_review_date: formData.next_review_date ? new Date(formData.next_review_date).toISOString() : undefined,
         status: formData.status,
-        notes: formData.notes || undefined
+      }
+
+      // Only include optional fields if they have values
+      if (formData.review_frequency && formData.review_frequency !== '') {
+        payload.review_frequency = formData.review_frequency
+      }
+      if (formData.next_review_date && formData.next_review_date !== '') {
+        payload.next_review_date = new Date(formData.next_review_date).toISOString()
+      }
+      if (formData.notes && formData.notes.trim() !== '') {
+        payload.notes = formData.notes
       }
 
       if (agreement) {
@@ -245,8 +253,8 @@ export function TeamAgreementDialog({
             <div className="space-y-2">
               <Label htmlFor="review_frequency">Review Frequency</Label>
               <Select
-                value={formData.review_frequency}
-                onValueChange={(value) => setFormData({ ...formData, review_frequency: value as TeamAgreement['review_frequency'] || '' })}
+                value={formData.review_frequency || undefined}
+                onValueChange={(value) => setFormData({ ...formData, review_frequency: (value || '') as TeamAgreement['review_frequency'] | '' })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select frequency" />
