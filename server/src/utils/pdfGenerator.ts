@@ -182,7 +182,18 @@ export async function markdownToPdf(
       }
     }
 
-    browser = await puppeteer.launch(launchOptions)
+    try {
+      browser = await puppeteer.launch(launchOptions)
+    } catch (launchError: any) {
+      // If launch fails and we don't have an executable path, try without it (let Puppeteer download Chrome)
+      if (!launchOptions.executablePath && launchError.message.includes("Could not find Chrome")) {
+        logger.warn("System Chrome not found, attempting to use Puppeteer's bundled Chrome...")
+        delete launchOptions.executablePath
+        browser = await puppeteer.launch(launchOptions)
+      } else {
+        throw launchError
+      }
+    }
 
     const page = await browser.newPage()
 
