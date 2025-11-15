@@ -531,6 +531,67 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
   }
 })
 
+// Generate PDF preview for signing
+// NOTE: Must be defined BEFORE /:id route to avoid route conflicts
+router.get("/:id/pdf-preview",
+  authenticateToken,
+  requirePermission("documents.read"),
+  validateParams(Joi.object({ id: schemas.uuid })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Get document content
+      const docResult = await pool.query(
+        "SELECT id, name, content FROM documents WHERE id = $1",
+        [id]
+      )
+
+      if (docResult.rows.length === 0) {
+        return res.status(404).json({ error: "Document not found" })
+      }
+
+      const doc = docResult.rows[0]
+      
+      // Extract markdown content
+      let markdownContent = ''
+      if (typeof doc.content === 'string') {
+        markdownContent = doc.content
+      } else if (doc.content && typeof doc.content === 'object') {
+        markdownContent = doc.content.content || doc.content.text || JSON.stringify(doc.content)
+      } else {
+        markdownContent = String(doc.content || '')
+      }
+
+      if (!markdownContent || markdownContent.trim() === '') {
+        log.warn(`Document ${id} has no content to convert`)
+        return res.status(400).json({ error: "Document has no content to convert to PDF" })
+      }
+
+      log.info(`Converting document ${id} to PDF (content length: ${markdownContent.length} chars)`)
+
+      // Convert Markdown to PDF
+      const pdfBuffer = await markdownToPdf(markdownContent, {
+        format: "A4",
+        margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
+        printBackground: true
+      })
+
+      // Return PDF
+      res.setHeader("Content-Type", "application/pdf")
+      res.setHeader("Content-Disposition", `inline; filename="${doc.name || 'document'}.pdf"`)
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+      res.send(pdfBuffer)
+
+      log.info(`PDF preview generated successfully for document ${id} (size: ${pdfBuffer.length} bytes)`)
+    } catch (error: any) {
+      log.error("Error generating PDF preview:", error)
+      res.status(500).json({ error: error.message || "Failed to generate PDF preview" })
+    }
+  }
+)
+
 // Get document by ID
 router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uuid })), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
@@ -1607,66 +1668,6 @@ router.post("/:id/restore",
     } catch (error) {
       log.error("Error restoring document:", error)
       res.status(500).json({ error: "Internal server error" })
-    }
-  }
-)
-
-// Generate PDF preview for signing
-router.get("/:id/pdf-preview",
-  authenticateToken,
-  requirePermission("documents.read"),
-  validateParams(Joi.object({ id: schemas.uuid })),
-  async (req, res) => {
-    const log = childLogger({ requestId: (req as any).requestId })
-    try {
-      const { id } = req.params
-
-      // Get document content
-      const docResult = await pool.query(
-        "SELECT id, name, content FROM documents WHERE id = $1",
-        [id]
-      )
-
-      if (docResult.rows.length === 0) {
-        return res.status(404).json({ error: "Document not found" })
-      }
-
-      const doc = docResult.rows[0]
-      
-      // Extract markdown content
-      let markdownContent = ''
-      if (typeof doc.content === 'string') {
-        markdownContent = doc.content
-      } else if (doc.content && typeof doc.content === 'object') {
-        markdownContent = doc.content.content || doc.content.text || JSON.stringify(doc.content)
-      } else {
-        markdownContent = String(doc.content || '')
-      }
-
-      if (!markdownContent || markdownContent.trim() === '') {
-        log.warn(`Document ${id} has no content to convert`)
-        return res.status(400).json({ error: "Document has no content to convert to PDF" })
-      }
-
-      log.info(`Converting document ${id} to PDF (content length: ${markdownContent.length} chars)`)
-
-      // Convert Markdown to PDF
-      const pdfBuffer = await markdownToPdf(markdownContent, {
-        format: "A4",
-        margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
-        printBackground: true
-      })
-
-      // Return PDF
-      res.setHeader("Content-Type", "application/pdf")
-      res.setHeader("Content-Disposition", `inline; filename="${doc.name || 'document'}.pdf"`)
-      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-      res.send(pdfBuffer)
-
-      log.info(`PDF preview generated successfully for document ${id} (size: ${pdfBuffer.length} bytes)`)
-    } catch (error: any) {
-      log.error("Error generating PDF preview:", error)
-      res.status(500).json({ error: error.message || "Failed to generate PDF preview" })
     }
   }
 )
