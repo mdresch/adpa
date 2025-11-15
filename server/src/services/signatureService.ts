@@ -236,12 +236,12 @@ export class SignatureService {
     try {
       const { signature_field_id, signature_data, ip_address, user_agent } = params
 
-      // Get signature field
+      // Get signature field (LEFT JOIN to allow fields without signature requests)
       const fieldResult = await pool.query(
         `
         SELECT sf.*, ds.id as document_signature_id, ds.document_id
         FROM signature_fields sf
-        JOIN document_signatures ds ON sf.document_id = ds.document_id
+        LEFT JOIN document_signatures ds ON sf.document_id = ds.document_id
         WHERE sf.id = $1
       `,
         [signature_field_id]

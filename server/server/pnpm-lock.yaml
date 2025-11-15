@@ -1,0 +1,133 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@hookform/resolvers':
+        specifier: ^5.2.2
+        version: 5.2.2(react-hook-form@7.66.0(react@19.2.0))
+      '@types/json2csv':
+        specifier: ^5.0.7
+        version: 5.0.7
+      date-fns:
+        specifier: ^4.1.0
+        version: 4.1.0
+      json2csv:
+        specifier: ^6.0.0-alpha.2
+        version: 6.0.0-alpha.2
+      perfect-freehand:
+        specifier: ^1.2.2
+        version: 1.2.2
+      ts-pattern:
+        specifier: ^5.9.0
+        version: 5.9.0
+      zod:
+        specifier: ^4.1.12
+        version: 4.1.12
+
+packages:
+
+  '@hookform/resolvers@5.2.2':
+    resolution: {integrity: sha512-A/IxlMLShx3KjV/HeTcTfaMxdwy690+L/ZADoeaTltLx+CVuzkeVIPuybK3jrRfw7YZnmdKsVVHAlEPIAEUNlA==}
+    peerDependencies:
+      react-hook-form: ^7.55.0
+
+  '@standard-schema/utils@0.3.0':
+    resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
+
+  '@streamparser/json@0.0.6':
+    resolution: {integrity: sha512-vL9EVn/v+OhZ+Wcs6O4iKE9EUpwHUqHmCtNUMWjqp+6dr85+XPOSGTEsqYNq1Vn04uk9SWlOVmx9J48ggJVT2Q==}
+
+  '@types/json2csv@5.0.7':
+    resolution: {integrity: sha512-Ma25zw9G9GEBnX8b12R4EYvnFT6dBh8L3jwsN5EUFXa+fl2dqmbLDbNWN0XuQU3rSXdsbBeCYjI9uHU2PUBxhA==}
+
+  '@types/node@24.10.1':
+    resolution: {integrity: sha512-GNWcUTRBgIRJD5zj+Tq0fKOJ5XZajIiBroOF0yvj2bSU1WvNdYS/dn9UxwsujGW4JX06dnHyjV2y9rRaybH0iQ==}
+
+  commander@6.2.1:
+    resolution: {integrity: sha512-U7VdrJFnJgo4xjrHpTzu0yrHPGImdsmD95ZlgYSEajAn2JKzDhDTPG9kBTefmObL2w/ngeZnilk+OV9CG3d7UA==}
+    engines: {node: '>= 6'}
+
+  date-fns@4.1.0:
+    resolution: {integrity: sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==}
+
+  json2csv@6.0.0-alpha.2:
+    resolution: {integrity: sha512-nJ3oP6QxN8z69IT1HmrJdfVxhU1kLTBVgMfRnNZc37YEY+jZ4nU27rBGxT4vaqM/KUCavLRhntmTuBFqZLBUcA==}
+    engines: {node: '>= 12', npm: '>= 6.13.0'}
+    hasBin: true
+
+  lodash.get@4.4.2:
+    resolution: {integrity: sha512-z+Uw/vLuy6gQe8cfaFWD7p0wVv8fJl3mbzXh33RS+0oW2wvUqiRXiQ69gLWSLpgB5/6sU+r6BlQR0MBILadqTQ==}
+    deprecated: This package is deprecated. Use the optional chaining (?.) operator instead.
+
+  perfect-freehand@1.2.2:
+    resolution: {integrity: sha512-eh31l019WICQ03pkF3FSzHxB8n07ItqIQ++G5UV8JX0zVOXzgTGCqnRR0jJ2h9U8/2uW4W4mtGJELt9kEV0CFQ==}
+
+  react-hook-form@7.66.0:
+    resolution: {integrity: sha512-xXBqsWGKrY46ZqaHDo+ZUYiMUgi8suYu5kdrS20EG8KiL7VRQitEbNjm+UcrDYrNi1YLyfpmAeGjCZYXLT9YBw==}
+    engines: {node: '>=18.0.0'}
+    peerDependencies:
+      react: ^16.8.0 || ^17 || ^18 || ^19
+
+  react@19.2.0:
+    resolution: {integrity: sha512-tmbWg6W31tQLeB5cdIBOicJDJRR2KzXsV7uSK9iNfLWQ5bIZfxuPEHp7M8wiHyHnn0DD1i7w3Zmin0FtkrwoCQ==}
+    engines: {node: '>=0.10.0'}
+
+  ts-pattern@5.9.0:
+    resolution: {integrity: sha512-6s5V71mX8qBUmlgbrfL33xDUwO0fq48rxAu2LBE11WBeGdpCPOsXksQbZJHvHwhrd3QjUusd3mAOM5Gg0mFBLg==}
+
+  undici-types@7.16.0:
+    resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
+
+  zod@4.1.12:
+    resolution: {integrity: sha512-JInaHOamG8pt5+Ey8kGmdcAcg3OL9reK8ltczgHTAwNhMys/6ThXHityHxVV2p3fkw/c+MAvBHFVYHFZDmjMCQ==}
+
+snapshots:
+
+  '@hookform/resolvers@5.2.2(react-hook-form@7.66.0(react@19.2.0))':
+    dependencies:
+      '@standard-schema/utils': 0.3.0
+      react-hook-form: 7.66.0(react@19.2.0)
+
+  '@standard-schema/utils@0.3.0': {}
+
+  '@streamparser/json@0.0.6': {}
+
+  '@types/json2csv@5.0.7':
+    dependencies:
+      '@types/node': 24.10.1
+
+  '@types/node@24.10.1':
+    dependencies:
+      undici-types: 7.16.0
+
+  commander@6.2.1: {}
+
+  date-fns@4.1.0: {}
+
+  json2csv@6.0.0-alpha.2:
+    dependencies:
+      '@streamparser/json': 0.0.6
+      commander: 6.2.1
+      lodash.get: 4.4.2
+
+  lodash.get@4.4.2: {}
+
+  perfect-freehand@1.2.2: {}
+
+  react-hook-form@7.66.0(react@19.2.0):
+    dependencies:
+      react: 19.2.0
+
+  react@19.2.0: {}
+
+  ts-pattern@5.9.0: {}
+
+  undici-types@7.16.0: {}
+
+  zod@4.1.12: {}

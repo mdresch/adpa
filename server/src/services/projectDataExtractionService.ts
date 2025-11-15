@@ -5841,9 +5841,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueActivities.forEach((a, index) => {
-      const offset = index * 10  // Changed from 11 to 10 (removed phase, duration, effort_estimate)
+      const offset = index * 11  // 11 columns: project_id, name, activity_name, description, category, start_date, end_date, status, assigned_to, source_document_id, created_by
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
       )
       
       // assigned_to must be UUID, not a name string

@@ -159,9 +159,9 @@ SIGNING_CERT_PASSWORD=your-certificate-password
 ## 📋 Next Steps
 
 1. ✅ **Extraction Complete** - Signing package extracted and adapted
-2. 📋 **Create Database Migration** - Add signature tables
-3. 📋 **Create API Routes** - Express.js endpoints for signing
-4. 📋 **Create Frontend Components** - Signature capture UI
+2. ✅ **Database Migration** - Migration 335 completed successfully (signature tables created)
+3. ✅ **API Routes** - Express.js endpoints created (`server/src/routes/signatures.ts`)
+4. 📋 **Create Frontend Components** - Signature capture UI (NEXT STEP)
 5. 📋 **Integration Testing** - Test signing workflow
 
 ---
