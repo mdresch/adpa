@@ -324,7 +324,7 @@ export default function AnalyticsPage() {
                             ) : (
                               <>
                                 <p className="text-2xl font-bold">{stats.systemUptime}</p>
-                                {analyticsData && stats.apiCalls > 0 && (
+                                {analyticsData && analyticsData.system_uptime && analyticsData.system_uptime !== "N/A" && (
                                   <div className="flex items-center mt-2">
                                     <Server className="h-4 w-4 text-green-500 mr-1" />
                                     <span className="text-sm text-muted-foreground">Monitoring active</span>

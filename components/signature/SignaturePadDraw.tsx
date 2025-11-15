@@ -28,11 +28,15 @@ const checkSignatureValidity = (element: React.RefObject<HTMLCanvasElement>): bo
   let filledPixels = 0;
   const totalPixels = data.length / 4;
 
-  for (let i = 0; i < data.length; i += 4) {
+  // Optimize by sampling every 4th pixel for better performance
+  const sampleRate = 4;
+  for (let i = 0; i < data.length; i += 4 * sampleRate) {
     if (data[i + 3] > 0) filledPixels++;
   }
-
-  const filledPercentage = filledPixels / totalPixels;
+  
+  // Adjust total pixels count for sampling
+  const sampledTotalPixels = Math.floor(totalPixels / sampleRate);
+  const filledPercentage = filledPixels / sampledTotalPixels;
   const isValid = filledPercentage > SIGNATURE_MIN_COVERAGE_THRESHOLD;
 
   return isValid;

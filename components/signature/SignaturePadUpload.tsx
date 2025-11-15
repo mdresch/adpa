@@ -90,7 +90,13 @@ export const SignaturePadUpload = ({
       $imageData.current = loadImageOntoCanvas(img, $el.current, ctx);
       onChange?.($el.current.toDataURL());
     } catch (error) {
-      console.error(error);
+      console.error('Image upload failed:', error);
+      // Notify user of upload failure
+      if (error instanceof Error) {
+        alert(`Upload failed: ${error.message}`);
+      } else {
+        alert('Upload failed: Unknown error occurred');
+      }
     }
   };
 

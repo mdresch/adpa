@@ -38,6 +38,7 @@ export default function DocumentSigningPage() {
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
   const [selectedField, setSelectedField] = useState<SignatureField | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     loadDocumentData();
@@ -56,6 +57,8 @@ export default function DocumentSigningPage() {
         const token = localStorage.getItem('auth_token');
         if (!token) {
           console.warn('No auth token found, PDF preview may fail');
+          toast.error('Authentication required. Please log in again.');
+          return;
         }
         const pdfUrl = getApiUrl(`/documents/${documentId}/pdf-preview`);
         // Create a blob URL for the PDF preview
@@ -164,6 +167,7 @@ export default function DocumentSigningPage() {
 
     try {
       setIsSigning(true);
+      setRetryCount(0); // Reset retry count on new signature attempt
 
       // First, ensure the field exists in the database
       // If field.id doesn't look like a UUID, it's a client-generated ID and needs to be saved first
@@ -274,24 +278,39 @@ export default function DocumentSigningPage() {
       
       // If field not found or validation error, try saving fields first
       if (errorMessage.includes('not found') || errorMessage.includes('GUID') || errorMessage.includes('validation') || error.response?.status === 404 || error.response?.status === 400) {
-        toast.info('Saving fields to database first...');
-        try {
-          await handleSaveFields();
-          // Reload fields to get database IDs
-          await loadDocumentData();
-          // Retry signing after a short delay
-          setTimeout(() => {
-            if (selectedField) {
-              handleSaveSignature(signature);
-            }
-          }, 1000);
-        } catch (saveError) {
-          console.error('Failed to save fields:', saveError);
-          toast.error('Failed to save fields. Please try placing the field again.');
+        // Prevent infinite recursion by tracking retry attempts
+        const maxRetries = 3;
+        if (retryCount < maxRetries) {
+          toast.info(`Saving fields to database first... (Attempt ${retryCount + 1}/${maxRetries})`);
+          try {
+            await handleSaveFields();
+            // Reload fields to get database IDs
+            await loadDocumentData();
+            // Retry signing after a short delay - don't set isSigning to false yet
+            setRetryCount(prev => prev + 1);
+            setTimeout(async () => {
+              if (selectedField) {
+                await handleSaveSignature(signature);
+              } else {
+                setIsSigning(false); // Only set to false if no field selected
+              }
+            }, 1000);
+            return; // Exit early to prevent setIsSigning(false) in finally block
+          } catch (saveError) {
+            console.error('Failed to save fields:', saveError);
+            toast.error('Failed to save fields. Please try placing the field again.');
+            setRetryCount(0); // Reset retry count on failure
+          }
+        } else {
+          toast.error('Maximum retry attempts reached. Please try again manually.');
+          setRetryCount(0); // Reset retry count
         }
       }
     } finally {
-      setIsSigning(false);
+      // Only set isSigning to false if we're not retrying
+      if (retryCount === 0 || retryCount >= 3) {
+        setIsSigning(false);
+      }
     }
   };
 

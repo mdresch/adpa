@@ -253,7 +253,7 @@ export function TeamAgreementDialog({
             <div className="space-y-2">
               <Label htmlFor="review_frequency">Review Frequency</Label>
               <Select
-                value={formData.review_frequency || undefined}
+                value={formData.review_frequency || ''}
                 onValueChange={(value) => setFormData({ ...formData, review_frequency: (value || '') as TeamAgreement['review_frequency'] | '' })}
               >
                 <SelectTrigger>
