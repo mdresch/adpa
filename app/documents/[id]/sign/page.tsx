@@ -39,6 +39,7 @@ export default function DocumentSigningPage() {
   const [selectedField, setSelectedField] = useState<SignatureField | null>(null);
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+  const [isRetrying, setIsRetrying] = useState(false); // Track if we're in a retry loop
 
   useEffect(() => {
     loadDocumentData();
@@ -165,9 +166,13 @@ export default function DocumentSigningPage() {
   const handleSaveSignature = async (signature: string) => {
     if (!selectedField) return;
 
+    // Only reset retry count if this is a NEW signature attempt (not a retry)
+    if (!isRetrying) {
+      setRetryCount(0);
+    }
+
     try {
       setIsSigning(true);
-      setRetryCount(0); // Reset retry count on new signature attempt
 
       // First, ensure the field exists in the database
       // If field.id doesn't look like a UUID, it's a client-generated ID and needs to be saved first
@@ -268,6 +273,8 @@ export default function DocumentSigningPage() {
       toast.success('Signature saved successfully');
       setShowSignatureDialog(false);
       setSelectedField(null);
+      setRetryCount(0); // Reset retry count on success
+      setIsRetrying(false); // Reset retry flag on success
 
       // Reload signature request status
       await loadDocumentData();
@@ -280,19 +287,26 @@ export default function DocumentSigningPage() {
       if (errorMessage.includes('not found') || errorMessage.includes('GUID') || errorMessage.includes('validation') || error.response?.status === 404 || error.response?.status === 400) {
         // Prevent infinite recursion by tracking retry attempts
         const maxRetries = 3;
-        if (retryCount < maxRetries) {
-          toast.info(`Saving fields to database first... (Attempt ${retryCount + 1}/${maxRetries})`);
+        const currentRetryCount = retryCount; // Capture current value synchronously
+        
+        if (currentRetryCount < maxRetries) {
+          toast.info(`Saving fields to database first... (Attempt ${currentRetryCount + 1}/${maxRetries})`);
           try {
+            setIsRetrying(true); // Mark that we're entering retry mode
             await handleSaveFields();
             // Reload fields to get database IDs
             await loadDocumentData();
-            // Retry signing after a short delay - don't set isSigning to false yet
-            setRetryCount(prev => prev + 1);
+            // Increment retry count before scheduling retry
+            const newRetryCount = currentRetryCount + 1;
+            setRetryCount(newRetryCount);
+            
+            // Retry signing after a short delay
             setTimeout(async () => {
               if (selectedField) {
                 await handleSaveSignature(signature);
               } else {
-                setIsSigning(false); // Only set to false if no field selected
+                setIsSigning(false);
+                setIsRetrying(false);
               }
             }, 1000);
             return; // Exit early to prevent setIsSigning(false) in finally block
@@ -300,16 +314,26 @@ export default function DocumentSigningPage() {
             console.error('Failed to save fields:', saveError);
             toast.error('Failed to save fields. Please try placing the field again.');
             setRetryCount(0); // Reset retry count on failure
+            setIsRetrying(false);
+            setIsSigning(false);
           }
         } else {
           toast.error('Maximum retry attempts reached. Please try again manually.');
           setRetryCount(0); // Reset retry count
+          setIsRetrying(false);
+          setIsSigning(false);
         }
+      } else {
+        // Not a retry-able error, reset retry state
+        setIsRetrying(false);
+        setIsSigning(false);
       }
     } finally {
       // Only set isSigning to false if we're not retrying
-      if (retryCount === 0 || retryCount >= 3) {
+      // Use the captured value from the error handler, not the stale state
+      if (!isRetrying && retryCount < 3) {
         setIsSigning(false);
+        setIsRetrying(false);
       }
     }
   };

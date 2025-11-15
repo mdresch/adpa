@@ -93,7 +93,13 @@ export function OverviewTab({
         setLoadingMetrics(true)
         
         // Fetch PMBOK 8 domain metrics from extraction API
-        const extractionResponse = await fetch(getApiUrl(`/project-data-extraction/${projectId}/summary`))
+        const token = localStorage.getItem('auth_token')
+        const extractionResponse = await fetch(getApiUrl(`/project-data-extraction/${projectId}/summary`), {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        })
         if (extractionResponse.ok) {
           const extractionData = await extractionResponse.json()
           if (extractionData.success && extractionData.pmbok8DomainCounts) {
