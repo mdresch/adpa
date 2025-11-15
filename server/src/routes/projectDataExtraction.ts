@@ -505,14 +505,36 @@ router.get(
       )
       const total = parseInt(countResult.rows[0]?.total || '0')
 
-      // Get entities with pagination (using validated numbers)
-      const result = await pool!.query(
-        `SELECT * FROM ${tableName} 
-         WHERE project_id = $1 
-         ORDER BY created_at DESC 
-         LIMIT $2 OFFSET $3`,
-        [projectId, limitNum, offsetNum]
-      )
+      // Build query with user name joins for created_by and updated_by
+      // Special handling for performance_measurements to join with users table
+      let query = `SELECT ${tableName}.*`
+      const queryParams: any[] = [projectId]
+      
+      if (tableName === 'performance_measurements') {
+        query = `
+          SELECT 
+            pm.*,
+            u1.name as created_by_name,
+            u2.name as updated_by_name
+          FROM ${tableName} pm
+          LEFT JOIN users u1 ON pm.created_by = u1.id
+          LEFT JOIN users u2 ON pm.updated_by = u2.id
+          WHERE pm.project_id = $1 
+          ORDER BY pm.created_at DESC 
+          LIMIT $2 OFFSET $3
+        `
+        queryParams.push(limitNum, offsetNum)
+      } else {
+        query = `
+          SELECT * FROM ${tableName} 
+          WHERE project_id = $1 
+          ORDER BY created_at DESC 
+          LIMIT $2 OFFSET $3
+        `
+        queryParams.push(limitNum, offsetNum)
+      }
+      
+      const result = await pool!.query(query, queryParams)
 
       logger.info('[ENTITY-DETAILS-API] Query completed', {
         entityType,
@@ -538,6 +560,183 @@ router.get(
       logger.error('[EXTRACTION-API] Entity fetch failed', {
         error: error instanceof Error ? error.message : String(error),
         entityType: req.params.entityType
+      })
+      next(error)
+    }
+  }
+)
+
+/**
+ * GET /api/project-data-extraction/document/:documentId/entities
+ * Get all entities extracted from a specific document (filtered by source_document_id)
+ */
+router.get(
+  '/document/:documentId/entities',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { documentId } = req.params
+      const userId = (req as any).user?.id
+      
+      logger.info('[DOCUMENT-ENTITIES-API] Request received', {
+        documentId,
+        userId,
+        query: req.query
+      })
+      
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      if (!uuidRegex.test(documentId)) {
+        logger.warn('[DOCUMENT-ENTITIES-API] Invalid document ID format', { documentId })
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid document ID format'
+        })
+      }
+
+      // SECURITY: Verify user has access to this document
+      const docCheck = await pool!.query(
+        `SELECT d.*, p.id as project_id, p.owner_id, p.created_by as project_created_by
+         FROM documents d
+         LEFT JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1`,
+        [documentId]
+      )
+
+      if (docCheck.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          error: 'Document not found'
+        })
+      }
+
+      const document = docCheck.rows[0]
+      const projectId = document.project_id
+      const userRole = (req as any).user?.role
+
+      // Check access: Admin or project owner
+      if (userRole !== 'admin') {
+        const projectOwnerId = document.owner_id || document.project_created_by
+        if (projectOwnerId !== userId) {
+          logger.warn('[DOCUMENT-ENTITIES-API] Unauthorized access attempt', {
+            documentId,
+            userId,
+            projectId
+          })
+          return res.status(403).json({
+            success: false,
+            error: 'Access denied: You do not have permission to view this document'
+          })
+        }
+      }
+
+      // Map all entity types to their table names
+      const entityTypes = [
+        { key: 'stakeholders', table: 'stakeholders' },
+        { key: 'requirements', table: 'requirements' },
+        { key: 'risks', table: 'risks' },
+        { key: 'milestones', table: 'milestones' },
+        { key: 'constraints', table: 'constraints' },
+        { key: 'successCriteria', table: 'success_criteria' },
+        { key: 'bestPractices', table: 'best_practices' },
+        { key: 'phases', table: 'phases' },
+        { key: 'resources', table: 'resources' },
+        { key: 'technologies', table: 'technologies' },
+        { key: 'qualityStandards', table: 'quality_standards' },
+        { key: 'deliverables', table: 'deliverables' },
+        { key: 'scopeItems', table: 'scope_items' },
+        { key: 'activities', table: 'activities' },
+        { key: 'teamAgreements', table: 'team_agreements' },
+        { key: 'developmentApproaches', table: 'development_approach' },
+        { key: 'projectIterations', table: 'project_iterations' },
+        { key: 'workItems', table: 'work_items' },
+        { key: 'capacityPlans', table: 'capacity_plans' },
+        { key: 'performanceMeasurements', table: 'performance_measurements' },
+        { key: 'earnedValueMetrics', table: 'earned_value_metrics' },
+        { key: 'opportunities', table: 'opportunities' },
+        { key: 'riskResponses', table: 'risk_responses' },
+        { key: 'performanceActuals', table: 'performance_actuals' }
+      ]
+
+      // Fetch entities from all tables filtered by source_document_id
+      const allEntities: Record<string, any[]> = {}
+      const entityCounts: Record<string, number> = {}
+
+      for (const { key, table } of entityTypes) {
+        try {
+          // Check if table has source_document_id column
+          const columnCheck = await pool!.query(
+            `SELECT column_name 
+             FROM information_schema.columns 
+             WHERE table_schema = 'public' 
+             AND table_name = $1 
+             AND column_name = 'source_document_id'`,
+            [table]
+          )
+
+          if (columnCheck.rows.length === 0) {
+            // Table doesn't have source_document_id column, skip it
+            logger.debug(`[DOCUMENT-ENTITIES-API] Table ${table} does not have source_document_id column, skipping`)
+            allEntities[key] = []
+            entityCounts[key] = 0
+            continue
+          }
+
+          // Build query - special handling for performance_measurements
+          let query: string
+          if (table === 'performance_measurements') {
+            query = `
+              SELECT 
+                pm.*,
+                u1.name as created_by_name,
+                u2.name as updated_by_name
+              FROM ${table} pm
+              LEFT JOIN users u1 ON pm.created_by = u1.id
+              LEFT JOIN users u2 ON pm.updated_by = u2.id
+              WHERE pm.source_document_id = $1
+              ORDER BY pm.created_at DESC
+            `
+          } else {
+            query = `
+              SELECT * FROM ${table}
+              WHERE source_document_id = $1
+              ORDER BY created_at DESC
+            `
+          }
+
+          const result = await pool!.query(query, [documentId])
+          allEntities[key] = result.rows
+          entityCounts[key] = result.rows.length
+
+          logger.debug(`[DOCUMENT-ENTITIES-API] Fetched ${result.rows.length} ${key} entities`)
+        } catch (error: any) {
+          // Table might not exist or have errors - log and continue
+          logger.warn(`[DOCUMENT-ENTITIES-API] Error fetching ${key} from ${table}:`, error.message)
+          allEntities[key] = []
+          entityCounts[key] = 0
+        }
+      }
+
+      const totalEntities = Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
+
+      logger.info('[DOCUMENT-ENTITIES-API] Query completed', {
+        documentId,
+        totalEntities,
+        entityCounts
+      })
+
+      res.json({
+        success: true,
+        documentId,
+        documentName: document.name || document.title,
+        entities: allEntities,
+        entityCounts,
+        totalEntities
+      })
+    } catch (error: unknown) {
+      logger.error('[DOCUMENT-ENTITIES-API] Entity fetch failed', {
+        error: error instanceof Error ? error.message : String(error),
+        documentId: req.params.documentId
       })
       next(error)
     }

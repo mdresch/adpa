@@ -12,6 +12,7 @@ import { toast } from "sonner"
 import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered } from "@/components/ui/icons-shim"
 import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield, Activity } from "lucide-react"
 import { apiClient } from "@/lib/api"
+import { useRouter } from "next/navigation"
 
 interface ProjectDataExtractionProps {
   projectId: string
@@ -48,6 +49,7 @@ interface EntityCounts {
 }
 
 export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtractionProps) {
+  const router = useRouter()
   const [showExtractionDialog, setShowExtractionDialog] = useState(false)
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
@@ -501,9 +503,26 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     )
   }
   
-  const renderEntityField = (key: string, value: any): React.ReactNode => {
+  const renderEntityField = (key: string, value: any, entity?: any): React.ReactNode => {
     if (value === null || value === undefined) return <span className="text-muted-foreground italic">-</span>
     if (typeof value === 'boolean') return value ? <span className="text-green-600">Yes</span> : <span className="text-red-600">No</span>
+    
+    // Special handling for source_document_id - show clickable link
+    if (key === 'source_document_id' && value) {
+      return (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(`/projects/${projectId}/documents/${value}/view`)}
+            className="h-7 text-xs"
+          >
+            <FileText className="h-3 w-3 mr-1" />
+            View Source Document
+          </Button>
+        </div>
+      )
+    }
     
     // Handle arrays (including JSONB arrays from PostgreSQL)
     if (Array.isArray(value)) {
@@ -550,8 +569,12 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       )
     }
     
-    // Handle dates
-    if (key.includes('date') || key.includes('Date')) {
+    // Handle dates (exclude user ID fields that contain "date" in their name)
+    if ((key.includes('date') || key.includes('Date')) && 
+        !key.includes('updated_by') && 
+        !key.includes('created_by') &&
+        !key.includes('updatedBy') &&
+        !key.includes('createdBy')) {
       try {
         return new Date(value).toLocaleDateString()
       } catch {
@@ -785,8 +808,30 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {Object.entries(entity)
-                        .filter(([key]) => !['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata'].includes(key))
+                        .filter(([key]) => {
+                          // Exclude system fields
+                          if (['id', 'project_id', 'created_at', 'updated_at', 'extraction_metadata'].includes(key)) {
+                            return false
+                          }
+                          // Skip created_by and updated_by UUIDs if we have name fields
+                          if ((key === 'created_by' || key === 'updated_by') && 
+                              typeof entity[key] === 'string' && 
+                              entity[key].match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i) &&
+                              entity[`${key}_name`]) {
+                            return false // Skip UUID if name field exists
+                          }
+                          return true
+                        })
                         .map(([key, value]) => {
+                          // Prefer _name fields over UUID fields
+                          if ((key === 'created_by_name' || key === 'updated_by_name')) {
+                            const baseKey = key.replace('_name', '')
+                            // If the UUID field exists, use the name field instead
+                            if (entity[baseKey]) {
+                              key = baseKey // Display as "created_by" or "updated_by" but show the name
+                            }
+                          }
+                          
                           const isLongContent = key === 'justification' || (Array.isArray(value) && value.length > 0)
                           return (
                             <div key={key} className={isLongContent ? 'space-y-1' : 'grid grid-cols-3 gap-2 text-sm'}>
@@ -794,7 +839,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                                 {key.replace(/_/g, ' ')}:
                               </span>
                               <div className={isLongContent ? 'w-full' : 'col-span-2 break-words'}>
-                                {renderEntityField(key, value)}
+                                {renderEntityField(key, value, entity)}
                               </div>
                             </div>
                           )
