@@ -4,7 +4,7 @@
   "description": "ADPA Backend API Server",
   "main": "dist/server.js",
   "scripts": {
-    "postinstall": "echo 'Skipping Puppeteer browser download. Set PUPPETEER_SKIP_DOWNLOAD=false to enable.'",
+    "postinstall": "if [ \"$PUPPETEER_SKIP_DOWNLOAD\" != \"true\" ] && [ -z \"$PUPPETEER_EXECUTABLE_PATH\" ]; then echo 'Installing Puppeteer Chrome...' && npx puppeteer browsers install chrome || echo 'Puppeteer browser install skipped or failed'; else echo 'Skipping Puppeteer browser download (using system Chrome or PUPPETEER_SKIP_DOWNLOAD=true)'; fi",
     "dev": "tsx watch src/server.ts",
     "build": "tsc --noEmit false || echo 'Build completed with warnings'",
     "build:strict": "tsc",

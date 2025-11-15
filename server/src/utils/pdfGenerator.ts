@@ -136,16 +136,53 @@ export async function markdownToPdf(
 </html>
     `
 
-    // Launch Puppeteer
-    browser = await puppeteer.launch({
+    // Launch Puppeteer with production-friendly configuration
+    // For Railway/production: Use system Chrome if available, otherwise try to download
+    const launchOptions: any = {
       headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-ipc-flooding-protection",
       ],
-    })
+    }
+
+    // Try to use system Chrome/Chromium if available (for Railway/production)
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    } else {
+      // Try common system Chrome paths
+      const possiblePaths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+      ]
+      
+      for (const path of possiblePaths) {
+        try {
+          const fs = require("fs")
+          if (fs.existsSync(path)) {
+            launchOptions.executablePath = path
+            logger.info(`Using system Chrome at: ${path}`)
+            break
+          }
+        } catch (e) {
+          // Continue to next path
+        }
+      }
+    }
+
+    browser = await puppeteer.launch(launchOptions)
 
     const page = await browser.newPage()
 
@@ -193,16 +230,64 @@ export async function htmlToPdf(
   try {
     logger.info("Starting HTML to PDF conversion")
 
-    // Launch Puppeteer
-    browser = await puppeteer.launch({
+    // Launch Puppeteer with production-friendly configuration
+    // For Railway/production: Use system Chrome if available, otherwise try to download
+    const launchOptions: any = {
       headless: true,
       args: [
         "--no-sandbox",
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
+        "--disable-software-rasterizer",
+        "--disable-extensions",
+        "--disable-background-networking",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-ipc-flooding-protection",
       ],
-    })
+    }
+
+    // Try to use system Chrome/Chromium if available (for Railway/production)
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    } else {
+      // Try common system Chrome paths
+      const possiblePaths = [
+        "/usr/bin/google-chrome",
+        "/usr/bin/google-chrome-stable",
+        "/usr/bin/chromium",
+        "/usr/bin/chromium-browser",
+        "/snap/bin/chromium",
+      ]
+      
+      for (const path of possiblePaths) {
+        try {
+          const fs = require("fs")
+          if (fs.existsSync(path)) {
+            launchOptions.executablePath = path
+            logger.info(`Using system Chrome at: ${path}`)
+            break
+          }
+        } catch (e) {
+          // Continue to next path
+        }
+      }
+    }
+
+    try {
+      browser = await puppeteer.launch(launchOptions)
+    } catch (launchError: any) {
+      // If launch fails and we don't have an executable path, try without it (let Puppeteer download Chrome)
+      if (!launchOptions.executablePath && launchError.message.includes("Could not find Chrome")) {
+        logger.warn("System Chrome not found, attempting to use Puppeteer's bundled Chrome...")
+        delete launchOptions.executablePath
+        browser = await puppeteer.launch(launchOptions)
+      } else {
+        throw launchError
+      }
+    }
 
     const page = await browser.newPage()
 
