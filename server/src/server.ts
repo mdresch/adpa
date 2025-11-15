@@ -469,11 +469,11 @@ async function startServer() {
     }
 
     // Initialize document conversion queue worker
+    // Note: The worker is automatically initialized when the module is imported
     try {
       console.log("📄 Initializing document conversion worker...")
-      const { setupDocumentConversionWorker } = require('./jobs/documentConversionJob')
-      setupDocumentConversionWorker(pool)
-      console.log("✅ Document conversion worker initialized (5 concurrent workers)")
+      require('./jobs/documentConversionJob') // Import to trigger worker initialization
+      console.log("✅ Document conversion worker initialized")
     } catch (workerError) {
       console.warn(
         "⚠️  Document conversion worker initialization failed:",
