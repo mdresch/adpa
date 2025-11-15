@@ -71,7 +71,7 @@
     "clsx": "^2.1.1",
     "cmdk": "latest",
     "cors": "latest",
-    "date-fns": "^4.1.0",
+    "date-fns": "^3.6.0",
     "diff": "^8.0.2",
     "docx": "^9.5.1",
     "dotenv": "^17.2.0",
