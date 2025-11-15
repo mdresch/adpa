@@ -2,15 +2,18 @@
 NIXPACKS_NODEJS_VERSION = "20"
 
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ["nodejs_20", "chromium"]
 
 [phases.install]
-cmds = ["npm install --prefix server"]
+cmds = [
+  "npm install --prefix server",
+  "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '')"
+]
 
 [phases.build]
 cmds = ["npm run build --prefix server || true"]
 
 [start]
-cmd = "npm start --prefix server"
+cmd = "export PUPPETEER_EXECUTABLE_PATH=$(which chromium || which chromium-browser || echo '') && npm start --prefix server"
 
 
