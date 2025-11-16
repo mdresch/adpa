@@ -105,33 +105,66 @@ export async function connectDatabase() {
       connectionTimeoutMillis: 30000,
     }
     
-    // Parse URL and manually resolve to IPv4
+    // Parse URL and handle IPv4/IPv6 resolution
     try {
       const dbUrl = new URL(databaseUrl)
       
-      // Manually resolve hostname to IPv4 address using dns.resolve4 (queries A records only)
-      console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
-      const addresses = await dnsResolve4(dbUrl.hostname)
+      // For Supabase, prefer connection pooler (port 6543) which has better IPv4 support
+      // If using direct connection (port 5432), try to resolve to IPv4 first
+      const isDirectConnection = dbUrl.port === '5432' || !dbUrl.port
+      const isPoolerConnection = 
+        dbUrl.port === '6543' || 
+        dbUrl.searchParams.has('pgbouncer') ||
+        dbUrl.hostname.includes('pooler.supabase.com')
       
-      // Validate that DNS resolution returned at least one IPv4 address
-      if (!addresses || addresses.length === 0) {
-        throw new Error(`No IPv4 addresses found for hostname: ${dbUrl.hostname}`)
-      }
-      
-      const ipv4Address = addresses[0] // Use first IPv4 address
-      console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
-      
-      poolConfig = {
-        ...poolConfig,
-        host: ipv4Address, // Use resolved IPv4 address instead of hostname
-        port: parseInt(dbUrl.port) || 5432,
-        database: dbUrl.pathname.slice(1).split('?')[0],
-        user: dbUrl.username,
-        password: dbUrl.password,
+      if (isDirectConnection) {
+        // Try to resolve to IPv4 for direct connections
+        try {
+          console.log(`🔧 Resolving ${dbUrl.hostname} to IPv4 address (A records only)...`)
+          const addresses = await dnsResolve4(dbUrl.hostname)
+          
+          if (addresses && addresses.length > 0) {
+            const ipv4Address = addresses[0]
+            console.log(`✅ Resolved to IPv4: ${ipv4Address}`)
+            
+            poolConfig = {
+              ...poolConfig,
+              host: ipv4Address, // Use resolved IPv4 address instead of hostname
+              port: parseInt(dbUrl.port) || 5432,
+              database: dbUrl.pathname.slice(1).split('?')[0],
+              user: dbUrl.username,
+              password: dbUrl.password,
+            }
+          } else {
+            throw new Error(`No IPv4 addresses found for hostname: ${dbUrl.hostname}`)
+          }
+        } catch (ipv4Error: any) {
+          // If IPv4 resolution fails, suggest using pooler instead
+          console.warn('⚠️  Could not resolve hostname to IPv4:', ipv4Error?.message || ipv4Error)
+          console.warn('💡 TIP: Use connection pooler (port 6543) for better IPv4 compatibility')
+          console.warn('   Example: postgresql://postgres:password@host:6543/db?pgbouncer=true')
+          
+          // Fall through to use hostname (might resolve to IPv6)
+          throw ipv4Error
+        }
+      } else {
+        // For pooler connections, use hostname directly (pooler handles IPv4/IPv6)
+        const poolerType = dbUrl.hostname.includes('pooler.supabase.com') ? 'Supabase Transaction Pooler' : 'Connection Pooler'
+        console.log(`🔧 Using ${poolerType} (port ${dbUrl.port}) - using hostname directly`)
+        console.log(`   Hostname: ${dbUrl.hostname}`)
+        console.log(`   Username: ${dbUrl.username}`)
+        poolConfig = {
+          ...poolConfig,
+          host: dbUrl.hostname,
+          port: parseInt(dbUrl.port) || 6543,
+          database: dbUrl.pathname.slice(1).split('?')[0],
+          user: dbUrl.username,
+          password: dbUrl.password,
+        }
       }
     } catch (e: any) {
-      // Fallback: Parse connection string manually to apply SSL config and force IPv4
-      console.warn('⚠️  Could not resolve hostname to IPv4, parsing connectionString with SSL config and IPv4 forcing:', e?.message || e)
+      // Fallback: Parse connection string manually
+      console.warn('⚠️  Could not resolve hostname, parsing connectionString with SSL config:', e?.message || e)
       try {
         const dbUrl = new URL(databaseUrl)
         poolConfig = {
@@ -145,10 +178,10 @@ export async function connectDatabase() {
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
         }
-        console.log(`🔧 Using parsed connection with SSL and IPv4 forcing (rejectUnauthorized: false) to: ${dbUrl.hostname}`)
+        console.log(`🔧 Using parsed connection with SSL to: ${dbUrl.hostname}:${dbUrl.port}`)
       } catch (parseError) {
-        // Last resort: use connectionString as-is with IPv4 forcing
-        console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString with IPv4 forcing')
+        // Last resort: use connectionString as-is
+        console.error('⚠️  Could not parse DATABASE_URL, using raw connectionString')
         poolConfig.connectionString = databaseUrl
       }
     }
