@@ -260,11 +260,58 @@ router.get("/:id",
     try {
       const { id } = req.params
 
-      // Check cache first
+      // Check cache first (but always fetch recent usage as it changes frequently)
       const cacheKey = `template:${id}`
       const cached = await cache.get(cacheKey)
+      
+      // Get recent template usage (always fetch fresh, not cached)
+      const usageResult = await pool.query(
+        `
+        SELECT 
+          tu.id,
+          tu.document_id,
+          tu.used_at,
+          tu.quality_score,
+          tu.success,
+          tu.word_count,
+          tu.generation_time_ms,
+          tu.ai_provider,
+          tu.ai_model,
+          d.name as document_name,
+          d.status as document_status,
+          p.id as project_id,
+          p.name as project_name,
+          u.name as user_name
+        FROM template_usage tu
+        LEFT JOIN documents d ON tu.document_id = d.id
+        LEFT JOIN projects p ON tu.project_id = p.id
+        LEFT JOIN users u ON tu.user_id = u.id
+        WHERE tu.template_id = $1
+        ORDER BY tu.used_at DESC
+        LIMIT 10
+        `,
+        [id]
+      )
+
+      const recentUsage = usageResult.rows.map((row: any) => ({
+        id: row.id,
+        document_id: row.document_id,
+        document_name: row.document_name,
+        document_status: row.document_status,
+        project_id: row.project_id,
+        project_name: row.project_name,
+        user_name: row.user_name,
+        used_at: row.used_at,
+        quality_score: row.quality_score,
+        success: row.success,
+        word_count: row.word_count,
+        generation_time_ms: row.generation_time_ms,
+        ai_provider: row.ai_provider,
+        ai_model: row.ai_model,
+      }))
+
       if (cached) {
-        return res.json({ template: cached })
+        return res.json({ template: cached, recentUsage })
       }
 
       const result = await pool.query(
@@ -304,7 +351,7 @@ router.get("/:id",
         trackActivity.viewTemplate(req.user.id, id)
       }
 
-      res.json({ template })
+      res.json({ template, recentUsage })
     } catch (error) {
       log.error("Get template error:", error)
       res.status(500).json({ error: "Internal server error" })

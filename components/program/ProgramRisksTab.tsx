@@ -31,8 +31,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { AlertTriangle, Plus, Pencil, Trash2, Loader2, TrendingUp, Shield } from 'lucide-react';
+import { AlertTriangle, Plus, Pencil, Trash2, Loader2, TrendingUp, Shield, FileText, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { RiskMitigationPlansView } from '@/components/risks/RiskMitigationPlansView';
+import { useRouter } from 'next/navigation';
 
 interface Risk {
   id: string;
@@ -47,6 +49,9 @@ interface Risk {
   mitigation?: string;
   createdAt: string;
   updatedAt: string;
+  projectId?: string;
+  projectName?: string;
+  extractedFromDocumentId?: string | null;
 }
 
 interface ProgramRisksTabProps {
@@ -75,6 +80,7 @@ const getStatusConfig = (status: string) => {
 };
 
 export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
+  const router = useRouter();
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -119,8 +125,13 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
 
       if (response.ok) {
         const data = await response.json();
-        setRisks(data.data || []);
+        console.log('[RISKS] API Response:', data);
+        const risksData = data.data || data.risks || [];
+        console.log('[RISKS] Parsed risks:', risksData);
+        setRisks(risksData);
       } else {
+        const errorText = await response.text();
+        console.error('[RISKS] API Error:', response.status, errorText);
         // For now, use mock data if endpoint doesn't exist
         setRisks(generateMockRisks());
       }
@@ -508,6 +519,26 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                       rows={3}
                     />
                   </div>
+                  {editingRisk?.extractedFromDocumentId && editingRisk?.projectId && (
+                    <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800">
+                      <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100">Source Document</p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300">This risk was extracted from a document</p>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setDialogOpen(false);
+                          router.push(`/projects/${editingRisk.projectId}/documents/${editingRisk.extractedFromDocumentId}`);
+                        }}
+                      >
+                        <ExternalLink className="h-3 w-3 mr-1" />
+                        View Document
+                      </Button>
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => { setDialogOpen(false); }}>
@@ -569,7 +600,22 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
               <TableBody>
                 {filteredRisks.map((risk) => (
                   <TableRow key={risk.id}>
-                    <TableCell className="font-medium">{risk.title}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{risk.title}</span>
+                        {risk.extractedFromDocumentId && risk.projectId && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => router.push(`/projects/${risk.projectId}/documents/${risk.extractedFromDocumentId}`)}
+                            title="View source document"
+                          >
+                            <FileText className="h-3 w-3 text-blue-600" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{risk.category}</TableCell>
                     <TableCell>
                       <Badge className={severityConfig[risk.severity].color}>
@@ -586,6 +632,22 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
                     <TableCell>{risk.owner || '-'}</TableCell>
                     <TableCell>
                       <div className="flex gap-2">
+                        <RiskMitigationPlansView
+                          riskId={risk.id}
+                          riskTitle={risk.title}
+                          extractedFromDocumentId={risk.extractedFromDocumentId}
+                          projectId={risk.projectId}
+                          riskDescription={risk.description}
+                          riskCategory={risk.category}
+                          riskProbability={risk.probability}
+                          riskImpact={risk.impact}
+                          riskSeverity={risk.severity}
+                          trigger={
+                            <Button variant="ghost" size="sm" title="View Mitigation Plans">
+                              <Shield className="h-4 w-4" />
+                            </Button>
+                          }
+                        />
                         <Button variant="ghost" size="sm" onClick={() => { handleEdit(risk); }}>
                           <Pencil className="h-4 w-4" />
                         </Button>

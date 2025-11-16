@@ -33,7 +33,9 @@ import {
 } from "lucide-react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket } from "@/contexts/WebSocketContext"
+import { useRouter } from "next/navigation"
 import { apiClient } from "@/lib/api"
+import { getApiUrl } from "@/lib/api-url"
 import { toast } from "sonner"
 import { debounce } from "lodash"
 import { SkeletonLine } from "@/components/ui/skeleton"
@@ -65,8 +67,9 @@ interface SearchFilters {
 }
 
 export default function SearchPage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { isConnected } = useWebSocket()
+  const router = useRouter()
   
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<SearchResult[]>([])
@@ -82,100 +85,201 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState("relevance")
   const [totalResults, setTotalResults] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
-
-  // Mock data for demonstration
-  const mockResults: SearchResult[] = [
-    {
-      id: "1",
-      type: "project",
-      title: "Enterprise Architecture Modernization",
-      description: "Comprehensive modernization of legacy systems using TOGAF framework",
-      content_preview: "This project aims to modernize our enterprise architecture by implementing TOGAF best practices...",
-      author: "John Smith",
-      created_at: "2024-01-15T10:00:00Z",
-      updated_at: "2024-01-20T15:30:00Z",
-      tags: ["modernization", "legacy", "enterprise"],
-      framework: "TOGAF",
-      status: "active",
-      relevance_score: 0.95,
-    },
-    {
-      id: "2",
-      type: "document",
-      title: "Security Architecture Guidelines",
-      description: "Comprehensive security guidelines for enterprise applications",
-      content_preview: "These guidelines provide a framework for implementing security controls across all enterprise applications...",
-      author: "Sarah Johnson",
-      created_at: "2024-01-10T09:00:00Z",
-      updated_at: "2024-01-18T11:45:00Z",
-      tags: ["security", "guidelines", "compliance"],
-      framework: "SABSA",
-      relevance_score: 0.87,
-    },
-    {
-      id: "3",
-      type: "template",
-      title: "Business Capability Assessment Template",
-      description: "Template for assessing business capabilities and maturity",
-      content_preview: "This template helps organizations assess their current business capabilities and identify areas for improvement...",
-      author: "Mike Davis",
-      created_at: "2024-01-05T14:20:00Z",
-      updated_at: "2024-01-12T16:10:00Z",
-      tags: ["assessment", "capabilities", "business"],
-      framework: "TOGAF",
-      relevance_score: 0.82,
-    },
-  ]
+  const [searchMode, setSearchMode] = useState<"semantic" | "keyword">("semantic")
+  
+  // Filter options from API - start empty to prevent hydration mismatch
+  const [availableFrameworks, setAvailableFrameworks] = useState<string[]>([])
+  const [availableAuthors, setAvailableAuthors] = useState<Array<{id: string, name: string, email: string}>>([])
+  const [filtersLoaded, setFiltersLoaded] = useState(false)
 
   const performSearch = useCallback(
     debounce(async (searchQuery: string, searchFilters: SearchFilters) => {
+      // Don't search if query is empty and no filters
       if (!searchQuery.trim() && activeFilters.length === 0) {
+        console.log('[SEARCH] Empty query, clearing results')
         setResults([])
         setTotalResults(0)
+        setLoading(false)
+        return
+      }
+
+      // Require minimum query length
+      if (searchQuery.trim().length < 2) {
+        console.log('[SEARCH] Query too short, clearing results')
+        setResults([])
+        setTotalResults(0)
+        setLoading(false)
         return
       }
 
       try {
         setLoading(true)
         
-        // Mock search - replace with actual API call
-        await new Promise(resolve => setTimeout(resolve, 500))
-        
-        let filteredResults = mockResults.filter(result => {
-          const matchesQuery = !searchQuery.trim() || 
-            result.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            result.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            result.content_preview.toLowerCase().includes(searchQuery.toLowerCase())
-          
-          const matchesType = searchFilters.type.length === 0 || searchFilters.type.includes(result.type)
-          const matchesFramework = searchFilters.framework.length === 0 || 
-            (result.framework && searchFilters.framework.includes(result.framework))
-          const matchesAuthor = searchFilters.author.length === 0 || searchFilters.author.includes(result.author)
-          
-          return matchesQuery && matchesType && matchesFramework && matchesAuthor
-        })
-
-        // Sort results
-        if (sortBy === "relevance") {
-          filteredResults.sort((a, b) => b.relevance_score - a.relevance_score)
-        } else if (sortBy === "date") {
-          filteredResults.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
-        } else if (sortBy === "title") {
-          filteredResults.sort((a, b) => a.title.localeCompare(b.title))
+        // Real API call
+        const token = localStorage.getItem('auth_token')
+        if (!token) {
+          console.error('[SEARCH] No auth token')
+          toast.error('Authentication required')
+          setLoading(false)
+          return
         }
 
-        setResults(filteredResults)
-        setTotalResults(filteredResults.length)
+        const searchUrl = getApiUrl('/search')
+        console.log('[SEARCH] ====== NEW SEARCH ======')
+        console.log('[SEARCH] Calling API:', searchUrl)
+        console.log('[SEARCH] Query:', searchQuery)
+        console.log('[SEARCH] Mode:', searchMode)
+        console.log('[SEARCH] Filters:', searchFilters)
         
-      } catch (error) {
-        console.error("Search failed:", error)
-        toast.error("Search failed")
+        const response = await fetch(searchUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            query: searchQuery,
+            types: searchFilters.type.length > 0 ? searchFilters.type : undefined,
+            frameworks: searchFilters.framework.length > 0 ? searchFilters.framework : undefined,
+            authors: searchFilters.author.length > 0 ? searchFilters.author : undefined,
+            dateRange: Object.keys(searchFilters.date_range).length > 0 ? searchFilters.date_range : undefined,
+            limit: 50,
+            offset: (currentPage - 1) * 50,
+            sortBy,
+            useSemanticSearch: searchMode === 'semantic'
+          })
+        })
+        
+        console.log('[SEARCH] Response status:', response.status)
+        
+        if (!response.ok) {
+          const errorText = await response.text()
+          console.error('[SEARCH] Error response:', errorText)
+          let errorData = {}
+          try {
+            errorData = JSON.parse(errorText)
+          } catch {
+            // Not JSON, use text as message
+          }
+          throw new Error((errorData as any).message || `Search request failed: ${response.status}`)
+        }
+        
+        const data = await response.json()
+        console.log('[SEARCH] Response data:', data)
+        console.log('[SEARCH] Results count:', data.results?.length || 0)
+        console.log('[SEARCH] First result:', data.results?.[0])
+        
+        if (data.success && data.results) {
+          // Results are already filtered by the API
+          const filteredResults = data.results || []
+          
+          console.log('[SEARCH] ✅ Setting results:', filteredResults.length, 'results')
+          console.log('[SEARCH] Results:', filteredResults)
+          setResults(filteredResults)
+          setTotalResults(data.total || filteredResults.length)
+        } else {
+          console.error('[SEARCH] ❌ API returned unsuccessful response:', data)
+          throw new Error(data.error || 'Search failed')
+        }
+        
+      } catch (error: any) {
+        console.error('[SEARCH] ❌ Search failed:', error)
+        console.error('[SEARCH] Error details:', {
+          message: error.message,
+          stack: error.stack
+        })
+        toast.error(error.message || "Search failed. Please try again.")
+        setResults([])
+        setTotalResults(0)
       } finally {
         setLoading(false)
       }
     }, 300),
-    [sortBy, activeFilters]
+    [sortBy, activeFilters, currentPage, searchMode]
   )
+
+  // Load filter options on mount (client-side only to prevent hydration issues)
+  useEffect(() => {
+    // Only run on client
+    if (typeof window === 'undefined') return
+    
+    // Wait for auth to finish loading
+    if (authLoading) {
+      console.log('[SEARCH] Auth still loading, waiting...')
+      return
+    }
+    
+    // If no user after loading, still try to load filters (might be public endpoint or token in apiClient)
+    if (!user) {
+      console.log('[SEARCH] No user found, but attempting to load filters anyway (might have token in apiClient)')
+    }
+    
+    const loadFilterOptions = async () => {
+      try {
+        console.log('[SEARCH] Fetching filter options (public endpoint, no auth required)')
+        try {
+          // Try apiClient first (handles auth automatically if available)
+          const data = await apiClient.get('/search/filters')
+          
+          console.log('[SEARCH] Filter API response data:', data)
+          
+          if (data.success && data.frameworks !== undefined) {
+            console.log('[SEARCH] ✅ Loaded filter options:', {
+              frameworks: data.frameworks?.length || 0,
+              authors: data.authors?.length || 0,
+              frameworksList: data.frameworks,
+              authorsList: data.authors
+            })
+            setAvailableFrameworks(data.frameworks || [])
+            setAvailableAuthors(data.authors || [])
+            setFiltersLoaded(true)
+          } else {
+            console.error('[SEARCH] ❌ Filter API returned unexpected format:', data)
+            setFiltersLoaded(true) // Still mark as loaded to prevent infinite loading
+          }
+        } catch (apiError: any) {
+          console.error('[SEARCH] ❌ Failed to load filter options via apiClient:', apiError)
+          // Fallback to fetch (no auth required - public endpoint)
+          try {
+            const response = await fetch(getApiUrl('/search/filters'), {
+              headers: {
+                'Content-Type': 'application/json'
+              }
+            })
+            
+            if (response.ok) {
+              const fetchData = await response.json()
+              if (fetchData.success) {
+                console.log('[SEARCH] ✅ Loaded filters via fetch fallback:', {
+                  frameworks: fetchData.frameworks?.length || 0,
+                  authors: fetchData.authors?.length || 0
+                })
+                setAvailableFrameworks(fetchData.frameworks || [])
+                setAvailableAuthors(fetchData.authors || [])
+                setFiltersLoaded(true)
+                return
+              }
+            } else {
+              console.error('[SEARCH] ❌ Fetch fallback failed with status:', response.status)
+            }
+          } catch (fetchError) {
+            console.error('[SEARCH] ❌ Fetch fallback also failed:', fetchError)
+          }
+          setFiltersLoaded(true) // Still mark as loaded to prevent infinite loading
+        }
+      } catch (error: any) {
+        console.error('[SEARCH] ❌ Error loading filter options:', error)
+        setFiltersLoaded(true) // Still mark as loaded to prevent infinite loading
+      }
+    }
+
+    // Small delay to ensure component is mounted
+    const timer = setTimeout(() => {
+      loadFilterOptions()
+    }, 100)
+
+    return () => clearTimeout(timer)
+  }, [user, authLoading]) // Re-run when user or auth loading state changes
 
   useEffect(() => {
     performSearch(query, filters)
@@ -244,6 +348,27 @@ export default function SearchPage() {
     })
   }
 
+  const handleResultClick = (result: SearchResult) => {
+    switch (result.type) {
+      case "project":
+        router.push(`/projects/${result.id}`)
+        break
+      case "document":
+        if (result.project_id) {
+          router.push(`/projects/${result.project_id}/documents/${result.id}`)
+        } else {
+          router.push(`/documents/${result.id}`)
+        }
+        break
+      case "template":
+        router.push(`/templates/${result.id}`)
+        break
+      case "user":
+        router.push(`/users/${result.id}`)
+        break
+    }
+  }
+
   return (
     <PageTransition>
       <div className="flex h-screen bg-background">
@@ -298,6 +423,15 @@ export default function SearchPage() {
                           <SelectItem value="relevance">Relevance</SelectItem>
                           <SelectItem value="date">Date Modified</SelectItem>
                           <SelectItem value="title">Title</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={searchMode} onValueChange={(value: "semantic" | "keyword") => setSearchMode(value)}>
+                        <SelectTrigger className="w-40">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="semantic">Semantic</SelectItem>
+                          <SelectItem value="keyword">Keyword</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -361,38 +495,50 @@ export default function SearchPage() {
                         {/* Framework Filter */}
                         <div>
                           <Label className="text-sm font-medium">Framework</Label>
-                          <div className="mt-2 space-y-2">
-                            {["TOGAF", "SABSA", "ZACHMAN", "FEAF"].map((framework) => (
-                              <Button
-                                key={framework}
-                                variant={filters.framework.includes(framework) ? "default" : "outline"}
-                                size="sm"
-                                className="w-full justify-start"
-                                onClick={() => addFilter("framework", framework)}
-                              >
-                                {framework}
-                              </Button>
-                            ))}
-                          </div>
+                          {!filtersLoaded ? (
+                            <div className="mt-2 text-sm text-muted-foreground">Loading frameworks...</div>
+                          ) : availableFrameworks.length > 0 ? (
+                            <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                              {availableFrameworks.map((framework) => (
+                                <Button
+                                  key={framework}
+                                  variant={filters.framework.includes(framework) ? "default" : "outline"}
+                                  size="sm"
+                                  className="w-full justify-start"
+                                  onClick={() => addFilter("framework", framework)}
+                                >
+                                  {framework}
+                                </Button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-sm text-muted-foreground">No frameworks available</div>
+                          )}
                         </div>
 
                         {/* Author Filter */}
                         <div>
                           <Label className="text-sm font-medium">Author</Label>
-                          <div className="mt-2 space-y-2">
-                            {["John Smith", "Sarah Johnson", "Mike Davis"].map((author) => (
-                              <Button
-                                key={author}
-                                variant={filters.author.includes(author) ? "default" : "outline"}
-                                size="sm"
-                                className="w-full justify-start"
-                                onClick={() => addFilter("author", author)}
-                              >
-                                <User className="h-4 w-4" />
-                                <span className="ml-2">{author}</span>
-                              </Button>
-                            ))}
-                          </div>
+                          {!filtersLoaded ? (
+                            <div className="mt-2 text-sm text-muted-foreground">Loading authors...</div>
+                          ) : availableAuthors.length > 0 ? (
+                            <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                              {availableAuthors.map((author) => (
+                                <Button
+                                  key={author.id}
+                                  variant={filters.author.includes(author.name) ? "default" : "outline"}
+                                  size="sm"
+                                  className="w-full justify-start"
+                                  onClick={() => addFilter("author", author.name)}
+                                >
+                                  <User className="h-4 w-4" />
+                                  <span className="ml-2">{author.name}</span>
+                                </Button>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="mt-2 text-sm text-muted-foreground">No authors available</div>
+                          )}
                         </div>
                       </CardContent>
                     </AnimatedCard>
@@ -432,7 +578,10 @@ export default function SearchPage() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ duration: 0.3 }}
                           >
-                            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                            <Card 
+                              className="hover:shadow-md transition-shadow cursor-pointer"
+                              onClick={() => handleResultClick(result)}
+                            >
                               <CardContent className="p-6">
                                 <div className="space-y-3">
                                   <div className="flex items-start justify-between">

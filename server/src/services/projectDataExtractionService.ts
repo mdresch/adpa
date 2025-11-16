@@ -4829,10 +4829,41 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate requirements by title (AI sometimes extracts same requirement multiple times)
+    const deduplicatedMap = new Map<string, Requirement>()
+    
+    requirements.forEach(req => {
+      const normalizedTitle = req.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        deduplicatedMap.set(normalizedTitle, req)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: Requirement = {
+          ...existing,
+          description: req.description || existing.description,
+          type: req.type || existing.type,
+          priority: req.priority || existing.priority,
+          status: req.status || existing.status,
+          acceptance_criteria: req.acceptance_criteria || existing.acceptance_criteria,
+          source: req.source || existing.source
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-REQUIREMENTS] Merged duplicate requirement: "${req.title}"`)
+      }
+    })
+    
+    const uniqueRequirements = Array.from(deduplicatedMap.values())
+    
+    if (uniqueRequirements.length < requirements.length) {
+      logger.info(`[EXTRACTION-REQUIREMENTS] Deduplicated ${requirements.length} → ${uniqueRequirements.length} requirements`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    requirements.forEach((r, index) => {
+    uniqueRequirements.forEach((r, index) => {
       const offset = index * 10
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10})`
@@ -4917,7 +4948,7 @@ Output valid JSON object with "performance_actuals" array only.`
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${requirements.length} requirements`)
+    logger.info(`[EXTRACTION] Saved ${uniqueRequirements.length} requirements (deduplicated from ${requirements.length})`)
   }
 
   /**
@@ -5041,10 +5072,40 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate milestones by name (AI sometimes extracts same milestone multiple times)
+    const deduplicatedMap = new Map<string, Milestone>()
+    
+    milestones.forEach(milestone => {
+      const normalizedName = milestone.name.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        deduplicatedMap.set(normalizedName, milestone)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: Milestone = {
+          ...existing,
+          description: milestone.description || existing.description,
+          due_date: milestone.due_date || existing.due_date,
+          status: milestone.status || existing.status,
+          deliverables: milestone.deliverables?.length ? milestone.deliverables : existing.deliverables,
+          dependencies: milestone.dependencies?.length ? milestone.dependencies : existing.dependencies
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.debug(`[EXTRACTION-MILESTONES] Merged duplicate milestone: "${milestone.name}"`)
+      }
+    })
+    
+    const uniqueMilestones = Array.from(deduplicatedMap.values())
+    
+    if (uniqueMilestones.length < milestones.length) {
+      logger.info(`[EXTRACTION-MILESTONES] Deduplicated ${milestones.length} → ${uniqueMilestones.length} milestones`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    milestones.forEach((m, index) => {
+    uniqueMilestones.forEach((m, index) => {
       const offset = index * 7
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
@@ -5095,7 +5156,7 @@ Output valid JSON object with "performance_actuals" array only.`
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${milestones.length} milestones`)
+    logger.info(`[EXTRACTION] Saved ${uniqueMilestones.length} milestones (deduplicated from ${milestones.length})`)
   }
 
   /**
@@ -5352,10 +5413,39 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate phases by name (AI sometimes extracts same phase multiple times)
+    const deduplicatedMap = new Map<string, Phase>()
+    
+    phases.forEach(phase => {
+      const normalizedName = phase.name.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        deduplicatedMap.set(normalizedName, phase)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: Phase = {
+          ...existing,
+          description: phase.description || existing.description,
+          start_date: phase.start_date || existing.start_date,
+          end_date: phase.end_date || existing.end_date,
+          status: phase.status || existing.status
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.debug(`[EXTRACTION-PHASES] Merged duplicate phase: "${phase.name}"`)
+      }
+    })
+    
+    const uniquePhases = Array.from(deduplicatedMap.values())
+    
+    if (uniquePhases.length < phases.length) {
+      logger.info(`[EXTRACTION-PHASES] Deduplicated ${phases.length} → ${uniquePhases.length} phases`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    phases.forEach((p, index) => {
+    uniquePhases.forEach((p, index) => {
       const offset = index * 8
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
@@ -5407,7 +5497,7 @@ Output valid JSON object with "performance_actuals" array only.`
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${phases.length} phases`)
+    logger.info(`[EXTRACTION] Saved ${uniquePhases.length} phases (deduplicated from ${phases.length})`)
   }
 
   /**
@@ -5601,10 +5691,38 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate quality standards by title (AI sometimes extracts same standard multiple times)
+    const deduplicatedMap = new Map<string, QualityStandard>()
+    
+    qualityStandards.forEach(qs => {
+      const normalizedTitle = qs.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        deduplicatedMap.set(normalizedTitle, qs)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: QualityStandard = {
+          ...existing,
+          description: qs.description || existing.description,
+          category: qs.category || existing.category,
+          measurement_criteria: qs.measurement_criteria || existing.measurement_criteria
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-QUALITY_STANDARDS] Merged duplicate standard: "${qs.title}"`)
+      }
+    })
+    
+    const uniqueQualityStandards = Array.from(deduplicatedMap.values())
+    
+    if (uniqueQualityStandards.length < qualityStandards.length) {
+      logger.info(`[EXTRACTION-QUALITY_STANDARDS] Deduplicated ${qualityStandards.length} → ${uniqueQualityStandards.length} quality standards`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    qualityStandards.forEach((qs, index) => {
+    uniqueQualityStandards.forEach((qs, index) => {
       const offset = index * 8
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
@@ -5640,7 +5758,7 @@ Output valid JSON object with "performance_actuals" array only.`
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${qualityStandards.length} quality standards`)
+    logger.info(`[EXTRACTION] Saved ${uniqueQualityStandards.length} quality standards (deduplicated from ${qualityStandards.length})`)
   }
 
   /**
@@ -5657,10 +5775,40 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate deliverables by name (AI sometimes extracts same deliverable multiple times)
+    const deduplicatedMap = new Map<string, Deliverable>()
+    
+    deliverables.forEach(deliverable => {
+      const normalizedName = deliverable.name.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        deduplicatedMap.set(normalizedName, deliverable)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: Deliverable = {
+          ...existing,
+          description: deliverable.description || existing.description,
+          type: deliverable.type || existing.type,
+          due_date: deliverable.due_date || existing.due_date,
+          status: deliverable.status || existing.status,
+          owner: deliverable.owner || existing.owner
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.debug(`[EXTRACTION-DELIVERABLES] Merged duplicate deliverable: "${deliverable.name}"`)
+      }
+    })
+    
+    const uniqueDeliverables = Array.from(deduplicatedMap.values())
+    
+    if (uniqueDeliverables.length < deliverables.length) {
+      logger.info(`[EXTRACTION-DELIVERABLES] Deduplicated ${deliverables.length} → ${uniqueDeliverables.length} deliverables`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    deliverables.forEach((d, index) => {
+    uniqueDeliverables.forEach((d, index) => {
       const offset = index * 9
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9})`
@@ -5732,7 +5880,7 @@ Output valid JSON object with "performance_actuals" array only.`
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${deliverables.length} deliverables`)
+    logger.info(`[EXTRACTION] Saved ${uniqueDeliverables.length} deliverables (deduplicated from ${deliverables.length})`)
   }
 
   /**
@@ -5749,10 +5897,38 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate scope items by title (AI sometimes extracts same scope item multiple times)
+    const deduplicatedMap = new Map<string, ScopeItem>()
+    
+    scopeItems.forEach(scopeItem => {
+      const normalizedTitle = scopeItem.title.trim().toLowerCase()
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        deduplicatedMap.set(normalizedTitle, scopeItem)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: ScopeItem = {
+          ...existing,
+          description: scopeItem.description || existing.description,
+          is_in_scope: scopeItem.is_in_scope !== undefined ? scopeItem.is_in_scope : existing.is_in_scope,
+          category: scopeItem.category || existing.category
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-SCOPE_ITEMS] Merged duplicate scope item: "${scopeItem.title}"`)
+      }
+    })
+    
+    const uniqueScopeItems = Array.from(deduplicatedMap.values())
+    
+    if (uniqueScopeItems.length < scopeItems.length) {
+      logger.info(`[EXTRACTION-SCOPE_ITEMS] Deduplicated ${scopeItems.length} → ${uniqueScopeItems.length} scope items`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    scopeItems.forEach((si, index) => {
+    uniqueScopeItems.forEach((si, index) => {
       const offset = index * 8
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8})`
@@ -5789,7 +5965,7 @@ Output valid JSON object with "performance_actuals" array only.`
         updated_at = CURRENT_TIMESTAMP
     `, values)
 
-    logger.info(`[EXTRACTION] Saved ${scopeItems.length} scope items`)
+    logger.info(`[EXTRACTION] Saved ${uniqueScopeItems.length} scope items (deduplicated from ${scopeItems.length})`)
   }
 
   /**
@@ -5934,6 +6110,48 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate team agreements by title (AI sometimes extracts same agreement multiple times)
+    const deduplicatedMap = new Map<string, TeamAgreement>()
+    
+    teamAgreements.forEach(agreement => {
+      const normalizedTitle = (agreement.title || '').trim().toLowerCase()
+      
+      if (!normalizedTitle) {
+        // Skip agreements without titles
+        return
+      }
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        deduplicatedMap.set(normalizedTitle, agreement)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: TeamAgreement = {
+          ...existing,
+          description: agreement.description || existing.description,
+          category: agreement.category || existing.category,
+          agreed_by: agreement.agreed_by?.length ? agreement.agreed_by : existing.agreed_by,
+          facilitated_by: agreement.facilitated_by || existing.facilitated_by,
+          effective_date: agreement.effective_date || existing.effective_date,
+          review_frequency: agreement.review_frequency || existing.review_frequency,
+          next_review_date: agreement.next_review_date || existing.next_review_date,
+          status: agreement.status || existing.status,
+          adherence_score: agreement.adherence_score !== undefined ? agreement.adherence_score : existing.adherence_score,
+          violations_count: agreement.violations_count !== undefined ? agreement.violations_count : existing.violations_count,
+          last_violation_date: agreement.last_violation_date || existing.last_violation_date,
+          notes: agreement.notes || existing.notes
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-TEAM_AGREEMENTS] Merged duplicate agreement: "${agreement.title}"`)
+      }
+    })
+    
+    const uniqueTeamAgreements = Array.from(deduplicatedMap.values())
+    
+    if (uniqueTeamAgreements.length < teamAgreements.length) {
+      logger.info(`[EXTRACTION-TEAM_AGREEMENTS] Deduplicated ${teamAgreements.length} → ${uniqueTeamAgreements.length} team agreements`)
+    }
+
     const allowedCategories = new Set([
       'working_hours',
       'communication',
@@ -5952,7 +6170,7 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
-    teamAgreements.forEach((agreement, index) => {
+    uniqueTeamAgreements.forEach((agreement, index) => {
       const offset = index * 17
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17})`
@@ -6050,7 +6268,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${teamAgreements.length} team agreements`)
+    logger.info(`[EXTRACTION] Saved ${uniqueTeamAgreements.length} team agreements (deduplicated from ${teamAgreements.length})`)
   }
 
   /**
@@ -6259,7 +6477,47 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
-    projectIterations.forEach((iteration, index) => {
+    // Deduplicate project iterations by name (AI sometimes extracts same iteration multiple times)
+    const deduplicatedMap = new Map<string, ProjectIteration>()
+    
+    projectIterations.forEach(iteration => {
+      const normalizedName = (iteration.name || '').trim().toLowerCase()
+      
+      if (!normalizedName) {
+        return
+      }
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        deduplicatedMap.set(normalizedName, iteration)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: ProjectIteration = {
+          ...existing,
+          iteration_type: iteration.iteration_type || existing.iteration_type,
+          sequence_number: iteration.sequence_number !== undefined ? iteration.sequence_number : existing.sequence_number,
+          start_date: iteration.start_date || existing.start_date,
+          end_date: iteration.end_date || existing.end_date,
+          goals: iteration.goals?.length ? iteration.goals : existing.goals,
+          planned_story_points: iteration.planned_story_points !== undefined ? iteration.planned_story_points : existing.planned_story_points,
+          completed_story_points: iteration.completed_story_points !== undefined ? iteration.completed_story_points : existing.completed_story_points,
+          velocity: iteration.velocity !== undefined ? iteration.velocity : existing.velocity,
+          status: iteration.status || existing.status,
+          retrospective_summary: iteration.retrospective_summary || existing.retrospective_summary,
+          impediments: iteration.impediments?.length ? iteration.impediments : existing.impediments
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.debug(`[EXTRACTION-PROJECT_ITERATIONS] Merged duplicate iteration: "${iteration.name}"`)
+      }
+    })
+    
+    const uniqueProjectIterations = Array.from(deduplicatedMap.values())
+    
+    if (uniqueProjectIterations.length < projectIterations.length) {
+      logger.info(`[EXTRACTION-PROJECT_ITERATIONS] Deduplicated ${projectIterations.length} → ${uniqueProjectIterations.length} project iterations`)
+    }
+
+    uniqueProjectIterations.forEach((iteration, index) => {
       const offset = index * 16
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16})`
@@ -6318,7 +6576,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${projectIterations.length} project iterations`)
+    logger.info(`[EXTRACTION] Saved ${uniqueProjectIterations.length} project iterations (deduplicated from ${projectIterations.length})`)
   }
 
   /**
@@ -6357,7 +6615,45 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
-    workItems.forEach((item, index) => {
+    // Deduplicate work items by name (AI sometimes extracts same work item multiple times)
+    const deduplicatedMap = new Map<string, WorkItemRecord>()
+    
+    workItems.forEach(item => {
+      const normalizedName = (item.name || '').trim().toLowerCase()
+      
+      if (!normalizedName) {
+        return
+      }
+      
+      if (!deduplicatedMap.has(normalizedName)) {
+        deduplicatedMap.set(normalizedName, item)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedName)!
+        const merged: WorkItemRecord = {
+          ...existing,
+          description: item.description || existing.description,
+          activity_name: item.activity_name || existing.activity_name,
+          assigned_to: item.assigned_to || existing.assigned_to,
+          estimated_hours: item.estimated_hours !== undefined ? item.estimated_hours : existing.estimated_hours,
+          actual_hours: item.actual_hours !== undefined ? item.actual_hours : existing.actual_hours,
+          progress_percentage: item.progress_percentage !== undefined ? item.progress_percentage : existing.progress_percentage,
+          status: item.status || existing.status,
+          blockers: item.blockers?.length ? item.blockers : existing.blockers,
+          completed_date: item.completed_date || existing.completed_date
+        }
+        deduplicatedMap.set(normalizedName, merged)
+        logger.debug(`[EXTRACTION-WORK_ITEMS] Merged duplicate work item: "${item.name}"`)
+      }
+    })
+    
+    const uniqueWorkItems = Array.from(deduplicatedMap.values())
+    
+    if (uniqueWorkItems.length < workItems.length) {
+      logger.info(`[EXTRACTION-WORK_ITEMS] Deduplicated ${workItems.length} → ${uniqueWorkItems.length} work items`)
+    }
+
+    uniqueWorkItems.forEach((item, index) => {
       const offset = index * 15
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15})`
@@ -6420,7 +6716,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${workItems.length} work items`)
+    logger.info(`[EXTRACTION] Saved ${uniqueWorkItems.length} work items (deduplicated from ${workItems.length})`)
   }
 
   /**
@@ -6440,7 +6736,44 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
+    // Deduplicate capacity plans by team_member + period (AI sometimes extracts same plan multiple times)
+    const deduplicatedMap = new Map<string, CapacityPlan>()
+    
     capacityPlans.forEach(plan => {
+      const periodStart = this.normalizeDate(plan.period_start)
+      const periodEnd = this.normalizeDate(plan.period_end)
+      
+      if (!periodStart || !periodEnd || !plan.team_member) {
+        return
+      }
+      
+      const key = `${plan.team_member.toLowerCase().trim()}:${periodStart}:${periodEnd}`
+      
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, plan)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(key)!
+        const merged: CapacityPlan = {
+          ...existing,
+          role: plan.role || existing.role,
+          available_hours: plan.available_hours !== undefined ? plan.available_hours : existing.available_hours,
+          allocated_hours: plan.allocated_hours !== undefined ? plan.allocated_hours : existing.allocated_hours,
+          utilization_percentage: plan.utilization_percentage !== undefined ? plan.utilization_percentage : existing.utilization_percentage,
+          notes: plan.notes || existing.notes
+        }
+        deduplicatedMap.set(key, merged)
+        logger.debug(`[EXTRACTION-CAPACITY_PLANS] Merged duplicate capacity plan: "${plan.team_member}" (${periodStart} - ${periodEnd})`)
+      }
+    })
+    
+    const uniqueCapacityPlans = Array.from(deduplicatedMap.values())
+    
+    if (uniqueCapacityPlans.length < capacityPlans.length) {
+      logger.info(`[EXTRACTION-CAPACITY_PLANS] Deduplicated ${capacityPlans.length} → ${uniqueCapacityPlans.length} capacity plans`)
+    }
+
+    uniqueCapacityPlans.forEach(plan => {
       const periodStart = this.normalizeDate(plan.period_start)
       const periodEnd = this.normalizeDate(plan.period_end)
 
@@ -6508,7 +6841,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${capacityPlans.length} capacity plan records`)
+    logger.info(`[EXTRACTION] Saved ${uniqueCapacityPlans.length} capacity plan records (deduplicated from ${capacityPlans.length})`)
   }
 
   /**
@@ -6557,7 +6890,52 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
+    // Deduplicate performance measurements by criterion_name + measurement_date (AI sometimes extracts same measurement multiple times)
+    const deduplicatedMap = new Map<string, PerformanceMeasurement>()
+    
     performanceMeasurements.forEach(measurement => {
+      const criterionName = measurement.success_criterion_name?.trim()
+      
+      if (!criterionName) {
+        return
+      }
+      
+      // Use provided date, or fallback to current date if missing
+      let measurementDate = this.normalizeDate(measurement.measurement_date)
+      if (!measurementDate) {
+        measurementDate = new Date().toISOString().split('T')[0]
+      }
+      
+      const key = `${criterionName.toLowerCase()}:${measurementDate}`
+      
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, measurement)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(key)!
+        const merged: PerformanceMeasurement = {
+          ...existing,
+          actual_value: measurement.actual_value !== undefined ? measurement.actual_value : existing.actual_value,
+          target_value: measurement.target_value !== undefined ? measurement.target_value : existing.target_value,
+          units: measurement.units || existing.units,
+          variance: measurement.variance !== undefined ? measurement.variance : existing.variance,
+          variance_percentage: measurement.variance_percentage !== undefined ? measurement.variance_percentage : existing.variance_percentage,
+          trend: measurement.trend || existing.trend,
+          status: measurement.status || existing.status,
+          notes: measurement.notes || existing.notes
+        }
+        deduplicatedMap.set(key, merged)
+        logger.debug(`[EXTRACTION-PERFORMANCE_MEASUREMENTS] Merged duplicate measurement: "${criterionName}" (${measurementDate})`)
+      }
+    })
+    
+    const uniquePerformanceMeasurements = Array.from(deduplicatedMap.values())
+    
+    if (uniquePerformanceMeasurements.length < performanceMeasurements.length) {
+      logger.info(`[EXTRACTION-PERFORMANCE_MEASUREMENTS] Deduplicated ${performanceMeasurements.length} → ${uniquePerformanceMeasurements.length} performance measurements`)
+    }
+
+    uniquePerformanceMeasurements.forEach(measurement => {
       const criterionName = measurement.success_criterion_name?.trim()
       
       if (!criterionName) {
@@ -6683,7 +7061,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${performanceMeasurements.length} performance measurements`)
+    logger.info(`[EXTRACTION] Saved ${uniquePerformanceMeasurements.length} performance measurements (deduplicated from ${performanceMeasurements.length})`)
   }
 
   /**
@@ -6700,10 +7078,50 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
+    // Deduplicate EVM metrics by measurement_date (AI sometimes extracts same metric multiple times)
+    const deduplicatedMap = new Map<string, EarnedValueMetric>()
+    
+    earnedValueMetrics.forEach(metric => {
+      const measurementDate = this.normalizeDate(metric.measurement_date)
+      if (!measurementDate) {
+        return
+      }
+      
+      const key = measurementDate
+      
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, metric)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(key)!
+        const merged: EarnedValueMetric = {
+          ...existing,
+          planned_value: metric.planned_value !== undefined ? metric.planned_value : existing.planned_value,
+          earned_value: metric.earned_value !== undefined ? metric.earned_value : existing.earned_value,
+          actual_cost: metric.actual_cost !== undefined ? metric.actual_cost : existing.actual_cost,
+          schedule_variance: metric.schedule_variance !== undefined ? metric.schedule_variance : existing.schedule_variance,
+          cost_variance: metric.cost_variance !== undefined ? metric.cost_variance : existing.cost_variance,
+          schedule_performance_index: metric.schedule_performance_index !== undefined ? metric.schedule_performance_index : existing.schedule_performance_index,
+          cost_performance_index: metric.cost_performance_index !== undefined ? metric.cost_performance_index : existing.cost_performance_index,
+          estimate_at_completion: metric.estimate_at_completion !== undefined ? metric.estimate_at_completion : existing.estimate_at_completion,
+          estimate_to_complete: metric.estimate_to_complete !== undefined ? metric.estimate_to_complete : existing.estimate_to_complete,
+          notes: metric.notes || existing.notes
+        }
+        deduplicatedMap.set(key, merged)
+        logger.debug(`[EXTRACTION-EARNED_VALUE_METRICS] Merged duplicate EVM metric: ${measurementDate}`)
+      }
+    })
+    
+    const uniqueEarnedValueMetrics = Array.from(deduplicatedMap.values())
+    
+    if (uniqueEarnedValueMetrics.length < earnedValueMetrics.length) {
+      logger.info(`[EXTRACTION-EARNED_VALUE_METRICS] Deduplicated ${earnedValueMetrics.length} → ${uniqueEarnedValueMetrics.length} EVM metrics`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    earnedValueMetrics.forEach(metric => {
+    uniqueEarnedValueMetrics.forEach(metric => {
       const measurementDate = this.normalizeDate(metric.measurement_date)
       if (!measurementDate) {
         logger.warn(`[EXTRACTION] Skipping EVM metric due to invalid date (${metric.measurement_date})`)
@@ -6775,7 +7193,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${earnedValueMetrics.length} earned value metric snapshots`)
+    logger.info(`[EXTRACTION] Saved ${uniqueEarnedValueMetrics.length} earned value metric snapshots (deduplicated from ${earnedValueMetrics.length})`)
   }
 
   /**
@@ -6815,10 +7233,48 @@ Output valid JSON object with "performance_actuals" array only.`
       lost: 'missed'
     }
 
+    // Deduplicate opportunities by title (AI sometimes extracts same opportunity multiple times)
+    const deduplicatedMap = new Map<string, OpportunityRecord>()
+    
+    opportunities.forEach(opportunity => {
+      const normalizedTitle = (opportunity.title || '').trim().toLowerCase()
+      
+      if (!normalizedTitle) {
+        return
+      }
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        deduplicatedMap.set(normalizedTitle, opportunity)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: OpportunityRecord = {
+          ...existing,
+          description: opportunity.description || existing.description,
+          category: opportunity.category || existing.category,
+          probability: opportunity.probability || existing.probability,
+          benefit_level: opportunity.benefit_level || existing.benefit_level,
+          exploitation_strategy: opportunity.exploitation_strategy || existing.exploitation_strategy,
+          owner: opportunity.owner || existing.owner,
+          status: opportunity.status || existing.status,
+          expected_benefit: opportunity.expected_benefit !== undefined ? opportunity.expected_benefit : existing.expected_benefit,
+          trigger_conditions: opportunity.trigger_conditions || existing.trigger_conditions
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-OPPORTUNITIES] Merged duplicate opportunity: "${opportunity.title}"`)
+      }
+    })
+    
+    const uniqueOpportunities = Array.from(deduplicatedMap.values())
+    
+    if (uniqueOpportunities.length < opportunities.length) {
+      logger.info(`[EXTRACTION-OPPORTUNITIES] Deduplicated ${opportunities.length} → ${uniqueOpportunities.length} opportunities`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    opportunities.forEach((opportunity, index) => {
+    uniqueOpportunities.forEach((opportunity, index) => {
       const offset = index * 14
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
@@ -6876,7 +7332,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${opportunities.length} opportunities`)
+    logger.info(`[EXTRACTION] Saved ${uniqueOpportunities.length} opportunities (deduplicated from ${opportunities.length})`)
   }
 
   /**
@@ -6916,10 +7372,48 @@ Output valid JSON object with "performance_actuals" array only.`
 
     const riskMap = await this.getRiskIdMap(client, projectId)
 
+    // Deduplicate risk responses by risk_title + response_date (AI sometimes extracts same response multiple times)
+    const deduplicatedMap = new Map<string, RiskResponseRecord>()
+    
+    riskResponses.forEach(response => {
+      const normalizedRiskTitle = (response.risk_title || '').trim().toLowerCase()
+      const responseDate = this.normalizeDate(response.response_date)
+      
+      if (!normalizedRiskTitle || !responseDate) {
+        return
+      }
+      
+      const key = `${normalizedRiskTitle}:${responseDate}`
+      
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, response)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(key)!
+        const merged: RiskResponseRecord = {
+          ...existing,
+          action_taken: response.action_taken || existing.action_taken,
+          effectiveness: response.effectiveness || existing.effectiveness,
+          cost_of_response: response.cost_of_response !== undefined ? response.cost_of_response : existing.cost_of_response,
+          residual_risk_level: response.residual_risk_level || existing.residual_risk_level,
+          owner: response.owner || existing.owner,
+          notes: response.notes || existing.notes
+        }
+        deduplicatedMap.set(key, merged)
+        logger.debug(`[EXTRACTION-RISK_RESPONSES] Merged duplicate risk response: "${response.risk_title}" (${responseDate})`)
+      }
+    })
+    
+    const uniqueRiskResponses = Array.from(deduplicatedMap.values())
+    
+    if (uniqueRiskResponses.length < riskResponses.length) {
+      logger.info(`[EXTRACTION-RISK_RESPONSES] Deduplicated ${riskResponses.length} → ${uniqueRiskResponses.length} risk responses`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
-    riskResponses.forEach((response, index) => {
+    uniqueRiskResponses.forEach((response, index) => {
       const offset = index * 13
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13})`
@@ -6986,7 +7480,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${riskResponses.length} risk responses`)
+    logger.info(`[EXTRACTION] Saved ${uniqueRiskResponses.length} risk responses (deduplicated from ${riskResponses.length})`)
   }
 
   /**
@@ -7007,11 +7501,57 @@ Output valid JSON object with "performance_actuals" array only.`
     // Validate entity_type enum
     const validEntityTypes = new Set(['milestone', 'deliverable', 'activity', 'phase', 'resource'])
 
+    // Deduplicate performance actuals by entity_type + entity_name + measurement_date (AI sometimes extracts same actual multiple times)
+    const deduplicatedMap = new Map<string, PerformanceActual>()
+    
+    performanceActuals.forEach(actual => {
+      const entityType = validEntityTypes.has(actual.entity_type) ? actual.entity_type : 'milestone'
+      const measurementDate = actual.actual_end_date || actual.actual_start_date || new Date().toISOString().split('T')[0]
+      const normalizedMeasurementDate = this.normalizeDate(measurementDate)
+      
+      if (!normalizedMeasurementDate || !actual.entity_name || actual.entity_name.trim().length === 0) {
+        return
+      }
+      
+      const key = `${entityType}:${actual.entity_name.trim().toLowerCase()}:${normalizedMeasurementDate}`
+      
+      if (!deduplicatedMap.has(key)) {
+        deduplicatedMap.set(key, actual)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(key)!
+        const merged: PerformanceActual = {
+          ...existing,
+          entity_id: actual.entity_id || existing.entity_id,
+          planned_start_date: actual.planned_start_date || existing.planned_start_date,
+          actual_start_date: actual.actual_start_date || existing.actual_start_date,
+          planned_end_date: actual.planned_end_date || existing.planned_end_date,
+          actual_end_date: actual.actual_end_date || existing.actual_end_date,
+          planned_cost: actual.planned_cost !== undefined ? actual.planned_cost : existing.planned_cost,
+          actual_cost: actual.actual_cost !== undefined ? actual.actual_cost : existing.actual_cost,
+          planned_progress_percent: actual.planned_progress_percent !== undefined ? actual.planned_progress_percent : existing.planned_progress_percent,
+          actual_progress_percent: actual.actual_progress_percent !== undefined ? actual.actual_progress_percent : existing.actual_progress_percent,
+          quality_score: actual.quality_score !== undefined ? actual.quality_score : existing.quality_score,
+          defects_found: actual.defects_found !== undefined ? actual.defects_found : existing.defects_found,
+          rework_hours: actual.rework_hours !== undefined ? actual.rework_hours : existing.rework_hours,
+          notes: actual.notes || existing.notes
+        }
+        deduplicatedMap.set(key, merged)
+        logger.debug(`[EXTRACTION-PERFORMANCE_ACTUALS] Merged duplicate performance actual: "${actual.entity_name}" (${entityType}, ${normalizedMeasurementDate})`)
+      }
+    })
+    
+    const uniquePerformanceActuals = Array.from(deduplicatedMap.values())
+    
+    if (uniquePerformanceActuals.length < performanceActuals.length) {
+      logger.info(`[EXTRACTION-PERFORMANCE_ACTUALS] Deduplicated ${performanceActuals.length} → ${uniquePerformanceActuals.length} performance actuals`)
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
     let validItemCount = 0 // Counter for valid items only (not forEach index)
 
-    performanceActuals.forEach((actual) => {
+    uniquePerformanceActuals.forEach((actual) => {
       // Validate entity_type
       const entityType = validEntityTypes.has(actual.entity_type) ? actual.entity_type : 'milestone'
       
@@ -7114,7 +7654,7 @@ Output valid JSON object with "performance_actuals" array only.`
       values
     )
 
-    logger.info(`[EXTRACTION] Saved ${placeholders.length} performance actuals`)
+    logger.info(`[EXTRACTION] Saved ${uniquePerformanceActuals.length} performance actuals (deduplicated from ${performanceActuals.length})`)
   }
 
   /**

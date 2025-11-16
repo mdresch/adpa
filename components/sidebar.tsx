@@ -28,18 +28,20 @@ import {
   Workflow,
   TrendingUp,
   CheckCircle,
+  BookOpen,
 } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderOpen },
-  { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true },
+  // { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true }, // Temporarily hidden for testing
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
   { name: "Integrations", href: "/integrations", icon: LinkIcon },
   { name: "Templates", href: "/templates", icon: FileText },
   { name: "Template Builder", href: "/templates/builder", icon: Layers },
+  // { name: "PMBOK 6 Processes", href: "/pmbok6", icon: BookOpen }, // Temporarily hidden for testing
   { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow },
   { name: "Users & Roles", href: "/users", icon: Users },
   { name: "Job Monitor", href: "/jobs", icon: Activity },
@@ -54,14 +56,15 @@ export function Sidebar() {
   const pathname = usePathname()
   const { user, logout } = useAuth()
 
-  useEffect(() => {
-    if (user) {
-      fetchPendingApprovals()
-      // Refresh every 30 seconds
-      const interval = setInterval(fetchPendingApprovals, 30000)
-      return () => clearInterval(interval)
-    }
-  }, [user])
+  // Temporarily disabled - Approvals menu item is hidden for testing
+  // useEffect(() => {
+  //   if (user) {
+  //     fetchPendingApprovals()
+  //     // Refresh every 30 seconds
+  //     const interval = setInterval(fetchPendingApprovals, 30000)
+  //     return () => clearInterval(interval)
+  //   }
+  // }, [user])
 
   const fetchPendingApprovals = async () => {
     try {

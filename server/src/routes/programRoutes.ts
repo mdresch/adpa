@@ -96,9 +96,31 @@ router.get('/:id/risks', authenticateToken, requirePermission('programs.view'), 
   try {
     const programId = req.params.id
     
+    // Check which document ID column exists (could be extracted_from_document_id or source_document_id)
+    let documentIdColumn = null
+    try {
+      const columnCheck = await pool.query(
+        `SELECT column_name
+         FROM information_schema.columns 
+         WHERE table_schema = 'public' 
+         AND table_name = 'risks' 
+         AND column_name IN ('extracted_from_document_id', 'source_document_id')
+         LIMIT 1`
+      )
+      if (columnCheck.rows.length > 0) {
+        documentIdColumn = columnCheck.rows[0].column_name
+      }
+    } catch (err) {
+      log.warn('Could not check for document ID column', err)
+    }
+    
     // Get all risks from projects in this program
-    const result = await pool.query(
-      `
+    // Build query with dynamic column name for document ID
+    const documentIdSelect = documentIdColumn 
+      ? `r.${documentIdColumn}` 
+      : 'NULL'
+    
+    const query = `
       SELECT 
         r.id,
         r.title,
@@ -112,6 +134,7 @@ router.get('/:id/risks', authenticateToken, requirePermission('programs.view'), 
         COALESCE(r.status, 'open') as status,
         r.created_at,
         r.updated_at,
+        ${documentIdSelect} as extracted_from_document_id,
         p.id as project_id,
         p.name as project_name
       FROM risks r
@@ -126,9 +149,9 @@ router.get('/:id/risks', authenticateToken, requirePermission('programs.view'), 
         END,
         r.probability DESC,
         r.impact DESC
-      `,
-      [programId]
-    )
+    `
+    
+    const result = await pool.query(query, [programId])
 
     // Transform to match frontend Risk interface
     const risks = result.rows.map((row: any) => {
@@ -192,14 +215,25 @@ router.get('/:id/risks', authenticateToken, requirePermission('programs.view'), 
         createdAt: row.created_at ? new Date(row.created_at).toISOString() : new Date().toISOString(),
         updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : new Date().toISOString(),
         projectId: row.project_id,
-        projectName: row.project_name
+        projectName: row.project_name,
+        extractedFromDocumentId: row.extracted_from_document_id || null
       }
     })
 
     res.json({ success: true, data: risks })
-  } catch (error) {
+  } catch (error: any) {
     log.error('Failed to fetch program risks', error)
-    res.status(500).json({ error: 'Failed to fetch program risks' })
+    log.error('Error details:', { 
+      message: error.message, 
+      stack: error.stack,
+      code: error.code,
+      detail: error.detail
+    })
+    res.status(500).json({ 
+      error: 'Failed to fetch program risks',
+      message: error.message,
+      detail: error.detail
+    })
   }
 })
 
