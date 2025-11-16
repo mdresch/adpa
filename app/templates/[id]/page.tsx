@@ -61,6 +61,23 @@ interface Template {
   updated_at: string
 }
 
+interface TemplateUsage {
+  id: string
+  document_id: string
+  document_name: string | null
+  document_status: string | null
+  project_id: string | null
+  project_name: string | null
+  user_name: string | null
+  used_at: string
+  quality_score: number | null
+  success: boolean
+  word_count: number | null
+  generation_time_ms: number | null
+  ai_provider: string | null
+  ai_model: string | null
+}
+
 const statusConfig = {
   draft: {
     label: '⚪ Draft',
@@ -144,6 +161,7 @@ export default function TemplateDetailPage() {
   const templateId = params.id as string
   
   const [template, setTemplate] = useState<Template | null>(null)
+  const [recentUsage, setRecentUsage] = useState<TemplateUsage[]>([])
   const [loading, setLoading] = useState(true)
   const [promoting, setPromoting] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -155,8 +173,17 @@ export default function TemplateDetailPage() {
   const fetchTemplate = async () => {
     try {
       setLoading(true)
-      const template = await apiClient.getTemplate(templateId)
-      setTemplate(template)
+      const response = await apiClient.request(`/templates/${templateId}`, {
+        method: 'GET',
+      })
+      
+      if (response.template) {
+        setTemplate(response.template)
+      }
+      
+      if (response.recentUsage) {
+        setRecentUsage(response.recentUsage)
+      }
     } catch (error) {
       console.error('Failed to fetch template:', error)
       toast.error('Failed to load template')
@@ -1038,65 +1065,135 @@ export default function TemplateDetailPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        {template.validation_count > 0 ? (
-                          <div className="space-y-4">
-                            {/* Last Validation */}
-                            {template.last_validated_at && (
-                              <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
-                                <div className="bg-blue-500 rounded-full p-2 mt-1">
-                                  <CheckCircle className="h-4 w-4 text-white" />
-                                </div>
-                                <div className="flex-1">
-                                  <p className="font-semibold text-sm">Latest Validation</p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(template.last_validated_at).toLocaleString()}
-                                  </p>
-                                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                                    ✓ Success • Quality: {template.health_rating}
-                                  </p>
+                        <div className="space-y-4">
+                          {/* Template Usage Entries */}
+                          {recentUsage.length > 0 && recentUsage.map((usage) => (
+                            <div 
+                              key={usage.id}
+                              className="flex items-start gap-3 p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900 transition-colors cursor-pointer"
+                              onClick={() => {
+                                if (usage.document_id && usage.project_id) {
+                                  router.push(`/projects/${usage.project_id}/documents/${usage.document_id}`)
+                                }
+                              }}
+                            >
+                              <div className="bg-green-500 rounded-full p-2 mt-1">
+                                <FileText className="h-4 w-4 text-white" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-semibold text-sm truncate">
+                                      Template Used
+                                    </p>
+                                    {usage.document_name && (
+                                      <p className="text-xs text-muted-foreground truncate mt-1">
+                                        Document: {usage.document_name}
+                                      </p>
+                                    )}
+                                    {usage.project_name && (
+                                      <p className="text-xs text-muted-foreground truncate">
+                                        Project: {usage.project_name}
+                                      </p>
+                                    )}
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {new Date(usage.used_at).toLocaleString()}
+                                    </p>
+                                    <div className="flex items-center gap-3 mt-2 flex-wrap">
+                                      {usage.quality_score !== null && (
+                                        <span className={`text-xs px-2 py-1 rounded ${
+                                          usage.success 
+                                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
+                                            : 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300'
+                                        }`}>
+                                          Quality: {usage.quality_score}%
+                                        </span>
+                                      )}
+                                      {usage.success ? (
+                                        <span className="text-xs text-green-600 dark:text-green-400">✓ Success</span>
+                                      ) : (
+                                        <span className="text-xs text-red-600 dark:text-red-400">✗ Failed</span>
+                                      )}
+                                      {usage.word_count && (
+                                        <span className="text-xs text-muted-foreground">
+                                          {usage.word_count.toLocaleString()} words
+                                        </span>
+                                      )}
+                                    </div>
+                                    {usage.document_id && (
+                                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-2 flex items-center gap-1">
+                                        <Eye className="h-3 w-3" />
+                                        Click to view document details
+                                      </p>
+                                    )}
+                                  </div>
+                                  {usage.document_id && (
+                                    <ArrowRight className="h-4 w-4 text-muted-foreground flex-shrink-0 mt-1" />
+                                  )}
                                 </div>
                               </div>
-                            )}
-                            
-                            {/* Status Change */}
-                            <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
-                              <div className="bg-purple-500 rounded-full p-2 mt-1">
-                                <ArrowUp className="h-4 w-4 text-white" />
+                            </div>
+                          ))}
+
+                          {/* Last Validation */}
+                          {template.last_validated_at && (
+                            <div className="flex items-start gap-3 p-3 bg-blue-50 dark:bg-blue-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                              <div className="bg-blue-500 rounded-full p-2 mt-1">
+                                <CheckCircle className="h-4 w-4 text-white" />
                               </div>
                               <div className="flex-1">
-                                <p className="font-semibold text-sm">Status: {statusConfig[template.development_status]?.emoji} {statusConfig[template.development_status]?.label}</p>
+                                <p className="font-semibold text-sm">Latest Validation</p>
                                 <p className="text-xs text-muted-foreground">
-                                  Updated: {new Date(template.updated_at).toLocaleString()}
+                                  {new Date(template.last_validated_at).toLocaleString()}
                                 </p>
-                                <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                                  {currentConfig.description}
+                                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                  ✓ Success • Quality: {template.health_rating}
                                 </p>
                               </div>
                             </div>
-                            
-                            {/* Template Created */}
-                            <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
-                              <div className="bg-gray-500 rounded-full p-2 mt-1">
-                                <Sparkles className="h-4 w-4 text-white" />
-                              </div>
-                              <div className="flex-1">
-                                <p className="font-semibold text-sm">Template Created</p>
-                                <p className="text-xs text-muted-foreground">
-                                  {new Date(template.created_at).toLocaleString()}
-                                </p>
-                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                                  By {template.created_by_name || 'Unknown'}
-                                </p>
-                              </div>
+                          )}
+                          
+                          {/* Status Change */}
+                          <div className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800">
+                            <div className="bg-purple-500 rounded-full p-2 mt-1">
+                              <ArrowUp className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm">Status: {statusConfig[template.development_status]?.emoji} {statusConfig[template.development_status]?.label}</p>
+                              <p className="text-xs text-muted-foreground">
+                                Updated: {new Date(template.updated_at).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                                {currentConfig.description}
+                              </p>
                             </div>
                           </div>
-                        ) : (
-                          <div className="text-center py-8 text-muted-foreground">
-                            <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                            <p className="text-sm">No validation history yet</p>
-                            <p className="text-xs mt-1">Generate documents to see activity</p>
+                          
+                          {/* Template Created */}
+                          <div className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-950 rounded-lg border border-gray-200 dark:border-gray-800">
+                            <div className="bg-gray-500 rounded-full p-2 mt-1">
+                              <Sparkles className="h-4 w-4 text-white" />
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm">Template Created</p>
+                              <p className="text-xs text-muted-foreground">
+                                {new Date(template.created_at).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                By {template.created_by_name || 'Unknown'}
+                              </p>
+                            </div>
                           </div>
-                        )}
+
+                          {/* Empty State */}
+                          {recentUsage.length === 0 && template.validation_count === 0 && (
+                            <div className="text-center py-8 text-muted-foreground">
+                              <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                              <p className="text-sm">No activity yet</p>
+                              <p className="text-xs mt-1">Generate documents to see activity</p>
+                            </div>
+                          )}
+                        </div>
                       </CardContent>
                     </AnimatedCard>
                   </div>

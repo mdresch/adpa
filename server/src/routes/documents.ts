@@ -945,6 +945,26 @@ router.post("/project/:projectId",
           
           log.info('Template usage tracked in template_usage table')
           
+          // 🔧 FIX: Increment template's usage_count (displayed in UI)
+          // This must be done separately from validation_count/success_count
+          try {
+            await pool.query(
+              `UPDATE templates 
+               SET usage_count = usage_count + 1,
+                   last_used_at = CURRENT_TIMESTAMP,
+                   updated_at = CURRENT_TIMESTAMP
+               WHERE id = $1`,
+              [template_id]
+            )
+            log.info('✅ Template usage_count incremented', { template_id })
+          } catch (usageError) {
+            log.error('⚠️ Failed to increment template usage_count:', {
+              template_id,
+              error: usageError.message
+            })
+            // Don't fail the document creation if counter update fails
+          }
+          
           // 🔧 FIX: Also increment template's validation_count and success_count
           // This was previously only done for AI-generated documents, causing counters to get stuck
           try {
