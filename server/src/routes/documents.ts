@@ -11,6 +11,21 @@ import { trackActivity } from "../middleware/analyticsMiddleware"
 import AuditService from "../services/auditService"
 import { extractionQueue } from "../services/queueService"
 import { markdownToPdf } from "../utils/pdfGenerator"
+import {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  AlignmentType,
+  ShadingType,
+} from "docx"
+// @ts-ignore - archiver v7 CommonJS compatibility
+import archiver from "archiver"
 
 const router = express.Router()
 
@@ -1754,6 +1769,795 @@ router.delete("/:id/permanent",
     } catch (error) {
       log.error("Error permanently deleting document:", error)
       res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Bulk export endpoints
+/**
+ * POST /api/documents/bulk-export/pdf
+ * Export multiple documents as PDF files in a ZIP archive
+ */
+router.post(
+  "/bulk-export/pdf",
+  authenticateToken,
+  requirePermission("documents.read"),
+  validate(
+    Joi.object({
+      document_ids: Joi.array().items(schemas.uuid).min(1).max(50).required(),
+    })
+  ),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { document_ids } = req.body
+
+      log.info(`Bulk PDF export requested for ${document_ids.length} documents`)
+
+      // Fetch all documents
+      const placeholders = document_ids.map((_, i) => `$${i + 1}`).join(",")
+      const result = await pool.query(
+        `SELECT id, name, content FROM documents WHERE id IN (${placeholders})`,
+        document_ids
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "No documents found" })
+      }
+
+      // Create ZIP archive
+      const archive = (archiver as any)("zip", { zlib: { level: 9 } })
+      res.setHeader("Content-Type", "application/zip")
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="documents-export-${Date.now()}.zip"`
+      )
+
+      archive.pipe(res)
+
+      // Process each document
+      for (const doc of result.rows) {
+        try {
+          // Extract markdown content
+          let markdownContent = ""
+          if (typeof doc.content === "string") {
+            markdownContent = doc.content
+          } else if (doc.content && typeof doc.content === "object") {
+            markdownContent =
+              doc.content.content || doc.content.text || JSON.stringify(doc.content)
+          } else {
+            markdownContent = String(doc.content || "")
+          }
+
+          if (!markdownContent || markdownContent.trim() === "") {
+            log.warn(`Document ${doc.id} has no content, skipping`)
+            continue
+          }
+
+          // Convert to PDF
+          const pdfBuffer = await markdownToPdf(markdownContent, {
+            format: "A4",
+            margin: { top: "20mm", right: "15mm", bottom: "20mm", left: "15mm" },
+            printBackground: true,
+          })
+
+          // Add to ZIP
+          const sanitizedName = doc.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()
+          archive.append(pdfBuffer, { name: `${sanitizedName}.pdf` })
+        } catch (error: any) {
+          log.error(`Failed to export document ${doc.id}:`, error)
+          // Continue with other documents
+        }
+      }
+
+      // Finalize ZIP
+      await archive.finalize()
+
+      log.info(`Bulk PDF export completed for ${result.rows.length} documents`)
+    } catch (error: any) {
+      log.error("Bulk PDF export error:", error)
+      res.status(500).json({ error: "Failed to export documents" })
+    }
+  }
+)
+
+/**
+ * Parse Markdown content into Word document elements with proper styling
+ */
+function parseMarkdownToWordElements(markdown: string): any[] {
+  const elements: any[] = []
+  const lines = markdown.split("\n")
+  let i = 0
+  let inCodeBlock = false
+  let codeBlockContent: string[] = []
+  let inTable = false
+  let tableRows: string[][] = []
+  let listStack: { type: "bullet" | "number"; level: number }[] = []
+
+  while (i < lines.length) {
+    const line = lines[i]
+    const trimmedLine = line.trim()
+
+    // Handle code blocks
+    if (trimmedLine.startsWith("```")) {
+      if (inCodeBlock) {
+        // End code block
+        const codeText = codeBlockContent.join("\n")
+        elements.push(
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: codeText,
+                font: "Courier New",
+                size: 20,
+                color: "333333",
+              }),
+            ],
+            shading: {
+              type: ShadingType.SOLID,
+              color: "F5F5F5",
+            },
+            spacing: { before: 120, after: 120 },
+            indent: { left: 360 },
+          })
+        )
+        codeBlockContent = []
+        inCodeBlock = false
+      } else {
+        // Start code block
+        inCodeBlock = true
+      }
+      i++
+      continue
+    }
+
+    if (inCodeBlock) {
+      codeBlockContent.push(line)
+      i++
+      continue
+    }
+
+    // Handle tables
+    if (trimmedLine.includes("|") && trimmedLine.split("|").length > 2) {
+      if (!inTable) {
+        inTable = true
+        tableRows = []
+      }
+      const cells = trimmedLine
+        .split("|")
+        .map((cell) => cell.trim())
+        .filter((cell) => cell.length > 0)
+      if (cells.length > 0) {
+        // Skip separator row (|---|---|)
+        if (!cells.every((cell) => /^:?-+:?$/.test(cell))) {
+          tableRows.push(cells)
+        }
+      }
+      i++
+      continue
+    } else if (inTable && tableRows.length > 0) {
+      // End table - ensure we have valid rows
+      if (tableRows.length > 0 && tableRows[0].length > 0) {
+        const tableCells = tableRows.map((row, rowIndex) => {
+          const isHeader = rowIndex === 0
+          // Ensure all rows have the same number of cells
+          const maxCells = Math.max(...tableRows.map((r) => r.length))
+          const paddedRow = [...row]
+          while (paddedRow.length < maxCells) {
+            paddedRow.push("")
+          }
+          
+          return new TableRow({
+            children: paddedRow.map(
+              (cell) =>
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: cell ? parseInlineMarkdown(cell) : [new TextRun({ text: "" })],
+                      alignment: AlignmentType.LEFT,
+                    }),
+                  ],
+                  shading: isHeader
+                    ? {
+                        type: ShadingType.SOLID,
+                        color: "E0E0E0",
+                      }
+                    : undefined,
+                })
+            ),
+          })
+        })
+
+        elements.push(
+          new Table({
+            rows: tableCells,
+            width: {
+              size: 100,
+              type: WidthType.PERCENTAGE,
+            },
+          })
+        )
+      }
+      tableRows = []
+      inTable = false
+    }
+
+    // Handle horizontal rules
+    if (/^[-*_]{3,}$/.test(trimmedLine)) {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "─────────────────────────────────────────────────────────",
+              color: "CCCCCC",
+            }),
+          ],
+          spacing: { before: 240, after: 240 },
+        })
+      )
+      i++
+      continue
+    }
+
+    // Handle headings
+    const headingMatch = trimmedLine.match(/^(#{1,6})\s+(.+)$/)
+    if (headingMatch) {
+      const level = headingMatch[1].length
+      let text = headingMatch[2]
+      // Strip markdown formatting from heading text (headings use Word styles, not markdown formatting)
+      text = stripMarkdownFormatting(text)
+      const headingLevels = [
+        HeadingLevel.HEADING_1,
+        HeadingLevel.HEADING_2,
+        HeadingLevel.HEADING_3,
+        HeadingLevel.HEADING_4,
+        HeadingLevel.HEADING_5,
+        HeadingLevel.HEADING_6,
+      ]
+      elements.push(
+        new Paragraph({
+          text: text,
+          heading: headingLevels[Math.min(level - 1, 5)],
+          spacing: { before: level === 1 ? 240 : 180, after: 120 },
+        })
+      )
+      i++
+      continue
+    }
+
+    // Handle blockquotes
+    if (trimmedLine.startsWith(">")) {
+      const quoteText = trimmedLine.substring(1).trim()
+      // Use indentation and visual indicator instead of border (border syntax may cause Word errors)
+      const quoteRuns = parseInlineMarkdown(quoteText)
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "│ ", color: "3498DB", bold: true }),
+            ...quoteRuns,
+          ],
+          indent: { left: 360 },
+          spacing: { before: 120, after: 120 },
+        })
+      )
+      i++
+      continue
+    }
+
+    // Handle lists
+    const bulletMatch = trimmedLine.match(/^(\s*)([-*+])\s+(.+)$/)
+    const numberMatch = trimmedLine.match(/^(\s*)(\d+\.)\s+(.+)$/)
+
+    if (bulletMatch || numberMatch) {
+      const match = bulletMatch || numberMatch!
+      const indent = match[1].length
+      const level = Math.floor(indent / 2)
+      const text = match[3]
+      const isNumbered = !!numberMatch
+
+      // Close deeper list levels
+      while (listStack.length > 0 && listStack[listStack.length - 1].level >= level) {
+        listStack.pop()
+      }
+
+      // For numbered lists, use manual numbering for now (1., 2., etc.)
+      // Word numbering requires predefined numbering styles which we don't have
+      if (isNumbered) {
+        const numberMatch = match[2].match(/(\d+)\./)
+        const number = numberMatch ? numberMatch[1] : "1"
+        elements.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: `${number}. `, bold: true }),
+              ...parseInlineMarkdown(text),
+            ],
+            indent: { left: level * 360 },
+            spacing: { after: 60 },
+          })
+        )
+      } else {
+        elements.push(
+          new Paragraph({
+            children: parseInlineMarkdown(text),
+            bullet: { level },
+            spacing: { after: 60 },
+          })
+        )
+      }
+
+      if (listStack.length === 0 || listStack[listStack.length - 1].level < level) {
+        listStack.push({ type: isNumbered ? "number" : "bullet", level })
+      }
+
+      i++
+      continue
+    }
+
+    // Handle empty lines
+    if (trimmedLine === "") {
+      // Only add empty paragraph if previous element wasn't already spacing
+      if (elements.length > 0) {
+        const lastElement = elements[elements.length - 1]
+        if (lastElement instanceof Paragraph && lastElement.children?.length === 0) {
+          // Skip duplicate empty paragraphs
+        } else {
+          elements.push(new Paragraph({ text: "" }))
+        }
+      }
+      i++
+      continue
+    }
+
+    // Regular paragraph with inline formatting
+    elements.push(
+      new Paragraph({
+        children: parseInlineMarkdown(trimmedLine),
+        spacing: { after: 120 },
+      })
+    )
+    i++
+  }
+
+  // Handle any remaining code block
+  if (inCodeBlock && codeBlockContent.length > 0) {
+    const codeText = codeBlockContent.join("\n")
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: codeText,
+            font: "Courier New",
+            size: 20,
+            color: "333333",
+          }),
+        ],
+        shading: {
+          type: ShadingType.SOLID,
+          color: "F5F5F5",
+        },
+        spacing: { before: 120, after: 120 },
+        indent: { left: 360 },
+      })
+    )
+  }
+
+  // Handle any remaining table
+  if (inTable && tableRows.length > 0 && tableRows[0].length > 0) {
+    const maxCells = Math.max(...tableRows.map((r) => r.length))
+    const tableCells = tableRows.map((row, rowIndex) => {
+      const isHeader = rowIndex === 0
+      const paddedRow = [...row]
+      while (paddedRow.length < maxCells) {
+        paddedRow.push("")
+      }
+      
+      return new TableRow({
+        children: paddedRow.map(
+          (cell) =>
+            new TableCell({
+              children: [
+                new Paragraph({
+                  children: cell ? parseInlineMarkdown(cell) : [new TextRun({ text: "" })],
+                  alignment: AlignmentType.LEFT,
+                }),
+              ],
+              shading: isHeader
+                ? {
+                    type: ShadingType.SOLID,
+                    color: "E0E0E0",
+                  }
+                : undefined,
+            })
+        ),
+      })
+    })
+
+    elements.push(
+      new Table({
+        rows: tableCells,
+        width: {
+          size: 100,
+          type: WidthType.PERCENTAGE,
+        },
+      })
+    )
+  }
+
+  return elements
+}
+
+/**
+ * Strip markdown formatting from text (remove **, *, _, `, etc.)
+ * This is used for headings where Word styles are applied instead of markdown formatting
+ */
+function stripMarkdownFormatting(text: string): string {
+  let cleaned = text
+  
+  // Remove bold: **text** (must come before single *)
+  cleaned = cleaned.replace(/\*\*([^*]+?)\*\*/g, '$1')
+  cleaned = cleaned.replace(/__([^_]+?)__/g, '$1')
+  
+  // Remove italic: *text* (single asterisk, not double)
+  cleaned = cleaned.replace(/\*([^*\s][^*]*?)\*/g, '$1')
+  cleaned = cleaned.replace(/_([^_\s][^_]*?)_/g, '$1')
+  
+  // Remove inline code: `code`
+  cleaned = cleaned.replace(/`([^`]+?)`/g, '$1')
+  
+  // Remove links: [text](url) -> keep text
+  cleaned = cleaned.replace(/\[([^\]]+?)\]\([^)]+?\)/g, '$1')
+  
+  // Remove any remaining markdown syntax (cleanup)
+  cleaned = cleaned.replace(/\*\*/g, '') // Any remaining **
+  cleaned = cleaned.replace(/__/g, '') // Any remaining __
+  cleaned = cleaned.replace(/\*/g, '') // Any remaining single *
+  cleaned = cleaned.replace(/_/g, '') // Any remaining single _
+  
+  return cleaned.trim()
+}
+
+/**
+ * Parse inline Markdown formatting (bold, italic, code, links) into TextRun elements
+ */
+function parseInlineMarkdown(text: string): TextRun[] {
+  const runs: TextRun[] = []
+  let currentIndex = 0
+  let buffer = ""
+
+  const flushBuffer = (bold = false, italic = false, code = false, link?: { text: string; url: string }) => {
+    if (buffer.length > 0) {
+      if (code) {
+        runs.push(
+          new TextRun({
+            text: buffer,
+            font: "Courier New",
+            size: 20,
+            color: "D63384",
+            shading: {
+              type: ShadingType.SOLID,
+              color: "F8F9FA",
+            },
+          })
+        )
+      } else if (link) {
+        runs.push(
+          new TextRun({
+            text: link.text,
+            color: "0066CC",
+            underline: {
+              type: "single",
+            },
+          })
+        )
+      } else {
+        runs.push(
+          new TextRun({
+            text: buffer,
+            bold,
+            italics: italic,
+          })
+        )
+      }
+      buffer = ""
+    }
+  }
+
+  while (currentIndex < text.length) {
+    // Inline code: `code`
+    if (text[currentIndex] === "`" && currentIndex + 1 < text.length) {
+      const codeEnd = text.indexOf("`", currentIndex + 1)
+      if (codeEnd !== -1) {
+        flushBuffer()
+        const codeText = text.substring(currentIndex + 1, codeEnd)
+        runs.push(
+          new TextRun({
+            text: codeText,
+            font: "Courier New",
+            size: 20,
+            color: "D63384",
+            shading: {
+              type: ShadingType.SOLID,
+              color: "F8F9FA",
+            },
+          })
+        )
+        currentIndex = codeEnd + 1
+        continue
+      }
+    }
+
+    // Links: [text](url)
+    const linkMatch = text.substring(currentIndex).match(/^\[([^\]]+)\]\(([^)]+)\)/)
+    if (linkMatch) {
+      flushBuffer()
+      runs.push(
+        new TextRun({
+          text: linkMatch[1],
+          color: "0066CC",
+          underline: {
+            type: "single",
+          },
+        })
+      )
+      currentIndex += linkMatch[0].length
+      continue
+    }
+
+    // Bold: **text** or __text__
+    const boldMatch = text.substring(currentIndex).match(/^(\*\*|__)(.+?)\1/)
+    if (boldMatch) {
+      flushBuffer()
+      buffer = boldMatch[2]
+      flushBuffer(true, false)
+      currentIndex += boldMatch[0].length
+      continue
+    }
+
+    // Italic: *text* or _text_ (but not ** or __)
+    // Check for single asterisk or underscore (not double) - must come after bold check
+    if (!boldMatch) {
+      const singleAsteriskMatch = text.substring(currentIndex).match(/^\*([^*\s][^*]*?)\*/)
+      const singleUnderscoreMatch = text.substring(currentIndex).match(/^_([^_\s][^_]*?)_/)
+      
+      if (singleAsteriskMatch) {
+        flushBuffer()
+        buffer = singleAsteriskMatch[1]
+        flushBuffer(false, true)
+        currentIndex += singleAsteriskMatch[0].length
+        continue
+      }
+      
+      if (singleUnderscoreMatch) {
+        flushBuffer()
+        buffer = singleUnderscoreMatch[1]
+        flushBuffer(false, true)
+        currentIndex += singleUnderscoreMatch[0].length
+        continue
+      }
+    }
+
+    buffer += text[currentIndex]
+    currentIndex++
+  }
+
+  flushBuffer()
+  return runs.length > 0 ? runs : [new TextRun({ text })]
+}
+
+/**
+ * POST /api/documents/bulk-export/docx
+ * Export multiple documents as a single combined Word (DOCX) file
+ */
+router.post(
+  "/bulk-export/docx",
+  authenticateToken,
+  requirePermission("documents.read"),
+  validate(
+    Joi.object({
+      document_ids: Joi.array().items(schemas.uuid).min(1).max(50).required(),
+    })
+  ),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { document_ids } = req.body
+
+      log.info(`Bulk DOCX export requested for ${document_ids.length} documents`)
+
+      // Fetch all documents
+      const placeholders = document_ids.map((_, i) => `$${i + 1}`).join(",")
+      const result = await pool.query(
+        `SELECT id, name, content FROM documents WHERE id IN (${placeholders}) ORDER BY created_at ASC`,
+        document_ids
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "No documents found" })
+      }
+
+      // Collect all paragraphs from all documents into a single array
+      const allParagraphs: any[] = []
+      let documentCount = 0
+
+      // Process each document
+      for (const doc of result.rows) {
+        try {
+          // Extract markdown content
+          let markdownContent = ""
+          if (typeof doc.content === "string") {
+            markdownContent = doc.content
+          } else if (doc.content && typeof doc.content === "object") {
+            markdownContent =
+              doc.content.content || doc.content.text || JSON.stringify(doc.content)
+          } else {
+            markdownContent = String(doc.content || "")
+          }
+
+          if (!markdownContent || markdownContent.trim() === "") {
+            log.warn(`Document ${doc.id} has no content, skipping`)
+            continue
+          }
+
+          // Add separator before this document (except the first one)
+          if (documentCount > 0) {
+            // Add extra spacing and a separator line
+            allParagraphs.push(
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: "─────────────────────────────────────────────────────────",
+                    color: "CCCCCC",
+                  }),
+                ],
+              })
+            )
+            allParagraphs.push(new Paragraph({ text: "" }))
+          }
+
+          // Add document title with page break (except for first document)
+          allParagraphs.push(
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: doc.name || "Untitled Document",
+                  bold: true,
+                  size: 32,
+                }),
+              ],
+              pageBreakBefore: documentCount > 0, // Page break for all documents except the first
+            })
+          )
+
+          // Add spacing after title
+          allParagraphs.push(new Paragraph({ text: "" }))
+
+          // Parse markdown with proper Word styling
+          const wordElements = parseMarkdownToWordElements(markdownContent)
+          allParagraphs.push(...wordElements)
+
+          documentCount++
+        } catch (error: any) {
+          log.error(`Failed to process document ${doc.id}:`, error)
+          // Continue with other documents
+        }
+      }
+
+      // Create single DOCX document with all content in one section
+      const combinedDoc = new Document({
+        sections: [
+          {
+            properties: {},
+            children: allParagraphs,
+          },
+        ],
+      })
+
+      // Generate buffer
+      log.info(`Generating combined DOCX with ${allParagraphs.length} paragraphs from ${documentCount} documents`)
+      const docxBuffer = await Packer.toBuffer(combinedDoc)
+      log.info(`DOCX buffer generated: ${docxBuffer.length} bytes`)
+
+      // Set headers for DOCX download (not ZIP!)
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="combined-documents-${Date.now()}.docx"`
+      )
+      res.setHeader("Content-Length", docxBuffer.length.toString())
+
+      // Send the combined DOCX file directly (not as ZIP)
+      res.end(docxBuffer)
+
+      log.info(`Bulk DOCX export completed: ${result.rows.length} documents combined into single file (${docxBuffer.length} bytes)`)
+    } catch (error: any) {
+      log.error("Bulk DOCX export error:", error)
+      res.status(500).json({ error: "Failed to export documents" })
+    }
+  }
+)
+
+/**
+ * POST /api/documents/bulk-export/markdown
+ * Export multiple documents as Markdown files in a ZIP archive
+ */
+router.post(
+  "/bulk-export/markdown",
+  authenticateToken,
+  requirePermission("documents.read"),
+  validate(
+    Joi.object({
+      document_ids: Joi.array().items(schemas.uuid).min(1).max(50).required(),
+    })
+  ),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { document_ids } = req.body
+
+      log.info(`Bulk Markdown export requested for ${document_ids.length} documents`)
+
+      // Fetch all documents
+      const placeholders = document_ids.map((_, i) => `$${i + 1}`).join(",")
+      const result = await pool.query(
+        `SELECT id, name, content, created_at, updated_at FROM documents WHERE id IN (${placeholders})`,
+        document_ids
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "No documents found" })
+      }
+
+      // Create ZIP archive
+      const archive = (archiver as any)("zip", { zlib: { level: 9 } })
+      res.setHeader("Content-Type", "application/zip")
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="documents-export-${Date.now()}.zip"`
+      )
+
+      archive.pipe(res)
+
+      // Process each document
+      for (const doc of result.rows) {
+        try {
+          // Extract markdown content
+          let markdownContent = ""
+          if (typeof doc.content === "string") {
+            markdownContent = doc.content
+          } else if (doc.content && typeof doc.content === "object") {
+            markdownContent =
+              doc.content.content || doc.content.text || JSON.stringify(doc.content)
+          } else {
+            markdownContent = String(doc.content || "")
+          }
+
+          // Add metadata header
+          const fullMarkdown = `# ${doc.name || "Untitled Document"}
+
+**Created:** ${new Date(doc.created_at).toLocaleDateString()}  
+**Updated:** ${new Date(doc.updated_at).toLocaleDateString()}
+
+---
+
+${markdownContent}
+`
+
+          // Add to ZIP
+          const sanitizedName = doc.name.replace(/[^a-z0-9]/gi, "_").toLowerCase()
+          archive.append(fullMarkdown, { name: `${sanitizedName}.md` })
+        } catch (error: any) {
+          log.error(`Failed to export document ${doc.id}:`, error)
+          // Continue with other documents
+        }
+      }
+
+      // Finalize ZIP
+      await archive.finalize()
+
+      log.info(`Bulk Markdown export completed for ${result.rows.length} documents`)
+    } catch (error: any) {
+      log.error("Bulk Markdown export error:", error)
+      res.status(500).json({ error: "Failed to export documents" })
     }
   }
 )

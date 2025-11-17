@@ -38,6 +38,10 @@ import {
   Wand2,
   Loader2,
   AlertTriangle,
+  CheckSquare,
+  Square,
+  FileDown,
+  Printer,
 } from "@/components/ui/icons-shim"
 import {
   Dialog,
@@ -53,6 +57,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient, Project, Template } from "@/lib/api"
+import { getApiUrl } from "@/lib/api-url"
 import { toast } from "sonner"
 import { QualityAuditBadge } from "@/components/quality"
 
@@ -142,6 +147,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [templateFilter, setTemplateFilter] = useState("all")
+  const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
+  const [exporting, setExporting] = useState(false)
   const [pagination, setPagination] = useState<{
     page: number
     limit: number
@@ -487,8 +494,108 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     }
   }
 
+  // Selection handlers
   // Documents are now filtered server-side, so we use them directly
   const displayDocuments = documents
+
+  const toggleDocumentSelection = (documentId: string) => {
+    setSelectedDocuments(prev => {
+      const newSet = new Set(prev)
+      if (newSet.has(documentId)) {
+        newSet.delete(documentId)
+      } else {
+        newSet.add(documentId)
+      }
+      return newSet
+    })
+  }
+
+  const selectAllDocuments = () => {
+    setSelectedDocuments(new Set(displayDocuments.map(doc => doc.id)))
+  }
+
+  const clearSelection = () => {
+    setSelectedDocuments(new Set())
+  }
+
+  const isAllSelected = selectedDocuments.size > 0 && selectedDocuments.size === displayDocuments.length
+  const isSomeSelected = selectedDocuments.size > 0 && selectedDocuments.size < displayDocuments.length
+
+  // Bulk export functions
+  const handleBulkExport = async (format: 'pdf' | 'docx' | 'markdown') => {
+    if (selectedDocuments.size === 0) {
+      toast.error("Please select at least one document")
+      return
+    }
+
+    try {
+      setExporting(true)
+      const documentIds = Array.from(selectedDocuments)
+
+      // Get auth token
+      const authToken = localStorage.getItem('auth_token')
+      if (!authToken) {
+        toast.error("Please log in to export documents")
+        return
+      }
+
+      // Use getApiUrl helper to construct the full URL
+      const response = await fetch(getApiUrl(`/documents/bulk-export/${format}`), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({ document_ids: documentIds }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: response.statusText }))
+        throw new Error(errorData.error || `Export failed: ${response.statusText}`)
+      }
+
+      // Determine file name based on format
+      // DOCX exports are single combined files, PDF/Markdown exports are ZIP archives
+      const fileName = format === 'docx' 
+        ? `combined-documents-${Date.now()}.docx`
+        : `documents-export-${Date.now()}.zip`
+
+      // Download file
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = fileName
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+
+      toast.success(`Successfully exported ${documentIds.length} document(s) as ${format.toUpperCase()}`)
+      clearSelection()
+    } catch (error: any) {
+      console.error(`Failed to export as ${format}:`, error)
+      toast.error(error.message || `Failed to export documents as ${format.toUpperCase()}`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleBulkPrint = () => {
+    if (selectedDocuments.size === 0) {
+      toast.error("Please select at least one document")
+      return
+    }
+
+    // Open each selected document in a new window for printing
+    selectedDocuments.forEach(documentId => {
+      const url = `/projects/${projectId}/documents/${documentId}/view`
+      window.open(url, '_blank')
+    })
+
+    toast.success(`Opening ${selectedDocuments.size} document(s) for printing`)
+    // Note: User will need to print each window manually
+  }
 
   // Get status color
   const getStatusColor = (status: string) => {
@@ -724,6 +831,78 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                   </motion.div>
                 )}
 
+                {/* Bulk Action Bar */}
+                {selectedDocuments.size > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-4 p-4 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-between"
+                  >
+                    <div className="flex items-center space-x-4">
+                      <span className="text-sm font-medium">
+                        {selectedDocuments.size} document{selectedDocuments.size > 1 ? 's' : ''} selected
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearSelection}
+                      >
+                        Clear Selection
+                      </Button>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleBulkExport('pdf')}
+                        disabled={exporting}
+                      >
+                        {exporting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <FileDown className="h-4 w-4 mr-2" />
+                        )}
+                        Export as PDF
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleBulkExport('docx')}
+                        disabled={exporting}
+                      >
+                        {exporting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <FileDown className="h-4 w-4 mr-2" />
+                        )}
+                        Export as Word
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleBulkExport('markdown')}
+                        disabled={exporting}
+                      >
+                        {exporting ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <FileDown className="h-4 w-4 mr-2" />
+                        )}
+                        Export as Markdown
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBulkPrint}
+                        disabled={exporting}
+                      >
+                        <Printer className="h-4 w-4 mr-2" />
+                        Print Documents
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Search and Filters */}
                 <motion.div
                   initial={{ opacity: 0, y: 20 }}
@@ -799,12 +978,44 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                     </AnimatedCard>
                   ) : (
                     <>
+                      {/* Select All Checkbox */}
+                      {displayDocuments.length > 0 && (
+                        <div className="flex items-center space-x-2 mb-4 p-2 border-b">
+                          <button
+                            onClick={isAllSelected ? clearSelection : selectAllDocuments}
+                            className="flex items-center space-x-2 hover:bg-muted/50 rounded p-2 transition-colors"
+                          >
+                            {isAllSelected ? (
+                              <CheckSquare className="h-5 w-5 text-primary" />
+                            ) : isSomeSelected ? (
+                              <CheckSquare className="h-5 w-5 text-primary opacity-50" />
+                            ) : (
+                              <Square className="h-5 w-5 text-muted-foreground" />
+                            )}
+                            <span className="text-sm font-medium">
+                              {isAllSelected ? 'Deselect All' : 'Select All'}
+                            </span>
+                          </button>
+                        </div>
+                      )}
+
                       {displayDocuments.map((document, index) => (
                         <AnimatedCard key={document.id}>
                           <CardContent className="p-6">
                             <div className="flex items-start justify-between">
                               <div className="flex-1">
                                 <div className="flex items-center space-x-3 mb-2">
+                                  {/* Checkbox */}
+                                  <button
+                                    onClick={() => toggleDocumentSelection(document.id)}
+                                    className="flex-shrink-0 mt-1"
+                                  >
+                                    {selectedDocuments.has(document.id) ? (
+                                      <CheckSquare className="h-5 w-5 text-primary" />
+                                    ) : (
+                                      <Square className="h-5 w-5 text-muted-foreground hover:text-primary transition-colors" />
+                                    )}
+                                  </button>
                                   <FileText className="h-5 w-5 text-muted-foreground" />
                                   <div className="flex-1">
                                     <h3 className="text-lg font-semibold">{document.name}</h3>

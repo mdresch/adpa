@@ -6218,6 +6218,9 @@ Output valid JSON object with "performance_actuals" array only.`
       const agreedByArray = this.ensureStringArray(agreement.agreed_by || [])
       const agreedByJson = JSON.stringify(agreedByArray) // Always stringify, even if empty array
 
+      // effective_date is NOT NULL, so provide default (current date) if not provided
+      const effectiveDate = this.normalizeDate(agreement.effective_date) || new Date().toISOString().split('T')[0]
+
       values.push(
         projectId,
         agreement.title?.substring(0, 200) || 'Team Agreement',
@@ -6225,7 +6228,7 @@ Output valid JSON object with "performance_actuals" array only.`
         category,
         agreedByJson, // Explicitly stringified JSON for JSONB column
         agreement.facilitated_by ? agreement.facilitated_by.substring(0, 255) : null,
-        this.normalizeDate(agreement.effective_date),
+        effectiveDate, // Use current date as default if not provided (NOT NULL constraint)
         reviewFrequency,
         this.normalizeDate(agreement.next_review_date),
         status,

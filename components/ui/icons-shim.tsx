@@ -230,6 +230,10 @@ export const Users2 = LucideIcons.Users2
 export const Gauge = LucideIcons.Gauge
 export const Rocket = LucideIcons.Rocket
 export const Wrench = LucideIcons.Wrench
+export const CheckSquare = LucideIcons.CheckSquare
+export const Square = LucideIcons.Square
+export const FileDown = LucideIcons.FileDown
+export const Printer = LucideIcons.Printer
 
 // Default export with all icons
 export default {
@@ -373,7 +377,11 @@ export default {
   Users2,
   Gauge,
   Rocket,
-  Wrench
+  Wrench,
+  CheckSquare,
+  Square,
+  FileDown,
+  Printer
 }
 
 // All icons are now properly exported above
