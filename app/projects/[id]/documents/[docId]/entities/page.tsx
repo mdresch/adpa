@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -46,6 +46,7 @@ import {
   Handshake,
   IterationCw,
   Info,
+  Sparkles,
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { getApiUrl } from "@/lib/api-url"
@@ -63,6 +64,7 @@ interface EntityCounts {
   resources: number
   technologies: number
   qualityStandards: number
+  complianceSecurity: number
   deliverables: number
   scopeItems: number
   activities: number
@@ -95,6 +97,7 @@ const entityTypes = [
   { key: 'resources', label: 'Resources', icon: Briefcase, color: 'text-cyan-500' },
   { key: 'technologies', label: 'Technologies', icon: Code, color: 'text-pink-500' },
   { key: 'qualityStandards', label: 'Quality Standards', icon: Shield, color: 'text-teal-500' },
+  { key: 'complianceSecurity', label: 'Compliance & Security', icon: Shield, color: 'text-amber-500' },
   { key: 'deliverables', label: 'Deliverables', icon: Box, color: 'text-amber-500' },
   { key: 'scopeItems', label: 'Scope Items', icon: ClipboardList, color: 'text-violet-500' },
   { key: 'activities', label: 'Activities', icon: Activity, color: 'text-rose-500' },
@@ -124,6 +127,32 @@ export default function DocumentEntitiesPage() {
   const [entityData, setEntityData] = useState<EntityData>({})
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
   const [totalEntities, setTotalEntities] = useState(0)
+  const [isExtracting, setIsExtracting] = useState(false)
+  const [extractionProgress, setExtractionProgress] = useState(0)
+  const [extractionStatus, setExtractionStatus] = useState<string>("")
+  const [currentJobId, setCurrentJobId] = useState<string | null>(null)
+  // Ref to track if job completed to avoid stale closure in timeout
+  const jobCompletedRef = useRef(false)
+  // Refs to store interval and timeout IDs for proper cleanup
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
+  const pollTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const statusClearTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cleanup function to clear both interval and timeout
+  const cleanupPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+    if (pollTimeoutRef.current) {
+      clearTimeout(pollTimeoutRef.current)
+      pollTimeoutRef.current = null
+    }
+    if (statusClearTimeoutRef.current) {
+      clearTimeout(statusClearTimeoutRef.current)
+      statusClearTimeoutRef.current = null
+    }
+  }
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -131,6 +160,11 @@ export default function DocumentEntitiesPage() {
       return
     }
     void fetchDocumentEntities()
+    
+    // Cleanup polling on unmount to prevent memory leaks and stale state updates
+    return () => {
+      cleanupPolling()
+    }
   }, [docId, isAuthenticated, projectId])
 
   const fetchDocumentEntities = async () => {
@@ -166,6 +200,127 @@ export default function DocumentEntitiesPage() {
   const getTotalEntities = () => {
     if (!entityCounts) return 0
     return Object.values(entityCounts).reduce((sum, count) => sum + count, 0)
+  }
+
+  const handleExtractEntities = async () => {
+    // Clean up any existing polling before starting new extraction
+    cleanupPolling()
+    
+    try {
+      setIsExtracting(true)
+      setExtractionProgress(0)
+      setExtractionStatus("Starting extraction for this document...")
+      
+      const apiUrl = getApiUrl('/project-data-extraction/extract')
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token || localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          projectId,
+          documentIds: [docId] // Extract only from this document
+        })
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || errorData.message || `Failed to start extraction (${response.status})`)
+      }
+
+      const data = await response.json()
+      setCurrentJobId(data.jobId)
+      setExtractionStatus("Extraction job started")
+      toast.success("Extraction started! This may take 2-3 minutes...")
+
+      // Poll job status
+      pollJobStatus(data.jobId)
+    } catch (error: any) {
+      console.error('[DocumentEntities] Extraction failed:', error)
+      toast.error(error.message || 'Failed to start extraction')
+      setIsExtracting(false)
+      setExtractionStatus("")
+    }
+  }
+
+  const pollJobStatus = async (jobId: string) => {
+    // Clean up any existing polling before starting new one
+    cleanupPolling()
+    
+    // Reset completion flag for new job
+    jobCompletedRef.current = false
+    
+    const pollInterval = setInterval(async () => {
+      try {
+        const apiUrl = getApiUrl(`/project-data-extraction/status/${jobId}`)
+        const response = await fetch(apiUrl, {
+          headers: {
+            'Authorization': `Bearer ${token || localStorage.getItem('auth_token')}`
+          }
+        })
+
+        if (!response.ok) {
+          throw new Error('Failed to check job status')
+        }
+
+        const data = await response.json()
+        const progress = data.progress || 0
+        const status = data.status
+
+        setExtractionProgress(progress)
+        setExtractionStatus(data.message || `Status: ${status}`)
+
+        if (status === 'completed') {
+          jobCompletedRef.current = true
+          cleanupPolling() // Clear both interval and timeout
+          setIsExtracting(false)
+          setExtractionProgress(100)
+          setExtractionStatus("Extraction completed!")
+          toast.success("Entities extracted successfully!")
+          
+          // Refresh entity data
+          await fetchDocumentEntities()
+          
+          // Clear status after a delay
+          // Store timeout ID in ref for cleanup
+          statusClearTimeoutRef.current = setTimeout(() => {
+            setExtractionStatus("")
+            setExtractionProgress(0)
+            statusClearTimeoutRef.current = null // Clear ref after execution
+          }, 3000)
+        } else if (status === 'failed') {
+          jobCompletedRef.current = true
+          cleanupPolling() // Clear both interval and timeout
+          setIsExtracting(false)
+          setExtractionStatus("Extraction failed")
+          toast.error(data.error_message || 'Extraction failed')
+        }
+      } catch (error) {
+        console.error('[DocumentEntities] Failed to poll job status:', error)
+        jobCompletedRef.current = true
+        cleanupPolling() // Clear both interval and timeout
+        setIsExtracting(false)
+      }
+    }, 2000) // Poll every 2 seconds
+    
+    // Store interval ID in ref for cleanup
+    pollIntervalRef.current = pollInterval
+
+    // Cleanup interval after 10 minutes
+    // Use ref to check if job completed to avoid stale closure issue
+    const timeoutId = setTimeout(() => {
+      cleanupPolling() // This will clear both interval and timeout
+      // Only show warning if job hasn't completed yet
+      if (!jobCompletedRef.current) {
+        setIsExtracting(false)
+        toast.warning('Extraction is taking longer than expected. Please check the jobs page.')
+      }
+    }, 600000) // 10 minutes
+    
+    // Store timeout ID in ref for cleanup
+    pollTimeoutRef.current = timeoutId
   }
 
   const renderEntityField = (key: string, value: any, entity: any): React.ReactNode => {
@@ -294,9 +449,39 @@ export default function DocumentEntitiesPage() {
                   <p className="text-muted-foreground mb-4">
                     This document doesn't have any extracted entities yet.
                   </p>
-                  <p className="text-sm text-muted-foreground">
-                    Run AI extraction from the project's Extraction tab to extract entities from this document.
-                  </p>
+                  <Button
+                    onClick={handleExtractEntities}
+                    disabled={isExtracting}
+                    className="gap-2"
+                  >
+                    {isExtracting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        Extract Entities from This Document
+                      </>
+                    )}
+                  </Button>
+                  {extractionStatus && (
+                    <div className="mt-4">
+                      <p className="text-sm text-muted-foreground">{extractionStatus}</p>
+                      {extractionProgress > 0 && (
+                        <div className="mt-2 w-full max-w-md mx-auto">
+                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-primary transition-all duration-300"
+                              style={{ width: `${extractionProgress}%` }}
+                            />
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-1">{extractionProgress}%</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </AnimatedCard>
             ) : (
@@ -304,13 +489,36 @@ export default function DocumentEntitiesPage() {
                 {/* Summary Card */}
                 <AnimatedCard>
                   <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Database className="h-5 w-5" />
-                      Extraction Summary
-                    </CardTitle>
-                    <CardDescription>
-                      Total entities extracted from this document
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <Database className="h-5 w-5" />
+                          Extraction Summary
+                        </CardTitle>
+                        <CardDescription>
+                          Total entities extracted from this document
+                        </CardDescription>
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExtractEntities}
+                        disabled={isExtracting}
+                        className="gap-2"
+                      >
+                        {isExtracting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Extracting...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-4 w-4" />
+                            Re-extract
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
@@ -322,6 +530,22 @@ export default function DocumentEntitiesPage() {
                         {totalEntities}
                       </Badge>
                     </div>
+                    {extractionStatus && (
+                      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <p className="text-sm text-blue-900 dark:text-blue-100">{extractionStatus}</p>
+                        {extractionProgress > 0 && (
+                          <div className="mt-2">
+                            <div className="h-2 bg-blue-200 dark:bg-blue-800 rounded-full overflow-hidden">
+                              <div
+                                className="h-full bg-blue-600 transition-all duration-300"
+                                style={{ width: `${extractionProgress}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">{extractionProgress}%</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </CardContent>
                 </AnimatedCard>
 

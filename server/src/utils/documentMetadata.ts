@@ -57,6 +57,17 @@ export interface DocumentGenerationMetadata {
   }
 }
 
+export interface ComplianceMetrics {
+  pmbokGuide: number // 0-100% - PMBOK Guide compliance
+  gdpr: number // 0-100% - GDPR compliance
+  hipaa: number // 0-100% - HIPAA compliance
+  soc2: number // 0-100% - SOC 2 compliance
+  industryStandards: number // 0-100% - Industry standards compliance
+  bestPractices: number // 0-100% - Best practices adherence
+  templateAdherence: number // 0-100% - Template adherence score
+  overallComplianceRating: number // 0-100% - Overall compliance rating (weighted average)
+}
+
 export interface QualityMetrics {
   // Core 4 metrics (existing)
   completeness: number // 0-100% - Has all required sections
@@ -71,6 +82,9 @@ export interface QualityMetrics {
   professionalQuality: number // 0-100% - Professional writing standards
   standardsCompliance: number // 0-100% - Framework compliance (PMBOK/BABOK/DMBOK)
   complexityScore: number // 0-100% - Document complexity (higher = more complex to create manually)
+  
+  // Compliance Metrics
+  complianceMetrics: ComplianceMetrics
   
   // Aggregate
   overallQuality: number // 0-100% - Weighted average of all 10 dimensions
@@ -176,6 +190,160 @@ export function calculateDocumentMetadata(
 }
 
 /**
+ * Calculates detailed compliance metrics for various standards and frameworks
+ */
+function calculateComplianceMetrics(
+  content: string,
+  metadata: DocumentGenerationMetadata,
+  framework?: string
+): ComplianceMetrics {
+  const contentLower = content.toLowerCase()
+  
+  // === PMBOK GUIDE COMPLIANCE ===
+  const pmbokKeywords = ['pmbok', 'project management', 'project charter', 'stakeholder', 'scope', 'schedule', 'cost', 'quality', 'risk', 'communication', 'procurement', 'integration']
+  const pmbokMentions = pmbokKeywords.filter(kw => contentLower.includes(kw)).length
+  const hasPmbokStructure = contentLower.includes('project charter') || contentLower.includes('project management plan')
+  const hasPmbokProcesses = contentLower.includes('initiating') || contentLower.includes('planning') || contentLower.includes('executing') || contentLower.includes('monitoring') || contentLower.includes('closing')
+  const hasPmbokKnowledgeAreas = pmbokMentions >= 5
+  
+  const pmbokGuide = Math.min(100,
+    (hasPmbokStructure ? 30 : 0) +
+    (hasPmbokProcesses ? 30 : 0) +
+    (hasPmbokKnowledgeAreas ? 25 : 0) +
+    (pmbokMentions >= 8 ? 15 : pmbokMentions >= 5 ? 10 : 0)
+  )
+  
+  // === GDPR COMPLIANCE ===
+  const gdprKeywords = ['gdpr', 'general data protection regulation', 'personal data', 'data subject', 'consent', 'privacy', 'data protection', 'right to be forgotten', 'data breach', 'data controller', 'data processor']
+  const gdprMentions = gdprKeywords.filter(kw => contentLower.includes(kw)).length
+  const hasGdprPrinciples = contentLower.includes('lawfulness') || contentLower.includes('fairness') || contentLower.includes('transparency')
+  const hasGdprRights = contentLower.includes('right to access') || contentLower.includes('right to erasure') || contentLower.includes('data portability')
+  const hasGdprCompliance = contentLower.includes('gdpr') && (contentLower.includes('compliance') || contentLower.includes('compliant'))
+  
+  const gdpr = Math.min(100,
+    (hasGdprCompliance ? 40 : 0) +
+    (hasGdprPrinciples ? 25 : 0) +
+    (hasGdprRights ? 20 : 0) +
+    (gdprMentions >= 5 ? 15 : gdprMentions >= 3 ? 10 : 0)
+  )
+  
+  // === HIPAA COMPLIANCE ===
+  const hipaaKeywords = ['hipaa', 'health insurance portability', 'protected health information', 'phi', 'ephi', 'privacy rule', 'security rule', 'breach notification', 'business associate', 'covered entity']
+  const hipaaMentions = hipaaKeywords.filter(kw => contentLower.includes(kw)).length
+  const hasHipaaPrivacy = contentLower.includes('privacy rule') || contentLower.includes('phi')
+  const hasHipaaSecurity = contentLower.includes('security rule') || contentLower.includes('ephi')
+  const hasHipaaCompliance = contentLower.includes('hipaa') && (contentLower.includes('compliance') || contentLower.includes('compliant'))
+  
+  const hipaa = Math.min(100,
+    (hasHipaaCompliance ? 40 : 0) +
+    (hasHipaaPrivacy ? 25 : 0) +
+    (hasHipaaSecurity ? 25 : 0) +
+    (hipaaMentions >= 4 ? 10 : hipaaMentions >= 2 ? 5 : 0)
+  )
+  
+  // === SOC 2 COMPLIANCE ===
+  const soc2Keywords = ['soc 2', 'soc2', 'service organization control', 'trust service criteria', 'security', 'availability', 'processing integrity', 'confidentiality', 'privacy', 'audit', 'controls', 'ccs']
+  const soc2Mentions = soc2Keywords.filter(kw => contentLower.includes(kw)).length
+  const hasSoc2Criteria = contentLower.includes('trust service criteria') || contentLower.includes('ccs') || contentLower.includes('common criteria')
+  const hasSoc2Controls = contentLower.includes('control') && (contentLower.includes('security') || contentLower.includes('availability'))
+  const hasSoc2Compliance = (contentLower.includes('soc 2') || contentLower.includes('soc2')) && (contentLower.includes('compliance') || contentLower.includes('compliant'))
+  
+  const soc2 = Math.min(100,
+    (hasSoc2Compliance ? 40 : 0) +
+    (hasSoc2Criteria ? 25 : 0) +
+    (hasSoc2Controls ? 25 : 0) +
+    (soc2Mentions >= 4 ? 10 : soc2Mentions >= 2 ? 5 : 0)
+  )
+  
+  // === INDUSTRY STANDARDS COMPLIANCE ===
+  const industryKeywords = ['iso', 'ansi', 'ieee', 'nist', 'cmmi', 'itil', 'cobit', 'industry standard', 'best practice', 'standard operating procedure', 'sop']
+  const industryMentions = industryKeywords.filter(kw => contentLower.includes(kw)).length
+  const hasIsoStandards = contentLower.includes('iso 9001') || contentLower.includes('iso 27001') || contentLower.includes('iso 20000')
+  const hasOtherStandards = contentLower.includes('ansi') || contentLower.includes('ieee') || contentLower.includes('nist')
+  const hasStandardsReferences = industryMentions >= 3
+  
+  const industryStandards = Math.min(100,
+    (hasIsoStandards ? 35 : 0) +
+    (hasOtherStandards ? 25 : 0) +
+    (hasStandardsReferences ? 25 : 0) +
+    (industryMentions >= 5 ? 15 : industryMentions >= 3 ? 10 : 0)
+  )
+  
+  // === BEST PRACTICES ADHERENCE ===
+  const bestPracticeKeywords = ['best practice', 'industry best practice', 'recommended practice', 'proven approach', 'established methodology', 'lessons learned', 'continuous improvement']
+  const bestPracticeMentions = bestPracticeKeywords.filter(kw => contentLower.includes(kw)).length
+  const hasBestPractices = contentLower.includes('best practice') || contentLower.includes('recommended practice')
+  const hasLessonsLearned = contentLower.includes('lessons learned') || contentLower.includes('continuous improvement')
+  const hasProvenMethods = contentLower.includes('proven') || contentLower.includes('established')
+  const hasDocumentationStandards = contentLower.includes('documentation') && (contentLower.includes('standard') || contentLower.includes('guideline'))
+  
+  const bestPractices = Math.min(100,
+    (hasBestPractices ? 30 : 0) +
+    (hasLessonsLearned ? 25 : 0) +
+    (hasProvenMethods ? 20 : 0) +
+    (hasDocumentationStandards ? 15 : 0) +
+    (bestPracticeMentions >= 3 ? 10 : bestPracticeMentions >= 1 ? 5 : 0)
+  )
+  
+  // === TEMPLATE ADHERENCE ===
+  // Check if document follows expected template structure
+  const hasTemplateStructure = metadata.templateId !== undefined && metadata.templateId !== null
+  const hasRequiredSections = (content.match(/^##/gm) || []).length >= 3
+  const hasProperFormatting = (content.match(/\|/g) || []).length >= 10 || (content.match(/^[-*]/gm) || []).length >= 5
+  const hasConsistentStructure = (content.match(/^###/gm) || []).length >= 2
+  
+  // If template is specified, check adherence more strictly
+  let templateAdherence = 0
+  if (hasTemplateStructure) {
+    templateAdherence = Math.min(100,
+      (hasRequiredSections ? 40 : 0) +
+      (hasProperFormatting ? 30 : 0) +
+      (hasConsistentStructure ? 30 : 0)
+    )
+  } else {
+    // For documents without templates, score based on structure quality
+    templateAdherence = Math.min(100,
+      (hasRequiredSections ? 30 : 0) +
+      (hasProperFormatting ? 25 : 0) +
+      (hasConsistentStructure ? 25 : 0) +
+      20 // Base score for having some structure
+    )
+  }
+  
+  // === OVERALL COMPLIANCE RATING ===
+  // Weighted average of all compliance metrics
+  // PMBOK gets higher weight if framework is PMBOK-related
+  const pmbokWeight = framework?.toLowerCase().includes('pmbok') ? 0.25 : 0.15
+  const gdprWeight = 0.15
+  const hipaaWeight = 0.15
+  const soc2Weight = 0.15
+  const industryWeight = 0.15
+  const bestPracticesWeight = 0.15
+  const templateWeight = 0.10
+  
+  const overallComplianceRating = Math.round(
+    pmbokGuide * pmbokWeight +
+    gdpr * gdprWeight +
+    hipaa * hipaaWeight +
+    soc2 * soc2Weight +
+    industryStandards * industryWeight +
+    bestPractices * bestPracticesWeight +
+    templateAdherence * templateWeight
+  )
+  
+  return {
+    pmbokGuide,
+    gdpr,
+    hipaa,
+    soc2,
+    industryStandards,
+    bestPractices,
+    templateAdherence,
+    overallComplianceRating
+  }
+}
+
+/**
  * Analyzes document quality and provides metrics
  */
 export function analyzeDocumentQuality(
@@ -194,6 +362,16 @@ export function analyzeDocumentQuality(
     professionalQuality: 0,
     standardsCompliance: 0,
     complexityScore: 0,
+    complianceMetrics: {
+      pmbokGuide: 0,
+      gdpr: 0,
+      hipaa: 0,
+      soc2: 0,
+      industryStandards: 0,
+      bestPractices: 0,
+      templateAdherence: 0,
+      overallComplianceRating: 0
+    },
     overallQuality: 0,
     recommendations: []
   }
@@ -320,6 +498,10 @@ export function analyzeDocumentQuality(
     (hasMetrics ? 20 : 0) +
     (hasTimelines ? 20 : 0) +
     (hasApprovals ? 15 : 0)
+  
+  // === COMPLIANCE METRICS ===
+  // Detailed compliance scoring for various standards and frameworks
+  metrics.complianceMetrics = calculateComplianceMetrics(content, metadata, metadata.framework)
   
   // === DIMENSION 10: COMPLEXITY SCORE ===
   // Estimates manual creation effort (higher = more complex/time-consuming)

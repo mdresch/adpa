@@ -3,7 +3,7 @@
  * TASK-1135: Mitigation plans tracked to completion
  */
 
-import { Router, Request, Response } from 'express'
+import { Router, Request, Response, NextFunction } from 'express'
 import { authenticateToken } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import Joi from 'joi'
@@ -147,10 +147,11 @@ router.post(
     risk_impact: Joi.number().optional(),
     risk_severity: Joi.string().optional()
   })),
-  async (req: Request, res: Response) => {
+  async (req: Request, res: Response, next: NextFunction) => {
     const log = childLogger({ requestId: (req as any).requestId })
+    const { risk_id } = req.body // Extract risk_id early for error handling
     try {
-      const { risk_id, risk_title, risk_description, risk_category, risk_probability, risk_impact, risk_severity } = req.body
+      const { risk_title, risk_description, risk_category, risk_probability, risk_impact, risk_severity } = req.body
       
       // Fetch risk details if not provided
       let riskTitle = risk_title
@@ -223,15 +224,60 @@ Guidelines:
 
       log.info('[MITIGATION-PLANS-SUGGEST] Generating AI suggestions', { risk_id })
       
-      // Generate suggestions using AI
-      const aiResponse = await aiService.generateWithFallback({
-        prompt,
-        provider: 'openai',
-        model: 'gpt-4',
-        temperature: 0.7,
-        max_tokens: 3000,
-        userId: (req as any).user!.id
-      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
+      // Use the built-in AI provider selection and fallback mechanism
+      // This automatically:
+      // 1. Queries the database for active AI providers (ordered by priority)
+      // 2. Tries providers in order of priority
+      // 3. Automatically falls back to next provider if one fails
+      // 4. Handles model errors, rate limits, and insufficient credits
+      // 5. Applies exponential backoff for failed providers
+      // 
+      // By not passing fallbackProviders, it uses ALL active providers from the database
+      // This ensures we use the configured providers and their priorities
+      let aiResponse
+      try {
+        // Get the best available provider from database (by priority)
+        const availableProviders = await aiService.getAvailableProviders()
+        const activeProviders = availableProviders.filter(p => p.is_active)
+        
+        if (activeProviders.length === 0) {
+          throw new Error('No active AI providers configured. Please configure at least one AI provider in Settings.')
+        }
+        
+        // Use the highest priority active provider as preferred
+        const preferredProvider = activeProviders[0].type
+        log.info('[MITIGATION-PLANS-SUGGEST] Using AI provider system', {
+          preferredProvider,
+          totalActiveProviders: activeProviders.length,
+          providers: activeProviders.map(p => `${p.type} (priority: ${p.name})`).join(', ')
+        })
+        
+        // Call generateWithFallback without fallbackProviders list
+        // This lets it use ALL active providers from database in priority order
+        aiResponse = await aiService.generateWithFallback({
+          prompt,
+          provider: preferredProvider, // Use highest priority provider
+          // model: undefined - let each provider use its default model
+          temperature: 0.7,
+          max_tokens: 3000,
+          userId: (req as any).user!.id
+        })
+        // Note: Not passing fallbackProviders means it uses ALL active providers from DB
+        
+        log.info('[MITIGATION-PLANS-SUGGEST] AI suggestions generated successfully', { 
+          providerUsed: (aiResponse as any).providerUsed || 'unknown',
+          contentLength: aiResponse.content?.length || 0
+        })
+      } catch (fallbackError: any) {
+        // If all providers failed, log detailed error info
+        log.error('[MITIGATION-PLANS-SUGGEST] All AI providers failed in fallback chain', {
+          error: fallbackError.message,
+          lastProvider: fallbackError.provider || 'unknown',
+          errorType: fallbackError.type || 'unknown'
+        })
+        // Re-throw to be handled by outer catch block
+        throw fallbackError
+      }
       
       // Parse AI response
       let suggestions: any[] = []
@@ -267,12 +313,39 @@ Guidelines:
         }
       })
     } catch (error: any) {
-      log.error('[MITIGATION-PLANS-SUGGEST] Failed to generate suggestions:', error)
-      res.status(500).json({
-        success: false,
-        error: 'Failed to generate mitigation plan suggestions',
-        message: error.message
+      log.error('[MITIGATION-PLANS-SUGGEST] Failed to generate suggestions:', {
+        error: error.message,
+        stack: error.stack,
+        risk_id
       })
+      
+      // Provide more helpful error messages
+      let errorMessage = error.message || 'Failed to generate mitigation plan suggestions'
+      let statusCode = 500
+      
+      if (error.message?.includes('No active providers') || error.message?.includes('All active providers')) {
+        errorMessage = 'No AI providers are currently configured or active. Please configure at least one AI provider in Settings.'
+        statusCode = 503 // Service Unavailable
+      } else if (error.message?.includes('insufficient funds') || error.message?.includes('credits')) {
+        errorMessage = 'AI provider has insufficient credits. Please add credits to your AI provider account.'
+        statusCode = 402 // Payment Required
+      } else if (error.message?.includes('rate limit') || error.message?.includes('429')) {
+        errorMessage = 'AI provider rate limit exceeded. Please try again in a few moments.'
+        statusCode = 429 // Too Many Requests
+      }
+      
+      // Make sure we haven't already sent a response
+      if (!res.headersSent) {
+        res.status(statusCode).json({
+          success: false,
+          error: 'Failed to generate mitigation plan suggestions',
+          message: errorMessage,
+          details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        })
+      } else {
+        // If response already sent, pass to error handler
+        next(error)
+      }
     }
   }
 )

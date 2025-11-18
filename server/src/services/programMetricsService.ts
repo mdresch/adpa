@@ -147,7 +147,9 @@ export async function getRiskMetrics(programId: string) {
         r.impact,
         r.category,
         r.mitigation_strategy,
-        r.owner
+        r.owner,
+        p.id as project_id,
+        p.name as project_name
       FROM risks r
       JOIN projects p ON r.project_id = p.id
       WHERE p.program_id = $1
@@ -203,7 +205,9 @@ export async function getRiskMetrics(programId: string) {
         description: row.description || '',
         probability,
         impact,
-        severity
+        severity,
+        projectId: row.project_id,
+        projectName: row.project_name
       }
     })
 

@@ -214,16 +214,84 @@ router.post("/generate",
       // Calculate word and character counts
       const wordCount = result.content.trim().split(/\s+/).filter(Boolean).length
       const characterCount = result.content.length
+      const sentenceCount = (result.content.match(/[.!?]+/g) || []).length
+      const paragraphCount = (result.content.match(/\n\n+/g) || []).length + 1
 
-      // Get template version if template is specified
+      // Get template version and framework if template is specified
       let templateVersion = '1'
+      let framework: string | undefined
       if (templateId) {
         const templateResult = await pool.query(
-          `SELECT prompt_version FROM templates WHERE id = $1`,
+          `SELECT prompt_version, framework FROM templates WHERE id = $1`,
           [templateId]
         )
         if (templateResult.rows.length > 0) {
           templateVersion = templateResult.rows[0].prompt_version?.toString() || '1'
+          framework = templateResult.rows[0].framework
+        }
+      }
+
+      // Get project framework if not from template
+      if (!framework) {
+        const projectResult = await pool.query(
+          `SELECT framework FROM projects WHERE id = $1`,
+          [projectId]
+        )
+        if (projectResult.rows.length > 0) {
+          framework = projectResult.rows[0].framework
+        }
+      }
+
+      // Calculate quality and compliance metrics
+      const { analyzeDocumentQuality, calculateDocumentMetadata } = await import('../utils/documentMetadata')
+      const tempMetadata = {
+        wordCount,
+        characterCount,
+        sentenceCount,
+        paragraphCount,
+        templateId: templateId || undefined,
+        framework
+      } as any
+      const qualityMetrics = analyzeDocumentQuality(result.content, tempMetadata, 0)
+
+      // Build generation metadata with compliance metrics
+      const generationMetadata = {
+        aiProcessing: {
+          provider: result.metadata.provider,
+          model: result.metadata.model,
+          tokens: {
+            total: result.metadata.tokensUsed || 0
+          }
+        },
+        contentMetrics: {
+          wordCount,
+          characterCount,
+          sentenceCount,
+          paragraphCount
+        },
+        qualityMetrics: {
+          overallQuality: qualityMetrics.overallQuality,
+          completeness: qualityMetrics.completeness,
+          structureScore: qualityMetrics.structureScore,
+          formattingScore: qualityMetrics.formattingScore,
+          contentDepth: qualityMetrics.contentDepth,
+          accuracy: qualityMetrics.accuracy,
+          consistency: qualityMetrics.consistency,
+          contextRelevance: qualityMetrics.contextRelevance,
+          professionalQuality: qualityMetrics.professionalQuality,
+          standardsCompliance: qualityMetrics.standardsCompliance,
+          complexityScore: qualityMetrics.complexityScore,
+          recommendations: qualityMetrics.recommendations
+        },
+        complianceMetrics: {
+          pmbokGuide: qualityMetrics.complianceMetrics.pmbokGuide,
+          gdpr: qualityMetrics.complianceMetrics.gdpr,
+          hipaa: qualityMetrics.complianceMetrics.hipaa,
+          soc2: qualityMetrics.complianceMetrics.soc2,
+          industryStandards: qualityMetrics.complianceMetrics.industryStandards,
+          bestPractices: qualityMetrics.complianceMetrics.bestPractices,
+          templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
+          overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
         }
       }
 
@@ -232,9 +300,9 @@ router.post("/generate",
       const documentResult = await pool.query(
         `INSERT INTO documents 
          (id, project_id, name, content, template_id, template_version, 
-          created_by, metadata, status, word_count, character_count, 
+          created_by, metadata, generation_metadata, status, word_count, character_count, 
           version, semantic_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING *`,
         [
           documentId,
@@ -245,6 +313,7 @@ router.post("/generate",
           templateVersion,
           req.user?.id,
           JSON.stringify(result.metadata),
+          JSON.stringify(generationMetadata),
           'draft',
           wordCount,
           characterCount,

@@ -10,9 +10,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MetricsDashboard } from '@/components/program/MetricsDashboard';
 import { ProgramProjectsTab } from '@/components/program/ProgramProjectsTab';
 import { ProgramMetrics } from '@/components/program/types';
+import { ProjectCard } from '@/components/program/ProjectCard';
 import FinancialDashboard from '@/components/program/FinancialDashboard';
 import { ProgramRisksTab } from '@/components/program/ProgramRisksTab';
 import { ProgramReportsTab } from '@/components/program/ProgramReportsTab';
+import { ProgramResourcesTab } from '@/components/program/ProgramResourcesTab';
+import { ReviewSchedulingTab } from '@/components/program/ReviewSchedulingTab';
 import { Loader2, Archive, ArchiveRestore, AlertTriangle } from 'lucide-react';
 import { apiClient } from '@/lib/api';
 import { getApiUrl } from '@/lib/api-url';
@@ -519,13 +522,15 @@ export default function ProgramDetailPage() {
 
               {/* Tabs */}
               <Tabs value={activeTab} onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-6 lg:w-[900px]">
+                <TabsList className="grid w-full grid-cols-8 lg:w-[1200px]">
                   <TabsTrigger value="overview">Overview</TabsTrigger>
                   <TabsTrigger value="projects">Projects</TabsTrigger>
                   <TabsTrigger value="prioritize">Prioritize</TabsTrigger>
                   <TabsTrigger value="finances">Finances</TabsTrigger>
                   <TabsTrigger value="risks">Risks</TabsTrigger>
+                  <TabsTrigger value="resources">Resources</TabsTrigger>
                   <TabsTrigger value="reports">Reports</TabsTrigger>
+                  <TabsTrigger value="reviews">Reviews</TabsTrigger>
                 </TabsList>
 
                 {/* Overview Tab with Metrics Dashboard */}
@@ -557,27 +562,21 @@ export default function ProgramDetailPage() {
                           </div>
                         ) : assignedProjects.length > 0 ? (
                           <div className="space-y-3">
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                               {assignedProjects.slice(0, 6).map((project) => (
-                                <div
+                                <ProjectCard
                                   key={project.id}
-                                  className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-                                  onClick={() => router.push(`/projects/${project.id}`)}
-                                >
-                                  <div className="flex-1 min-w-0">
-                                    <p className="font-medium text-sm truncate">{project.name}</p>
-                                    <Badge 
-                                      variant="outline" 
-                                      className="mt-1 text-xs"
-                                    >
-                                      {project.status === 'completed' ? '✅ Completed' :
-                                       project.status === 'active' ? '🔵 Active' :
-                                       project.status === 'at_risk' ? '⚠️ At Risk' :
-                                       project.status === 'on_hold' ? '⏸️ On Hold' :
-                                       project.status}
-                                    </Badge>
-                                  </div>
-                                </div>
+                                  id={project.id}
+                                  name={project.name}
+                                  description={project.description}
+                                  status={project.status}
+                                  budget={project.budget}
+                                  start_date={project.start_date}
+                                  end_date={project.end_date}
+                                  owner_name={project.owner_name}
+                                  document_count={project.document_count}
+                                  document_quality_score={project.document_quality_score}
+                                />
                               ))}
                             </div>
                             {assignedProjects.length > 6 && (
@@ -676,10 +675,32 @@ export default function ProgramDetailPage() {
                   )}
                 </TabsContent>
 
+                {/* Resources Tab - Resource Management */}
+                <TabsContent value="resources" className="mt-6">
+                  {programId ? (
+                    <ProgramResourcesTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
+                </TabsContent>
+
                 {/* Reports Tab - Full Implementation */}
                 <TabsContent value="reports" className="mt-6">
                   {programId ? (
                     <ProgramReportsTab programId={programId} />
+                  ) : (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                    </div>
+                  )}
+                </TabsContent>
+
+                {/* Reviews Tab - Review Scheduling & Compliance */}
+                <TabsContent value="reviews" className="mt-6">
+                  {programId ? (
+                    <ReviewSchedulingTab programId={programId} />
                   ) : (
                     <div className="flex items-center justify-center py-12">
                       <Loader2 className="h-8 w-8 animate-spin" />

@@ -420,13 +420,33 @@ class ApiClient {
         credentials: (options as any).credentials || "include",
       })
 
-      const data = await response.json()
+      let data: any
+      try {
+        data = await response.json()
+      } catch (jsonError) {
+        // If response is not JSON, create a text error
+        const text = await response.text()
+        data = { error: text || `HTTP error! status: ${response.status}`, message: text || `HTTP error! status: ${response.status}` }
+      }
 
       if (!response.ok) {
         // Create an error object that includes the response data for better error handling
-        const error = new Error(data.error || data.message || `HTTP error! status: ${response.status}`)
+        // Extract message from various possible locations in the response
+        let errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`
+        
+        // Ensure errorMessage is a string
+        if (typeof errorMessage !== 'string') {
+          if (typeof errorMessage === 'object' && errorMessage !== null) {
+            errorMessage = JSON.stringify(errorMessage)
+          } else {
+            errorMessage = String(errorMessage)
+          }
+        }
+        
+        const error = new Error(errorMessage)
         ;(error as any).response = { data, status: response.status }
         ;(error as any).status = response.status
+        ;(error as any).data = data // Also attach data directly for easier access
         throw error
       }
 
@@ -438,7 +458,13 @@ class ApiClient {
         (error?.status === 404 || error?.status === 401 || error?.status === 403)
       
       if (!shouldSuppressLog) {
-        console.error(`API request failed: ${endpoint}`, error)
+        // Log error with better formatting
+        const errorDetails = error?.response?.data || error?.data || error?.message || error
+        console.error(`API request failed: ${endpoint}`, {
+          status: error?.status || error?.response?.status,
+          message: typeof errorDetails === 'string' ? errorDetails : JSON.stringify(errorDetails),
+          error
+        })
       }
       throw error
     }
@@ -1378,6 +1404,218 @@ class ApiClient {
     const query = status ? `?status=${status}` : ''
     return this.get(`/api/drift/project/${projectId}${query}`)
   }
+
+  // Review Scheduling API
+  async getReviewSchedule(programId: string, reviewType?: string): Promise<{
+    success: boolean
+    data: ReviewSchedule | null
+  }> {
+    const query = reviewType ? `?review_type=${reviewType}` : ''
+    return this.get(`/programs/${programId}/reviews/schedule${query}`)
+  }
+
+  async createReviewSchedule(programId: string, scheduleData: Partial<ReviewSchedule>): Promise<{
+    success: boolean
+    data: ReviewSchedule
+  }> {
+    return this.post(`/programs/${programId}/reviews/schedule`, scheduleData)
+  }
+
+  async getReviewMeetings(
+    programId: string,
+    options?: {
+      limit?: number
+      offset?: number
+      status?: string
+      start_date?: string
+      end_date?: string
+    }
+  ): Promise<{
+    success: boolean
+    data: ReviewMeeting[]
+  }> {
+    const params = new URLSearchParams()
+    if (options?.limit) params.append('limit', options.limit.toString())
+    if (options?.offset) params.append('offset', options.offset.toString())
+    if (options?.status) params.append('status', options.status)
+    if (options?.start_date) params.append('start_date', options.start_date)
+    if (options?.end_date) params.append('end_date', options.end_date)
+    const query = params.toString() ? `?${params.toString()}` : ''
+    return this.get(`/programs/${programId}/reviews${query}`)
+  }
+
+  async createReviewMeeting(programId: string, meetingData: Partial<ReviewMeeting>): Promise<{
+    success: boolean
+    data: ReviewMeeting
+  }> {
+    return this.post(`/programs/${programId}/reviews`, meetingData)
+  }
+
+  async getReviewMeeting(programId: string, meetingId: string): Promise<{
+    success: boolean
+    data: ReviewMeeting
+  }> {
+    return this.get(`/programs/${programId}/reviews/${meetingId}`)
+  }
+
+  async updateReviewMeeting(programId: string, meetingId: string, updates: Partial<ReviewMeeting>): Promise<{
+    success: boolean
+    data: ReviewMeeting
+  }> {
+    return this.put(`/programs/${programId}/reviews/${meetingId}`, updates)
+  }
+
+  async deleteReviewMeeting(programId: string, meetingId: string): Promise<{
+    success: boolean
+    message: string
+  }> {
+    return this.delete(`/programs/${programId}/reviews/${meetingId}`)
+  }
+
+  async createReviewDecision(programId: string, meetingId: string, decisionData: Partial<ReviewDecision>): Promise<{
+    success: boolean
+    data: ReviewDecision
+  }> {
+    return this.post(`/programs/${programId}/reviews/${meetingId}/decisions`, decisionData)
+  }
+
+  async createReviewActionItem(programId: string, meetingId: string, actionItemData: Partial<ReviewActionItem>): Promise<{
+    success: boolean
+    data: ReviewActionItem
+  }> {
+    return this.post(`/programs/${programId}/reviews/${meetingId}/action-items`, actionItemData)
+  }
+
+  async getReviewCompliance(programId: string): Promise<{
+    success: boolean
+    data: ReviewCompliance[]
+  }> {
+    return this.get(`/programs/${programId}/reviews/compliance`)
+  }
+
+  async getUpcomingReviews(daysAhead?: number): Promise<{
+    success: boolean
+    data: ReviewMeeting[]
+  }> {
+    const query = daysAhead ? `?days_ahead=${daysAhead}` : ''
+    return this.get(`/reviews/upcoming${query}`)
+  }
+
+  async getOverdueReviews(): Promise<{
+    success: boolean
+    data: ReviewCompliance[]
+  }> {
+    return this.get(`/reviews/overdue`)
+  }
+
+  async generateUpcomingMeetings(programId: string, scheduleId: string, monthsAhead?: number): Promise<{
+    success: boolean
+    data: ReviewMeeting[]
+    message: string
+  }> {
+    return this.post(`/programs/${programId}/reviews/schedule/${scheduleId}/generate-meetings`, {
+      months_ahead: monthsAhead || 3
+    })
+  }
+
+  async autoGenerateAllMeetings(monthsAhead?: number): Promise<{
+    success: boolean
+    data: {
+      schedulesProcessed: number
+      meetingsCreated: number
+      errors: string[]
+    }
+    message: string
+  }> {
+    return this.post(`/reviews/auto-generate`, {
+      months_ahead: monthsAhead || 3
+    })
+  }
+}
+
+// Review Scheduling Types
+export interface ReviewSchedule {
+  id: string
+  program_id: string
+  review_type: 'portfolio_performance' | 'program_performance' | 'strategic' | 'governance'
+  frequency: 'monthly' | 'quarterly' | 'bi-annually' | 'annually'
+  day_of_month?: number
+  day_of_week?: string
+  required_attendees: string[]
+  optional_attendees: string[]
+  review_owner_id?: string
+  agenda_template_id?: string
+  duration_minutes: number
+  auto_generate_agenda: boolean
+  send_reminders: boolean
+  reminder_days_before: number[]
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewMeeting {
+  id: string
+  schedule_id: string
+  program_id: string
+  scheduled_date: string
+  actual_date?: string
+  start_time?: string
+  end_time?: string
+  duration_minutes?: number
+  status: 'scheduled' | 'in-progress' | 'completed' | 'cancelled' | 'postponed'
+  attendees: string[]
+  absentees: string[]
+  decisions: any[]
+  action_items: any[]
+  notes?: string
+  was_on_time?: boolean
+  was_complete?: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewDecision {
+  id: string
+  review_meeting_id: string
+  decision_type: 'approve' | 'reject' | 'defer' | 'modify' | 'escalate'
+  decision_text: string
+  affected_projects: string[]
+  affected_programs: string[]
+  approved_by?: string
+  approval_date?: string
+  implementation_deadline?: string
+  implementation_status: 'pending' | 'in-progress' | 'completed'
+  created_at: string
+}
+
+export interface ReviewActionItem {
+  id: string
+  review_meeting_id: string
+  action_text: string
+  assigned_to?: string
+  due_date?: string
+  status: 'open' | 'in-progress' | 'completed' | 'cancelled'
+  completed_at?: string
+  completed_by?: string
+  priority: 'high' | 'medium' | 'low'
+  related_project_id?: string
+  related_program_id?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewCompliance {
+  schedule_id: string
+  program_id: string
+  review_type: string
+  frequency: string
+  total_reviews_held: number
+  on_time_reviews: number
+  completed_reviews: number
+  last_review_date?: string
+  next_review_due_date?: string
+  compliance_status: 'overdue' | 'on-track' | 'no-reviews'
 }
 
 export const apiClient = new ApiClient(API_BASE_URL)

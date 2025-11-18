@@ -18,6 +18,7 @@ interface RiskMitigationPlansViewProps {
   riskTitle: string
   extractedFromDocumentId?: string | null
   projectId?: string
+  projectName?: string
   riskDescription?: string
   riskCategory?: string
   riskProbability?: number
@@ -31,6 +32,7 @@ export function RiskMitigationPlansView({
   riskTitle,
   extractedFromDocumentId,
   projectId,
+  projectName,
   riskDescription,
   riskCategory,
   riskProbability,
@@ -69,6 +71,16 @@ export function RiskMitigationPlansView({
               Manage mitigation plans and track completion for this risk
             </DialogDescription>
           </DialogHeader>
+          
+          {projectName && (
+            <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800 mb-4">
+              <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <div className="flex-1">
+                <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">Project</p>
+                <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">{projectName}</p>
+              </div>
+            </div>
+          )}
           
           {extractedFromDocumentId && projectId && (
             <div className="flex items-center gap-2 p-3 bg-blue-50 dark:bg-blue-950 rounded-md border border-blue-200 dark:border-blue-800 mb-4">
