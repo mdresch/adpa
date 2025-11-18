@@ -23,6 +23,8 @@ import { TimelineTab } from "./components/TimelineTab"
 import { OverviewTab } from "./components/OverviewTab"
 import { DocumentsTab } from "./components/DocumentsTab"
 import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
+import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
+import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
@@ -71,6 +73,7 @@ import {
   Copy,
   Lightbulb,
   Database,
+  Shield,
 } from "@/components/ui/icons-shim"
 import { Users2 } from "lucide-react"
 import {
@@ -3013,6 +3016,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                 </TabsTrigger>
                 <TabsTrigger value="variables">Variables</TabsTrigger>
                 <TabsTrigger value="timeline">Timeline</TabsTrigger>
+                <TabsTrigger value="risks">
+                  <AlertTriangle className="h-4 w-4 mr-2" />
+                  Risks
+                </TabsTrigger>
+                <TabsTrigger value="compliance-security">
+                  <Shield className="h-4 w-4 mr-2" />
+                  Compliance & Security
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
@@ -3089,6 +3100,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
               <TabsContent value="timeline" className="space-y-4">
                 <TimelineTab project={project} documents={documents} progress={progress} />
+              </TabsContent>
+
+              <TabsContent value="risks" className="space-y-4">
+                <ProjectRisksTab projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="compliance-security" className="space-y-4">
+                <ComplianceSecurityTab projectId={projectId} />
               </TabsContent>
             </Tabs>
           </div>

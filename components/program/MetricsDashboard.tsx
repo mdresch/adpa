@@ -70,6 +70,7 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
     name: risk.title,
     description: risk.description,
     severity: risk.severity,
+    projectName: risk.projectName,
     fill: RISK_COLORS[risk.severity]
   }));
 
@@ -141,6 +142,9 @@ export function MetricsDashboard({ metrics, programId, loading = false }: Metric
       return (
         <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg max-w-xs">
           <p className="font-semibold">{data.name}</p>
+          {data.projectName && (
+            <p className="text-xs text-blue-600 font-medium mt-1">Project: {data.projectName}</p>
+          )}
           <p className="text-sm text-gray-600">{data.description}</p>
           <div className="mt-2 space-y-1 text-sm">
             <p>Probability: {data.x}%</p>

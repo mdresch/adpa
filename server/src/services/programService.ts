@@ -139,19 +139,156 @@ export async function listPrograms(opts: { limit?: number; offset?: number; owne
  */
 export async function getProgramProjects(programId: string): Promise<Record<string, unknown>[]> {
   try {
-    const result = await pool.query(`
+    // Check if review_meetings table exists
+    let hasReviewMeetings = false
+    try {
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'review_meetings'
+        )
+      `)
+      hasReviewMeetings = tableCheck.rows[0]?.exists === true
+    } catch (err) {
+      logger.warn('Could not check for review_meetings table', { error: err })
+    }
+
+    // Build query with conditional review meeting joins
+    const reviewJoin = hasReviewMeetings 
+      ? `LEFT JOIN review_meetings rm ON rm.program_id = $1
+         LEFT JOIN review_decisions rd ON rd.review_meeting_id = rm.id 
+           AND (rd.affected_projects @> ARRAY[p.id::text] OR rd.affected_projects @> ARRAY[p.id::uuid::text])`
+      : ''
+    
+    const reviewSelects = hasReviewMeetings
+      ? `MAX(rm.scheduled_date) as last_review_date,
+         MAX(CASE WHEN rm.status = 'completed' THEN rm.actual_date END) as last_review_completed_date`
+      : `NULL::DATE as last_review_date,
+         NULL::DATE as last_review_completed_date`
+
+    const query = `
       SELECT 
         p.*,
         u.email as owner_email,
         u.name as owner_name,
-        (SELECT COUNT(*) FROM documents WHERE project_id = p.id) as document_count
+        COUNT(DISTINCT d.id) as document_count,
+        -- Quality Metrics (from qualityMetrics object)
+        AVG(
+          CASE 
+            WHEN d.generation_metadata->>'quality' IS NOT NULL 
+            THEN (d.generation_metadata->>'quality')::numeric * 100
+            WHEN d.generation_metadata->'qualityMetrics'->>'overallQuality' IS NOT NULL
+            THEN (d.generation_metadata->'qualityMetrics'->>'overallQuality')::numeric
+            ELSE NULL
+          END
+        ) as document_quality_score,
+        AVG((d.generation_metadata->'qualityMetrics'->>'completeness')::numeric) as avg_completeness,
+        AVG((d.generation_metadata->'qualityMetrics'->>'structureScore')::numeric) as avg_structure_score,
+        AVG((d.generation_metadata->'qualityMetrics'->>'formattingScore')::numeric) as avg_formatting_score,
+        AVG((d.generation_metadata->'qualityMetrics'->>'contentDepth')::numeric) as avg_content_depth,
+        AVG((d.generation_metadata->'qualityMetrics'->>'accuracy')::numeric) as avg_accuracy,
+        AVG((d.generation_metadata->'qualityMetrics'->>'consistency')::numeric) as avg_consistency,
+        AVG((d.generation_metadata->'qualityMetrics'->>'contextRelevance')::numeric) as avg_context_relevance,
+        AVG((d.generation_metadata->'qualityMetrics'->>'professionalQuality')::numeric) as avg_professional_quality,
+        -- Compliance Metrics (ONLY standardsCompliance - do NOT mix with quality score)
+        -- This is specifically for framework compliance (PMBOK/BABOK/DMBOK standards adherence)
+        AVG(
+          CASE 
+            WHEN d.generation_metadata->'qualityMetrics'->>'standardsCompliance' IS NOT NULL 
+              AND (d.generation_metadata->'qualityMetrics'->>'standardsCompliance')::numeric > 0
+            THEN (d.generation_metadata->'qualityMetrics'->>'standardsCompliance')::numeric
+            ELSE NULL
+          END
+        ) as avg_standards_compliance,
+        -- Content Metrics (calculate from content if columns are NULL/0)
+        SUM(
+          CASE 
+            WHEN COALESCE(d.word_count, 0) > 0 THEN d.word_count
+            WHEN d.content IS NOT NULL AND d.content != '' THEN
+              array_length(regexp_split_to_array(trim(d.content), E'\\s+'), 1)
+            ELSE 0
+          END
+        ) as total_word_count,
+        SUM(
+          CASE 
+            WHEN COALESCE(d.character_count, 0) > 0 THEN d.character_count
+            WHEN d.content IS NOT NULL THEN length(d.content)
+            ELSE 0
+          END
+        ) as total_character_count,
+        SUM(
+          CASE 
+            WHEN COALESCE(d.sentence_count, 0) > 0 THEN d.sentence_count
+            WHEN d.content IS NOT NULL AND d.content != '' THEN
+              array_length(regexp_split_to_array(d.content, '[.!?]+'), 1) - 1
+            ELSE 0
+          END
+        ) as total_sentence_count,
+        SUM(
+          CASE 
+            WHEN COALESCE(d.paragraph_count, 0) > 0 THEN d.paragraph_count
+            WHEN d.content IS NOT NULL AND d.content != '' THEN
+              (length(d.content) - length(replace(d.content, E'\n\n', ''))) / 2 + 1
+            ELSE 0
+          END
+        ) as total_paragraph_count,
+        AVG(
+          CASE 
+            WHEN COALESCE(d.word_count, 0) > 0 THEN d.word_count
+            WHEN d.content IS NOT NULL AND d.content != '' THEN
+              array_length(regexp_split_to_array(trim(d.content), E'\\s+'), 1)
+            ELSE 0
+          END
+        ) as avg_words_per_document,
+        CASE 
+          WHEN SUM(
+            CASE 
+              WHEN COALESCE(d.sentence_count, 0) > 0 THEN d.sentence_count
+              WHEN d.content IS NOT NULL AND d.content != '' THEN
+                array_length(regexp_split_to_array(d.content, '[.!?]+'), 1) - 1
+              ELSE 0
+            END
+          ) > 0 
+          THEN SUM(
+            CASE 
+              WHEN COALESCE(d.word_count, 0) > 0 THEN d.word_count
+              WHEN d.content IS NOT NULL AND d.content != '' THEN
+                array_length(regexp_split_to_array(trim(d.content), E'\\s+'), 1)
+              ELSE 0
+            END
+          )::numeric / SUM(
+            CASE 
+              WHEN COALESCE(d.sentence_count, 0) > 0 THEN d.sentence_count
+              WHEN d.content IS NOT NULL AND d.content != '' THEN
+                array_length(regexp_split_to_array(d.content, '[.!?]+'), 1) - 1
+              ELSE 0
+            END
+          )::numeric
+          ELSE 0
+        END as avg_words_per_sentence,
+        -- Review Status
+        COUNT(DISTINCT CASE WHEN d.status = 'under_review' THEN d.id END) as documents_under_review,
+        COUNT(DISTINCT CASE WHEN d.status = 'reviewed' THEN d.id END) as documents_reviewed,
+        ${reviewSelects}
       FROM projects p
       LEFT JOIN users u ON p.owner_id = u.id
+      LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
+      ${reviewJoin}
       WHERE p.program_id = $1
+        AND p.deleted_at IS NULL
+      GROUP BY p.id, u.email, u.name
       ORDER BY p.created_at DESC
-    `, [programId])
+    `
+
+    const result = await pool.query(query, [programId])
     
-    logger.info('[PROGRAM] Projects fetched', { programId, count: result.rows.length })
+    logger.info('[PROGRAM] Projects fetched', { 
+      programId, 
+      count: result.rows.length,
+      sampleCompliance: result.rows[0]?.avg_standards_compliance,
+      sampleQuality: result.rows[0]?.document_quality_score
+    })
     return result.rows
   } catch (error) {
     logger.error('getProgramProjects error', { error })

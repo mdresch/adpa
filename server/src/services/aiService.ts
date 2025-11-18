@@ -289,28 +289,39 @@ class AIService {
         logger.info(`✅ [AI-FALLBACK] Success with provider: ${provider}`)
         return { ...result, providerUsed: provider }
       } catch (error: any) {
-        logger.warn(`⚠️ [AI-FALLBACK] Provider ${provider} failed: ${error.message}`)
+        const errorMessage = error.message || 'Unknown error'
+        logger.warn(`⚠️ [AI-FALLBACK] Provider ${provider} failed: ${errorMessage}`)
         
         // Check if error is due to insufficient funds/credits or capacity exceeded
-        const errorMessage = error.message?.toLowerCase() || ''
+        const errorMessageLower = errorMessage.toLowerCase()
         const isInsufficientFunds = 
-          errorMessage.includes('insufficient funds') ||
-          errorMessage.includes('insufficient_funds') ||
-          errorMessage.includes('no credits') ||
-          errorMessage.includes('out of credits') ||
-          errorMessage.includes('credit limit') ||
-          errorMessage.includes('service tier capacity exceeded') ||
-          errorMessage.includes('capacity exceeded') ||
-          errorMessage.includes('rate limit exceeded') ||
-          errorMessage.includes('too many requests') ||
+          errorMessageLower.includes('insufficient funds') ||
+          errorMessageLower.includes('insufficient_funds') ||
+          errorMessageLower.includes('no credits') ||
+          errorMessageLower.includes('out of credits') ||
+          errorMessageLower.includes('credit limit') ||
+          errorMessageLower.includes('service tier capacity exceeded') ||
+          errorMessageLower.includes('capacity exceeded') ||
+          errorMessageLower.includes('rate limit exceeded') ||
+          errorMessageLower.includes('too many requests') ||
           error.statusCode === 402 || // Payment Required
           error.statusCode === 429 || // Too Many Requests
           error.type === 'insufficient_funds' ||
           error.code === 'rate_limit_exceeded'
         
+        // Check if it's a model not found error (should trigger fallback, not disable provider)
+        const isModelNotFound = 
+          error.type === 'model_not_found' ||
+          errorMessageLower.includes('model not found') ||
+          errorMessageLower.includes('model:') && errorMessageLower.includes('not found')
+        
         if (isInsufficientFunds) {
           logger.error(`💳 [AI-CREDITS] Provider ${provider} has insufficient funds/credits or capacity exceeded`)
-          await autoDisableProvider(provider, `Insufficient capacity: ${error.message}`)
+          await autoDisableProvider(provider, `Insufficient capacity: ${errorMessage}`)
+        } else if (isModelNotFound) {
+          logger.warn(`🔍 [AI-FALLBACK] Provider ${provider} model not found - will try next provider`)
+          // Don't disable provider for model errors - just try next one
+          this.recordProviderFailure(provider)
         } else {
           // Record failure and apply backoff for other errors
           this.recordProviderFailure(provider)
@@ -321,8 +332,10 @@ class AIService {
         // Add delay between provider attempts (progressive backoff)
         if (attemptsWithBackoff < providers.length) {
           const delayMs = Math.min(1000 * attemptsWithBackoff, 5000) // Max 5s between attempts
-          logger.info(`⏳ [AI-FALLBACK] Waiting ${delayMs}ms before trying next provider...`)
+          logger.info(`⏳ [AI-FALLBACK] Waiting ${delayMs}ms before trying next provider (${attemptsWithBackoff + 1}/${providers.length})...`)
           await new Promise(resolve => setTimeout(resolve, delayMs))
+        } else {
+          logger.warn(`⚠️ [AI-FALLBACK] No more providers to try - all ${providers.length} providers failed`)
         }
       }
     }
@@ -587,11 +600,24 @@ class AIService {
             apiKey: directApiKey
           })
           
-          // Use the model name provided by the user
-          // Don't override to claude-4.x series - respect user's model choice
-          const modelName = request.model || 'claude-3-5-sonnet-20241022'  // Default to Claude 3.5 Sonnet (widely available)
+          // Normalize Anthropic model names - strip date suffixes (e.g., claude-3-5-sonnet-20241022 -> claude-3-5-sonnet)
+          const normalizeAnthropicModel = (model: string): string => {
+            if (!model) return 'claude-3-5-sonnet'
+            // Remove date suffix pattern: -YYYYMMDD
+            const dateSuffixPattern = /-\d{8}$/
+            if (dateSuffixPattern.test(model)) {
+              const normalized = model.replace(dateSuffixPattern, '')
+              logger.debug(`[AI-SERVICE] Normalized Anthropic model: ${model} -> ${normalized}`)
+              return normalized
+            }
+            return model
+          }
           
-          logger.info(`[AI-SERVICE] Anthropic model: ${modelName}`)
+          // Use the model name provided by the user, normalized
+          const rawModelName = request.model || 'claude-3-5-sonnet'
+          const modelName = normalizeAnthropicModel(rawModelName)
+          
+          logger.info(`[AI-SERVICE] Anthropic model: ${modelName}${rawModelName !== modelName ? ` (normalized from ${rawModelName})` : ''}`)
           logger.info(`[AI-SERVICE] Calling native Anthropic messages.create()`)
           
           // Build messages for Anthropic (separate system from messages)
@@ -603,14 +629,41 @@ class AIService {
             content: userMessage
           })
           
-          // Call native Anthropic API
-          const completion = await anthropicClient.messages.create({
-            model: modelName,
-            max_tokens: request.max_tokens || 4096,
-            system: systemMessage || undefined,  // System is separate in Anthropic
-            messages: anthropicMessages,
-            temperature: request.temperature || 0.7
-          })
+          // Call native Anthropic API with proper error handling for fallback
+          let completion
+          try {
+            completion = await anthropicClient.messages.create({
+              model: modelName,
+              max_tokens: request.max_tokens || 4096,
+              system: systemMessage || undefined,  // System is separate in Anthropic
+              messages: anthropicMessages,
+              temperature: request.temperature || 0.7
+            })
+          } catch (anthropicError: any) {
+            // Format Anthropic errors for proper fallback handling
+            const errorMessage = anthropicError?.error?.message || anthropicError?.message || 'Anthropic API error'
+            const errorType = anthropicError?.error?.type || anthropicError?.type || 'unknown_error'
+            
+            // Check if it's a model not found error - this should trigger fallback
+            if (errorType === 'not_found_error' || errorMessage.includes('model:') || errorMessage.includes('not found')) {
+              logger.warn(`⚠️ [AI-SERVICE] Anthropic model not found: ${modelName} - will trigger fallback`)
+              // Create error that will be caught by generateWithFallback
+              const fallbackError: any = new Error(`Anthropic model not found: ${errorMessage}`)
+              fallbackError.statusCode = 404
+              fallbackError.type = 'model_not_found'
+              fallbackError.provider = 'anthropic' // Mark which provider failed
+              // Preserve original error for debugging
+              fallbackError.originalError = anthropicError
+              throw fallbackError
+            }
+            
+            // Re-throw other errors as-is for fallback mechanism
+            // Ensure error has provider info for fallback handling
+            if (!anthropicError.provider) {
+              anthropicError.provider = 'anthropic'
+            }
+            throw anthropicError
+          }
           
           const content = completion.content[0]?.type === 'text' ? completion.content[0].text : ''
           const totalTokens = completion.usage.input_tokens + completion.usage.output_tokens
@@ -1401,14 +1454,33 @@ class AIService {
       const providers = []
 
       for (const provider of result.rows) {
-        // Use available_models from database if exists, otherwise fall back to hardcoded list
-        const availableModels = provider.available_models || this.getModelsForProvider(provider.provider_type)
+        // Parse available_models from JSONB (PostgreSQL returns JSONB as parsed object/array)
+        // Handle both array and null/undefined cases
+        let availableModels: string[] = []
+        if (provider.available_models) {
+          // PostgreSQL JSONB is already parsed, but ensure it's an array
+          if (Array.isArray(provider.available_models)) {
+            availableModels = provider.available_models
+          } else if (typeof provider.available_models === 'string') {
+            // If it's a string, parse it
+            try {
+              availableModels = JSON.parse(provider.available_models)
+            } catch {
+              availableModels = []
+            }
+          }
+        }
+        
+        // Only use fallback if available_models is empty or null
+        if (!availableModels || availableModels.length === 0) {
+          availableModels = this.getModelsForProvider(provider.provider_type)
+        }
         
         providers.push({
           id: provider.id,
           name: provider.name,
           type: provider.provider_type,
-          models: availableModels,
+          models: availableModels, // This should now contain the synced models
           is_active: provider.is_active,
           configuration: provider.configuration,
           usage_stats: provider.usage_stats || {
@@ -1450,7 +1522,7 @@ class AIService {
       case "mistral":
         return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
-        return ["claude-sonnet-4.0", "claude-haiku-4.0", "claude-opus-4.0", "claude-4-sonnet", "claude-4-haiku", "claude-4-opus"]
+        return ["claude-3-5-sonnet", "claude-3-5-haiku", "claude-3-opus", "claude-sonnet-4.0", "claude-haiku-4.0", "claude-opus-4.0", "claude-4-sonnet", "claude-4-haiku", "claude-4-opus"]
       case "deepseek":
         return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
       case "moonshot":

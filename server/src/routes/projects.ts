@@ -102,6 +102,615 @@ router.get("/", authenticateToken, async (req, res) => {
   }
 })
 
+// Project Risks Routes (must be before /:id route)
+
+// Get all risks for a project
+router.get("/:projectId/risks", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+
+    // Verify project exists
+    const projectCheck = await pool.query(
+      'SELECT id FROM projects WHERE id = $1',
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, error: "Project not found" })
+    }
+
+    // Check which columns exist in the risks table
+    let availableColumns: Set<string> = new Set()
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'risks'
+        ORDER BY column_name
+      `)
+      if (columnCheck.rows && columnCheck.rows.length > 0) {
+        availableColumns = new Set(columnCheck.rows.map((row: any) => row.column_name))
+        log.info('Available risk columns:', Array.from(availableColumns).sort())
+      } else {
+        log.warn('No columns found for risks table, using minimal safe query')
+        // At minimum, id and title should exist, but be safe
+        availableColumns = new Set(['id', 'title', 'project_id'])
+      }
+    } catch (err: any) {
+      log.error('Could not check for risk columns, using minimal safe query', {
+        error: err?.message,
+        stack: err?.stack
+      })
+      // Fallback to absolute minimum columns
+      availableColumns = new Set(['id', 'title', 'project_id'])
+    }
+
+    // Build query based on available columns
+    const hasExtractedFromDoc = availableColumns.has('extracted_from_document_id')
+    const hasSourceDoc = availableColumns.has('source_document_id')
+    const hasRiskOrigin = availableColumns.has('risk_origin')
+    const hasRiskLevel = availableColumns.has('risk_level')
+    const hasIsCurated = availableColumns.has('is_curated')
+
+    // Build SELECT fields dynamically - only include columns that exist
+    const selectFields = ['r.id', 'r.title']
+    
+    if (availableColumns.has('description')) selectFields.push('r.description')
+    if (availableColumns.has('category')) selectFields.push('r.category')
+    if (availableColumns.has('probability')) selectFields.push('r.probability')
+    if (availableColumns.has('impact')) selectFields.push('r.impact')
+    if (availableColumns.has('severity')) {
+      selectFields.push('r.severity')
+    } else {
+      // Calculate severity from probability and impact if they exist
+      if (availableColumns.has('probability') && availableColumns.has('impact')) {
+        selectFields.push(`(
+          CASE 
+            WHEN r.probability IN ('very_high', 'high') AND r.impact IN ('very_high', 'high') THEN 'critical'
+            WHEN r.probability IN ('very_high', 'high') OR r.impact IN ('very_high', 'high') THEN 'high'
+            WHEN r.probability = 'medium' AND r.impact = 'medium' THEN 'medium'
+            ELSE 'low'
+          END
+        ) as severity`)
+      } else {
+        selectFields.push("'low' as severity")
+      }
+    }
+    
+    if (availableColumns.has('status')) {
+      selectFields.push("COALESCE(r.status, 'identified') as status")
+    } else {
+      selectFields.push("'identified' as status")
+    }
+    
+    if (availableColumns.has('mitigation_strategy')) selectFields.push('r.mitigation_strategy')
+    if (availableColumns.has('contingency_plan')) selectFields.push('r.contingency_plan')
+    if (availableColumns.has('owner')) selectFields.push('r.owner')
+
+    // Add optional fields
+    if (hasRiskOrigin) {
+      selectFields.push("COALESCE(r.risk_origin, 'project-extraction') as risk_origin")
+    } else {
+      selectFields.push("'project-extraction' as risk_origin")
+    }
+
+    if (hasRiskLevel) {
+      selectFields.push("COALESCE(r.risk_level, 'project') as risk_level")
+    } else {
+      selectFields.push("'project' as risk_level")
+    }
+
+    if (hasIsCurated) {
+      selectFields.push('COALESCE(r.is_curated, false) as is_curated')
+    } else {
+      selectFields.push('false as is_curated')
+    }
+
+    if (hasExtractedFromDoc) {
+      selectFields.push('r.extracted_from_document_id')
+    } else {
+      selectFields.push('NULL as extracted_from_document_id')
+    }
+
+    if (hasSourceDoc) {
+      if (hasExtractedFromDoc) {
+        selectFields.push('COALESCE(r.source_document_id, r.extracted_from_document_id) as source_document_id')
+      } else {
+        selectFields.push('r.source_document_id as source_document_id')
+      }
+    } else if (hasExtractedFromDoc) {
+      selectFields.push('r.extracted_from_document_id as source_document_id')
+    } else {
+      selectFields.push('NULL as source_document_id')
+    }
+
+    // Add timestamp fields
+    if (availableColumns.has('created_at')) {
+      selectFields.push('r.created_at')
+    } else {
+      selectFields.push('NULL as created_at')
+    }
+    
+    if (availableColumns.has('updated_at')) {
+      selectFields.push('r.updated_at')
+    } else {
+      selectFields.push('NULL as updated_at')
+    }
+    
+    // Add document title if join is possible
+    if (hasExtractedFromDoc || hasSourceDoc) {
+      selectFields.push('d.title as source_document_title')
+    } else {
+      selectFields.push('NULL as source_document_title')
+    }
+
+    // Build JOIN clause - only join if columns actually exist
+    let joinClause = ''
+    if (hasExtractedFromDoc && hasSourceDoc) {
+      // Both columns exist - use both in join
+      joinClause = `LEFT JOIN documents d ON (
+        r.extracted_from_document_id = d.id 
+        OR (r.source_document_id IS NOT NULL AND r.source_document_id = d.id)
+      )`
+    } else if (hasExtractedFromDoc) {
+      // Only extracted_from_document_id exists
+      joinClause = 'LEFT JOIN documents d ON r.extracted_from_document_id = d.id'
+    } else if (hasSourceDoc) {
+      // Only source_document_id exists
+      joinClause = 'LEFT JOIN documents d ON r.source_document_id = d.id'
+    } else {
+      // Neither column exists - use FALSE to prevent join
+      joinClause = 'LEFT JOIN documents d ON FALSE'
+    }
+
+    // Build ORDER BY clause - handle severity if it exists or was calculated
+    const createdAtField = availableColumns.has('created_at') ? 'r.created_at' : 'r.id'
+    let orderByClause = ''
+    
+    if (availableColumns.has('severity')) {
+      orderByClause = `
+        ORDER BY 
+          CASE COALESCE(r.severity, 'low')
+            WHEN 'critical' THEN 1
+            WHEN 'high' THEN 2
+            WHEN 'medium' THEN 3
+            WHEN 'low' THEN 4
+            ELSE 5
+          END,
+          ${createdAtField} DESC`
+    } else if (availableColumns.has('probability') && availableColumns.has('impact')) {
+      // Order by calculated severity
+      orderByClause = `
+        ORDER BY 
+          CASE 
+            WHEN r.probability IN ('very_high', 'high') AND r.impact IN ('very_high', 'high') THEN 1
+            WHEN r.probability IN ('very_high', 'high') OR r.impact IN ('very_high', 'high') THEN 2
+            WHEN r.probability = 'medium' AND r.impact = 'medium' THEN 3
+            ELSE 4
+          END,
+          ${createdAtField} DESC`
+    } else {
+      const orderField = availableColumns.has('created_at') ? 'r.created_at' : 'r.id'
+      orderByClause = `ORDER BY ${orderField} DESC`
+    }
+
+    const query = `
+      SELECT ${selectFields.join(',\n          ')}
+      FROM risks r
+      ${joinClause}
+      WHERE r.project_id = $1
+      ${orderByClause}
+    `
+
+    log.info('Constructed query for project risks:', {
+      projectId,
+      hasExtractedFromDoc,
+      hasSourceDoc,
+      hasRiskOrigin,
+      hasRiskLevel,
+      hasIsCurated,
+      selectFieldCount: selectFields.length,
+      availableColumns: Array.from(availableColumns).sort(),
+      queryPreview: query.substring(0, 500) + '...'
+    })
+
+    // First, check how many risks exist for this project with a simple query
+    const countResult = await pool.query(
+      'SELECT COUNT(*) as count FROM risks WHERE project_id = $1',
+      [projectId]
+    )
+    const riskCount = parseInt(countResult.rows[0]?.count || '0', 10)
+    log.info(`Found ${riskCount} total risks in database for project ${projectId}`)
+
+    const result = await pool.query(query, [projectId])
+
+    log.info(`Fetched ${result.rows.length} risks for project ${projectId}`, {
+      projectId,
+      riskCount: result.rows.length,
+      sampleRisk: result.rows.length > 0 ? {
+        id: result.rows[0].id,
+        title: result.rows[0].title,
+        severity: result.rows[0].severity,
+        status: result.rows[0].status,
+        risk_origin: result.rows[0].risk_origin
+      } : null
+    })
+
+    res.json({
+      success: true,
+      data: result.rows
+    })
+  } catch (error: any) {
+    log.error("Get project risks error:", {
+      message: error?.message,
+      stack: error?.stack,
+      code: error?.code,
+      detail: error?.detail
+    })
+    res.status(500).json({ 
+      success: false,
+      error: "Internal server error",
+      message: error?.message || "Unknown error",
+      detail: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    })
+  }
+})
+
+// Create a new risk for a project
+router.post("/:projectId/risks", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+    const {
+      title,
+      description,
+      category,
+      probability,
+      impact,
+      status = 'identified',
+      mitigation_strategy,
+      contingency_plan,
+      owner,
+      risk_origin = 'manual-entry',
+      is_curated = false
+    } = req.body
+    const userId = req.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    // Verify project exists
+    const projectCheck = await pool.query(
+      'SELECT id FROM projects WHERE id = $1',
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    // Calculate severity from probability and impact
+    const probScore = probability === 'very_high' ? 90 : probability === 'high' ? 70 : probability === 'medium' ? 50 : probability === 'low' ? 30 : 10
+    const impactScore = impact === 'very_high' ? 5 : impact === 'high' ? 4 : impact === 'medium' ? 3 : impact === 'low' ? 2 : 1
+    const score = (probScore / 100) * impactScore
+    const severity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
+
+    const riskId = uuidv4()
+
+    // Check if new columns exist (from migration 340)
+    let hasNewColumns = false
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'risks' 
+        AND column_name IN ('risk_origin', 'risk_level', 'is_curated')
+        LIMIT 1
+      `)
+      hasNewColumns = columnCheck.rows.length > 0
+    } catch (err) {
+      log.warn('Could not check for new risk columns', err)
+    }
+
+    let query: string
+    let params: any[]
+
+    if (hasNewColumns) {
+      // Use new columns if they exist
+      query = `
+        INSERT INTO risks (
+          id, project_id, title, description, category, probability, impact, severity,
+          status, mitigation_strategy, contingency_plan, owner, risk_origin, risk_level,
+          is_curated, created_by, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+        RETURNING *
+      `
+      params = [
+        riskId,
+        projectId,
+        title,
+        description || null,
+        category || null,
+        probability,
+        impact,
+        severity,
+        status,
+        mitigation_strategy || null,
+        contingency_plan || null,
+        owner || null,
+        risk_origin,
+        'project',
+        is_curated,
+        userId
+      ]
+    } else {
+      // Use base columns only
+      query = `
+        INSERT INTO risks (
+          id, project_id, title, description, category, probability, impact, severity,
+          status, mitigation_strategy, contingency_plan, owner, created_by, created_at, updated_at
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW(), NOW())
+        RETURNING *
+      `
+      params = [
+        riskId,
+        projectId,
+        title,
+        description || null,
+        category || null,
+        probability,
+        impact,
+        severity,
+        status,
+        mitigation_strategy || null,
+        contingency_plan || null,
+        owner || null,
+        userId
+      ]
+    }
+
+    const result = await pool.query(query, params)
+
+    log.info(`Risk created for project ${projectId}`, { riskId, title })
+
+    res.status(201).json({
+      success: true,
+      data: result.rows[0]
+    })
+  } catch (error) {
+    log.error("Create project risk error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+// Update a risk
+router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId, riskId } = req.params
+    const updates = req.body
+    const userId = req.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" })
+    }
+
+    // Verify risk belongs to project
+    const riskCheck = await pool.query(
+      'SELECT id FROM risks WHERE id = $1 AND project_id = $2',
+      [riskId, projectId]
+    )
+
+    if (riskCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Risk not found" })
+    }
+
+    // Recalculate severity if probability or impact changed
+    if (updates.probability || updates.impact) {
+      const currentRisk = await pool.query(
+        'SELECT probability, impact FROM risks WHERE id = $1',
+        [riskId]
+      )
+      const prob = updates.probability || currentRisk.rows[0].probability
+      const imp = updates.impact || currentRisk.rows[0].impact
+      
+      const probScore = prob === 'very_high' ? 90 : prob === 'high' ? 70 : prob === 'medium' ? 50 : prob === 'low' ? 30 : 10
+      const impactScore = imp === 'very_high' ? 5 : imp === 'high' ? 4 : imp === 'medium' ? 3 : imp === 'low' ? 2 : 1
+      const score = (probScore / 100) * impactScore
+      updates.severity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
+    }
+
+    // Check which new columns exist individually
+    let availableColumns: Set<string> = new Set()
+    try {
+      const columnCheck = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' 
+        AND table_name = 'risks'
+      `)
+      if (columnCheck.rows && columnCheck.rows.length > 0) {
+        availableColumns = new Set(columnCheck.rows.map((row: any) => row.column_name))
+      }
+    } catch (err) {
+      log.warn('Could not check for risk columns', err)
+    }
+
+    // Build update query dynamically - only include fields that exist
+    const updateFields: string[] = []
+    const updateValues: any[] = []
+    let paramCount = 1
+
+    // Base fields that should exist (but check anyway)
+    const baseFields = [
+      'title', 'description', 'category', 'probability', 'impact',
+      'status', 'mitigation_strategy', 'contingency_plan', 'owner'
+    ]
+    
+    // Optional fields that may not exist
+    const optionalFields = ['severity']
+    
+    // Check each new field individually
+    const newFields: string[] = []
+    if (availableColumns.has('risk_origin')) newFields.push('risk_origin')
+    if (availableColumns.has('risk_level')) newFields.push('risk_level')
+    if (availableColumns.has('is_curated')) newFields.push('is_curated')
+    
+    // Build allowed fields list - only include optional fields if they exist
+    const allowedFields = [...baseFields, ...newFields]
+    if (availableColumns.has('severity')) {
+      allowedFields.push('severity')
+    }
+
+    const skippedFields: string[] = []
+    for (const field of allowedFields) {
+      if (updates.hasOwnProperty(field)) {
+        let fieldValue = updates[field]
+        
+        // Validate risk_level if being updated
+        if (field === 'risk_level' && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
+          const validLevels = ['project', 'program', 'portfolio', 'systemic']
+          if (!validLevels.includes(fieldValue)) {
+            log.warn(`Invalid risk_level value: ${fieldValue}, skipping update`)
+            skippedFields.push(field)
+            continue
+          }
+        }
+        
+        // Skip empty strings for optional fields to let trigger handle defaults
+        if (newFields.includes(field) && (fieldValue === '' || fieldValue === null || fieldValue === undefined)) {
+          log.debug(`Skipping empty/null value for ${field}, letting trigger set default`)
+          skippedFields.push(field)
+          continue
+        }
+        
+        // Check if column exists - baseFields are assumed to exist, but verify optional fields
+        const fieldExists = baseFields.includes(field) || 
+                           newFields.includes(field) || 
+                           (optionalFields.includes(field) && availableColumns.has(field))
+        
+        if (fieldExists) {
+          updateFields.push(`${field} = $${paramCount}`)
+          updateValues.push(fieldValue)
+          paramCount++
+        } else {
+          skippedFields.push(field)
+          log.warn(`Skipping field ${field} - column does not exist in database`)
+        }
+      }
+    }
+
+    if (updateFields.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: "No valid fields to update",
+        skippedFields: skippedFields.length > 0 ? skippedFields : undefined
+      })
+    }
+    
+    // Warn if important fields were skipped
+    if (skippedFields.length > 0) {
+      log.warn(`Some fields could not be updated (columns don't exist): ${skippedFields.join(', ')}`)
+    }
+
+    // Always update updated_at if column exists
+    if (availableColumns.has('updated_at')) {
+      updateFields.push(`updated_at = NOW()`)
+    }
+    
+    // Add last_updated_by if column exists and we're updating
+    if (availableColumns.has('last_updated_by')) {
+      updateFields.push(`last_updated_by = $${paramCount}`)
+      updateValues.push(userId)
+      paramCount++
+    }
+    
+    updateValues.push(riskId, projectId)
+
+    const query = `
+      UPDATE risks
+      SET ${updateFields.join(', ')}
+      WHERE id = $${paramCount} AND project_id = $${paramCount + 1}
+      RETURNING *
+    `
+
+    log.debug('Update risk query:', {
+      query,
+      updateFields,
+      updateValues: updateValues.slice(0, -2), // Don't log the IDs
+      paramCount
+    })
+
+    const result = await pool.query(query, updateValues)
+
+    log.info(`Risk updated for project ${projectId}`, { riskId, skippedFields })
+
+    const response: any = {
+      success: true,
+      data: result.rows[0]
+    }
+    
+    // Include warning if fields were skipped
+    if (skippedFields.length > 0) {
+      response.warning = `Some fields could not be updated (columns don't exist): ${skippedFields.join(', ')}. Please run migration 340 to enable these features.`
+    }
+    
+    res.json(response)
+  } catch (error: any) {
+    log.error("Update project risk error:", {
+      message: error?.message,
+      stack: error?.stack,
+      code: error?.code,
+      detail: error?.detail
+    })
+    res.status(500).json({ 
+      success: false,
+      error: "Internal server error",
+      message: error?.message || "Unknown error",
+      detail: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    })
+  }
+})
+
+// Delete a risk
+router.delete("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId, riskId } = req.params
+
+    // Verify risk belongs to project
+    const riskCheck = await pool.query(
+      'SELECT id FROM risks WHERE id = $1 AND project_id = $2',
+      [riskId, projectId]
+    )
+
+    if (riskCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Risk not found" })
+    }
+
+    await pool.query(
+      'DELETE FROM risks WHERE id = $1 AND project_id = $2',
+      [riskId, projectId]
+    )
+
+    log.info(`Risk deleted for project ${projectId}`, { riskId })
+
+    res.json({
+      success: true,
+      message: "Risk deleted successfully"
+    })
+  } catch (error) {
+    log.error("Delete project risk error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
 // Get project context for AI generation (must be before /:id route)
 router.get("/:id/context", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
@@ -1066,6 +1675,50 @@ router.post("/:id/upgrade-to-program", authenticateToken, requirePermission("pro
     res.status(500).json({ 
       error: "Failed to upgrade project to program",
       details: error.message 
+    })
+  }
+})
+
+// Get compliance and security data for a project
+router.get("/:projectId/compliance-security", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+    const userId = (req as any).user?.id
+
+    // Verify project exists and user has access
+    const projectCheck = await pool.query(
+      `SELECT id FROM projects WHERE id = $1`,
+      [projectId]
+    )
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found" })
+    }
+
+    // Get compliance security data
+    const result = await pool.query(
+      `SELECT * FROM compliance_security 
+       WHERE project_id = $1 
+       ORDER BY created_at DESC`,
+      [projectId]
+    )
+
+    log.info(`Retrieved compliance security data for project`, {
+      projectId,
+      userId,
+      count: result.rows.length
+    })
+
+    res.json({
+      success: true,
+      data: result.rows
+    })
+  } catch (error: any) {
+    log.error("Get compliance security error:", error)
+    res.status(500).json({
+      error: "Failed to retrieve compliance security data",
+      details: error.message
     })
   }
 })

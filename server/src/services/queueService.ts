@@ -279,13 +279,15 @@ aiQueue.process("ai-generate", async (job) => {
         sentenceCount,
         paragraphCount,
         lineCount: (docContent.match(/\n/g) || []).length + 1,
-        estimatedReadingTime: Math.ceil(wordCount / 200) // 200 words per minute
+        estimatedReadingTime: Math.ceil(wordCount / 200), // 200 words per minute
+        templateId: template_id || undefined,
+        framework: job.data?.framework || undefined
       } as any
       
       // Get source document count for research complexity calculation
       const sourceDocCount = job.data?.documentIds?.length || 0
       
-      // Calculate quality metrics
+      // Calculate quality metrics (includes compliance metrics)
       const qualityMetrics = analyzeDocumentQuality(docContent, tempMetadata, sourceDocCount)
       
       // Calculate AI cost based on token usage and provider
@@ -375,6 +377,16 @@ aiQueue.process("ai-generate", async (job) => {
           standardsCompliance: qualityMetrics.standardsCompliance,
           complexityScore: qualityMetrics.complexityScore,
           recommendations: qualityMetrics.recommendations
+        },
+        complianceMetrics: {
+          pmbokGuide: qualityMetrics.complianceMetrics.pmbokGuide,
+          gdpr: qualityMetrics.complianceMetrics.gdpr,
+          hipaa: qualityMetrics.complianceMetrics.hipaa,
+          soc2: qualityMetrics.complianceMetrics.soc2,
+          industryStandards: qualityMetrics.complianceMetrics.industryStandards,
+          bestPractices: qualityMetrics.complianceMetrics.bestPractices,
+          templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
+          overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
         },
         sourceDocuments: job.data?.documentIds?.map((docId: string, idx: number) => ({
           id: docId,
@@ -1160,7 +1172,7 @@ qualityAuditQueue.on("failed", (job, err) => {
 const ENTITY_TYPES = [
   'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
   'success_criteria', 'best_practices', 'phases', 'resources',
-  'technologies', 'quality_standards', 'deliverables', 'scope_items', 'activities',
+  'technologies', 'quality_standards', 'compliance_security', 'deliverables', 'scope_items', 'activities',
   // PMBOK 8 Performance Domain entities
   'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
   'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
@@ -1410,6 +1422,7 @@ async function finalizeExtractionJob(jobId: string, projectId: string, failedJob
       pool.query(`SELECT COUNT(*) as count FROM resources WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM technologies WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM quality_standards WHERE project_id = $1`, [projectId]),
+      pool.query(`SELECT COUNT(*) as count FROM compliance_security WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM deliverables WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM scope_items WHERE project_id = $1`, [projectId]),
       pool.query(`SELECT COUNT(*) as count FROM activities WHERE project_id = $1`, [projectId]),

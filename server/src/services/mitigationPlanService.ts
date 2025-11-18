@@ -332,6 +332,11 @@ export async function updateMitigationPlan(
       params.push(input.assigned_to)
     }
     
+    // Get current plan to check status change
+    const currentPlan = await getMitigationPlanById(planId)
+    const isStatusChangingToCompleted = input.status === 'completed' && currentPlan?.status !== 'completed'
+    const isStatusChangingFromCompleted = input.status !== undefined && input.status !== 'completed' && currentPlan?.status === 'completed'
+    
     if (input.status !== undefined) {
       paramCount++
       updates.push(`status = $${paramCount}`)
@@ -341,6 +346,39 @@ export async function updateMitigationPlan(
       if (input.status === 'in_progress') {
         paramCount++
         updates.push(`actual_start_date = COALESCE(actual_start_date, CURRENT_DATE)`)
+      }
+      
+      // Auto-set completion fields when status changes to completed
+      if (isStatusChangingToCompleted) {
+        // Set completion_percentage to 100 if not already set
+        if (input.completion_percentage === undefined) {
+          paramCount++
+          updates.push(`completion_percentage = $${paramCount}`)
+          params.push(100)
+        }
+        
+        // Set actual_completion_date if not already set
+        if (input.actual_completion_date === undefined) {
+          updates.push(`actual_completion_date = COALESCE(actual_completion_date, CURRENT_DATE)`)
+        }
+        
+        // Set completed_at if not already set
+        updates.push(`completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)`)
+        
+        // Set completed_by if not already set (use COALESCE to preserve existing value)
+        // We need to check current plan's completed_by to avoid overwriting
+        if (!currentPlan?.completed_by) {
+          paramCount++
+          updates.push(`completed_by = $${paramCount}`)
+          params.push(userId)
+        }
+      }
+      
+      // Reset completion fields if status changes from completed
+      if (isStatusChangingFromCompleted) {
+        updates.push(`completed_at = NULL`)
+        updates.push(`completed_by = NULL`)
+        updates.push(`actual_completion_date = NULL`)
       }
     }
     

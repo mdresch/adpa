@@ -36,6 +36,8 @@ export interface Risk {
   probability: number; // 0-100%
   impact: number; // Dollar amount
   severity: 'critical' | 'high' | 'medium' | 'low';
+  projectId?: string;
+  projectName?: string;
 }
 
 export interface Milestone {

@@ -29,6 +29,7 @@ import {
   TrendingUp,
   CheckCircle,
   BookOpen,
+  Target,
 } from "lucide-react"
 
 const navigation = [
@@ -38,6 +39,7 @@ const navigation = [
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
+  { name: "AI Readiness", href: "/ai-readiness", icon: Target },
   { name: "Integrations", href: "/integrations", icon: LinkIcon },
   { name: "Templates", href: "/templates", icon: FileText },
   { name: "Template Builder", href: "/templates/builder", icon: Layers },

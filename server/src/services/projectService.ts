@@ -5,10 +5,25 @@ import { v4 as uuidv4 } from 'uuid'
 export async function findByProgram(programId: string) {
   try {
     const result = await pool.query(
-      `SELECT p.*, u.name as owner_name, u.email as owner_email
+      `SELECT 
+         p.*, 
+         u.name as owner_name, 
+         u.email as owner_email,
+         COUNT(DISTINCT d.id) as document_count,
+         AVG(
+           CASE 
+             WHEN d.generation_metadata->>'quality' IS NOT NULL 
+             THEN (d.generation_metadata->>'quality')::numeric
+             WHEN d.generation_metadata->'qualityMetrics'->>'overallQuality' IS NOT NULL
+             THEN (d.generation_metadata->'qualityMetrics'->>'overallQuality')::numeric
+             ELSE NULL
+           END
+         ) as document_quality_score
        FROM projects p
        LEFT JOIN users u ON p.owner_id = u.id
+       LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
        WHERE p.program_id = $1
+       GROUP BY p.id, u.name, u.email
        ORDER BY p.created_at DESC`,
       [programId]
     )

@@ -460,5 +460,27 @@ curl -X GET "http://localhost:5000/api/mitigation-plans/risk/{riskId}/completion
 ---
 
 **Status**: ✅ **IMPLEMENTATION COMPLETE**  
-**Next Action**: Test the UI components and create mitigation plans for existing risks
+**Last Updated**: 2025-11-20  
+**Completion**: 100%
+
+## Recent Updates (2025-11-20)
+
+### Fixed Auto-Completion Logic
+- ✅ Enhanced `updateMitigationPlan()` service to automatically set completion fields when status changes to `completed`:
+  - Sets `completion_percentage` to 100 (if not already set)
+  - Sets `actual_completion_date` to current date (if not already set)
+  - Sets `completed_at` timestamp (if not already set)
+  - Sets `completed_by` to the user making the update (if not already set)
+- ✅ Added logic to reset completion fields when status changes from `completed` to another status
+- ✅ Fixed database trigger to remove invalid `updated_by` reference
+- ✅ Service layer now properly handles all completion tracking logic
+
+### Verification
+- ✅ All API endpoints functional
+- ✅ Frontend components integrated
+- ✅ Completion tracking working correctly
+- ✅ Risk-level completion percentage calculation functional
+- ✅ Auto-completion logic tested and verified
+
+**Next Action**: Ready for production use. All acceptance criteria met.
 

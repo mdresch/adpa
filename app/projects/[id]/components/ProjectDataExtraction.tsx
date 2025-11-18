@@ -32,6 +32,7 @@ interface EntityCounts {
   resources: number
   technologies: number
   qualityStandards: number
+  complianceSecurity: number
   deliverables: number
   scopeItems: number
   activities: number
@@ -613,6 +614,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     { key: 'resources', label: 'Resources', icon: DollarSign, color: 'text-emerald-500' },
     { key: 'technologies', label: 'Technologies', icon: Database, color: 'text-gray-500' },
     { key: 'qualityStandards', label: 'Quality Standards', icon: CheckCircle, color: 'text-cyan-500' },
+    { key: 'complianceSecurity', label: 'Compliance & Security', icon: Shield, color: 'text-amber-500' },
     { key: 'deliverables', label: 'Deliverables', icon: Archive, color: 'text-pink-500' },
     { key: 'scopeItems', label: 'Scope Items', icon: ListOrdered, color: 'text-violet-500' },
     { key: 'activities', label: 'Activities', icon: Target, color: 'text-lime-500' },

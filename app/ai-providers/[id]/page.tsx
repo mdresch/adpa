@@ -445,15 +445,8 @@ export default function AIProviderDetails() {
         })
       })
       
-      // Update provider state immediately with the response
-      if (response.provider) {
-        const providers = await apiClient.getAIProviders()
-        const updatedProvider = providers.find((p: any) => p.id === providerId)
-        
-        if (updatedProvider) {
-          setProvider(updatedProvider)
-        }
-      }
+      // Reload provider details to get updated models
+      await loadProviderDetails()
       
       toast.success(`Models synced successfully! ${selectedModels.length} models saved.`)
       

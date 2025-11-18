@@ -102,7 +102,56 @@ export function AIMitigationSuggestionsDialog({
       }
     } catch (error: any) {
       console.error('Failed to generate suggestions:', error)
-      toast.error(error.message || 'Failed to generate AI suggestions')
+      
+      // Extract error message from various possible locations
+      let errorMessage = 'Failed to generate AI suggestions'
+      
+      // Handle global error handler format: {success: false, error: {message, statusCode}}
+      if (error?.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message
+      } else if (error?.data?.error?.message) {
+        errorMessage = error.data.error.message
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message
+      } else if (error?.message) {
+        // Handle case where error.message might be an object or JSON string
+        if (typeof error.message === 'string') {
+          // Try to parse if it's a JSON string
+          try {
+            const parsed = JSON.parse(error.message)
+            errorMessage = parsed.message || parsed.error?.message || error.message
+          } catch {
+            errorMessage = error.message
+          }
+        } else {
+          errorMessage = JSON.stringify(error.message)
+        }
+      } else if (error?.response?.data?.error) {
+        const errorObj = error.response.data.error
+        errorMessage = typeof errorObj === 'string' 
+          ? errorObj 
+          : (errorObj?.message || JSON.stringify(errorObj))
+      }
+      
+      // Clean up [object Object] strings and JSON-looking strings
+      if (errorMessage === '[object Object]' || errorMessage.includes('[object Object]')) {
+        errorMessage = 'Failed to generate AI suggestions. Please check your AI provider configuration.'
+      }
+      
+      // Check for common error patterns
+      if (errorMessage.includes('No active providers') || errorMessage.includes('All active providers')) {
+        errorMessage = 'No AI providers are currently configured or active. Please configure at least one AI provider in Settings.'
+      } else if (errorMessage.includes('insufficient funds') || errorMessage.includes('credits')) {
+        errorMessage = 'AI provider has insufficient credits. Please add credits to your AI provider account.'
+      } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+        errorMessage = 'AI provider rate limit exceeded. Please try again in a few moments.'
+      }
+      
+      toast.error(errorMessage, {
+        duration: 5000, // Show for 5 seconds for longer error messages
+      })
     } finally {
       setLoading(false)
     }

@@ -1500,7 +1500,7 @@ class ProcessFlowService {
           modelName = 'mistral-large-latest'
           break
         case 'anthropic':
-          modelName = 'claude-3-5-sonnet-20241022'
+          modelName = 'claude-3-5-sonnet'  // Simplified name without date suffix
           break
         default:
           modelName = 'gpt-4o'
@@ -1746,6 +1746,50 @@ class ProcessFlowService {
           avgWordsPerSentence: sentenceCount > 0 ? Math.round(wordCount / sentenceCount) : 0,
           readingTime: Math.ceil(wordCount / 200) // 200 words per minute average
         }
+      }
+      
+      // Calculate quality and compliance metrics
+      try {
+        const { analyzeDocumentQuality } = await import('../utils/documentMetadata')
+        const tempMetadata = {
+          wordCount,
+          characterCount,
+          sentenceCount,
+          paragraphCount,
+          templateId: config.templateId || undefined,
+          framework: project.framework || 'ADPA'
+        } as any
+        const qualityMetrics = analyzeDocumentQuality(finalContent, tempMetadata, compressedDocuments.length)
+        
+        // Add quality and compliance metrics to generation_metadata
+        generationMetadata.qualityMetrics = {
+          overallQuality: qualityMetrics.overallQuality,
+          completeness: qualityMetrics.completeness,
+          structureScore: qualityMetrics.structureScore,
+          formattingScore: qualityMetrics.formattingScore,
+          contentDepth: qualityMetrics.contentDepth,
+          accuracy: qualityMetrics.accuracy,
+          consistency: qualityMetrics.consistency,
+          contextRelevance: qualityMetrics.contextRelevance,
+          professionalQuality: qualityMetrics.professionalQuality,
+          standardsCompliance: qualityMetrics.standardsCompliance,
+          complexityScore: qualityMetrics.complexityScore,
+          recommendations: qualityMetrics.recommendations
+        }
+        
+        generationMetadata.complianceMetrics = {
+          pmbokGuide: qualityMetrics.complianceMetrics.pmbokGuide,
+          gdpr: qualityMetrics.complianceMetrics.gdpr,
+          hipaa: qualityMetrics.complianceMetrics.hipaa,
+          soc2: qualityMetrics.complianceMetrics.soc2,
+          industryStandards: qualityMetrics.complianceMetrics.industryStandards,
+          bestPractices: qualityMetrics.complianceMetrics.bestPractices,
+          templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
+          overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
+        }
+      } catch (metricsError) {
+        logger.warn('Failed to calculate compliance metrics:', metricsError)
+        // Continue without metrics rather than failing the document save
       }
       
       // Insert document into database with both metadata and generation_metadata

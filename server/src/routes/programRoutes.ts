@@ -8,6 +8,7 @@ import projectService from '../services/projectService'
 import * as programMetricsService from '../services/programMetricsService'
 import * as programFinancialService from '../services/programFinancialService'
 import * as evmCalculator from '../services/evmCalculator'
+import * as resourceService from '../services/resourceService'
 import { pool } from '../database/connection'
 
 const router = express.Router()
@@ -77,18 +78,9 @@ router.post('/', authenticateToken, requirePermission('programs.manage'), valida
 // IMPORTANT: Specific routes (/:id/projects, /:id/metrics) must come BEFORE generic /:id route
 // Express matches routes in order, so /:id would catch /:id/projects if placed first
 
-// List projects belonging to a program
-router.get('/:id/projects', authenticateToken, requirePermission('programs.view'), async (req, res) => {
-  const log = childLogger({ requestId: (req as any).requestId })
-  try {
-    const programId = req.params.id
-    const projects = await projectService.findByProgram(programId)
-    res.json({ success: true, data: projects })
-  } catch (error) {
-    log.error('Failed to list projects by program', error)
-    res.status(500).json({ error: 'Failed to list projects by program' })
-  }
-})
+// NOTE: The /:id/projects route is defined later (line 620) using programService.getProgramProjects
+// which includes comprehensive metrics (quality, compliance, content metrics)
+// This duplicate route has been removed to avoid conflicts
 
 // Get program risks (aggregated from all projects in program)
 router.get('/:id/risks', authenticateToken, requirePermission('programs.view'), async (req, res) => {
@@ -776,6 +768,775 @@ router.post('/:id/unarchive',
     } catch (error) {
       log.error('Failed to unarchive program', error)
       res.status(500).json({ error: 'Failed to unarchive program' })
+    }
+  }
+)
+
+// ================================================================
+// RESOURCE MANAGEMENT ROUTES
+// TASK-1141 / Issue #415: Resource management system in use
+// ================================================================
+
+// Validation schemas for resource management
+const resourcePlanSchema = Joi.object({
+  resourceType: Joi.string().valid('human', 'financial', 'technological', 'physical', 'other').required(),
+  resourceName: Joi.string().max(255).required(),
+  resourceRole: Joi.string().max(100).optional(),
+  requiredQuantity: Joi.number().positive().required(),
+  unitOfMeasure: Joi.string().max(50).optional().default('FTE'),
+  neededFrom: Joi.date().required(),
+  neededUntil: Joi.date().optional(),
+  hoursPerWeek: Joi.number().min(0).max(168).optional(),
+  requiredSkills: Joi.array().items(Joi.string()).optional(),
+  seniorityLevel: Joi.string().valid('junior', 'mid', 'senior', 'expert', 'lead', 'principal').optional(),
+  planningStatus: Joi.string().valid('identified', 'requested', 'approved', 'allocated', 'cancelled').optional().default('identified'),
+  description: Joi.string().optional(),
+  priority: Joi.number().integer().optional().default(0)
+})
+
+const resourceAllocationSchema = Joi.object({
+  projectId: Joi.string().uuid().optional(),
+  resourceId: Joi.string().uuid().required(),
+  resourceName: Joi.string().max(255).required(),
+  resourceType: Joi.string().valid('human', 'financial', 'technological', 'physical', 'other').required(),
+  allocatedAmount: Joi.number().positive().required(),
+  allocationPercentage: Joi.number().min(0).max(100).optional(),
+  allocationStart: Joi.date().required(),
+  allocationEnd: Joi.date().optional(),
+  priorityScore: Joi.number().min(0).max(100).optional(),
+  isCriticalResource: Joi.boolean().optional().default(false),
+  allocationStatus: Joi.string().valid('planned', 'active', 'completed', 'released', 'cancelled').optional().default('planned'),
+  notes: Joi.string().optional()
+})
+
+const capacityForecastSchema = Joi.object({
+  forecastPeriod: Joi.date().required()
+})
+
+const skillsInventorySchema = Joi.object({
+  userId: Joi.string().uuid().required(),
+  skillName: Joi.string().max(255).required(),
+  skillCategory: Joi.string().valid('technical', 'leadership', 'domain', 'tool', 'soft', 'certification', 'other').required(),
+  proficiencyLevel: Joi.string().valid('beginner', 'intermediate', 'advanced', 'expert').required(),
+  proficiencyScore: Joi.number().min(1).max(100).optional(),
+  isCertified: Joi.boolean().optional().default(false),
+  certificationName: Joi.string().max(255).optional(),
+  certificationExpiry: Joi.date().optional(),
+  certificationIssuer: Joi.string().max(255).optional(),
+  yearsExperience: Joi.number().min(0).optional().default(0),
+  projectsUsedIn: Joi.array().items(Joi.string().uuid()).optional(),
+  lastUsedDate: Joi.date().optional(),
+  availableForAllocation: Joi.boolean().optional().default(true),
+  preferredAllocationType: Joi.string().valid('full-time', 'part-time', 'consulting').optional(),
+  verifiedBy: Joi.string().uuid().optional(),
+  verifiedAt: Joi.date().optional(),
+  verificationNotes: Joi.string().optional()
+})
+
+const resourcePerformanceSchema = Joi.object({
+  resourceId: Joi.string().uuid().required(),
+  reportingPeriod: Joi.date().required(),
+  availableHours: Joi.number().min(0).optional(),
+  billableHours: Joi.number().min(0).optional(),
+  tasksAssigned: Joi.number().integer().min(0).optional().default(0),
+  tasksCompleted: Joi.number().integer().min(0).optional().default(0),
+  qualityScore: Joi.number().min(0).max(100).optional(),
+  reworkPercentage: Joi.number().min(0).max(100).optional().default(0),
+  overallPerformance: Joi.string().valid('exceeds', 'meets', 'below-expectations', 'needs-improvement').optional(),
+  performanceScore: Joi.number().min(1).max(100).optional(),
+  managerFeedback: Joi.string().optional(),
+  peerFeedback: Joi.object().optional(),
+  selfAssessment: Joi.string().optional(),
+  reviewedBy: Joi.string().uuid().optional(),
+  reviewedAt: Joi.date().optional()
+})
+
+const resourceRiskSchema = Joi.object({
+  resourceId: Joi.string().uuid().optional(),
+  riskTitle: Joi.string().max(255).required(),
+  riskDescription: Joi.string().optional(),
+  riskCategory: Joi.string().valid('availability', 'capability', 'capacity', 'cost', 'conflict', 'retention', 'other').optional(),
+  probability: Joi.string().valid('low', 'medium', 'high', 'very-high').optional().default('low'),
+  impact: Joi.string().valid('low', 'medium', 'high', 'critical').optional().default('low'),
+  mitigationPlan: Joi.string().optional(),
+  mitigationStatus: Joi.string().valid('planned', 'in-progress', 'completed', 'cancelled').optional().default('planned'),
+  mitigationOwnerId: Joi.string().uuid().optional(),
+  riskStatus: Joi.string().valid('open', 'mitigated', 'accepted', 'closed').optional().default('open'),
+  identifiedDate: Joi.date().optional(),
+  mitigationDueDate: Joi.date().optional()
+})
+
+/**
+ * POST /api/programs/:id/resources/plans
+ * Create a resource plan entry
+ */
+router.post('/:id/resources/plans',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(resourcePlanSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const programId = req.params.id
+      
+      const plan = await resourceService.createResourcePlan(
+        { ...req.body, programId },
+        userId
+      )
+      
+      log.info('[RESOURCE] Created resource plan', { planId: plan.id, programId })
+      
+      res.status(201).json({
+        success: true,
+        data: plan
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to create resource plan:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create resource plan',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/plans
+ * Get resource plans for a program
+ */
+router.get('/:id/resources/plans',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const filters = {
+        resourceType: req.query.resource_type as string,
+        planningStatus: req.query.status as string,
+        dateRange: {
+          from: req.query.from ? new Date(req.query.from as string) : undefined,
+          until: req.query.until ? new Date(req.query.until as string) : undefined
+        }
+      }
+      
+      const plans = await resourceService.getResourcePlans(programId, filters)
+      
+      log.info('[RESOURCE] Retrieved resource plans', { programId, count: plans.length })
+      
+      res.json({
+        success: true,
+        data: plans,
+        count: plans.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get resource plans:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resource plans',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * PUT /api/programs/:id/resources/plans/:planId/status
+ * Update resource plan status
+ */
+router.put('/:id/resources/plans/:planId/status',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(Joi.object({
+    status: Joi.string().valid('identified', 'requested', 'approved', 'allocated', 'cancelled').required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const planId = req.params.planId
+      
+      const plan = await resourceService.updateResourcePlanStatus(
+        planId,
+        req.body.status,
+        userId
+      )
+      
+      log.info('[RESOURCE] Updated resource plan status', { planId, status: req.body.status })
+      
+      res.json({
+        success: true,
+        data: plan
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to update resource plan status:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update resource plan status',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/resources/allocations
+ * Allocate resource to a project
+ */
+router.post('/:id/resources/allocations',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(resourceAllocationSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const programId = req.params.id
+      
+      const allocation = await resourceService.allocateResource(
+        { ...req.body, programId },
+        userId
+      )
+      
+      log.info('[RESOURCE] Allocated resource', {
+        allocationId: allocation.id,
+        programId,
+        resourceId: allocation.resourceId,
+        hasConflicts: allocation.hasConflicts
+      })
+      
+      res.status(201).json({
+        success: true,
+        data: allocation
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to allocate resource:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to allocate resource',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/allocations
+ * Get resource allocations for a program
+ */
+router.get('/:id/resources/allocations',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const filters = {
+        projectId: req.query.project_id as string,
+        resourceId: req.query.resource_id as string,
+        allocationStatus: req.query.status as string,
+        showConflictsOnly: req.query.conflicts_only === 'true'
+      }
+      
+      const allocations = await resourceService.getResourceAllocations(programId, filters)
+      
+      log.info('[RESOURCE] Retrieved resource allocations', { programId, count: allocations.length })
+      
+      res.json({
+        success: true,
+        data: allocations,
+        count: allocations.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get resource allocations:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resource allocations',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/conflicts
+ * Get resource conflicts for a program
+ */
+router.get('/:id/resources/conflicts',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const conflicts = await resourceService.getResourceConflicts(programId)
+      
+      log.info('[RESOURCE] Retrieved resource conflicts', { programId, count: conflicts.length })
+      
+      res.json({
+        success: true,
+        data: conflicts,
+        count: conflicts.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get resource conflicts:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resource conflicts',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/resources/conflicts/detect
+ * Manually trigger conflict detection
+ */
+router.post('/:id/resources/conflicts/detect',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const conflictCount = await resourceService.detectConflicts(programId)
+      
+      log.info('[RESOURCE] Detected conflicts', { programId, conflictCount })
+      
+      res.json({
+        success: true,
+        data: {
+          conflictCount,
+          message: `Detected ${conflictCount} resource conflict(s)`
+        }
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to detect conflicts:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to detect conflicts',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * PUT /api/programs/:id/resources/allocations/:allocationId/status
+ * Update allocation status
+ */
+router.put('/:id/resources/allocations/:allocationId/status',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(Joi.object({
+    status: Joi.string().valid('planned', 'active', 'completed', 'released', 'cancelled').required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const allocationId = req.params.allocationId
+      
+      const allocation = await resourceService.updateAllocationStatus(
+        allocationId,
+        req.body.status,
+        userId
+      )
+      
+      log.info('[RESOURCE] Updated allocation status', { allocationId, status: req.body.status })
+      
+      res.json({
+        success: true,
+        data: allocation
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to update allocation status:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to update allocation status',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/resources/capacity/forecast
+ * Calculate capacity forecast for a program
+ */
+router.post('/:id/resources/capacity/forecast',
+  authenticateToken,
+  requirePermission('programs.view'),
+  validate(capacityForecastSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const programId = req.params.id
+      
+      const forecast = await resourceService.calculateCapacityForecast(
+        programId,
+        req.body.forecastPeriod,
+        userId
+      )
+      
+      log.info('[RESOURCE] Calculated capacity forecast', { programId, forecastPeriod: req.body.forecastPeriod })
+      
+      res.json({
+        success: true,
+        data: forecast
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to calculate capacity forecast:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to calculate capacity forecast',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/capacity/forecasts
+ * Get capacity forecasts for a program
+ */
+router.get('/:id/resources/capacity/forecasts',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const forecasts = await resourceService.getCapacityForecasts(
+        programId,
+        req.query.start_date ? new Date(req.query.start_date as string) : undefined,
+        req.query.end_date ? new Date(req.query.end_date as string) : undefined
+      )
+      
+      log.info('[RESOURCE] Retrieved capacity forecasts', { programId, count: forecasts.length })
+      
+      res.json({
+        success: true,
+        data: forecasts,
+        count: forecasts.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get capacity forecasts:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve capacity forecasts',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/demand
+ * Get resource demand summary
+ */
+router.get('/:id/resources/demand',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const demand = await resourceService.getResourceDemand(programId)
+      
+      log.info('[RESOURCE] Retrieved resource demand', { programId, count: demand.length })
+      
+      res.json({
+        success: true,
+        data: demand,
+        count: demand.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get resource demand:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resource demand',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/resources/skills
+ * Add or update skill in inventory
+ */
+router.post('/:id/resources/skills',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(skillsInventorySchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const programId = req.params.id
+      
+      const skill = await resourceService.upsertSkill(
+        { ...req.body, programId },
+        userId
+      )
+      
+      log.info('[RESOURCE] Upserted skill', {
+        skillId: skill.id,
+        programId,
+        userId: skill.userId,
+        skillName: skill.skillName
+      })
+      
+      res.status(201).json({
+        success: true,
+        data: skill
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to upsert skill:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to add/update skill',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/skills
+ * Get skills inventory for a program
+ */
+router.get('/:id/resources/skills',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const filters = {
+        userId: req.query.user_id as string,
+        skillCategory: req.query.category as string,
+        proficiencyLevel: req.query.proficiency as string,
+        skillName: req.query.skill_name as string
+      }
+      
+      const skills = await resourceService.getSkillsInventory(programId, filters)
+      
+      log.info('[RESOURCE] Retrieved skills inventory', { programId, count: skills.length })
+      
+      res.json({
+        success: true,
+        data: skills,
+        count: skills.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get skills inventory:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve skills inventory',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/skills/gap
+ * Get skills gap analysis
+ */
+router.get('/:id/resources/skills/gap',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const gaps = await resourceService.getSkillsGap(programId)
+      
+      log.info('[RESOURCE] Retrieved skills gap analysis', { programId, count: gaps.length })
+      
+      res.json({
+        success: true,
+        data: gaps,
+        count: gaps.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get skills gap:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve skills gap analysis',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/resources/performance
+ * Create or update resource performance record
+ */
+router.post('/:id/resources/performance',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(resourcePerformanceSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const programId = req.params.id
+      
+      const performance = await resourceService.upsertResourcePerformance(
+        { ...req.body, programId },
+        userId
+      )
+      
+      log.info('[RESOURCE] Upserted resource performance', {
+        performanceId: performance.id,
+        programId,
+        resourceId: performance.resourceId
+      })
+      
+      res.status(201).json({
+        success: true,
+        data: performance
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to upsert resource performance:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to add/update resource performance',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/utilization
+ * Get resource utilization summary
+ */
+router.get('/:id/resources/utilization',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const utilization = await resourceService.getResourceUtilizationSummary(programId)
+      
+      if (!utilization) {
+        return res.json({
+          success: true,
+          data: null,
+          message: 'No utilization data available for this program'
+        })
+      }
+      
+      log.info('[RESOURCE] Retrieved resource utilization summary', { programId })
+      
+      res.json({
+        success: true,
+        data: utilization
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get resource utilization:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resource utilization',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/programs/:id/resources/risks
+ * Create resource risk
+ */
+router.post('/:id/resources/risks',
+  authenticateToken,
+  requirePermission('programs.manage'),
+  validate(resourceRiskSchema),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const programId = req.params.id
+      
+      const risk = await resourceService.createResourceRisk(
+        { ...req.body, programId },
+        userId
+      )
+      
+      log.info('[RESOURCE] Created resource risk', {
+        riskId: risk.id,
+        programId,
+        riskTitle: risk.riskTitle
+      })
+      
+      res.status(201).json({
+        success: true,
+        data: risk
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to create resource risk:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to create resource risk',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/programs/:id/resources/risks
+ * Get resource risks for a program
+ */
+router.get('/:id/resources/risks',
+  authenticateToken,
+  requirePermission('programs.view'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const programId = req.params.id
+      
+      const filters = {
+        riskStatus: req.query.status as string,
+        riskCategory: req.query.category as string,
+        resourceId: req.query.resource_id as string
+      }
+      
+      const risks = await resourceService.getResourceRisks(programId, filters)
+      
+      log.info('[RESOURCE] Retrieved resource risks', { programId, count: risks.length })
+      
+      res.json({
+        success: true,
+        data: risks,
+        count: risks.length
+      })
+    } catch (error: any) {
+      log.error('[RESOURCE] Failed to get resource risks:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to retrieve resource risks',
+        message: error.message
+      })
     }
   }
 )

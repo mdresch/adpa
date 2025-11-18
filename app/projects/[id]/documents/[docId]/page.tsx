@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -130,6 +130,7 @@ import { toast } from "sonner"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
 import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
+import { QualityAuditModal } from "@/components/quality/QualityAuditModal"
 
 interface Document {
   id: string
@@ -227,6 +228,12 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
   const [signatureRequest, setSignatureRequest] = useState<any>(null)
   const [signatureRecipients, setSignatureRecipients] = useState<any[]>([])
   const [templateCategory, setTemplateCategory] = useState<string | null>(null)
+  const [showQualityAuditModal, setShowQualityAuditModal] = useState(false)
+  const [runningQualityAudit, setRunningQualityAudit] = useState(false)
+  const [qualityAudit, setQualityAudit] = useState<any>(null)
+  const [loadingAudit, setLoadingAudit] = useState(false)
+  // Ref to store timeout ID for quality audit refresh to prevent stale state updates
+  const qualityAuditTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -279,6 +286,38 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     }
   }
   
+  // Fetch quality audit data
+  const fetchQualityAudit = async () => {
+    try {
+      setLoadingAudit(true)
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const authToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      if (!authToken) {
+        return
+      }
+
+      const response = await fetch(`${API_BASE_URL}/quality-audits/document/${docId}`, {
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success && data.audit) {
+          setQualityAudit(data.audit)
+        }
+      }
+    } catch (error) {
+      console.error("Failed to fetch quality audit:", error)
+      // Don't show error toast - audit might not exist yet
+    } finally {
+      setLoadingAudit(false)
+    }
+  }
+
   // Fetch template category
   const fetchTemplateCategory = async (templateId: string | undefined) => {
     if (!templateId) {
@@ -448,6 +487,74 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       setTemplates(response.templates || [])
     } catch (error) {
       console.error("Failed to fetch templates:", error)
+    }
+  }
+
+  // Run quality audit
+  const handleRunQualityAudit = async () => {
+    if (!document) {
+      toast.error("Document not loaded")
+      return
+    }
+
+    // Clear any existing timeout to prevent stale updates
+    if (qualityAuditTimeoutRef.current) {
+      clearTimeout(qualityAuditTimeoutRef.current)
+      qualityAuditTimeoutRef.current = null
+    }
+
+    try {
+      setRunningQualityAudit(true)
+      
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const authToken = token || localStorage.getItem('auth_token') || localStorage.getItem('token')
+      
+      if (!authToken) {
+        toast.error("Authentication required. Please log in again.")
+        setRunningQualityAudit(false)
+        return
+      }
+
+      // Trigger quality audit
+      const response = await fetch(`${API_BASE_URL}/quality-audits/trigger`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          documentId: docId
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to trigger quality audit')
+      }
+
+      toast.success("Quality audit started successfully!")
+      
+      // Reset loading state immediately after successful trigger
+      setRunningQualityAudit(false)
+      
+      // Refresh audit data after a delay to show new results
+      // Store timeout ID in ref for cleanup
+      qualityAuditTimeoutRef.current = setTimeout(async () => {
+        await fetchQualityAudit()
+        setShowQualityAuditModal(true)
+        qualityAuditTimeoutRef.current = null // Clear ref after execution
+      }, 3000)
+    } catch (error) {
+      console.error("Failed to run quality audit:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to run quality audit")
+      setRunningQualityAudit(false)
+      
+      // Clear timeout if it was set before error occurred
+      if (qualityAuditTimeoutRef.current) {
+        clearTimeout(qualityAuditTimeoutRef.current)
+        qualityAuditTimeoutRef.current = null
+      }
     }
   }
 
@@ -675,11 +782,21 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
   // Load data on component mount
   useEffect(() => {
     if (isAuthenticated) {
-      Promise.all([fetchDocument(), fetchProject(), fetchTemplates()]).then(() => {
+      Promise.all([fetchDocument(), fetchProject(), fetchTemplates(), fetchQualityAudit()]).then(() => {
         setLoading(false)
       })
     }
   }, [isAuthenticated, docId, projectId])
+
+  // Cleanup timeout on unmount to prevent stale state updates
+  useEffect(() => {
+    return () => {
+      if (qualityAuditTimeoutRef.current) {
+        clearTimeout(qualityAuditTimeoutRef.current)
+        qualityAuditTimeoutRef.current = null
+      }
+    }
+  }, [])
   
   // Update template category when templates are loaded or document template changes
   useEffect(() => {
@@ -992,6 +1109,24 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                       >
                         <Sparkles className="h-4 w-4 mr-2" />
                         Create new Version
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        className="w-full justify-start"
+                        onClick={handleRunQualityAudit}
+                        disabled={runningQualityAudit || !document}
+                      >
+                        {runningQualityAudit ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Running Audit...
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-4 w-4 mr-2" />
+                            Run Quality Audit
+                          </>
+                        )}
                       </Button>
                       <Button variant="outline" className="w-full justify-start">
                         <ExternalLink className="h-4 w-4 mr-2" />
@@ -1369,6 +1504,172 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
                               </>
                             )
                           })()}
+                        </div>
+                      </CardContent>
+                    </AnimatedCard>
+                  )}
+
+                  {/* Quality Audit Results */}
+                  {qualityAudit && (
+                    <AnimatedCard>
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <ShieldCheck className="h-5 w-5" />
+                            <span>Quality Audit</span>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setShowQualityAuditModal(true)}
+                          >
+                            <Eye className="h-4 w-4 mr-1" />
+                            View Full Report
+                          </Button>
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {/* Overall Score */}
+                          <div className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                            <div className={`text-4xl font-bold ${
+                              qualityAudit.overall_score >= 90 ? 'text-green-600' :
+                              qualityAudit.overall_score >= 80 ? 'text-blue-600' :
+                              qualityAudit.overall_score >= 70 ? 'text-yellow-600' :
+                              qualityAudit.overall_score >= 60 ? 'text-orange-600' :
+                              'text-red-600'
+                            }`}>
+                              {qualityAudit.overall_score}%
+                            </div>
+                            <div className="flex items-center justify-center gap-2 mt-2">
+                              <Badge className={`${
+                                qualityAudit.overall_grade === 'A' ? 'bg-green-500' :
+                                qualityAudit.overall_grade === 'B' ? 'bg-blue-500' :
+                                qualityAudit.overall_grade === 'C' ? 'bg-yellow-500' :
+                                qualityAudit.overall_grade === 'D' ? 'bg-orange-500' :
+                                'bg-red-500'
+                              } text-white`}>
+                                Grade {qualityAudit.overall_grade}
+                              </Badge>
+                              <span className="text-sm text-gray-600">{qualityAudit.quality_level}</span>
+                            </div>
+                          </div>
+
+                          {/* Key Dimensions */}
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Completeness</span>
+                              <div className="flex items-center space-x-2">
+                                <div className="w-20 bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className={`h-2 rounded-full ${
+                                      qualityAudit.completeness_score >= 90 ? 'bg-green-500' :
+                                      qualityAudit.completeness_score >= 80 ? 'bg-blue-500' :
+                                      qualityAudit.completeness_score >= 70 ? 'bg-yellow-500' :
+                                      'bg-orange-500'
+                                    }`}
+                                    style={{ width: `${qualityAudit.completeness_score}%` }}
+                                  />
+                                </div>
+                                <span className="text-sm font-medium w-12 text-right">{qualityAudit.completeness_score}%</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Consistency</span>
+                              <div className="flex items-center space-x-2">
+                                <div className="w-20 bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className={`h-2 rounded-full ${
+                                      qualityAudit.consistency_score >= 90 ? 'bg-green-500' :
+                                      qualityAudit.consistency_score >= 80 ? 'bg-blue-500' :
+                                      qualityAudit.consistency_score >= 70 ? 'bg-yellow-500' :
+                                      'bg-orange-500'
+                                    }`}
+                                    style={{ width: `${qualityAudit.consistency_score}%` }}
+                                  />
+                                </div>
+                                <span className="text-sm font-medium w-12 text-right">{qualityAudit.consistency_score}%</span>
+                              </div>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-sm text-muted-foreground">Standards Compliance</span>
+                              <div className="flex items-center space-x-2">
+                                <div className="w-20 bg-gray-200 rounded-full h-2">
+                                  <div 
+                                    className={`h-2 rounded-full ${
+                                      qualityAudit.standards_compliance_score >= 90 ? 'bg-green-500' :
+                                      qualityAudit.standards_compliance_score >= 80 ? 'bg-blue-500' :
+                                      qualityAudit.standards_compliance_score >= 70 ? 'bg-yellow-500' :
+                                      'bg-orange-500'
+                                    }`}
+                                    style={{ width: `${qualityAudit.standards_compliance_score}%` }}
+                                  />
+                                </div>
+                                <span className="text-sm font-medium w-12 text-right">{qualityAudit.standards_compliance_score}%</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Compliance Metrics Summary */}
+                          {qualityAudit.compliance_metrics && (
+                            <>
+                              <Separator />
+                              <div className="space-y-2">
+                                <div className="text-sm font-semibold text-muted-foreground mb-2">Compliance Rating</div>
+                                <div className="flex justify-between items-center">
+                                  <span className="text-sm text-muted-foreground">Overall Compliance</span>
+                                  <div className="flex items-center space-x-2">
+                                    <div className="w-20 bg-gray-200 rounded-full h-2">
+                                      <div 
+                                        className={`h-2 rounded-full ${
+                                          qualityAudit.compliance_metrics.overallComplianceRating >= 90 ? 'bg-green-500' :
+                                          qualityAudit.compliance_metrics.overallComplianceRating >= 80 ? 'bg-blue-500' :
+                                          qualityAudit.compliance_metrics.overallComplianceRating >= 70 ? 'bg-yellow-500' :
+                                          'bg-orange-500'
+                                        }`}
+                                        style={{ width: `${qualityAudit.compliance_metrics.overallComplianceRating}%` }}
+                                      />
+                                    </div>
+                                    <span className="text-sm font-medium w-12 text-right">{qualityAudit.compliance_metrics.overallComplianceRating}%</span>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 mt-3 text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">PMBOK:</span>
+                                    <span className="font-medium">{qualityAudit.compliance_metrics.pmbokGuide}%</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">GDPR:</span>
+                                    <span className="font-medium">{qualityAudit.compliance_metrics.gdpr}%</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">HIPAA:</span>
+                                    <span className="font-medium">{qualityAudit.compliance_metrics.hipaa}%</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">SOC 2:</span>
+                                    <span className="font-medium">{qualityAudit.compliance_metrics.soc2}%</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Issues Count */}
+                          {qualityAudit.issues && qualityAudit.issues.length > 0 && (
+                            <>
+                              <Separator />
+                              <div className="flex items-center justify-between">
+                                <span className="text-sm text-muted-foreground">Issues Found</span>
+                                <Badge variant="destructive">{qualityAudit.issues.length}</Badge>
+                              </div>
+                            </>
+                          )}
+
+                          {/* Audit Date */}
+                          <div className="text-xs text-muted-foreground pt-2 border-t">
+                            Audited: {new Date(qualityAudit.audited_at).toLocaleString()}
+                          </div>
                         </div>
                       </CardContent>
                     </AnimatedCard>
@@ -2406,6 +2707,14 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
         }}
         documentTitle={document?.name}
       />
+
+      {/* Quality Audit Modal */}
+      {showQualityAuditModal && (
+        <QualityAuditModal
+          documentId={docId}
+          onClose={() => setShowQualityAuditModal(false)}
+        />
+      )}
     </div>
   )
 }

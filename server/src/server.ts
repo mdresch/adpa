@@ -94,6 +94,7 @@ import signatureRoutes from "./routes/signatures"
 import searchRoutes from "./routes/search"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
 import pmbok6Routes from "./routes/pmbok6Routes"
+import reviewRoutes from "./routes/reviewRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -278,7 +279,8 @@ app.use("/api/signatures", signatureRoutes)
 app.use("/api/search", searchRoutes)
 app.use("/api/mitigation-plans", mitigationPlanRoutes)
 app.use("/api/pmbok6", pmbok6Routes)
-console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, and PMBOK 6)")
+app.use("/api", reviewRoutes)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, and review scheduling)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {

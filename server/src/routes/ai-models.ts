@@ -91,18 +91,96 @@ router.get("/providers/:providerId/models/:modelId",
     try {
       const { providerId, modelId } = req.params
       
-      const result = await pool.query(`
-        SELECT 
-          mc.*,
-          ap.name as provider_name,
-          ap.provider_type
-        FROM ai_model_configurations mc
-        JOIN ai_providers ap ON mc.provider_id = ap.id
-        WHERE mc.provider_id = $1 AND mc.id = $2
-      `, [providerId, modelId])
+      // modelId can be either:
+      // 1. A UUID (from ai_model_configurations.id) - for existing configured models
+      // 2. A model name/ID string (e.g., "gemini-2.5-flash") - for models from available_models list
+      // Try to find by UUID first, then by model_id
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)
       
+      let result
+      if (isUUID) {
+        // Query by UUID (ai_model_configurations.id)
+        result = await pool.query(`
+          SELECT 
+            mc.*,
+            ap.name as provider_name,
+            ap.provider_type
+          FROM ai_model_configurations mc
+          JOIN ai_providers ap ON mc.provider_id = ap.id
+          WHERE mc.provider_id = $1 AND mc.id = $2
+        `, [providerId, modelId])
+      } else {
+        // Query by model_id (actual model name/ID like "gemini-2.5-flash")
+        result = await pool.query(`
+          SELECT 
+            mc.*,
+            ap.name as provider_name,
+            ap.provider_type
+          FROM ai_model_configurations mc
+          JOIN ai_providers ap ON mc.provider_id = ap.id
+          WHERE mc.provider_id = $1 AND mc.model_id = $2
+        `, [providerId, modelId])
+      }
+      
+      // If no model configuration found in database, create a basic one from available_models
       if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Model configuration not found" })
+        // Check if model exists in provider's available_models
+        const providerResult = await pool.query(`
+          SELECT available_models, default_model, provider_type, name
+          FROM ai_providers
+          WHERE id = $1
+        `, [providerId])
+        
+        if (providerResult.rows.length === 0) {
+          return res.status(404).json({ error: "Provider not found" })
+        }
+        
+        const provider = providerResult.rows[0]
+        let availableModels: string[] = []
+        if (provider.available_models) {
+          if (Array.isArray(provider.available_models)) {
+            availableModels = provider.available_models
+          } else if (typeof provider.available_models === 'string') {
+            try {
+              availableModels = JSON.parse(provider.available_models)
+            } catch {
+              availableModels = []
+            }
+          }
+        }
+        
+        // Check if modelId exists in available_models
+        if (!availableModels.includes(modelId)) {
+          return res.status(404).json({ 
+            error: "Model not found",
+            message: `Model "${modelId}" is not in the provider's available models list`
+          })
+        }
+        
+        // Return a basic model configuration (not in database yet)
+        return res.json({
+          success: true,
+          model: {
+            id: null, // No database record yet
+            modelId: modelId,
+            name: modelId,
+            providerId: providerId,
+            providerName: provider.name,
+            providerType: provider.provider_type,
+            is_active: true,
+            contextWindow: 128000, // Default, can be overridden
+            maxTokens: 4096,
+            temperature: 0.7,
+            topP: 1.0,
+            frequencyPenalty: 0.0,
+            presencePenalty: 0.0,
+            configuration: {},
+            usage_stats: {},
+            created_at: null,
+            updated_at: null
+          },
+          isBasic: true // Flag to indicate this is a basic model, not configured
+        })
       }
       
       const model = result.rows[0]
@@ -408,36 +486,106 @@ router.post("/providers/:providerId/models/:modelId/test",
       const { providerId, modelId } = req.params
       const { testType, testId, prompt, maxTokens } = req.body
       
-      // Get model configuration
-      const modelResult = await pool.query(`
-        SELECT 
-          mc.*,
-          ap.name as provider_name,
-          ap.provider_type,
-          ap.api_key_encrypted
-        FROM ai_model_configurations mc
-        JOIN ai_providers ap ON mc.provider_id = ap.id
-        WHERE mc.provider_id = $1 AND mc.id = $2
-      `, [providerId, modelId])
+      // modelId can be either UUID or model name string
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(modelId)
       
-      if (modelResult.rows.length === 0) {
-        return res.status(404).json({ error: "Model configuration not found" })
+      // Get model configuration
+      let modelResult
+      if (isUUID) {
+        modelResult = await pool.query(`
+          SELECT 
+            mc.*,
+            ap.name as provider_name,
+            ap.provider_type,
+            ap.api_key_encrypted
+          FROM ai_model_configurations mc
+          JOIN ai_providers ap ON mc.provider_id = ap.id
+          WHERE mc.provider_id = $1 AND mc.id = $2
+        `, [providerId, modelId])
+      } else {
+        modelResult = await pool.query(`
+          SELECT 
+            mc.*,
+            ap.name as provider_name,
+            ap.provider_type,
+            ap.api_key_encrypted
+          FROM ai_model_configurations mc
+          JOIN ai_providers ap ON mc.provider_id = ap.id
+          WHERE mc.provider_id = $1 AND mc.model_id = $2
+        `, [providerId, modelId])
       }
       
-      const model = modelResult.rows[0]
+      // If model not found in database, check if it exists in available_models
+      let model
+      if (modelResult.rows.length === 0) {
+        // Check provider's available_models
+        const providerResult = await pool.query(`
+          SELECT available_models, provider_type, name, api_key_encrypted, configuration
+          FROM ai_providers
+          WHERE id = $1
+        `, [providerId])
+        
+        if (providerResult.rows.length === 0) {
+          return res.status(404).json({ error: "Provider not found" })
+        }
+        
+        const provider = providerResult.rows[0]
+        let availableModels: string[] = []
+        if (provider.available_models) {
+          if (Array.isArray(provider.available_models)) {
+            availableModels = provider.available_models
+          } else if (typeof provider.available_models === 'string') {
+            try {
+              availableModels = JSON.parse(provider.available_models)
+            } catch {
+              availableModels = []
+            }
+          }
+        }
+        
+        if (!availableModels.includes(modelId)) {
+          return res.status(404).json({ 
+            error: "Model not found",
+            message: `Model "${modelId}" is not in the provider's available models list`
+          })
+        }
+        
+        // Create a basic model config for testing (not persisted)
+        model = {
+          id: null,
+          model_id: modelId,
+          model_name: modelId,
+          provider_id: providerId,
+          provider_name: provider.name,
+          provider_type: provider.provider_type,
+          api_key_encrypted: provider.api_key_encrypted,
+          is_active: true,
+          context_window: 128000,
+          max_tokens: maxTokens || 4096,
+          temperature: 0.7,
+          top_p: 1.0,
+          frequency_penalty: 0.0,
+          presence_penalty: 0.0,
+          configuration: provider.configuration || {}
+        }
+      } else {
+        model = modelResult.rows[0]
+      }
       
       // Implement comprehensive model testing based on test type
       const testResult = await performModelTest(model, testType, testId, prompt, maxTokens)
       
-      // Update usage statistics
-      await pool.query(`
-        UPDATE ai_model_configurations 
-        SET usage_stats = COALESCE(usage_stats, '{}'::jsonb) || jsonb_build_object(
-          'last_tested', NOW(),
-          'test_count', COALESCE((usage_stats->>'test_count')::int, 0) + 1
-        )
-        WHERE id = $1
-      `, [modelId])
+      // Update usage statistics only if model exists in database
+      if (model.id) {
+        await pool.query(`
+          UPDATE ai_model_configurations 
+          SET usage_stats = COALESCE(usage_stats, '{}'::jsonb) || jsonb_build_object(
+            'last_tested', NOW(),
+            'test_count', COALESCE((usage_stats->>'test_count')::int, 0) + 1
+          )
+          WHERE id = $1
+        `, [model.id])
+      }
       
       logger.info(`Tested model configuration: ${model.model_name} for provider ${providerId}`)
       res.json(testResult)
@@ -972,7 +1120,7 @@ async function testAuthentication(provider: any, config: any, startTime: number)
     // Special handling for Anthropic - requires POST with body
     if (providerType === 'anthropic') {
       const minimalBody = {
-        model: "claude-3-5-sonnet-20241022",
+        model: "claude-3-5-sonnet",  // Simplified name without date suffix
         max_tokens: 1,
         messages: [{ role: "user", content: "test" }]
       }

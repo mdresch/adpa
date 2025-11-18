@@ -142,6 +142,80 @@ interface QualityStandard {
   compliance_level?: 'mandatory' | 'recommended' | 'optional'
 }
 
+interface ComplianceSecurity {
+  title: string
+  category: 'compliance' | 'security' | 'legal' | 'standard'
+  type?: string // e.g., 'ISO 27001', 'SOC 2', 'GDPR', 'Encryption', 'Authentication'
+  description?: string
+  requirement_text?: string
+  status?: 'applicable' | 'not_applicable' | 'partial' | 'compliant' | 'non_compliant'
+  security_score?: number // 0-10
+  compliance_score?: number // 0-10
+  latest_breach?: string
+  data_at_rest_encryption?: string
+  multi_factor_authentication?: boolean
+  ip_address_restriction?: boolean
+  user_audit_trail?: boolean
+  admin_audit_trail?: boolean
+  data_audit_trail?: boolean
+  user_can_upload_data?: boolean
+  data_classification?: boolean
+  remember_password?: boolean
+  user_roles_support?: boolean
+  file_sharing?: boolean
+  valid_certificate_name?: string
+  trusted_certificate?: boolean
+  encryption_protocol?: string
+  heartbleed_patched?: boolean
+  http_security_headers?: boolean
+  supports_saml?: boolean
+  protected_against_drown?: boolean
+  penetration_testing?: boolean
+  requires_user_authentication?: boolean
+  password_policy?: string
+  // Compliance Standards
+  iso_27001?: boolean
+  iso_27018?: boolean
+  iso_27017?: boolean
+  iso_27002?: boolean
+  finra?: boolean
+  fisma?: boolean
+  gaap?: boolean
+  hipaa?: boolean
+  isae_3402?: boolean
+  itar?: boolean
+  soc_1?: boolean
+  soc_2?: boolean
+  soc_3?: boolean
+  sox?: boolean
+  sp_800_53?: boolean
+  ssae_18?: boolean
+  safe_harbor?: boolean
+  pci_dss_version?: string
+  glba?: boolean
+  fedramp_level?: string
+  csa_star_level?: string
+  certification?: boolean
+  privacy_shield?: boolean
+  ffiec?: boolean
+  gapp?: boolean
+  cobit?: boolean
+  coppa?: boolean
+  ferpa?: boolean
+  hitrust_csf?: boolean
+  jericho_forum_commandments?: boolean
+  // Legal Requirements
+  data_ownership?: string
+  dmca?: boolean
+  data_retention_policy?: string
+  gdpr_readiness_statement?: string
+  gdpr_right_to_erasure?: boolean
+  gdpr_report_data_breaches?: boolean
+  gdpr_data_protection?: boolean
+  gdpr_user_ownership?: boolean
+  other_standards?: Record<string, any>
+}
+
 interface Technology {
   name: string
   category: 'frontend' | 'backend' | 'database' | 'infrastructure' | 'devops' | 'testing' | 'monitoring' | 'other'
@@ -1969,6 +2043,172 @@ Requirements:
       return validQualityStandards
     } catch (error: unknown) {
       logger.error('[EXTRACTION-QUALITY] Extraction failed', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      return []
+    }
+  }
+
+  /**
+   * Extract compliance, security, legal, and standards requirements using AI
+   */
+  private async extractComplianceSecurity(
+    documents: Array<{ id: string; title: string; content: string; template_name?: string }>,
+    projectId: string,
+    options: { aiProvider?: string; aiModel?: string },
+    documentMap: Map<string, string>,
+    documentList: string
+  ): Promise<ComplianceSecurity[]> {
+    try {
+      logger.info('[EXTRACTION-COMPLIANCE-SECURITY] Starting extraction')
+
+      const documentContext = this.buildDocumentContext(documents)
+      
+      const prompt = `Analyze the following project documents and extract ALL compliance, security, legal, and standards requirements mentioned.
+
+${documentContext}
+
+AVAILABLE DOCUMENTS (for source_document matching):
+${documentList}
+
+Extract compliance, security, legal, and standards requirements in JSON format with the following structure:
+{
+  "compliance_security": [
+    {
+      "title": "Requirement Title (e.g., 'ISO 27001 Compliance', 'ISO 9001 Quality Management', 'SOC 2 Type II', 'GDPR Requirements', 'HIPAA Compliance')",
+      "category": "compliance|security|legal|standard",
+      "type": "Specific type (e.g., 'ISO 27001', 'ISO 27018', 'ISO 27017', 'ISO 27002', 'ISO 9001', 'FINRA', 'FISMA', 'GAAP', 'HIPAA', 'ISAE 3402', 'ITAR', 'SOC 1', 'SOC 2', 'SOC 3', 'SOX', 'SP 800-53', 'SSAE 18', 'Safe Harbor', 'PCI DSS', 'GLBA', 'FedRAMP', 'CSA STAR', 'Privacy Shield', 'FFIEC', 'GAPP', 'COBIT', 'COPPA', 'FERPA', 'HITRUST CSF', 'Jericho Forum Commandments', 'GDPR', 'Encryption', 'Authentication')",
+      "description": "Detailed description of the requirement",
+      "requirement_text": "Specific requirement text if mentioned",
+      "status": "applicable|not_applicable|partial|compliant|non_compliant",
+      "security_score": 0-10,
+      "compliance_score": 0-10,
+      "latest_breach": "YYYY-MM-DD or null",
+      "data_at_rest_encryption": "e.g., 'AES', 'AES-256'",
+      "multi_factor_authentication": true|false,
+      "ip_address_restriction": true|false,
+      "user_audit_trail": true|false,
+      "admin_audit_trail": true|false,
+      "data_audit_trail": true|false,
+      "user_can_upload_data": true|false,
+      "data_classification": true|false,
+      "remember_password": true|false,
+      "user_roles_support": true|false,
+      "file_sharing": true|false,
+      "valid_certificate_name": "Certificate name if mentioned",
+      "trusted_certificate": true|false,
+      "encryption_protocol": "e.g., 'TLS 1.2', 'TLS 1.3'",
+      "heartbleed_patched": true|false,
+      "http_security_headers": true|false,
+      "supports_saml": true|false,
+      "protected_against_drown": true|false,
+      "penetration_testing": true|false,
+      "requires_user_authentication": true|false,
+      "password_policy": "Password policy description",
+      "iso_27001": true|false,
+      "iso_27018": true|false,
+      "iso_27017": true|false,
+      "iso_27002": true|false,
+      "finra": true|false,
+      "fisma": true|false,
+      "gaap": true|false,
+      "hipaa": true|false,
+      "isae_3402": true|false,
+      "itar": true|false,
+      "soc_1": true|false,
+      "soc_2": true|false,
+      "soc_3": true|false,
+      "sox": true|false,
+      "sp_800_53": true|false,
+      "ssae_18": true|false,
+      "safe_harbor": true|false,
+      "pci_dss_version": "e.g., '4', '3.2.1'",
+      "glba": true|false,
+      "fedramp_level": "e.g., 'High', 'Moderate', 'Low'",
+      "csa_star_level": "CSA STAR level if mentioned",
+      "certification": true|false,
+      "privacy_shield": true|false,
+      "ffiec": true|false,
+      "gapp": true|false,
+      "cobit": true|false,
+      "coppa": true|false,
+      "ferpa": true|false,
+      "hitrust_csf": true|false,
+      "jericho_forum_commandments": true|false,
+      "data_ownership": "Data ownership description",
+      "dmca": true|false,
+      "data_retention_policy": "e.g., 'Deleted immediately', 'Retained for 7 years'",
+      "gdpr_readiness_statement": "GDPR readiness statement URL or text",
+      "gdpr_right_to_erasure": true|false,
+      "gdpr_report_data_breaches": true|false,
+      "gdpr_data_protection": true|false,
+      "gdpr_user_ownership": true|false,
+      "other_standards": {"standard_name": "value"} for any international standards not listed above,
+      "source_document": "EXACT document title from AVAILABLE DOCUMENTS list above"
+    }
+  ]
+}
+
+Requirements:
+- Extract ALL compliance standards mentioned, including but not limited to:
+  * ISO Standards: ISO 27001, ISO 27018, ISO 27017, ISO 27002, ISO 9001, ISO 9000 series
+  * Financial/Accounting: FINRA, GAAP, SOX (Sarbanes-Oxley), FFIEC
+  * Security Frameworks: SOC 1, SOC 2, SOC 3, SSAE 18, ISAE 3402, SP 800-53, FedRAMP, CSA STAR, HITRUST CSF, Jericho Forum Commandments
+  * Healthcare: HIPAA, FERPA, COPPA
+  * Government: FISMA, ITAR, GLBA
+  * Privacy/Data Protection: GDPR, Privacy Shield, Safe Harbor, GAPP
+  * Payment Card: PCI DSS (all versions including PCI DSS version 4)
+  * IT Governance: COBIT
+- Extract ALL quality management standards (ISO 9001, ISO 9000 series, etc.)
+- Extract ALL security requirements (encryption, authentication, audit trails, etc.)
+- Extract ALL legal requirements (DMCA, data retention, GDPR rights, etc.)
+- Extract ALL applicable standards (international or industry-specific)
+- For standards not explicitly listed above, include them in the "other_standards" field
+- Only include boolean fields (true/false) if explicitly mentioned in the documents
+- Only include scores (0-10) if explicitly mentioned or can be inferred
+- **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
+- Return ONLY valid JSON, no markdown or explanation`
+
+      const response = await aiService.generate({
+        prompt,
+        provider: options.aiProvider!,
+        model: options.aiModel,
+        temperature: 0.3,
+        max_tokens: 4000 // Larger token limit due to comprehensive extraction
+      })
+
+      const parsed = this.parseAIResponse(response.content)
+      const complianceSecurityItems = parsed.compliance_security || []
+
+      // Resolve source_document_id for each item (STRICT: reject if missing)
+      const validItems: ComplianceSecurity[] = []
+      let rejectedCount = 0
+      
+      complianceSecurityItems.forEach((item: any) => {
+        const isValid = this.resolveSourceDocumentIdStrict(
+          item,
+          documentMap,
+          documents,
+          'COMPLIANCE-SECURITY',
+          item.title || item.type || 'Unnamed Compliance/Security Requirement'
+        )
+        
+        if (isValid) {
+          validItems.push(item)
+        } else {
+          rejectedCount++
+        }
+      })
+
+      if (rejectedCount > 0) {
+        logger.warn(`[EXTRACTION-COMPLIANCE-SECURITY] REJECTED ${rejectedCount} items without valid source_document_id (out of ${complianceSecurityItems.length} total)`)
+      }
+      
+      logger.info(`[EXTRACTION-COMPLIANCE-SECURITY] Extracted ${validItems.length} compliance/security items with valid source_document_id (${rejectedCount} rejected)`)
+
+      return validItems
+    } catch (error: unknown) {
+      logger.error('[EXTRACTION-COMPLIANCE-SECURITY] Extraction failed', {
         error: error instanceof Error ? error.message : String(error)
       })
       return []
@@ -5000,15 +5240,20 @@ Output valid JSON object with "performance_actuals" array only.`
     const values: any[] = []
     const placeholders: string[] = []
 
-    uniqueRisks.forEach((r, index) => {
-      const offset = index * 11
+      uniqueRisks.forEach((r, index) => {
+      const offset = index * 14  // Updated to 14 values per risk
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14})`
       )
       
+      // Validate placeholder count matches expected values count
+      const expectedValuesPerRisk = 14  // Updated: project_id, name, description, category, probability, impact, risk_level, mitigation_strategy, contingency_plan, owner, status, title, created_by, source_document_id
+      const expectedTotalValues = (index + 1) * expectedValuesPerRisk
+      
       // Map AI impact values to database CHECK constraint values
-      // DB allows: high, medium, low
+      // DB allows: high, medium, low (exact match required, case-sensitive)
       // AI returns: critical, very_high, high, medium, low
+      // IMPORTANT: Validate that impact is actually a risk level, not mitigation_strategy or other text
       const impactMap: Record<string, string> = {
         'critical': 'high',
         'very_high': 'high',
@@ -5017,30 +5262,266 @@ Output valid JSON object with "performance_actuals" array only.`
         'low': 'low',
         'very_low': 'low'
       }
-      const mappedImpact = impactMap[(r.impact || 'medium').toLowerCase()] || 'medium'
+      const rawImpact = String(r.impact || 'medium').toLowerCase().trim()
+      
+      // Check if impact looks like it might be mitigation_strategy or other text (too long)
+      let mappedImpact = 'medium' // Default
+      if (rawImpact.length <= 10 && impactMap[rawImpact]) {
+        mappedImpact = impactMap[rawImpact]
+      } else {
+        logger.warn(`[EXTRACTION-RISKS] Impact value looks invalid (too long or not a risk level): "${rawImpact}", defaulting to 'medium'`, {
+          title: r.title,
+          impact: r.impact,
+          impactLength: rawImpact.length
+        })
+      }
+      
+      // Map AI probability values to database CHECK constraint values
+      // DB allows: high, medium, low (exact match required, case-sensitive)
+      // AI returns: critical, very_high, high, medium, low
+      // IMPORTANT: Validate that probability is actually a risk level, not mitigation_strategy or other text
+      const probabilityMap: Record<string, string> = {
+        'critical': 'high',
+        'very_high': 'high',
+        'high': 'high',
+        'medium': 'medium',
+        'low': 'low',
+        'very_low': 'low'
+      }
+      const rawProbability = String(r.probability || 'medium').toLowerCase().trim()
+      
+      // Check if probability looks like it might be mitigation_strategy or other text (too long)
+      let mappedProbability = 'medium' // Default
+      if (rawProbability.length <= 10 && probabilityMap[rawProbability]) {
+        mappedProbability = probabilityMap[rawProbability]
+      } else {
+        logger.warn(`[EXTRACTION-RISKS] Probability value looks invalid (too long or not a risk level): "${rawProbability}", defaulting to 'medium'`, {
+          title: r.title,
+          probability: r.probability,
+          probabilityLength: rawProbability.length
+        })
+      }
+      
+      // Calculate risk_level from probability and impact
+      // High probability + High impact = High risk
+      // Medium probability + High impact = High risk
+      // High probability + Medium impact = High risk
+      // Otherwise use the higher of the two
+      // IMPORTANT: Must be exactly 'high', 'medium', or 'low' (case-sensitive, matches CHECK constraint)
+      let calculatedRiskLevel: string
+      if ((mappedProbability === 'high' && mappedImpact === 'high') ||
+          (mappedProbability === 'high' && mappedImpact === 'medium') ||
+          (mappedProbability === 'medium' && mappedImpact === 'high')) {
+        calculatedRiskLevel = 'high'
+      } else if ((mappedProbability === 'low' && mappedImpact === 'low')) {
+        calculatedRiskLevel = 'low'
+      } else {
+        calculatedRiskLevel = 'medium'
+      }
+      
+      // CRITICAL: Ensure risk_level is exactly one of the three allowed values (case-sensitive)
+      // Force to lowercase and validate against exact matches
+      calculatedRiskLevel = String(calculatedRiskLevel).toLowerCase().trim()
+      const validRiskLevels = ['high', 'medium', 'low']
+      if (!validRiskLevels.includes(calculatedRiskLevel)) {
+        logger.error(`[EXTRACTION-RISKS] Invalid calculated risk_level: "${calculatedRiskLevel}", defaulting to 'medium'`, {
+          title: r.title,
+          probability: r.probability,
+          impact: r.impact,
+          mappedProbability,
+          mappedImpact,
+          calculatedRiskLevel,
+          calculatedRiskLevelType: typeof calculatedRiskLevel,
+          calculatedRiskLevelLength: calculatedRiskLevel.length
+        })
+        calculatedRiskLevel = 'medium'
+      }
+      
+      // Final defensive check - ensure it's exactly one of the three values
+      if (calculatedRiskLevel !== 'high' && calculatedRiskLevel !== 'medium' && calculatedRiskLevel !== 'low') {
+        logger.error(`[EXTRACTION-RISKS] CRITICAL: risk_level still invalid after normalization: "${calculatedRiskLevel}", forcing to 'medium'`, {
+          title: r.title,
+          originalProbability: r.probability,
+          originalImpact: r.impact,
+          mappedProbability,
+          mappedImpact,
+          calculatedRiskLevel
+        })
+        calculatedRiskLevel = 'medium'
+      }
       
       // Resolve source_document_id
       const sourceDocumentId = (r as any).source_document_id || null
       
+      // Log final values for debugging
+      logger.debug(`[EXTRACTION-RISKS] Final risk values`, {
+        title: r.title,
+        probability: mappedProbability,
+        impact: mappedImpact,
+        risk_level: calculatedRiskLevel,
+        isValid: ['high', 'medium', 'low'].includes(calculatedRiskLevel)
+      })
+      
+      // CRITICAL: Final validation before pushing to values array
+      // Ensure all three risk-related values are exactly 'high', 'medium', or 'low'
+      // Remove any whitespace, ensure lowercase, and validate
+      const cleanProbability = String(mappedProbability || 'medium').toLowerCase().trim()
+      const cleanImpact = String(mappedImpact || 'medium').toLowerCase().trim()
+      const cleanRiskLevel = String(calculatedRiskLevel || 'medium').toLowerCase().trim()
+      
+      const finalProbability = (['high', 'medium', 'low'].includes(cleanProbability)) ? cleanProbability : 'medium'
+      const finalImpact = (['high', 'medium', 'low'].includes(cleanImpact)) ? cleanImpact : 'medium'
+      const finalRiskLevel = (['high', 'medium', 'low'].includes(cleanRiskLevel)) ? cleanRiskLevel : 'medium'
+      
+      // CRITICAL: Double-check that finalRiskLevel is exactly one of the three valid values
+      // This is a defensive check to prevent any edge cases
+      if (finalRiskLevel !== 'high' && finalRiskLevel !== 'medium' && finalRiskLevel !== 'low') {
+        logger.error(`[EXTRACTION-RISKS] CRITICAL: finalRiskLevel is still invalid: "${finalRiskLevel}", forcing to 'medium'`, {
+          title: r.title,
+          cleanRiskLevel,
+          calculatedRiskLevel,
+          finalRiskLevel
+        })
+        // Force to medium as last resort
+        const forcedRiskLevel = 'medium'
+        values.push(
+          projectId,
+          r.title || '',        // name column
+          r.description || '',
+          r.category || null,
+          finalProbability,  // Use validated probability value
+          finalImpact,       // Use validated impact value
+          forcedRiskLevel,    // Use forced risk_level value
+          r.mitigation_strategy || null,
+          r.contingency_plan || null,
+          r.owner || null,      // owner column
+          'identified',        // status column (default)
+          r.title || '',        // title column (after name)
+          userId,              // created_by
+          sourceDocumentId     // source_document_id
+        )
+        return // Skip to next risk
+      }
+      
+      // Log if we had to fix any values
+      if (finalProbability !== mappedProbability || finalImpact !== mappedImpact || finalRiskLevel !== calculatedRiskLevel) {
+        logger.error(`[EXTRACTION-RISKS] Had to fix invalid risk values before insert`, {
+          title: r.title,
+          originalProbability: mappedProbability,
+          originalImpact: mappedImpact,
+          originalRiskLevel: calculatedRiskLevel,
+          finalProbability,
+          finalImpact,
+          finalRiskLevel
+        })
+      }
+      
+      // Final sanity check - ensure risk_level is exactly 'high', 'medium', or 'low' (no extra characters)
+      if (finalRiskLevel.length > 10 || !/^(high|medium|low)$/.test(finalRiskLevel)) {
+        logger.error(`[EXTRACTION-RISKS] CRITICAL: risk_level fails regex validation: "${finalRiskLevel}" (length: ${finalRiskLevel.length}), using 'medium'`, {
+          title: r.title,
+          finalRiskLevel,
+          finalRiskLevelLength: finalRiskLevel.length,
+          finalRiskLevelCharCodes: finalRiskLevel.split('').map(c => c.charCodeAt(0))
+        })
+        values.push(
+          projectId,
+          r.title || '',        // name column
+          r.description || '',
+          r.category || null,
+          finalProbability,
+          finalImpact,
+          'medium',    // Force to medium
+          r.mitigation_strategy || null,
+          r.contingency_plan || null,
+          r.owner || null,      // owner column
+          'identified',        // status column (default)
+          r.title || '',        // title column (after name)
+          userId,              // created_by
+          sourceDocumentId     // source_document_id
+        )
+        return // Skip to next risk
+      }
+      
       values.push(
         projectId,
-        r.title,        // For title column
-        r.title,        // For name column (populate both with same value)
-        r.description,
-        r.category,
-        r.probability,
-        mappedImpact,   // Use mapped impact value
+        r.title || '',        // name column (required, comes first)
+        r.description || '',
+        r.category || null,
+        finalProbability,  // Use validated probability value
+        finalImpact,       // Use validated impact value
+        finalRiskLevel,    // Use validated risk_level value
         r.mitigation_strategy || null,
         r.contingency_plan || null,
-        sourceDocumentId,
-        userId
+        r.owner || null,      // owner column
+        'identified',        // status column (default value)
+        r.title || '',        // title column (comes after name in schema)
+        userId,              // created_by
+        sourceDocumentId     // source_document_id
       )
     })
 
+    // CRITICAL: Final validation pass - check all values before insert
+    // Values array structure: [projectId, name, description, category, probability, impact, risk_level, mitigation_strategy, contingency_plan, owner, status, title, created_by, source_document_id]
+    // For each risk (14 values per risk), validate probability (index 4), impact (index 5), risk_level (index 6)
+    const validRiskLevels = ['high', 'medium', 'low']
+    for (let i = 0; i < uniqueRisks.length; i++) {
+      const probabilityIndex = i * 14 + 4  // Updated index: 0=projectId, 1=name, 2=description, 3=category, 4=probability
+      const impactIndex = i * 14 + 5       // Updated index: 5=impact
+      const riskLevelIndex = i * 14 + 6    // Updated index: 6=risk_level
+      
+      if (probabilityIndex < values.length && impactIndex < values.length && riskLevelIndex < values.length) {
+        const prob = String(values[probabilityIndex] || '').toLowerCase().trim()
+        const impact = String(values[impactIndex] || '').toLowerCase().trim()
+        const riskLevel = String(values[riskLevelIndex] || '').toLowerCase().trim()
+        
+        // Fix any invalid values
+        if (!validRiskLevels.includes(prob)) {
+          logger.error(`[EXTRACTION-RISKS] Invalid probability value in values array: "${prob}", fixing to 'medium'`, {
+            index: probabilityIndex,
+            riskIndex: i,
+            title: uniqueRisks[i].title
+          })
+          values[probabilityIndex] = 'medium'
+        }
+        
+        if (!validRiskLevels.includes(impact)) {
+          logger.error(`[EXTRACTION-RISKS] Invalid impact value in values array: "${impact}", fixing to 'medium'`, {
+            index: impactIndex,
+            riskIndex: i,
+            title: uniqueRisks[i].title
+          })
+          values[impactIndex] = 'medium'
+        }
+        
+        if (!validRiskLevels.includes(riskLevel)) {
+          logger.error(`[EXTRACTION-RISKS] Invalid risk_level value in values array: "${riskLevel}", fixing to 'medium'`, {
+            index: riskLevelIndex,
+            riskIndex: i,
+            title: uniqueRisks[i].title,
+            probability: prob,
+            impact: impact
+          })
+          // Recalculate risk_level based on probability and impact
+          const fixedProb = validRiskLevels.includes(prob) ? prob : 'medium'
+          const fixedImpact = validRiskLevels.includes(impact) ? impact : 'medium'
+          let fixedRiskLevel = 'medium'
+          if ((fixedProb === 'high' && fixedImpact === 'high') ||
+              (fixedProb === 'high' && fixedImpact === 'medium') ||
+              (fixedProb === 'medium' && fixedImpact === 'high')) {
+            fixedRiskLevel = 'high'
+          } else if (fixedProb === 'low' && fixedImpact === 'low') {
+            fixedRiskLevel = 'low'
+          }
+          values[riskLevelIndex] = fixedRiskLevel
+        }
+      }
+    }
+
     await client.query(`
       INSERT INTO risks (
-        project_id, title, name, description, category, probability, impact,
-        mitigation_strategy, contingency_plan, source_document_id, created_by
+        project_id, name, description, category, probability, impact, risk_level,
+        mitigation_strategy, contingency_plan, owner, status, title, created_by, source_document_id
       )
       VALUES ${placeholders.join(', ')}
       ON CONFLICT (project_id, name) DO UPDATE SET
@@ -5049,6 +5530,7 @@ Output valid JSON object with "performance_actuals" array only.`
         category = EXCLUDED.category,
         probability = EXCLUDED.probability,
         impact = EXCLUDED.impact,
+        risk_level = EXCLUDED.risk_level,
         mitigation_strategy = EXCLUDED.mitigation_strategy,
         contingency_plan = EXCLUDED.contingency_plan,
         source_document_id = COALESCE(EXCLUDED.source_document_id, risks.source_document_id),
@@ -5759,6 +6241,274 @@ Output valid JSON object with "performance_actuals" array only.`
     `, values)
 
     logger.info(`[EXTRACTION] Saved ${uniqueQualityStandards.length} quality standards (deduplicated from ${qualityStandards.length})`)
+  }
+
+  /**
+   * Save compliance security requirements to database
+   */
+  private async saveComplianceSecurity(
+    client: PoolClient,
+    projectId: string,
+    userId: string,
+    complianceSecurityItems: ComplianceSecurity[]
+  ): Promise<void> {
+    if (complianceSecurityItems.length === 0) {
+      logger.info('[EXTRACTION] No compliance_security items to save, skipping')
+      return
+    }
+
+    // Deduplicate by title (AI sometimes extracts same requirement multiple times)
+    const deduplicatedMap = new Map<string, ComplianceSecurity>()
+    
+    complianceSecurityItems.forEach(item => {
+      const normalizedTitle = (item.title || '').trim().toLowerCase()
+      
+      if (!normalizedTitle) {
+        // Skip items without titles
+        return
+      }
+      
+      if (!deduplicatedMap.has(normalizedTitle)) {
+        deduplicatedMap.set(normalizedTitle, item)
+      } else {
+        // Duplicate found - merge details (keep most detailed version)
+        const existing = deduplicatedMap.get(normalizedTitle)!
+        const merged: ComplianceSecurity = {
+          ...existing,
+          ...item,
+          // Merge boolean fields (if new value is true, keep it)
+          multi_factor_authentication: item.multi_factor_authentication ?? existing.multi_factor_authentication,
+          ip_address_restriction: item.ip_address_restriction ?? existing.ip_address_restriction,
+          // Merge scores (keep higher score)
+          security_score: item.security_score !== undefined && existing.security_score !== undefined
+            ? Math.max(item.security_score, existing.security_score)
+            : item.security_score ?? existing.security_score,
+          compliance_score: item.compliance_score !== undefined && existing.compliance_score !== undefined
+            ? Math.max(item.compliance_score, existing.compliance_score)
+            : item.compliance_score ?? existing.compliance_score,
+        }
+        deduplicatedMap.set(normalizedTitle, merged)
+        logger.debug(`[EXTRACTION-COMPLIANCE-SECURITY] Merged duplicate item: "${item.title}"`)
+      }
+    })
+    
+    const uniqueItems = Array.from(deduplicatedMap.values())
+    
+    if (uniqueItems.length < complianceSecurityItems.length) {
+      logger.info(`[EXTRACTION-COMPLIANCE-SECURITY] Deduplicated ${complianceSecurityItems.length} → ${uniqueItems.length} items`)
+    }
+
+    const values: any[] = []
+    const placeholders: string[] = []
+
+    uniqueItems.forEach((item, index) => {
+      const offset = index * 70 // Large number of columns
+      placeholders.push(
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19}, $${offset + 20}, $${offset + 21}, $${offset + 22}, $${offset + 23}, $${offset + 24}, $${offset + 25}, $${offset + 26}, $${offset + 27}, $${offset + 28}, $${offset + 29}, $${offset + 30}, $${offset + 31}, $${offset + 32}, $${offset + 33}, $${offset + 34}, $${offset + 35}, $${offset + 36}, $${offset + 37}, $${offset + 38}, $${offset + 39}, $${offset + 40}, $${offset + 41}, $${offset + 42}, $${offset + 43}, $${offset + 44}, $${offset + 45}, $${offset + 46}, $${offset + 47}, $${offset + 48}, $${offset + 49}, $${offset + 50}, $${offset + 51}, $${offset + 52}, $${offset + 53}, $${offset + 54}, $${offset + 55}, $${offset + 56}, $${offset + 57}, $${offset + 58}, $${offset + 59}, $${offset + 60}, $${offset + 61}, $${offset + 62}, $${offset + 63}, $${offset + 64}, $${offset + 65}, $${offset + 66}, $${offset + 67}, $${offset + 68}, $${offset + 69}, $${offset + 70})`
+      )
+      
+      // Resolve source_document_id
+      const sourceDocumentId = (item as any).source_document_id || null
+      
+      // Parse latest_breach date if provided as string
+      let latestBreachDate: Date | null = null
+      if (item.latest_breach) {
+        const parsed = new Date(item.latest_breach)
+        if (!isNaN(parsed.getTime())) {
+          latestBreachDate = parsed
+        }
+      }
+      
+      // Ensure scores are within valid range
+      const securityScore = item.security_score !== undefined 
+        ? Math.max(0, Math.min(10, item.security_score)) 
+        : null
+      const complianceScore = item.compliance_score !== undefined 
+        ? Math.max(0, Math.min(10, item.compliance_score)) 
+        : null
+      
+      // Ensure category is valid
+      const category = ['compliance', 'security', 'legal', 'standard'].includes(item.category)
+        ? item.category
+        : 'standard'
+      
+      // Ensure status is valid
+      const status = ['applicable', 'not_applicable', 'partial', 'compliant', 'non_compliant'].includes(item.status || '')
+        ? (item.status || 'applicable')
+        : 'applicable'
+      
+      values.push(
+        projectId,
+        item.title,
+        category,
+        item.type || null,
+        item.description || null,
+        item.requirement_text || null,
+        status,
+        securityScore,
+        latestBreachDate,
+        item.data_at_rest_encryption || null,
+        item.multi_factor_authentication ?? null,
+        item.ip_address_restriction ?? null,
+        item.user_audit_trail ?? null,
+        item.admin_audit_trail ?? null,
+        item.data_audit_trail ?? null,
+        item.user_can_upload_data ?? null,
+        item.data_classification ?? null,
+        item.remember_password ?? null,
+        item.user_roles_support ?? null,
+        item.file_sharing ?? null,
+        item.valid_certificate_name || null,
+        item.trusted_certificate ?? null,
+        item.encryption_protocol || null,
+        item.heartbleed_patched ?? null,
+        item.http_security_headers ?? null,
+        item.supports_saml ?? null,
+        item.protected_against_drown ?? null,
+        item.penetration_testing ?? null,
+        item.requires_user_authentication ?? null,
+        item.password_policy || null,
+        // Compliance Standards
+        item.iso_27001 ?? null,
+        item.iso_27018 ?? null,
+        item.iso_27017 ?? null,
+        item.iso_27002 ?? null,
+        item.finra ?? null,
+        item.fisma ?? null,
+        item.gaap ?? null,
+        item.hipaa ?? null,
+        item.isae_3402 ?? null,
+        item.itar ?? null,
+        item.soc_1 ?? null,
+        item.soc_2 ?? null,
+        item.soc_3 ?? null,
+        item.sox ?? null,
+        item.sp_800_53 ?? null,
+        item.ssae_18 ?? null,
+        item.safe_harbor ?? null,
+        item.pci_dss_version || null,
+        item.glba ?? null,
+        item.fedramp_level || null,
+        item.csa_star_level || null,
+        item.certification ?? null,
+        item.privacy_shield ?? null,
+        item.ffiec ?? null,
+        item.gapp ?? null,
+        item.cobit ?? null,
+        item.coppa ?? null,
+        item.ferpa ?? null,
+        item.hitrust_csf ?? null,
+        item.jericho_forum_commandments ?? null,
+        // Legal Requirements
+        item.data_ownership || null,
+        item.dmca ?? null,
+        item.data_retention_policy || null,
+        item.gdpr_readiness_statement || null,
+        item.gdpr_right_to_erasure ?? null,
+        item.gdpr_report_data_breaches ?? null,
+        item.gdpr_data_protection ?? null,
+        item.gdpr_user_ownership ?? null,
+        // Other Standards (as JSONB)
+        item.other_standards ? JSON.stringify(item.other_standards) : null,
+        complianceScore,
+        sourceDocumentId,
+        userId
+      )
+    })
+
+    await client.query(`
+      INSERT INTO compliance_security (
+        project_id, title, category, type, description, requirement_text, status,
+        security_score, latest_breach, data_at_rest_encryption, multi_factor_authentication,
+        ip_address_restriction, user_audit_trail, admin_audit_trail, data_audit_trail,
+        user_can_upload_data, data_classification, remember_password, user_roles_support,
+        file_sharing, valid_certificate_name, trusted_certificate, encryption_protocol,
+        heartbleed_patched, http_security_headers, supports_saml, protected_against_drown,
+        penetration_testing, requires_user_authentication, password_policy,
+        iso_27001, iso_27018, iso_27017, iso_27002, finra, fisma, gaap, hipaa,
+        isae_3402, itar, soc_1, soc_2, soc_3, sox, sp_800_53, ssae_18, safe_harbor,
+        pci_dss_version, glba, fedramp_level, csa_star_level, certification,
+        privacy_shield, ffiec, gapp, cobit, coppa, ferpa, hitrust_csf,
+        jericho_forum_commandments, data_ownership, dmca, data_retention_policy,
+        gdpr_readiness_statement, gdpr_right_to_erasure, gdpr_report_data_breaches,
+        gdpr_data_protection, gdpr_user_ownership, other_standards, compliance_score,
+        source_document_id, created_by
+      )
+      VALUES ${placeholders.join(', ')}
+      ON CONFLICT (project_id, title) DO UPDATE SET
+        category = EXCLUDED.category,
+        type = EXCLUDED.type,
+        description = COALESCE(EXCLUDED.description, compliance_security.description),
+        requirement_text = COALESCE(EXCLUDED.requirement_text, compliance_security.requirement_text),
+        status = EXCLUDED.status,
+        security_score = COALESCE(EXCLUDED.security_score, compliance_security.security_score),
+        latest_breach = COALESCE(EXCLUDED.latest_breach, compliance_security.latest_breach),
+        data_at_rest_encryption = COALESCE(EXCLUDED.data_at_rest_encryption, compliance_security.data_at_rest_encryption),
+        multi_factor_authentication = COALESCE(EXCLUDED.multi_factor_authentication, compliance_security.multi_factor_authentication),
+        ip_address_restriction = COALESCE(EXCLUDED.ip_address_restriction, compliance_security.ip_address_restriction),
+        user_audit_trail = COALESCE(EXCLUDED.user_audit_trail, compliance_security.user_audit_trail),
+        admin_audit_trail = COALESCE(EXCLUDED.admin_audit_trail, compliance_security.admin_audit_trail),
+        data_audit_trail = COALESCE(EXCLUDED.data_audit_trail, compliance_security.data_audit_trail),
+        user_can_upload_data = COALESCE(EXCLUDED.user_can_upload_data, compliance_security.user_can_upload_data),
+        data_classification = COALESCE(EXCLUDED.data_classification, compliance_security.data_classification),
+        remember_password = COALESCE(EXCLUDED.remember_password, compliance_security.remember_password),
+        user_roles_support = COALESCE(EXCLUDED.user_roles_support, compliance_security.user_roles_support),
+        file_sharing = COALESCE(EXCLUDED.file_sharing, compliance_security.file_sharing),
+        valid_certificate_name = COALESCE(EXCLUDED.valid_certificate_name, compliance_security.valid_certificate_name),
+        trusted_certificate = COALESCE(EXCLUDED.trusted_certificate, compliance_security.trusted_certificate),
+        encryption_protocol = COALESCE(EXCLUDED.encryption_protocol, compliance_security.encryption_protocol),
+        heartbleed_patched = COALESCE(EXCLUDED.heartbleed_patched, compliance_security.heartbleed_patched),
+        http_security_headers = COALESCE(EXCLUDED.http_security_headers, compliance_security.http_security_headers),
+        supports_saml = COALESCE(EXCLUDED.supports_saml, compliance_security.supports_saml),
+        protected_against_drown = COALESCE(EXCLUDED.protected_against_drown, compliance_security.protected_against_drown),
+        penetration_testing = COALESCE(EXCLUDED.penetration_testing, compliance_security.penetration_testing),
+        requires_user_authentication = COALESCE(EXCLUDED.requires_user_authentication, compliance_security.requires_user_authentication),
+        password_policy = COALESCE(EXCLUDED.password_policy, compliance_security.password_policy),
+        iso_27001 = COALESCE(EXCLUDED.iso_27001, compliance_security.iso_27001),
+        iso_27018 = COALESCE(EXCLUDED.iso_27018, compliance_security.iso_27018),
+        iso_27017 = COALESCE(EXCLUDED.iso_27017, compliance_security.iso_27017),
+        iso_27002 = COALESCE(EXCLUDED.iso_27002, compliance_security.iso_27002),
+        finra = COALESCE(EXCLUDED.finra, compliance_security.finra),
+        fisma = COALESCE(EXCLUDED.fisma, compliance_security.fisma),
+        gaap = COALESCE(EXCLUDED.gaap, compliance_security.gaap),
+        hipaa = COALESCE(EXCLUDED.hipaa, compliance_security.hipaa),
+        isae_3402 = COALESCE(EXCLUDED.isae_3402, compliance_security.isae_3402),
+        itar = COALESCE(EXCLUDED.itar, compliance_security.itar),
+        soc_1 = COALESCE(EXCLUDED.soc_1, compliance_security.soc_1),
+        soc_2 = COALESCE(EXCLUDED.soc_2, compliance_security.soc_2),
+        soc_3 = COALESCE(EXCLUDED.soc_3, compliance_security.soc_3),
+        sox = COALESCE(EXCLUDED.sox, compliance_security.sox),
+        sp_800_53 = COALESCE(EXCLUDED.sp_800_53, compliance_security.sp_800_53),
+        ssae_18 = COALESCE(EXCLUDED.ssae_18, compliance_security.ssae_18),
+        safe_harbor = COALESCE(EXCLUDED.safe_harbor, compliance_security.safe_harbor),
+        pci_dss_version = COALESCE(EXCLUDED.pci_dss_version, compliance_security.pci_dss_version),
+        glba = COALESCE(EXCLUDED.glba, compliance_security.glba),
+        fedramp_level = COALESCE(EXCLUDED.fedramp_level, compliance_security.fedramp_level),
+        csa_star_level = COALESCE(EXCLUDED.csa_star_level, compliance_security.csa_star_level),
+        certification = COALESCE(EXCLUDED.certification, compliance_security.certification),
+        privacy_shield = COALESCE(EXCLUDED.privacy_shield, compliance_security.privacy_shield),
+        ffiec = COALESCE(EXCLUDED.ffiec, compliance_security.ffiec),
+        gapp = COALESCE(EXCLUDED.gapp, compliance_security.gapp),
+        cobit = COALESCE(EXCLUDED.cobit, compliance_security.cobit),
+        coppa = COALESCE(EXCLUDED.coppa, compliance_security.coppa),
+        ferpa = COALESCE(EXCLUDED.ferpa, compliance_security.ferpa),
+        hitrust_csf = COALESCE(EXCLUDED.hitrust_csf, compliance_security.hitrust_csf),
+        jericho_forum_commandments = COALESCE(EXCLUDED.jericho_forum_commandments, compliance_security.jericho_forum_commandments),
+        data_ownership = COALESCE(EXCLUDED.data_ownership, compliance_security.data_ownership),
+        dmca = COALESCE(EXCLUDED.dmca, compliance_security.dmca),
+        data_retention_policy = COALESCE(EXCLUDED.data_retention_policy, compliance_security.data_retention_policy),
+        gdpr_readiness_statement = COALESCE(EXCLUDED.gdpr_readiness_statement, compliance_security.gdpr_readiness_statement),
+        gdpr_right_to_erasure = COALESCE(EXCLUDED.gdpr_right_to_erasure, compliance_security.gdpr_right_to_erasure),
+        gdpr_report_data_breaches = COALESCE(EXCLUDED.gdpr_report_data_breaches, compliance_security.gdpr_report_data_breaches),
+        gdpr_data_protection = COALESCE(EXCLUDED.gdpr_data_protection, compliance_security.gdpr_data_protection),
+        gdpr_user_ownership = COALESCE(EXCLUDED.gdpr_user_ownership, compliance_security.gdpr_user_ownership),
+        other_standards = COALESCE(EXCLUDED.other_standards, compliance_security.other_standards),
+        compliance_score = COALESCE(EXCLUDED.compliance_score, compliance_security.compliance_score),
+        source_document_id = COALESCE(EXCLUDED.source_document_id, compliance_security.source_document_id),
+        updated_at = CURRENT_TIMESTAMP
+    `, values)
+
+    logger.info(`[EXTRACTION] Saved ${uniqueItems.length} compliance/security items (deduplicated from ${complianceSecurityItems.length})`)
   }
 
   /**
@@ -7413,6 +8163,12 @@ Output valid JSON object with "performance_actuals" array only.`
       logger.info(`[EXTRACTION-RISK_RESPONSES] Deduplicated ${riskResponses.length} → ${uniqueRiskResponses.length} risk responses`)
     }
 
+    // Early return if no valid responses after deduplication
+    if (uniqueRiskResponses.length === 0) {
+      logger.info('[EXTRACTION-RISK_RESPONSES] No valid risk responses to save after deduplication')
+      return
+    }
+
     const values: any[] = []
     const placeholders: string[] = []
 
@@ -7460,9 +8216,14 @@ Output valid JSON object with "performance_actuals" array only.`
       )
     })
 
+    // Validate placeholder/value alignment
+    const expectedValuesLength = uniqueRiskResponses.length * 13
+    if (values.length !== expectedValuesLength) {
+      throw new Error(`Placeholder/value misalignment: ${values.length} values but ${uniqueRiskResponses.length} placeholders (expected ${expectedValuesLength} values)`)
+    }
+
     await client.query(
-      `
-      INSERT INTO risk_responses (
+      `INSERT INTO risk_responses (
         project_id, risk_id, risk_title, response_date, action_taken, effectiveness,
         cost_of_response, residual_risk_level, owner, notes, source_document_id,
         created_by, updated_by
@@ -7478,8 +8239,7 @@ Output valid JSON object with "performance_actuals" array only.`
         notes = EXCLUDED.notes,
         source_document_id = COALESCE(EXCLUDED.source_document_id, risk_responses.source_document_id),
         updated_by = EXCLUDED.updated_by,
-        updated_at = CURRENT_TIMESTAMP
-    `,
+        updated_at = CURRENT_TIMESTAMP`,
       values
     )
 
@@ -7573,9 +8333,13 @@ Output valid JSON object with "performance_actuals" array only.`
       }
 
       // Calculate offset based on valid item count (not forEach index)
-      const offset = validItemCount * 18
+      // 19 columns: project_id, entity_type, entity_id, entity_name, planned_start_date, actual_start_date, 
+      // planned_end_date, actual_end_date, planned_cost, actual_cost, planned_progress_percent, 
+      // actual_progress_percent, quality_score, defects_found, rework_hours, measurement_date, 
+      // measurement_method, measured_by, notes
+      const offset = validItemCount * 19
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19})`
       )
 
       const notesSegments = []
@@ -7618,14 +8382,14 @@ Output valid JSON object with "performance_actuals" array only.`
       return
     }
 
-    // Verify alignment: values.length should equal placeholders.length * 18
-    if (values.length !== placeholders.length * 18) {
+    // Verify alignment: values.length should equal placeholders.length * 19
+    if (values.length !== placeholders.length * 19) {
       logger.error('[EXTRACTION] Placeholder/value misalignment detected', {
         valuesLength: values.length,
         placeholdersLength: placeholders.length,
-        expectedValuesLength: placeholders.length * 18
+        expectedValuesLength: placeholders.length * 19
       })
-      throw new Error(`Placeholder/value misalignment: ${values.length} values but ${placeholders.length} placeholders (expected ${placeholders.length * 18} values)`)
+      throw new Error(`Placeholder/value misalignment: ${values.length} values but ${placeholders.length} placeholders (expected ${placeholders.length * 19} values)`)
     }
 
     await client.query(
@@ -7770,6 +8534,9 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'quality_standards':
         entities = await this.extractQualityStandards(documents, projectId, extractionOptions, documentMap, documentList)
         break
+      case 'compliance_security':
+        entities = await this.extractComplianceSecurity(documents, projectId, extractionOptions, documentMap, documentList)
+        break
       case 'deliverables':
         entities = await this.extractDeliverables(documents, projectId, extractionOptions, documentMap, documentList)
         break
@@ -7907,6 +8674,9 @@ Output valid JSON object with "performance_actuals" array only.`
           break
         case 'quality_standards':
           await this.saveQualityStandards(client, projectId, userId, entities)
+          break
+        case 'compliance_security':
+          await this.saveComplianceSecurity(client, projectId, userId, entities)
           break
         case 'deliverables':
           await this.saveDeliverables(client, projectId, userId, entities)

@@ -43,6 +43,17 @@ interface QualityIssue {
   recommendation?: string
 }
 
+interface ComplianceMetrics {
+  pmbokGuide: number
+  gdpr: number
+  hipaa: number
+  soc2: number
+  industryStandards: number
+  bestPractices: number
+  templateAdherence: number
+  overallComplianceRating: number
+}
+
 interface QualityAudit {
   id: string
   document_id: string
@@ -66,6 +77,7 @@ interface QualityAudit {
   analysis_cost: number
   analysis_time: number
   audited_at: string
+  compliance_metrics?: ComplianceMetrics
 }
 
 export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProps) {
@@ -190,8 +202,11 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
             </div>
 
             <Tabs defaultValue="scores" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="scores">Scores</TabsTrigger>
+                <TabsTrigger value="compliance">
+                  Compliance {audit.compliance_metrics && '✓'}
+                </TabsTrigger>
                 <TabsTrigger value="issues">
                   Issues {audit.issues.length > 0 && `(${audit.issues.length})`}
                 </TabsTrigger>
@@ -252,6 +267,88 @@ export function QualityAuditModal({ documentId, onClose }: QualityAuditModalProp
                   weight="10%"
                   finding={audit.findings.contextRelevance}
                 />
+              </TabsContent>
+
+              {/* Compliance Metrics Tab */}
+              <TabsContent value="compliance" className="space-y-4">
+                <h3 className="font-semibold text-lg mb-4">Compliance Metrics</h3>
+                
+                {audit.compliance_metrics ? (
+                  <>
+                    {/* Overall Compliance Rating */}
+                    <div className="p-6 bg-gradient-to-br from-purple-50 to-indigo-50 rounded-lg border border-purple-200 mb-6">
+                      <div className="text-center">
+                        <div className={`text-5xl font-bold ${getScoreColor(audit.compliance_metrics.overallComplianceRating)} mb-2`}>
+                          {audit.compliance_metrics.overallComplianceRating}%
+                        </div>
+                        <div className="text-xl font-semibold text-gray-700">Overall Compliance Rating</div>
+                        <p className="text-sm text-gray-600 mt-2">
+                          Weighted average of all compliance standards
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Individual Compliance Metrics */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <ComplianceMetricCard
+                        name="PMBOK Guide"
+                        description="PMBOK Guide compliance"
+                        score={audit.compliance_metrics.pmbokGuide}
+                        icon="📘"
+                      />
+                      
+                      <ComplianceMetricCard
+                        name="GDPR"
+                        description="General Data Protection Regulation"
+                        score={audit.compliance_metrics.gdpr}
+                        icon="🔒"
+                      />
+                      
+                      <ComplianceMetricCard
+                        name="HIPAA"
+                        description="Health Insurance Portability and Accountability Act"
+                        score={audit.compliance_metrics.hipaa}
+                        icon="🏥"
+                      />
+                      
+                      <ComplianceMetricCard
+                        name="SOC 2"
+                        description="Service Organization Control 2"
+                        score={audit.compliance_metrics.soc2}
+                        icon="🛡️"
+                      />
+                      
+                      <ComplianceMetricCard
+                        name="Industry Standards"
+                        description="ISO, ANSI, IEEE, NIST, CMMI, ITIL, COBIT"
+                        score={audit.compliance_metrics.industryStandards}
+                        icon="⭐"
+                      />
+                      
+                      <ComplianceMetricCard
+                        name="Best Practices"
+                        description="Industry best practices adherence"
+                        score={audit.compliance_metrics.bestPractices}
+                        icon="✨"
+                      />
+                      
+                      <ComplianceMetricCard
+                        name="Template Adherence"
+                        description="Template structure compliance"
+                        score={audit.compliance_metrics.templateAdherence}
+                        icon="📋"
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <Alert>
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertDescription>
+                      Compliance metrics are not available for this document. 
+                      They are automatically calculated for newly generated documents.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </TabsContent>
 
               {/* Issues Tab */}
@@ -395,13 +492,7 @@ function QualityMetricCard({
         </div>
       </div>
       
-      <div className="relative">
-        <Progress value={score} className="h-2" />
-        <div 
-          className={`absolute top-0 left-0 h-2 rounded-full transition-all ${getProgressColor(score)}`}
-          style={{ width: `${score}%` }}
-        />
-      </div>
+      <Progress value={score} className="h-2" />
       
       {finding && (
         <p className="text-sm text-gray-600 mt-3 italic">{finding}</p>
@@ -464,6 +555,54 @@ function IssueCard({ issue }: { issue: QualityIssue }) {
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Compliance Metric Card Component
+ */
+function ComplianceMetricCard({
+  name,
+  description,
+  score,
+  icon
+}: {
+  name: string
+  description: string
+  score: number
+  icon: string
+}) {
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return 'text-green-600'
+    if (score >= 80) return 'text-green-500'
+    if (score >= 70) return 'text-yellow-600'
+    if (score >= 60) return 'text-orange-600'
+    return 'text-red-600'
+  }
+
+  const getProgressColor = (score: number) => {
+    if (score >= 90) return 'bg-green-500'
+    if (score >= 80) return 'bg-green-400'
+    if (score >= 70) return 'bg-yellow-500'
+    if (score >= 60) return 'bg-orange-500'
+    return 'bg-red-500'
+  }
+
+  return (
+    <div className="p-4 border rounded-lg hover:bg-gray-50 transition-colors">
+      <div className="flex items-start gap-3 mb-3">
+        <div className="text-2xl">{icon}</div>
+        <div className="flex-1">
+          <h4 className="font-semibold text-base">{name}</h4>
+          <p className="text-xs text-gray-500">{description}</p>
+        </div>
+        <div className={`text-xl font-bold ${getScoreColor(score)}`}>
+          {score}%
+        </div>
+      </div>
+      
+      <Progress value={score} className="h-2" />
     </div>
   )
 }

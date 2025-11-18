@@ -950,12 +950,14 @@ Remember: Your audit helps improve future document generation, so be detailed an
 
   /**
    * Get quality audit for a document
+   * Also includes compliance metrics from generation_metadata if available
    */
   async getDocumentAudit(documentId: string): Promise<any> {
     const result = await pool.query(
       `SELECT qa.*, 
               COALESCE(d.title, d.name) as document_title,
-              t.name as document_type
+              t.name as document_type,
+              d.generation_metadata
        FROM quality_audits qa
        JOIN documents d ON qa.document_id = d.id
        LEFT JOIN templates t ON d.template_id = t.id
@@ -969,7 +971,27 @@ Remember: Your audit helps improve future document generation, so be detailed an
       return null
     }
 
-    return result.rows[0]
+    const audit = result.rows[0]
+    
+    // Extract compliance metrics from generation_metadata if available
+    if (audit.generation_metadata) {
+      try {
+        const metadata = typeof audit.generation_metadata === 'string' 
+          ? JSON.parse(audit.generation_metadata) 
+          : audit.generation_metadata
+        
+        if (metadata.complianceMetrics) {
+          audit.compliance_metrics = metadata.complianceMetrics
+        }
+      } catch (error) {
+        logger.warn('[QUALITY-AUDIT] Failed to parse compliance metrics from generation_metadata', {
+          documentId,
+          error: error instanceof Error ? error.message : String(error)
+        })
+      }
+    }
+
+    return audit
   }
 
   /**

@@ -42,16 +42,35 @@ router.get('/', async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const result = await pool.query(`
-      SELECT id, name, provider_type, configuration, is_active, priority, created_at, updated_at
+      SELECT id, name, provider_type, configuration, is_active, priority, 
+             available_models, default_model, created_at, updated_at
       FROM ai_providers 
       ORDER BY priority ASC, name ASC
     `)
 
     const providers = result.rows.map(row => {
-      // Get configured models or fallback to defaults
+      // Parse available_models from JSONB column (synced via Model Discovery)
+      let availableModels: string[] = []
+      if (row.available_models) {
+        if (Array.isArray(row.available_models)) {
+          availableModels = row.available_models
+        } else if (typeof row.available_models === 'string') {
+          try {
+            availableModels = JSON.parse(row.available_models)
+          } catch {
+            availableModels = []
+          }
+        }
+      }
+      
+      // Fallback to configuration.models or default models if available_models is empty
       const configuredModels = row.configuration?.models || []
       const fallbackModels = getDefaultModels(row.provider_type)
-      const models = configuredModels.length > 0 ? configuredModels : fallbackModels
+      
+      // Use available_models if it has data, otherwise fall back
+      const models = availableModels.length > 0 
+        ? availableModels 
+        : (configuredModels.length > 0 ? configuredModels : fallbackModels)
       
       return {
         id: row.id,
@@ -67,10 +86,12 @@ router.get('/', async (req, res) => {
         requestCount: 0, // TODO: Add usage tracking
         errorRate: 0, // TODO: Add error tracking
         is_active: row.is_active,
+        models: models, // Top-level models field for frontend compatibility
+        default_model: row.default_model || (models.length > 0 ? models[0] : null),
         configuration: {
-          models: models, // Always include fallback models if none configured
+          models: models, // Also include in configuration for backward compatibility
           max_tokens: row.configuration?.max_tokens,
-          default_model: row.configuration?.default_model || getDefaultModel(row.provider_type),
+          default_model: row.default_model || row.configuration?.default_model || getDefaultModel(row.provider_type),
           model: row.configuration?.model || getDefaultModel(row.provider_type),
           endpoint: row.configuration?.endpoint || getDefaultEndpoint(row.provider_type)
         }
