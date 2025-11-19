@@ -53,6 +53,8 @@ interface SearchResult {
   framework?: string
   status?: string
   relevance_score: number
+  project_id?: string // For documents
+  project_name?: string // For documents
 }
 
 interface SearchFilters {
@@ -85,7 +87,9 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState("relevance")
   const [totalResults, setTotalResults] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
-  const [searchMode, setSearchMode] = useState<"semantic" | "keyword">("semantic")
+  const [searchMode, setSearchMode] = useState<"semantic" | "keyword" | "hybrid">("semantic")
+  const [showHistory, setShowHistory] = useState(false)
+  const [searchHistory, setSearchHistory] = useState<Array<{query: string, timestamp: number, filters?: SearchFilters}>>([])
   
   // Filter options from API - start empty to prevent hydration mismatch
   const [availableFrameworks, setAvailableFrameworks] = useState<string[]>([])
@@ -142,11 +146,13 @@ export default function SearchPage() {
             types: searchFilters.type.length > 0 ? searchFilters.type : undefined,
             frameworks: searchFilters.framework.length > 0 ? searchFilters.framework : undefined,
             authors: searchFilters.author.length > 0 ? searchFilters.author : undefined,
+            tags: searchFilters.tags.length > 0 ? searchFilters.tags : undefined,
             dateRange: Object.keys(searchFilters.date_range).length > 0 ? searchFilters.date_range : undefined,
             limit: 50,
             offset: (currentPage - 1) * 50,
             sortBy,
-            useSemanticSearch: searchMode === 'semantic'
+            useSemanticSearch: searchMode === 'semantic' || searchMode === 'hybrid',
+            searchMode: searchMode
           })
         })
         
@@ -177,6 +183,14 @@ export default function SearchPage() {
           console.log('[SEARCH] Results:', filteredResults)
           setResults(filteredResults)
           setTotalResults(data.total || filteredResults.length)
+          
+          // Save to search history
+          saveToHistory(searchQuery, searchFilters)
+          
+          // Show cache hit notification
+          if (data.cached) {
+            toast.success('Results loaded from cache', { duration: 2000 })
+          }
         } else {
           console.error('[SEARCH] ❌ API returned unsuccessful response:', data)
           throw new Error(data.error || 'Search failed')
@@ -195,8 +209,71 @@ export default function SearchPage() {
         setLoading(false)
       }
     }, 300),
-    [sortBy, activeFilters, currentPage, searchMode]
+    [sortBy, activeFilters, currentPage, searchMode, saveToHistory]
   )
+
+  // Load search history from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const saved = localStorage.getItem('search_history')
+      if (saved) {
+        const history = JSON.parse(saved)
+        setSearchHistory(history.slice(0, 20)) // Keep last 20 searches
+      }
+    } catch (error) {
+      console.error('[SEARCH] Failed to load search history:', error)
+    }
+  }, [])
+
+  // Save search to history
+  const saveToHistory = useCallback((searchQuery: string, searchFilters: SearchFilters) => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) return
+    
+    try {
+      const historyItem = {
+        query: searchQuery.trim(),
+        timestamp: Date.now(),
+        filters: searchFilters
+      }
+      
+      // Remove duplicates and add to front
+      const updatedHistory = [
+        historyItem,
+        ...searchHistory.filter(h => h.query !== historyItem.query)
+      ].slice(0, 20) // Keep last 20
+      
+      setSearchHistory(updatedHistory)
+      localStorage.setItem('search_history', JSON.stringify(updatedHistory))
+    } catch (error) {
+      console.error('[SEARCH] Failed to save search history:', error)
+    }
+  }, [searchHistory])
+
+  // Load search from history
+  const loadFromHistory = useCallback((historyItem: {query: string, filters?: SearchFilters}) => {
+    setQuery(historyItem.query)
+    if (historyItem.filters) {
+      setFilters(historyItem.filters)
+      // Update active filters
+      const active: string[] = []
+      Object.entries(historyItem.filters).forEach(([key, value]) => {
+        if (key === 'date_range') return
+        if (Array.isArray(value) && value.length > 0) {
+          value.forEach(v => active.push(`${key}:${v}`))
+        }
+      })
+      setActiveFilters(active)
+    }
+    setShowHistory(false)
+  }, [])
+
+  // Clear search history
+  const clearHistory = useCallback(() => {
+    setSearchHistory([])
+    localStorage.removeItem('search_history')
+    setShowHistory(false)
+  }, [])
 
   // Load filter options on mount (client-side only to prevent hydration issues)
   useEffect(() => {
@@ -411,9 +488,53 @@ export default function SearchPage() {
                         <Input
                           placeholder="Search projects, documents, templates, and users..."
                           value={query}
-                          onChange={(e) => setQuery(e.target.value)}
+                          onChange={(e) => {
+                            setQuery(e.target.value)
+                            setShowHistory(e.target.value.length === 0 && searchHistory.length > 0)
+                          }}
+                          onFocus={() => {
+                            if (searchHistory.length > 0) setShowHistory(true)
+                          }}
+                          onBlur={() => {
+                            // Delay to allow click on history item
+                            setTimeout(() => setShowHistory(false), 200)
+                          }}
                           className="pl-10 pr-4 py-3 text-lg"
                         />
+                        {/* Search History Dropdown */}
+                        {showHistory && searchHistory.length > 0 && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
+                            <div className="p-2 border-b flex items-center justify-between">
+                              <span className="text-xs font-medium text-muted-foreground">Recent Searches</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  clearHistory()
+                                }}
+                                className="h-6 px-2 text-xs"
+                              >
+                                Clear
+                              </Button>
+                            </div>
+                            {searchHistory.map((item, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => loadFromHistory(item)}
+                                className="w-full text-left px-3 py-2 hover:bg-muted flex items-center justify-between group"
+                              >
+                                <div className="flex items-center gap-2 flex-1 min-w-0">
+                                  <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  <span className="truncate">{item.query}</span>
+                                </div>
+                                <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                                  {new Date(item.timestamp).toLocaleDateString()}
+                                </span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <Select value={sortBy} onValueChange={setSortBy}>
                         <SelectTrigger className="w-40">
@@ -425,13 +546,14 @@ export default function SearchPage() {
                           <SelectItem value="title">Title</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Select value={searchMode} onValueChange={(value: "semantic" | "keyword") => setSearchMode(value)}>
+                      <Select value={searchMode} onValueChange={(value: "semantic" | "keyword" | "hybrid") => setSearchMode(value)}>
                         <SelectTrigger className="w-40">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="semantic">Semantic</SelectItem>
-                          <SelectItem value="keyword">Keyword</SelectItem>
+                          <SelectItem value="semantic">🧠 Semantic</SelectItem>
+                          <SelectItem value="keyword">🔤 Keyword</SelectItem>
+                          <SelectItem value="hybrid">⚡ Hybrid</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -540,6 +662,110 @@ export default function SearchPage() {
                             <div className="mt-2 text-sm text-muted-foreground">No authors available</div>
                           )}
                         </div>
+
+                        {/* Tag Filter */}
+                        <div>
+                          <Label className="text-sm font-medium">Tags</Label>
+                          {results.length > 0 ? (() => {
+                            const availableTags = Array.from(
+                              new Set(results.flatMap(r => r.tags))
+                            ).sort()
+                            return availableTags.length > 0 ? (
+                              <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                                {availableTags.map((tag) => (
+                                  <Button
+                                    key={tag}
+                                    variant={filters.tags.includes(tag) ? "default" : "outline"}
+                                    size="sm"
+                                    className="w-full justify-start"
+                                    onClick={() => addFilter("tags", tag)}
+                                  >
+                                    <Tag className="h-4 w-4" />
+                                    <span className="ml-2">{tag}</span>
+                                  </Button>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="mt-2 text-sm text-muted-foreground">No tags found</div>
+                            )
+                          })() : (
+                            <div className="mt-2 text-sm text-muted-foreground">Search to see tags</div>
+                          )}
+                        </div>
+
+                        {/* Date Range Presets */}
+                        <div>
+                          <Label className="text-sm font-medium">Date Range</Label>
+                          <div className="mt-2 space-y-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full justify-start"
+                              onClick={() => {
+                                const end = new Date().toISOString()
+                                const start = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+                                setFilters({
+                                  ...filters,
+                                  date_range: { start, end }
+                                })
+                                setActiveFilters([...activeFilters.filter(f => !f.startsWith('date_range:')), 'date_range:last7days'])
+                              }}
+                            >
+                              <Calendar className="h-4 w-4" />
+                              <span className="ml-2">Last 7 days</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full justify-start"
+                              onClick={() => {
+                                const end = new Date().toISOString()
+                                const start = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+                                setFilters({
+                                  ...filters,
+                                  date_range: { start, end }
+                                })
+                                setActiveFilters([...activeFilters.filter(f => !f.startsWith('date_range:')), 'date_range:last30days'])
+                              }}
+                            >
+                              <Calendar className="h-4 w-4" />
+                              <span className="ml-2">Last 30 days</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full justify-start"
+                              onClick={() => {
+                                const end = new Date().toISOString()
+                                const start = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+                                setFilters({
+                                  ...filters,
+                                  date_range: { start, end }
+                                })
+                                setActiveFilters([...activeFilters.filter(f => !f.startsWith('date_range:')), 'date_range:last90days'])
+                              }}
+                            >
+                              <Calendar className="h-4 w-4" />
+                              <span className="ml-2">Last 90 days</span>
+                            </Button>
+                            {Object.keys(filters.date_range).length > 0 && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start text-xs"
+                                onClick={() => {
+                                  setFilters({
+                                    ...filters,
+                                    date_range: {}
+                                  })
+                                  setActiveFilters(activeFilters.filter(f => !f.startsWith('date_range:')))
+                                }}
+                              >
+                                Clear date filter
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       </CardContent>
                     </AnimatedCard>
                   </div>
@@ -634,20 +860,61 @@ export default function SearchPage() {
                                     </div>
                                   </div>
 
-                                  <div className="flex items-center justify-between pt-2">
+                                  <div className="flex items-center justify-between pt-2 border-t">
                                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                      <Star className="h-3 w-3" />
+                                      <Star className={`h-3 w-3 ${result.relevance_score > 0.7 ? 'text-yellow-500 fill-yellow-500' : ''}`} />
                                       Relevance: {Math.round(result.relevance_score * 100)}%
+                                      {searchMode === 'semantic' && result.relevance_score > 0.8 && (
+                                        <Badge variant="secondary" className="ml-2 text-xs">High Match</Badge>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                      <Button variant="ghost" size="sm">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          handleResultClick(result)
+                                        }}
+                                        title="View"
+                                      >
                                         <Eye className="h-4 w-4" />
                                       </Button>
-                                      <Button variant="ghost" size="sm">
+                                      {result.type === 'document' && (
+                                        <Button 
+                                          variant="ghost" 
+                                          size="sm"
+                                          onClick={(e) => {
+                                            e.stopPropagation()
+                                            // Download document
+                                            if (result.project_id) {
+                                              window.open(`/api/documents/${result.id}/download`, '_blank')
+                                            }
+                                          }}
+                                          title="Download"
+                                        >
+                                          <Download className="h-4 w-4" />
+                                        </Button>
+                                      )}
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          // Copy link to clipboard
+                                          const url = result.type === 'document' && result.project_id
+                                            ? `${window.location.origin}/projects/${result.project_id}/documents/${result.id}`
+                                            : result.type === 'project'
+                                            ? `${window.location.origin}/projects/${result.id}`
+                                            : result.type === 'template'
+                                            ? `${window.location.origin}/templates/${result.id}`
+                                            : `${window.location.origin}/users/${result.id}`
+                                          navigator.clipboard.writeText(url)
+                                          toast.success('Link copied to clipboard')
+                                        }}
+                                        title="Share"
+                                      >
                                         <Share className="h-4 w-4" />
-                                      </Button>
-                                      <Button variant="ghost" size="sm">
-                                        <MoreHorizontal className="h-4 w-4" />
                                       </Button>
                                     </div>
                                   </div>

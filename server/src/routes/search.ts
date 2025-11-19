@@ -17,8 +17,34 @@ import {
   SearchResult
 } from '../services/searchService'
 import { pool } from '../database/connection'
+import { cache } from '../utils/redis'
+import crypto from 'crypto'
 
 const router = Router()
+
+/**
+ * Generate a cache key from search request
+ * Includes query, filters, pagination, and user ID for user-specific results
+ */
+function generateCacheKey(request: UniversalSearchRequest, userId: string): string {
+  const cacheData = {
+    query: request.query.toLowerCase().trim(),
+    types: (request.types || []).sort().join(','),
+    frameworks: (request.frameworks || []).sort().join(','),
+    authors: (request.authors || []).sort().join(','),
+    tags: (request.tags || []).sort().join(','),
+    dateRange: request.dateRange ? JSON.stringify(request.dateRange) : '',
+    limit: request.limit || 20,
+    offset: request.offset || 0,
+    sortBy: request.sortBy || 'relevance',
+    searchMode: request.searchMode || 'semantic',
+    userId
+  }
+  
+  const cacheString = JSON.stringify(cacheData)
+  const hash = crypto.createHash('sha256').update(cacheString).digest('hex')
+  return `search:${hash.substring(0, 16)}`
+}
 
 /**
  * POST /api/search
@@ -32,6 +58,7 @@ router.post(
     types: Joi.array().items(Joi.string().valid('project', 'document', 'template', 'user')).optional(),
     frameworks: Joi.array().items(Joi.string()).optional(),
     authors: Joi.array().items(Joi.string()).optional(),
+    tags: Joi.array().items(Joi.string()).optional(),
     dateRange: Joi.object({
       start: Joi.string().isoDate().optional(),
       end: Joi.string().isoDate().optional()
@@ -39,7 +66,8 @@ router.post(
     limit: Joi.number().min(1).max(100).default(20),
     offset: Joi.number().min(0).default(0),
     sortBy: Joi.string().valid('relevance', 'date', 'title').default('relevance'),
-    useSemanticSearch: Joi.boolean().default(true)
+    useSemanticSearch: Joi.boolean().default(true),
+    searchMode: Joi.string().valid('semantic', 'keyword', 'hybrid').optional()
   })),
   async (req: Request, res: Response) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -49,11 +77,13 @@ router.post(
         types: req.body.types,
         frameworks: req.body.frameworks,
         authors: req.body.authors,
+        tags: req.body.tags,
         dateRange: req.body.dateRange,
         limit: req.body.limit || 20,
         offset: req.body.offset || 0,
         sortBy: req.body.sortBy || 'relevance',
-        useSemanticSearch: req.body.useSemanticSearch !== false // Default to true
+        useSemanticSearch: req.body.useSemanticSearch !== false, // Default to true
+        searchMode: req.body.searchMode // 'semantic' | 'keyword' | 'hybrid'
       }
       
       const userId = (req as any).user!.id
@@ -63,6 +93,19 @@ router.post(
         types: searchRequest.types,
         userId
       })
+      
+      // Generate cache key from search request
+      const cacheKey = generateCacheKey(searchRequest, userId)
+      
+      // Try to get cached results (5-minute TTL)
+      const cachedResult = await cache.get(cacheKey)
+      if (cachedResult) {
+        log.info('[SEARCH] Cache hit', { cacheKey })
+        return res.json({
+          ...cachedResult,
+          cached: true
+        })
+      }
       
       const results: SearchResult[] = []
       
@@ -111,13 +154,7 @@ router.post(
         searchRequest.offset! + searchRequest.limit!
       )
       
-      log.info('[SEARCH] Search completed', {
-        totalResults: results.length,
-        returnedResults: paginatedResults.length,
-        types: typesToSearch
-      })
-      
-      res.json({
+      const response = {
         success: true,
         results: paginatedResults,
         total: results.length,
@@ -126,8 +163,21 @@ router.post(
           limit: searchRequest.limit,
           offset: searchRequest.offset,
           hasMore: results.length > (searchRequest.offset! + searchRequest.limit!)
-        }
+        },
+        cached: false
+      }
+      
+      // Cache the results (5 minutes = 300 seconds)
+      await cache.set(cacheKey, response, 300)
+      
+      log.info('[SEARCH] Search completed', {
+        totalResults: results.length,
+        returnedResults: paginatedResults.length,
+        types: typesToSearch,
+        cacheKey
       })
+      
+      res.json(response)
       
     } catch (error: any) {
       log.error('[SEARCH] Search failed:', error)
