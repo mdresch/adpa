@@ -1,8 +1,12 @@
 import express from "express"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
+import { validate } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
+import Joi from "joi"
+import * as stakeholderService from "../services/stakeholderService"
+import * as skillsService from "../services/skillsManagementService"
 
 const router = express.Router()
 
@@ -303,5 +307,369 @@ router.get("/project/:projectId/engagement-matrix", authenticateToken, async (re
     res.status(500).json({ error: "Internal server error" })
   }
 })
+
+// ================================================================
+// STAKEHOLDER-USER LINKAGE & ROLE ASSIGNMENTS
+// Migration: 209_stakeholder_role_skills_integration.sql
+// ================================================================
+
+// Link stakeholder to user account
+router.post(
+  "/:id/link-user",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  validate(Joi.object({
+    userId: Joi.string().uuid().required()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId } = req.params
+      const { userId } = req.body
+
+      const linked = await stakeholderService.linkStakeholderToUser(stakeholderId, userId)
+
+      if (!linked) {
+        return res.status(404).json({ error: "Stakeholder or user not found" })
+      }
+
+      log.info(`Stakeholder ${stakeholderId} linked to user ${userId}`)
+
+      res.json({
+        success: true,
+        message: "Stakeholder linked to user successfully"
+      })
+    } catch (error: any) {
+      log.error("Link stakeholder to user error:", error)
+      if (error.message?.includes("not found")) {
+        return res.status(404).json({ error: error.message })
+      }
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Assign role to stakeholder
+router.post(
+  "/:id/assign-role",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  validate(Joi.object({
+    roleId: Joi.string().uuid().required(),
+    projectId: Joi.string().uuid().required(),
+    assignmentType: Joi.string().valid("primary", "secondary", "backup", "consultant").optional(),
+    startDate: Joi.date().optional(),
+    endDate: Joi.date().optional(),
+    allocationPercentage: Joi.number().min(0).max(100).optional(),
+    notes: Joi.string().optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId } = req.params
+      const { roleId, projectId, assignmentType, startDate, endDate, allocationPercentage, notes } = req.body
+
+      const assignment = await stakeholderService.assignRoleToStakeholder(
+        stakeholderId,
+        roleId,
+        projectId,
+        {
+          assignmentType,
+          startDate,
+          endDate,
+          allocationPercentage,
+          notes
+        },
+        (req as any).user?.id
+      )
+
+      log.info(`Role ${roleId} assigned to stakeholder ${stakeholderId} in project ${projectId}`)
+
+      res.status(201).json({
+        success: true,
+        data: assignment
+      })
+    } catch (error: any) {
+      log.error("Assign role to stakeholder error:", error)
+      if (error.message?.includes("not found") || error.message?.includes("does not belong")) {
+        return res.status(404).json({ error: error.message })
+      }
+      if (error.message?.includes("already")) {
+        return res.status(409).json({ error: error.message })
+      }
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get stakeholder roles
+router.get("/:id/roles", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: stakeholderId } = req.params
+    const projectId = req.query.projectId as string | undefined
+
+    const roles = await stakeholderService.getStakeholderRoles(stakeholderId, projectId)
+
+    res.json({
+      success: true,
+      data: roles,
+      count: roles.length
+    })
+  } catch (error) {
+    log.error("Get stakeholder roles error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+// Get stakeholder skills
+router.get("/:id/skills", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: stakeholderId } = req.params
+    const skills = await skillsService.getStakeholderSkills(stakeholderId)
+
+    res.json({
+      success: true,
+      data: skills,
+      count: skills.length
+    })
+  } catch (error) {
+    log.error("Get stakeholder skills error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+// Assign skill to stakeholder
+router.post(
+  "/:id/skills",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  validate(Joi.object({
+    skillId: Joi.string().uuid().required(),
+    proficiencyLevel: Joi.string().valid("beginner", "intermediate", "advanced", "expert").optional(),
+    yearsOfExperience: Joi.number().integer().min(0).optional(),
+    verified: Joi.boolean().optional(),
+    notes: Joi.string().optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId } = req.params
+      const { skillId, proficiencyLevel, yearsOfExperience, verified, notes } = req.body
+
+      const stakeholderSkill = await skillsService.assignSkillToStakeholder(
+        stakeholderId,
+        skillId,
+        proficiencyLevel || "intermediate",
+        {
+          yearsOfExperience,
+          verified,
+          verifiedBy: verified ? (req as any).user?.id : undefined,
+          notes
+        }
+      )
+
+      log.info(`Skill ${skillId} assigned to stakeholder ${stakeholderId}`)
+
+      res.status(201).json({
+        success: true,
+        data: stakeholderSkill
+      })
+    } catch (error) {
+      log.error("Assign skill to stakeholder error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Update stakeholder skill
+router.put(
+  "/:id/skills/:skillId",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  validate(Joi.object({
+    proficiencyLevel: Joi.string().valid("beginner", "intermediate", "advanced", "expert").optional(),
+    yearsOfExperience: Joi.number().integer().min(0).optional().allow(null),
+    verified: Joi.boolean().optional(),
+    notes: Joi.string().optional().allow(null)
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId, skillId } = req.params
+      const { proficiencyLevel, yearsOfExperience, verified, notes } = req.body
+
+      const stakeholderSkill = await skillsService.assignSkillToStakeholder(
+        stakeholderId,
+        skillId,
+        proficiencyLevel || "intermediate",
+        {
+          yearsOfExperience,
+          verified,
+          verifiedBy: verified ? (req as any).user?.id : undefined,
+          notes
+        }
+      )
+
+      log.info(`Skill ${skillId} updated for stakeholder ${stakeholderId}`)
+
+      res.json({
+        success: true,
+        data: stakeholderSkill,
+        message: "Skill updated successfully"
+      })
+    } catch (error) {
+      log.error("Update skill error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Remove skill from stakeholder
+router.delete(
+  "/:id/skills/:skillId",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId, skillId } = req.params
+
+      const result = await pool.query(
+        `DELETE FROM stakeholder_skills 
+         WHERE stakeholder_id = $1 AND skill_id = $2`,
+        [stakeholderId, skillId]
+      )
+
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: "Skill assignment not found" })
+      }
+
+      log.info(`Skill ${skillId} removed from stakeholder ${stakeholderId}`)
+
+      res.json({
+        success: true,
+        message: "Skill removed from stakeholder successfully"
+      })
+    } catch (error) {
+      log.error("Remove skill from stakeholder error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Get skill match percentage for stakeholder and role
+router.get("/:id/match-role/:roleId", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: stakeholderId, roleId } = req.params
+
+    const match = await skillsService.matchStakeholderToRole(stakeholderId, roleId)
+
+    res.json({
+      success: true,
+      data: match
+    })
+  } catch (error) {
+    log.error("Get skill match error:", error)
+    res.status(500).json({ error: "Internal server error" })
+  }
+})
+
+// Update stakeholder role assignment
+router.put(
+  "/:id/roles/:roleId",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  validate(Joi.object({
+    projectId: Joi.string().uuid().required(),
+    assignmentType: Joi.string().valid("primary", "secondary", "backup", "consultant").optional(),
+    startDate: Joi.date().optional().allow(null),
+    endDate: Joi.date().optional().allow(null),
+    allocationPercentage: Joi.number().min(0).max(100).optional(),
+    notes: Joi.string().optional().allow(null)
+  }).unknown(true)),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId, roleId } = req.params
+      const { projectId, assignmentType, startDate, endDate, allocationPercentage, notes } = req.body
+
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required in request body" })
+      }
+
+      const assignment = await stakeholderService.assignRoleToStakeholder(
+        stakeholderId,
+        roleId,
+        projectId,
+        {
+          assignmentType,
+          startDate: startDate ? new Date(startDate) : undefined,
+          endDate: endDate ? new Date(endDate) : undefined,
+          allocationPercentage,
+          notes
+        },
+        (req as any).user?.id
+      )
+
+      log.info(`Role ${roleId} updated for stakeholder ${stakeholderId} in project ${projectId}`)
+
+      res.json({
+        success: true,
+        data: assignment,
+        message: "Role assignment updated successfully"
+      })
+    } catch (error: any) {
+      log.error("Update role assignment error:", error)
+      if (error.message?.includes("not found") || error.message?.includes("does not belong")) {
+        return res.status(404).json({ error: error.message })
+      }
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Remove role from stakeholder
+router.delete(
+  "/:id/roles/:roleId",
+  authenticateToken,
+  requirePermission("stakeholders.update"),
+  validate(Joi.object({
+    projectId: Joi.string().uuid().required()
+  }).unknown(true)),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: stakeholderId, roleId } = req.params
+      const projectId = req.query.projectId as string
+
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId query parameter is required" })
+      }
+
+      const removed = await stakeholderService.removeRoleFromStakeholder(
+        stakeholderId,
+        roleId,
+        projectId
+      )
+
+      if (!removed) {
+        return res.status(404).json({ error: "Role assignment not found" })
+      }
+
+      log.info(`Role ${roleId} removed from stakeholder ${stakeholderId}`)
+
+      res.json({
+        success: true,
+        message: "Role removed from stakeholder successfully"
+      })
+    } catch (error) {
+      log.error("Remove role from stakeholder error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
 
 export default router

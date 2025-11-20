@@ -8,8 +8,10 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiClient } from "@/lib/api"
-import { Loader2, Save, Key, CheckCircle, AlertCircle } from "lucide-react"
+import { Loader2, Save, Key, CheckCircle, AlertCircle, Globe, Calendar } from "lucide-react"
+import { COMMON_TIMEZONES, getBrowserTimezone, DATE_FORMAT_OPTIONS, type DateFormat } from "@/lib/utils/timezone"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -31,9 +33,52 @@ export default function SettingsPage() {
     confirmPassword: ''
   })
 
+  // User Preferences (Timezone & Date Format)
+  const [preferencesLoading, setPreferencesLoading] = useState(false)
+  const [savingPreferences, setSavingPreferences] = useState(false)
+  const [preferencesMessage, setPreferencesMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [userTimezone, setUserTimezone] = useState<string>('UTC')
+  const [userDateFormat, setUserDateFormat] = useState<DateFormat>('MM/DD/YYYY')
+
   useEffect(() => {
     loadSettings()
+    loadPreferences()
   }, [])
+
+  const loadPreferences = async () => {
+    setPreferencesLoading(true)
+    try {
+      const data = await apiClient.get('/users/me/preferences')
+      setUserTimezone(data.preferences?.timezone || getBrowserTimezone() || 'UTC')
+      setUserDateFormat(data.preferences?.date_format || 'MM/DD/YYYY')
+    } catch (error) {
+      console.error('Failed to load preferences:', error)
+      // Fallback to browser timezone and default date format
+      setUserTimezone(getBrowserTimezone() || 'UTC')
+      setUserDateFormat('MM/DD/YYYY')
+    } finally {
+      setPreferencesLoading(false)
+    }
+  }
+
+  const savePreferences = async () => {
+    setSavingPreferences(true)
+    setPreferencesMessage(null)
+    
+    try {
+      await apiClient.put('/users/me/preferences', {
+        timezone: userTimezone,
+        date_format: userDateFormat
+      })
+
+      setPreferencesMessage({ type: 'success', text: 'Preferences saved successfully!' })
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.error || error?.message || 'Failed to save preferences'
+      setPreferencesMessage({ type: 'error', text: errorMessage })
+    } finally {
+      setSavingPreferences(false)
+    }
+  }
 
   const loadSettings = async () => {
     setLoading(true)
@@ -270,15 +315,120 @@ export default function SettingsPage() {
           <TabsContent value="general" className="mt-6">
             <Card>
               <CardHeader>
-                <CardTitle>General Settings</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  <Globe className="h-5 w-5" />
+                  General Settings
+                </CardTitle>
                 <CardDescription>
-                  Configure general application settings
+                  Configure your personal preferences and display settings
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  General settings coming soon...
-                </p>
+              <CardContent className="space-y-6">
+                {preferencesMessage && (
+                  <Alert variant={preferencesMessage.type === 'error' ? 'destructive' : 'default'}>
+                    {preferencesMessage.type === 'success' ? (
+                      <CheckCircle className="h-4 w-4" />
+                    ) : (
+                      <AlertCircle className="h-4 w-4" />
+                    )}
+                    <AlertDescription>{preferencesMessage.text}</AlertDescription>
+                  </Alert>
+                )}
+
+                <div className="space-y-6">
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="timezone" className="flex items-center gap-2">
+                        <Globe className="h-4 w-4" />
+                        Timezone
+                      </Label>
+                      <Select
+                        value={userTimezone}
+                        onValueChange={setUserTimezone}
+                        disabled={preferencesLoading || savingPreferences}
+                      >
+                        <SelectTrigger id="timezone" className="w-full">
+                          <SelectValue placeholder="Select your timezone" />
+                        </SelectTrigger>
+                        <SelectContent className="max-h-[300px]">
+                          {COMMON_TIMEZONES.map((tz) => (
+                            <SelectItem key={tz.value} value={tz.value}>
+                              {tz.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        All timestamps will be displayed in your selected timezone. 
+                        Dates are stored in UTC and converted for display.
+                      </p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <Label htmlFor="date-format" className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        Date Format
+                      </Label>
+                      <Select
+                        value={userDateFormat}
+                        onValueChange={(value: DateFormat) => setUserDateFormat(value)}
+                        disabled={preferencesLoading || savingPreferences}
+                      >
+                        <SelectTrigger id="date-format" className="w-full">
+                          <SelectValue placeholder="Select date format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DATE_FORMAT_OPTIONS.map((format) => (
+                            <SelectItem key={format.value} value={format.value}>
+                              <div className="flex items-center justify-between w-full">
+                                <span>{format.label}</span>
+                                <span className="text-xs text-muted-foreground ml-4">
+                                  {format.example}
+                                </span>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Choose how dates are displayed throughout the application.
+                        Example: {DATE_FORMAT_OPTIONS.find(f => f.value === userDateFormat)?.example || '11/19/2025'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <Button
+                    onClick={savePreferences}
+                    disabled={savingPreferences || preferencesLoading}
+                    className="w-full sm:w-auto"
+                  >
+                    {savingPreferences ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="mr-2 h-4 w-4" />
+                        Save Preferences
+                      </>
+                    )}
+                  </Button>
+                </div>
+
+                <div className="bg-blue-50 dark:bg-blue-950 p-4 rounded-lg mt-6">
+                  <h4 className="font-medium mb-2 flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    About Display Preferences
+                  </h4>
+                  <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+                    <li>All dates and times are stored in UTC (Coordinated Universal Time)</li>
+                    <li>Your timezone preference converts UTC timestamps to your local time</li>
+                    <li>Your date format preference controls how dates are displayed (MM/DD/YYYY, DD/MM/YYYY, or YYYY-MM-DD)</li>
+                    <li>These preferences apply throughout the application</li>
+                    <li>If not set, defaults are used (UTC timezone, MM/DD/YYYY format)</li>
+                  </ul>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

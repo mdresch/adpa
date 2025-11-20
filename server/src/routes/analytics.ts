@@ -663,4 +663,127 @@ router.get(
   }
 )
 
+/**
+ * GET /api/analytics/search
+ * Get search analytics data
+ */
+router.get(
+  "/search",
+  authenticateToken,
+  requirePermission("analytics.view"),
+  validateQuery(Joi.object({
+    startDate: Joi.string().isoDate().optional(),
+    endDate: Joi.string().isoDate().optional(),
+    timeRange: Joi.string().valid("7d", "30d", "90d", "1y").optional()
+  })),
+  async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      // Calculate date range
+      let startDate: Date
+      let endDate: Date = new Date()
+      
+      if (req.query.timeRange) {
+        const days = req.query.timeRange === "7d" ? 7 : req.query.timeRange === "30d" ? 30 : req.query.timeRange === "90d" ? 90 : 365
+        startDate = new Date()
+        startDate.setDate(startDate.getDate() - days)
+      } else if (req.query.startDate && req.query.endDate) {
+        startDate = new Date(req.query.startDate as string)
+        endDate = new Date(req.query.endDate as string)
+      } else {
+        // Default to last 30 days
+        startDate = new Date()
+        startDate.setDate(startDate.getDate() - 30)
+      }
+
+      // Refresh materialized views to ensure they have latest data
+      // This is safe to do concurrently and won't block reads
+      try {
+        await pool.query(`SELECT refresh_search_analytics_views()`)
+        log.debug('[SEARCH ANALYTICS] Refreshed materialized views')
+      } catch (error: any) {
+        log.warn('[SEARCH ANALYTICS] Failed to refresh views (non-critical):', error.message)
+        // Continue anyway - views may still have some data
+      }
+
+      // Get search statistics
+      const statsResult = await pool.query(
+        `SELECT * FROM get_search_statistics($1, $2)`,
+        [startDate, endDate]
+      )
+
+      // Get popular searches
+      const popularSearches = await pool.query(`
+        SELECT * FROM mv_popular_searches
+        ORDER BY search_count DESC
+        LIMIT 20
+      `)
+
+      // Get search mode usage
+      const modeUsage = await pool.query(`
+        SELECT * FROM mv_search_mode_usage
+        WHERE date >= $1
+        ORDER BY date DESC, usage_count DESC
+      `, [startDate])
+
+      // Get search success rate over time
+      const successRate = await pool.query(`
+        SELECT * FROM mv_search_success_rate
+        WHERE date >= $1
+        ORDER BY date DESC
+      `, [startDate])
+
+      // Get top clicked results
+      const topClicked = await pool.query(`
+        SELECT * FROM mv_top_clicked_results
+        ORDER BY click_count DESC
+        LIMIT 20
+      `)
+
+      // Get suggestion usage
+      const suggestionUsage = await pool.query(`
+        SELECT 
+          suggestion_type,
+          COUNT(*) as click_count,
+          COUNT(DISTINCT user_id) as unique_users
+        FROM search_suggestion_clicks
+        WHERE created_at >= $1 AND created_at <= $2
+        GROUP BY suggestion_type
+        ORDER BY click_count DESC
+      `, [startDate, endDate])
+
+      // Get searches by hour of day
+      const searchesByHour = await pool.query(`
+        SELECT 
+          EXTRACT(HOUR FROM created_at) as hour,
+          COUNT(*) as search_count
+        FROM search_analytics
+        WHERE created_at >= $1 AND created_at <= $2
+        GROUP BY EXTRACT(HOUR FROM created_at)
+        ORDER BY hour
+      `, [startDate, endDate])
+
+      const analytics = {
+        statistics: statsResult.rows[0] || {},
+        popularSearches: popularSearches.rows,
+        modeUsage: modeUsage.rows,
+        successRate: successRate.rows,
+        topClickedResults: topClicked.rows,
+        suggestionUsage: suggestionUsage.rows,
+        searchesByHour: searchesByHour.rows,
+        dateRange: {
+          start: startDate.toISOString(),
+          end: endDate.toISOString()
+        },
+        generated_at: new Date().toISOString()
+      }
+
+      res.json(analytics)
+    } catch (error: any) {
+      log.error("Get search analytics error:", error)
+      res.status(500).json({ error: "Failed to fetch search analytics", message: error.message })
+    }
+  }
+)
+
 export default router
