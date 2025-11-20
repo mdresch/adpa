@@ -18,6 +18,7 @@ import {
 } from '../services/searchService'
 import { pool } from '../database/connection'
 import { cache } from '../utils/redis'
+import AnalyticsTrackingService from '../services/analyticsTrackingService'
 import crypto from 'crypto'
 
 const router = Router()
@@ -87,6 +88,7 @@ router.post(
       }
       
       const userId = (req as any).user!.id
+      const searchStartTime = Date.now()
       
       log.info('[SEARCH] Universal search request', {
         query: searchRequest.query.substring(0, 100),
@@ -101,9 +103,37 @@ router.post(
       const cachedResult = await cache.get(cacheKey)
       if (cachedResult) {
         log.info('[SEARCH] Cache hit', { cacheKey })
+        
+        // Track search analytics for cached results (get searchId for response)
+        const cachedResponseTimeMs = Date.now() - searchStartTime
+        let cachedSearchId: string | null = null
+        
+        try {
+          cachedSearchId = await AnalyticsTrackingService.trackSearchAnalytics({
+            userId,
+            query: searchRequest.query,
+            searchMode: searchRequest.searchMode || (searchRequest.useSemanticSearch ? 'semantic' : 'keyword'),
+            types: searchRequest.types,
+            frameworks: searchRequest.frameworks,
+            authors: searchRequest.authors,
+            tags: searchRequest.tags,
+            hasDateFilter: !!searchRequest.dateRange,
+            totalResults: cachedResult.total || 0,
+            resultsReturned: cachedResult.results?.length || 0,
+            hasResults: (cachedResult.results?.length || 0) > 0,
+            responseTimeMs: cachedResponseTimeMs,
+            cacheHit: true,
+            ipAddress: req.ip || req.socket.remoteAddress,
+            userAgent: req.headers['user-agent']
+          })
+        } catch (error: any) {
+          log.warn('[SEARCH] Failed to track cached search analytics:', error.message)
+        }
+        
         return res.json({
           ...cachedResult,
-          cached: true
+          cached: true,
+          searchId: cachedSearchId || undefined
         })
       }
       
@@ -154,6 +184,33 @@ router.post(
         searchRequest.offset! + searchRequest.limit!
       )
       
+      // Track search analytics (asynchronously, but get searchId for response)
+      const responseTimeMs = Date.now() - searchStartTime
+      let searchId: string | null = null
+      
+      // Track search (synchronous for searchId, but lightweight)
+      try {
+        searchId = await AnalyticsTrackingService.trackSearchAnalytics({
+          userId,
+          query: searchRequest.query,
+          searchMode: searchRequest.searchMode || (searchRequest.useSemanticSearch ? 'semantic' : 'keyword'),
+          types: searchRequest.types,
+          frameworks: searchRequest.frameworks,
+          authors: searchRequest.authors,
+          tags: searchRequest.tags,
+          hasDateFilter: !!searchRequest.dateRange,
+          totalResults: results.length,
+          resultsReturned: paginatedResults.length,
+          hasResults: results.length > 0,
+          responseTimeMs,
+          cacheHit: false,
+          ipAddress: req.ip || req.socket.remoteAddress,
+          userAgent: req.headers['user-agent']
+        })
+      } catch (error: any) {
+        log.warn('[SEARCH] Failed to track search analytics:', error.message)
+      }
+      
       const response = {
         success: true,
         results: paginatedResults,
@@ -164,7 +221,8 @@ router.post(
           offset: searchRequest.offset,
           hasMore: results.length > (searchRequest.offset! + searchRequest.limit!)
         },
-        cached: false
+        cached: false,
+        searchId: searchId || undefined // Include searchId for click tracking
       }
       
       // Cache the results (5 minutes = 300 seconds)
@@ -253,6 +311,252 @@ router.get(
       res.status(500).json({
         success: false,
         error: 'Failed to get filter options',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/search/track-click
+ * Track when a user clicks on a search result
+ */
+router.post(
+  '/track-click',
+  authenticateToken,
+  validate(Joi.object({
+    searchId: Joi.string().uuid().required(),
+    resultId: Joi.string().uuid().required(),
+    resultType: Joi.string().valid('project', 'document', 'template', 'user').required(),
+    resultTitle: Joi.string().optional(),
+    resultPosition: Joi.number().integer().min(1).required(),
+    relevanceScore: Joi.number().min(0).max(1).optional(),
+    actionType: Joi.string().valid('view', 'download', 'share').default('view')
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      
+      await AnalyticsTrackingService.trackSearchResultClick({
+        searchId: req.body.searchId,
+        resultId: req.body.resultId,
+        resultType: req.body.resultType,
+        resultTitle: req.body.resultTitle,
+        resultPosition: req.body.resultPosition,
+        relevanceScore: req.body.relevanceScore,
+        userId,
+        actionType: req.body.actionType
+      })
+      
+      res.json({ success: true })
+    } catch (error: any) {
+      log.error('[SEARCH-CLICK] Failed to track click:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to track click',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * POST /api/search/track-suggestion
+ * Track when a user clicks on a search suggestion
+ */
+router.post(
+  '/track-suggestion',
+  authenticateToken,
+  validate(Joi.object({
+    suggestionText: Joi.string().required(),
+    suggestionType: Joi.string().valid('autocomplete', 'popular', 'recent').required(),
+    queryBefore: Joi.string().optional(),
+    queryAfter: Joi.string().optional()
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      
+      await AnalyticsTrackingService.trackSearchSuggestionClick({
+        userId,
+        suggestionText: req.body.suggestionText,
+        suggestionType: req.body.suggestionType,
+        queryBefore: req.body.queryBefore,
+        queryAfter: req.body.queryAfter || req.body.suggestionText
+      })
+      
+      res.json({ success: true })
+    } catch (error: any) {
+      log.error('[SEARCH-SUGGESTION] Failed to track suggestion click:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to track suggestion click',
+        message: error.message
+      })
+    }
+  }
+)
+
+/**
+ * GET /api/search/suggestions
+ * Get search suggestions (autocomplete, popular searches, recent searches)
+ */
+router.get(
+  '/suggestions',
+  authenticateToken,
+  validate(Joi.object({
+    query: Joi.string().min(1).max(100).optional(),
+    limit: Joi.number().min(1).max(20).default(10)
+  })),
+  async (req: Request, res: Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = (req as any).user!.id
+      const query = req.query.query as string | undefined
+      const limit = parseInt(req.query.limit as string) || 10
+      
+      const suggestions: {
+        autocomplete: string[]
+        popular: string[]
+        recent: string[]
+      } = {
+        autocomplete: [],
+        popular: [],
+        recent: []
+      }
+      
+      // Autocomplete: Get matching titles/names from projects, documents, templates
+      if (query && query.trim().length > 0) {
+        const searchTerm = `%${query.trim()}%`
+        
+        // Search projects
+        const projectsResult = await pool.query(`
+          SELECT DISTINCT name as suggestion
+          FROM projects
+          WHERE (owner_id = $1 OR $1::text = ANY(SELECT jsonb_array_elements_text(team_members)))
+            AND name ILIKE $2
+          ORDER BY name ASC
+          LIMIT $3
+        `, [userId, searchTerm, Math.ceil(limit / 3)])
+        
+        // Search documents
+        const documentsResult = await pool.query(`
+          SELECT DISTINCT d.title as suggestion
+          FROM documents d
+          JOIN projects p ON d.project_id = p.id
+          WHERE d.deleted_at IS NULL
+            AND d.title ILIKE $1
+            AND (p.owner_id = $2 OR $2::text = ANY(SELECT jsonb_array_elements_text(p.team_members)))
+          ORDER BY d.title ASC
+          LIMIT $3
+        `, [searchTerm, userId, Math.ceil(limit / 3)])
+        
+        // Search templates
+        const templatesResult = await pool.query(`
+          SELECT DISTINCT name as suggestion
+          FROM templates
+          WHERE deleted_at IS NULL
+            AND name ILIKE $1
+          ORDER BY name ASC
+          LIMIT $2
+        `, [searchTerm, Math.ceil(limit / 3)])
+        
+        // Combine and deduplicate
+        const allSuggestions = [
+          ...projectsResult.rows.map((r: any) => r.suggestion),
+          ...documentsResult.rows.map((r: any) => r.suggestion),
+          ...templatesResult.rows.map((r: any) => r.suggestion)
+        ]
+        
+        // Remove duplicates and limit
+        suggestions.autocomplete = Array.from(new Set(allSuggestions))
+          .filter(Boolean)
+          .slice(0, limit)
+      }
+      
+      // Popular searches: Get from analytics (if available), fallback to project/document names
+      try {
+        const popularAnalyticsResult = await pool.query(`
+          SELECT query as suggestion, search_count as count
+          FROM mv_popular_searches
+          ORDER BY search_count DESC
+          LIMIT $1
+        `, [limit])
+        
+        if (popularAnalyticsResult.rows.length > 0) {
+          suggestions.popular = popularAnalyticsResult.rows
+            .map((r: any) => r.suggestion)
+            .filter(Boolean)
+            .slice(0, limit)
+        } else {
+          // Fallback: Get common project/document names
+          const popularResult = await pool.query(`
+            SELECT name as suggestion, COUNT(*) as count
+            FROM (
+              SELECT name FROM projects WHERE owner_id = $1 OR $1::text = ANY(SELECT jsonb_array_elements_text(team_members))
+              UNION ALL
+              SELECT title as name FROM documents d
+              JOIN projects p ON d.project_id = p.id
+              WHERE d.deleted_at IS NULL
+                AND (p.owner_id = $1 OR $1::text = ANY(SELECT jsonb_array_elements_text(p.team_members)))
+            ) AS all_names
+            GROUP BY name
+            ORDER BY count DESC, name ASC
+            LIMIT $2
+          `, [userId, limit])
+          
+          suggestions.popular = popularResult.rows
+            .map((r: any) => r.suggestion)
+            .filter(Boolean)
+            .slice(0, limit)
+        }
+      } catch (error: any) {
+        // If analytics table doesn't exist yet, fallback to project/document names
+        log.warn('[SEARCH-SUGGESTIONS] Analytics table not available, using fallback:', error.message)
+        const popularResult = await pool.query(`
+          SELECT name as suggestion, COUNT(*) as count
+          FROM (
+            SELECT name FROM projects WHERE owner_id = $1 OR $1::text = ANY(SELECT jsonb_array_elements_text(team_members))
+            UNION ALL
+            SELECT title as name FROM documents d
+            JOIN projects p ON d.project_id = p.id
+            WHERE d.deleted_at IS NULL
+              AND (p.owner_id = $1 OR $1::text = ANY(SELECT jsonb_array_elements_text(p.team_members)))
+          ) AS all_names
+          GROUP BY name
+          ORDER BY count DESC, name ASC
+          LIMIT $2
+        `, [userId, limit])
+        
+        suggestions.popular = popularResult.rows
+          .map((r: any) => r.suggestion)
+          .filter(Boolean)
+          .slice(0, limit)
+      }
+      
+      // Recent searches: Get from user's search history (stored in localStorage on frontend)
+      // Backend doesn't store this, so return empty array
+      // Frontend will handle recent searches from localStorage
+      suggestions.recent = []
+      
+      log.info('[SEARCH-SUGGESTIONS] Generated suggestions', {
+        autocompleteCount: suggestions.autocomplete.length,
+        popularCount: suggestions.popular.length,
+        query: query?.substring(0, 50)
+      })
+      
+      res.json({
+        success: true,
+        suggestions
+      })
+      
+    } catch (error: any) {
+      log.error('[SEARCH-SUGGESTIONS] Failed to get suggestions:', error)
+      res.status(500).json({
+        success: false,
+        error: 'Failed to get search suggestions',
         message: error.message
       })
     }

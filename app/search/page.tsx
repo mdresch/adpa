@@ -90,11 +90,48 @@ export default function SearchPage() {
   const [searchMode, setSearchMode] = useState<"semantic" | "keyword" | "hybrid">("semantic")
   const [showHistory, setShowHistory] = useState(false)
   const [searchHistory, setSearchHistory] = useState<Array<{query: string, timestamp: number, filters?: SearchFilters}>>([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const [suggestions, setSuggestions] = useState<{
+    autocomplete: string[]
+    popular: string[]
+    recent: string[]
+  }>({
+    autocomplete: [],
+    popular: [],
+    recent: []
+  })
+  const [suggestionIndex, setSuggestionIndex] = useState(-1)
+  const [currentSearchId, setCurrentSearchId] = useState<string | null>(null)
   
   // Filter options from API - start empty to prevent hydration mismatch
   const [availableFrameworks, setAvailableFrameworks] = useState<string[]>([])
   const [availableAuthors, setAvailableAuthors] = useState<Array<{id: string, name: string, email: string}>>([])
   const [filtersLoaded, setFiltersLoaded] = useState(false)
+
+  // Save search to history (defined early so it can be used in performSearch)
+  const saveToHistory = useCallback((searchQuery: string, searchFilters: SearchFilters) => {
+    if (!searchQuery.trim() || searchQuery.trim().length < 2) return
+    
+    try {
+      const historyItem = {
+        query: searchQuery.trim(),
+        timestamp: Date.now(),
+        filters: searchFilters
+      }
+      
+      // Remove duplicates and add to front
+      setSearchHistory(prev => {
+        const updatedHistory = [
+          historyItem,
+          ...prev.filter(h => h.query !== historyItem.query)
+        ].slice(0, 20) // Keep last 20
+        localStorage.setItem('search_history', JSON.stringify(updatedHistory))
+        return updatedHistory
+      })
+    } catch (error) {
+      console.error('[SEARCH] Failed to save search history:', error)
+    }
+  }, [])
 
   const performSearch = useCallback(
     debounce(async (searchQuery: string, searchFilters: SearchFilters) => {
@@ -184,6 +221,11 @@ export default function SearchPage() {
           setResults(filteredResults)
           setTotalResults(data.total || filteredResults.length)
           
+          // Store searchId for tracking clicks
+          if ((data as any).searchId) {
+            setCurrentSearchId((data as any).searchId)
+          }
+          
           // Save to search history
           saveToHistory(searchQuery, searchFilters)
           
@@ -220,35 +262,60 @@ export default function SearchPage() {
       if (saved) {
         const history = JSON.parse(saved)
         setSearchHistory(history.slice(0, 20)) // Keep last 20 searches
+        // Update recent suggestions from history
+        setSuggestions(prev => ({
+          ...prev,
+          recent: history.slice(0, 5).map((h: any) => h.query)
+        }))
       }
     } catch (error) {
       console.error('[SEARCH] Failed to load search history:', error)
     }
   }, [])
 
-  // Save search to history
-  const saveToHistory = useCallback((searchQuery: string, searchFilters: SearchFilters) => {
-    if (!searchQuery.trim() || searchQuery.trim().length < 2) return
-    
-    try {
-      const historyItem = {
-        query: searchQuery.trim(),
-        timestamp: Date.now(),
-        filters: searchFilters
+  // Fetch search suggestions
+  const fetchSuggestions = useCallback(
+    debounce(async (searchQuery: string) => {
+      if (!searchQuery.trim() || searchQuery.trim().length < 1) {
+        // Show popular and recent when query is empty
+        setSuggestions(prev => ({
+          ...prev,
+          autocomplete: []
+        }))
+        setShowSuggestions(true)
+        return
       }
-      
-      // Remove duplicates and add to front
-      const updatedHistory = [
-        historyItem,
-        ...searchHistory.filter(h => h.query !== historyItem.query)
-      ].slice(0, 20) // Keep last 20
-      
-      setSearchHistory(updatedHistory)
-      localStorage.setItem('search_history', JSON.stringify(updatedHistory))
-    } catch (error) {
-      console.error('[SEARCH] Failed to save search history:', error)
-    }
-  }, [searchHistory])
+
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (!token) return
+
+        const suggestionsUrl = getApiUrl(`/search/suggestions?query=${encodeURIComponent(searchQuery)}&limit=10`)
+        const response = await fetch(suggestionsUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.suggestions) {
+            setSuggestions({
+              autocomplete: data.suggestions.autocomplete || [],
+              popular: data.suggestions.popular || [],
+              recent: searchHistory.slice(0, 5).map(h => h.query)
+            })
+            setShowSuggestions(true)
+            setSuggestionIndex(-1)
+          }
+        }
+      } catch (error) {
+        console.error('[SEARCH] Failed to fetch suggestions:', error)
+      }
+    }, 200),
+    [searchHistory]
+  )
+
 
   // Load search from history
   const loadFromHistory = useCallback((historyItem: {query: string, filters?: SearchFilters}) => {
@@ -273,6 +340,39 @@ export default function SearchPage() {
     setSearchHistory([])
     localStorage.removeItem('search_history')
     setShowHistory(false)
+  }, [])
+
+  // Load popular suggestions on mount
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    const loadPopularSuggestions = async () => {
+      try {
+        const token = localStorage.getItem('auth_token')
+        if (!token) return
+
+        const suggestionsUrl = getApiUrl('/search/suggestions?limit=10')
+        const response = await fetch(suggestionsUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.success && data.suggestions) {
+            setSuggestions(prev => ({
+              ...prev,
+              popular: data.suggestions.popular || []
+            }))
+          }
+        }
+      } catch (error) {
+        console.error('[SEARCH] Failed to load popular suggestions:', error)
+      }
+    }
+
+    loadPopularSuggestions()
   }, [])
 
   // Load filter options on mount (client-side only to prevent hydration issues)
@@ -425,7 +525,39 @@ export default function SearchPage() {
     })
   }
 
-  const handleResultClick = (result: SearchResult) => {
+  // Track result click
+  const trackResultClick = async (result: SearchResult, position: number, actionType: 'view' | 'download' | 'share' = 'view') => {
+    if (!currentSearchId) return
+    
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return
+
+      await fetch(getApiUrl('/search/track-click'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          searchId: currentSearchId,
+          resultId: result.id,
+          resultType: result.type,
+          resultTitle: result.title,
+          resultPosition: position,
+          relevanceScore: result.relevance_score,
+          actionType
+        })
+      })
+    } catch (error) {
+      console.error('[SEARCH] Failed to track result click:', error)
+    }
+  }
+
+  const handleResultClick = (result: SearchResult, position: number) => {
+    // Track click
+    trackResultClick(result, position, 'view')
+    
     switch (result.type) {
       case "project":
         router.push(`/projects/${result.id}`)
@@ -490,49 +622,231 @@ export default function SearchPage() {
                           value={query}
                           onChange={(e) => {
                             setQuery(e.target.value)
-                            setShowHistory(e.target.value.length === 0 && searchHistory.length > 0)
+                            setShowHistory(false)
+                            fetchSuggestions(e.target.value)
                           }}
                           onFocus={() => {
-                            if (searchHistory.length > 0) setShowHistory(true)
+                            if (query.length === 0 && searchHistory.length > 0) {
+                              setShowHistory(true)
+                            } else if (query.length > 0) {
+                              setShowSuggestions(true)
+                            }
                           }}
                           onBlur={() => {
-                            // Delay to allow click on history item
-                            setTimeout(() => setShowHistory(false), 200)
+                            // Delay to allow click on suggestion
+                            setTimeout(() => {
+                              setShowHistory(false)
+                              setShowSuggestions(false)
+                            }, 200)
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'ArrowDown') {
+                              e.preventDefault()
+                              const totalSuggestions = [
+                                ...suggestions.autocomplete,
+                                ...(query.length === 0 ? [...suggestions.popular, ...suggestions.recent] : [])
+                              ].length
+                              if (totalSuggestions > 0) {
+                                setSuggestionIndex(prev => 
+                                  prev < totalSuggestions - 1 ? prev + 1 : prev
+                                )
+                                setShowSuggestions(true)
+                              }
+                            } else if (e.key === 'ArrowUp') {
+                              e.preventDefault()
+                              setSuggestionIndex(prev => prev > 0 ? prev - 1 : -1)
+                            } else if (e.key === 'Enter' && suggestionIndex >= 0) {
+                              e.preventDefault()
+                              const allSuggestions = [
+                                ...suggestions.autocomplete,
+                                ...(query.length === 0 ? [...suggestions.popular, ...suggestions.recent] : [])
+                              ]
+                              if (allSuggestions[suggestionIndex]) {
+                                setQuery(allSuggestions[suggestionIndex])
+                                setShowSuggestions(false)
+                                setSuggestionIndex(-1)
+                              }
+                            } else if (e.key === 'Escape') {
+                              setShowSuggestions(false)
+                              setShowHistory(false)
+                              setSuggestionIndex(-1)
+                            }
                           }}
                           className="pl-10 pr-4 py-3 text-lg"
                         />
-                        {/* Search History Dropdown */}
-                        {showHistory && searchHistory.length > 0 && (
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg z-50 max-h-64 overflow-y-auto">
-                            <div className="p-2 border-b flex items-center justify-between">
-                              <span className="text-xs font-medium text-muted-foreground">Recent Searches</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  clearHistory()
-                                }}
-                                className="h-6 px-2 text-xs"
-                              >
-                                Clear
-                              </Button>
-                            </div>
-                            {searchHistory.map((item, idx) => (
-                              <button
-                                key={idx}
-                                onClick={() => loadFromHistory(item)}
-                                className="w-full text-left px-3 py-2 hover:bg-muted flex items-center justify-between group"
-                              >
-                                <div className="flex items-center gap-2 flex-1 min-w-0">
-                                  <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                                  <span className="truncate">{item.query}</span>
+                        {/* Search Suggestions Dropdown */}
+                        {(showSuggestions || showHistory) && (
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-background border rounded-md shadow-lg z-50 max-h-96 overflow-y-auto">
+                            {/* Autocomplete Suggestions */}
+                            {showSuggestions && query.length > 0 && suggestions.autocomplete.length > 0 && (
+                              <>
+                                <div className="p-2 border-b">
+                                  <span className="text-xs font-medium text-muted-foreground">Suggestions</span>
                                 </div>
-                                <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
-                                  {new Date(item.timestamp).toLocaleDateString()}
-                                </span>
-                              </button>
-                            ))}
+                                {suggestions.autocomplete.map((suggestion, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={async () => {
+                                      // Track suggestion click
+                                      try {
+                                        const token = localStorage.getItem('auth_token')
+                                        if (token) {
+                                          await fetch(getApiUrl('/search/track-suggestion'), {
+                                            method: 'POST',
+                                            headers: {
+                                              'Content-Type': 'application/json',
+                                              'Authorization': `Bearer ${token}`
+                                            },
+                                            body: JSON.stringify({
+                                              suggestionText: suggestion,
+                                              suggestionType: 'autocomplete',
+                                              queryBefore: query,
+                                              queryAfter: suggestion
+                                            })
+                                          })
+                                        }
+                                      } catch (error) {
+                                        console.error('[SEARCH] Failed to track suggestion click:', error)
+                                      }
+                                      
+                                      setQuery(suggestion)
+                                      setShowSuggestions(false)
+                                      setSuggestionIndex(-1)
+                                    }}
+                                    className={`w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 ${
+                                      suggestionIndex === idx ? 'bg-muted' : ''
+                                    }`}
+                                  >
+                                    <Search className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                    <span className="truncate">{suggestion}</span>
+                                  </button>
+                                ))}
+                              </>
+                            )}
+                            
+                            {/* Popular Searches (when query is empty) */}
+                            {showSuggestions && query.length === 0 && suggestions.popular.length > 0 && (
+                              <>
+                                <div className="p-2 border-b flex items-center justify-between">
+                                  <span className="text-xs font-medium text-muted-foreground">Popular Searches</span>
+                                </div>
+                                {suggestions.popular.map((suggestion, idx) => {
+                                  const absoluteIdx = idx
+                                  return (
+                                    <button
+                                      key={idx}
+                                      onClick={async () => {
+                                        // Track suggestion click
+                                        try {
+                                          const token = localStorage.getItem('auth_token')
+                                          if (token) {
+                                            await fetch(getApiUrl('/search/track-suggestion'), {
+                                              method: 'POST',
+                                              headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${token}`
+                                              },
+                                              body: JSON.stringify({
+                                                suggestionText: suggestion,
+                                                suggestionType: 'popular',
+                                                queryBefore: '',
+                                                queryAfter: suggestion
+                                              })
+                                            })
+                                          }
+                                        } catch (error) {
+                                          console.error('[SEARCH] Failed to track suggestion click:', error)
+                                        }
+                                        
+                                        setQuery(suggestion)
+                                        setShowSuggestions(false)
+                                        setSuggestionIndex(-1)
+                                      }}
+                                      className={`w-full text-left px-3 py-2 hover:bg-muted flex items-center gap-2 ${
+                                        suggestionIndex === absoluteIdx ? 'bg-muted' : ''
+                                      }`}
+                                    >
+                                      <Star className="h-4 w-4 text-yellow-500 fill-yellow-500 flex-shrink-0" />
+                                      <span className="truncate">{suggestion}</span>
+                                    </button>
+                                  )
+                                })}
+                              </>
+                            )}
+                            
+                            {/* Recent Searches */}
+                            {(showHistory || (showSuggestions && query.length === 0)) && searchHistory.length > 0 && (
+                              <>
+                                <div className="p-2 border-b flex items-center justify-between">
+                                  <span className="text-xs font-medium text-muted-foreground">Recent Searches</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      clearHistory()
+                                    }}
+                                    className="h-6 px-2 text-xs"
+                                  >
+                                    Clear
+                                  </Button>
+                                </div>
+                                {searchHistory.map((item, idx) => {
+                                  const absoluteIdx = suggestions.popular.length + idx
+                                  return (
+                                    <button
+                                      key={idx}
+                                      onClick={async () => {
+                                        // Track suggestion click
+                                        try {
+                                          const token = localStorage.getItem('auth_token')
+                                          if (token) {
+                                            await fetch(getApiUrl('/search/track-suggestion'), {
+                                              method: 'POST',
+                                              headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${token}`
+                                              },
+                                              body: JSON.stringify({
+                                                suggestionText: item.query,
+                                                suggestionType: 'recent',
+                                                queryBefore: query,
+                                                queryAfter: item.query
+                                              })
+                                            })
+                                          }
+                                        } catch (error) {
+                                          console.error('[SEARCH] Failed to track suggestion click:', error)
+                                        }
+                                        
+                                        loadFromHistory(item)
+                                        setShowSuggestions(false)
+                                        setShowHistory(false)
+                                        setSuggestionIndex(-1)
+                                      }}
+                                      className={`w-full text-left px-3 py-2 hover:bg-muted flex items-center justify-between group ${
+                                        suggestionIndex === absoluteIdx ? 'bg-muted' : ''
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                                        <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                        <span className="truncate">{item.query}</span>
+                                      </div>
+                                      <span className="text-xs text-muted-foreground ml-2 flex-shrink-0">
+                                        {new Date(item.timestamp).toLocaleDateString()}
+                                      </span>
+                                    </button>
+                                  )
+                                })}
+                              </>
+                            )}
+                            
+                            {/* Empty State */}
+                            {showSuggestions && query.length > 0 && suggestions.autocomplete.length === 0 && (
+                              <div className="p-4 text-center text-sm text-muted-foreground">
+                                No suggestions found
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -797,7 +1111,7 @@ export default function SearchPage() {
                           ))}
                         </div>
                       ) : results.length > 0 ? (
-                        results.map((result) => (
+                        results.map((result, idx) => (
                           <motion.div
                             key={result.id}
                             initial={{ opacity: 0, y: 20 }}
@@ -806,7 +1120,7 @@ export default function SearchPage() {
                           >
                             <Card 
                               className="hover:shadow-md transition-shadow cursor-pointer"
-                              onClick={() => handleResultClick(result)}
+                              onClick={() => handleResultClick(result, idx + 1)}
                             >
                               <CardContent className="p-6">
                                 <div className="space-y-3">
@@ -874,7 +1188,8 @@ export default function SearchPage() {
                                         size="sm"
                                         onClick={(e) => {
                                           e.stopPropagation()
-                                          handleResultClick(result)
+                                          trackResultClick(result, idx + 1, 'view')
+                                          handleResultClick(result, idx + 1)
                                         }}
                                         title="View"
                                       >
@@ -886,6 +1201,7 @@ export default function SearchPage() {
                                           size="sm"
                                           onClick={(e) => {
                                             e.stopPropagation()
+                                            trackResultClick(result, idx + 1, 'download')
                                             // Download document
                                             if (result.project_id) {
                                               window.open(`/api/documents/${result.id}/download`, '_blank')
@@ -901,6 +1217,7 @@ export default function SearchPage() {
                                         size="sm"
                                         onClick={(e) => {
                                           e.stopPropagation()
+                                          trackResultClick(result, idx + 1, 'share')
                                           // Copy link to clipboard
                                           const url = result.type === 'document' && result.project_id
                                             ? `${window.location.origin}/projects/${result.project_id}/documents/${result.id}`

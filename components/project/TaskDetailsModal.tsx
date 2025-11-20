@@ -135,8 +135,12 @@ export function TaskDetailsModal({
           </div>
         ) : error ? null : task ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-            <TabsList className="grid grid-cols-5 w-full">
+            <TabsList className="grid grid-cols-6 w-full">
               <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="roles">
+                <Briefcase className="h-4 w-4 mr-2" />
+                Roles
+              </TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
               <TabsTrigger value="hours">Hours</TabsTrigger>
@@ -145,6 +149,24 @@ export function TaskDetailsModal({
 
             <TabsContent value="details" className="mt-4">
               <TaskEditForm task={task} onSave={handleTaskUpdate} />
+            </TabsContent>
+
+            <TabsContent value="roles" className="mt-4">
+              {task.project_id && (
+                <TaskRoleAssignment
+                  taskId={task.id}
+                  projectId={task.project_id}
+                  onUpdate={handleTaskUpdate}
+                />
+              )}
+              {!task.project_id && (
+                <Alert>
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Project ID not available. Cannot load role assignments.
+                  </AlertDescription>
+                </Alert>
+              )}
             </TabsContent>
 
             <TabsContent value="resources" className="mt-4">

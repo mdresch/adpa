@@ -32,11 +32,40 @@ import {
 } from '@/components/ui/table';
 import {
   AlertTriangle, Plus, Pencil, Trash2, Loader2, Filter, Search, 
-  FileText, CheckCircle, XCircle, Eye, EyeOff, RefreshCw
+  FileText, CheckCircle, XCircle, Eye, EyeOff, RefreshCw, AlertCircle
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { apiClient } from '@/lib/api';
 import { useRouter } from 'next/navigation';
+
+// Helper function to safely extract error message
+const getErrorMessage = (error: any, defaultMessage: string): string => {
+  if (!error) return defaultMessage
+  
+  // Check if error.response.data is an object with message/code/details
+  const errorData = error.response?.data
+  if (errorData) {
+    // If it's a string, return it
+    if (typeof errorData === 'string') return errorData
+    
+    // If it's an object, try to extract message
+    if (typeof errorData === 'object') {
+      if (errorData.message && typeof errorData.message === 'string') {
+        return errorData.message
+      }
+      if (errorData.error && typeof errorData.error === 'string') {
+        return errorData.error
+      }
+      // If object has message/code/details, stringify the message
+      if (errorData.message) {
+        return String(errorData.message)
+      }
+    }
+  }
+  
+  // Fallback to error.message or default
+  return error.message || defaultMessage
+}
 
 interface ProjectRisk {
   id: string;
@@ -93,6 +122,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRisk, setEditingRisk] = useState<ProjectRisk | null>(null);
+  const [materializingRiskId, setMaterializingRiskId] = useState<string | null>(null);
   
   // Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -305,7 +335,7 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
       fetchRisks();
     } catch (error: any) {
       console.error('Failed to save risk:', error);
-      toast.error(error.response?.data?.error || 'Failed to save risk');
+      toast.error(getErrorMessage(error, 'Failed to save risk'));
     }
   };
 
@@ -332,6 +362,35 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
     } catch (error: any) {
       console.error('Failed to update curation status:', error);
       toast.error('Failed to update risk');
+    }
+  };
+
+  // Materialize risk into issue (when risk matures into actual problem)
+  const handleMaterializeRisk = async (risk: ProjectRisk) => {
+    if (!confirm(`Convert this risk into an issue?\n\n"${risk.title}"\n\nThis will create an issue and mark the risk as materialized.`)) {
+      return;
+    }
+
+    setMaterializingRiskId(risk.id);
+    try {
+      const response = await apiClient.post(`/issues/materialize-risk/${risk.id}`, {
+        priority: risk.severity === 'critical' ? 'critical' : risk.severity === 'high' ? 'high' : 'medium',
+        impact: `Risk with ${risk.impact} impact has materialized`
+      });
+
+      toast.success('Risk successfully converted to issue');
+      
+      // Refresh risks to show updated status
+      fetchRisks();
+      
+      // Optionally navigate to issues tab
+      // You can uncomment this if you want to auto-navigate:
+      // router.push(`/projects/${projectId}?tab=issues`);
+    } catch (error: any) {
+      console.error('Failed to materialize risk:', error);
+      toast.error(getErrorMessage(error, 'Failed to convert risk to issue'));
+    } finally {
+      setMaterializingRiskId(null);
     }
   };
 
@@ -581,6 +640,20 @@ export function ProjectRisksTab({ projectId }: ProjectRisksTabProps) {
                       </TableCell>
                       <TableCell>
                         <div className="flex gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleMaterializeRisk(risk)}
+                            disabled={materializingRiskId === risk.id || risk.status === 'closed'}
+                            title="Convert to Issue (Risk has materialized)"
+                            className="text-orange-600 hover:text-orange-700"
+                          >
+                            {materializingRiskId === risk.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <AlertCircle className="h-4 w-4" />
+                            )}
+                          </Button>
                           <Button
                             variant="ghost"
                             size="sm"
