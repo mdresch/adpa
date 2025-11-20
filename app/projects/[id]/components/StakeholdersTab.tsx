@@ -26,8 +26,20 @@ import {
   Trash2,
   Filter,
   X,
-  UserCheck
+  UserCheck,
+  Award,
+  Briefcase
 } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { StakeholderRoleAssignment } from "@/components/stakeholder/StakeholderRoleAssignment"
+import { StakeholderSkillsManagement } from "@/components/stakeholder/StakeholderSkillsManagement"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 interface Stakeholder {
   id: string
@@ -53,6 +65,7 @@ interface Stakeholder {
 interface StakeholdersTabProps {
   stakeholders: Stakeholder[]
   stakeholdersLoading: boolean
+  projectId: string
   onAddStakeholder: () => void
   onEditStakeholder: (stakeholder: Stakeholder) => void
   onDeleteStakeholder: (id: string) => Promise<void>
@@ -135,6 +148,7 @@ const formatCommunicationFrequency = (frequency: string) => {
 export function StakeholdersTab({ 
   stakeholders, 
   stakeholdersLoading,
+  projectId,
   onAddStakeholder,
   onEditStakeholder,
   onDeleteStakeholder 
@@ -147,6 +161,10 @@ export function StakeholdersTab({
   const [influenceLevelFilter, setInfluenceLevelFilter] = useState<string>("all")
   const [communicationFilter, setCommunicationFilter] = useState<string>("all")
   const [engagementFilter, setEngagementFilter] = useState<string>("all")
+  
+  // Detail dialog state
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+  const [selectedStakeholder, setSelectedStakeholder] = useState<Stakeholder | null>(null)
 
   // Get unique departments
   const departments = useMemo(() => {
@@ -197,6 +215,16 @@ export function StakeholdersTab({
     setInfluenceLevelFilter("all")
     setCommunicationFilter("all")
     setEngagementFilter("all")
+  }
+
+  const handleViewDetails = (stakeholder: Stakeholder) => {
+    setSelectedStakeholder(stakeholder)
+    setDetailDialogOpen(true)
+  }
+
+  const handleCloseDetails = () => {
+    setDetailDialogOpen(false)
+    setSelectedStakeholder(null)
   }
 
   return (
@@ -609,6 +637,15 @@ export function StakeholdersTab({
                     {/* Actions */}
                     <div className="flex items-center space-x-2">
                       <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleViewDetails(stakeholder)}
+                        aria-label={`View details for ${stakeholder.role}`}
+                      >
+                        <Briefcase className="h-4 w-4 mr-2" />
+                        Details
+                      </Button>
+                      <Button 
                         variant="ghost" 
                         size="sm" 
                         onClick={() => onEditStakeholder(stakeholder)}
@@ -657,6 +694,120 @@ export function StakeholdersTab({
           )}
         </div>
       )}
+
+      {/* Stakeholder Detail Dialog */}
+      <Dialog open={detailDialogOpen} onOpenChange={setDetailDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {selectedStakeholder && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{selectedStakeholder.role}</DialogTitle>
+                <DialogDescription>
+                  Manage roles, skills, and competencies for this stakeholder
+                </DialogDescription>
+              </DialogHeader>
+              <Tabs defaultValue="overview" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="roles">
+                    <Briefcase className="h-4 w-4 mr-2" />
+                    Roles
+                  </TabsTrigger>
+                  <TabsTrigger value="skills">
+                    <Award className="h-4 w-4 mr-2" />
+                    Skills
+                  </TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="overview" className="space-y-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Stakeholder Information</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Name</p>
+                          <p className="text-sm">{selectedStakeholder.name || "Not specified"}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Email</p>
+                          <p className="text-sm">{selectedStakeholder.email}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Department</p>
+                          <p className="text-sm">{selectedStakeholder.department || "Not specified"}</p>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Phone</p>
+                          <p className="text-sm">{selectedStakeholder.phone || "Not specified"}</p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Type</p>
+                          <Badge variant={selectedStakeholder.stakeholder_type === 'internal' ? 'default' : 'secondary'}>
+                            {selectedStakeholder.stakeholder_type === 'internal' ? 'Internal' : 'External'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Category</p>
+                          <Badge variant={selectedStakeholder.stakeholder_category === 'primary' ? 'default' : 'outline'}>
+                            {selectedStakeholder.stakeholder_category === 'primary' ? 'Primary' : 'Secondary'}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Interest Level</p>
+                          <Badge variant={getInterestLevelColor(selectedStakeholder.interest_level)}>
+                            {selectedStakeholder.interest_level.charAt(0).toUpperCase() + selectedStakeholder.interest_level.slice(1)}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Influence Level</p>
+                          <Badge variant={getInfluenceLevelColor(selectedStakeholder.influence_level)}>
+                            {selectedStakeholder.influence_level.charAt(0).toUpperCase() + selectedStakeholder.influence_level.slice(1)}
+                          </Badge>
+                        </div>
+                      </div>
+                      {selectedStakeholder.expectations && (
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Expectations</p>
+                          <p className="text-sm">{selectedStakeholder.expectations}</p>
+                        </div>
+                      )}
+                      {selectedStakeholder.potential_impact && (
+                        <div>
+                          <p className="text-sm font-medium text-muted-foreground">Potential Impact</p>
+                          <p className="text-sm">{selectedStakeholder.potential_impact}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+                
+                <TabsContent value="roles" className="space-y-4">
+                  <StakeholderRoleAssignment
+                    stakeholderId={selectedStakeholder.id}
+                    projectId={projectId}
+                    onUpdate={() => {
+                      // Refresh stakeholder data if needed
+                    }}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="skills" className="space-y-4">
+                  <StakeholderSkillsManagement
+                    stakeholderId={selectedStakeholder.id}
+                    onUpdate={() => {
+                      // Refresh stakeholder data if needed
+                    }}
+                  />
+                </TabsContent>
+              </Tabs>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

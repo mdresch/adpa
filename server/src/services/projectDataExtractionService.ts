@@ -5302,53 +5302,10 @@ Output valid JSON object with "performance_actuals" array only.`
         })
       }
       
-      // Calculate risk_level from probability and impact
-      // High probability + High impact = High risk
-      // Medium probability + High impact = High risk
-      // High probability + Medium impact = High risk
-      // Otherwise use the higher of the two
-      // IMPORTANT: Must be exactly 'high', 'medium', or 'low' (case-sensitive, matches CHECK constraint)
-      let calculatedRiskLevel: string
-      if ((mappedProbability === 'high' && mappedImpact === 'high') ||
-          (mappedProbability === 'high' && mappedImpact === 'medium') ||
-          (mappedProbability === 'medium' && mappedImpact === 'high')) {
-        calculatedRiskLevel = 'high'
-      } else if ((mappedProbability === 'low' && mappedImpact === 'low')) {
-        calculatedRiskLevel = 'low'
-      } else {
-        calculatedRiskLevel = 'medium'
-      }
-      
-      // CRITICAL: Ensure risk_level is exactly one of the three allowed values (case-sensitive)
-      // Force to lowercase and validate against exact matches
-      calculatedRiskLevel = String(calculatedRiskLevel).toLowerCase().trim()
-      const validRiskLevels = ['high', 'medium', 'low']
-      if (!validRiskLevels.includes(calculatedRiskLevel)) {
-        logger.error(`[EXTRACTION-RISKS] Invalid calculated risk_level: "${calculatedRiskLevel}", defaulting to 'medium'`, {
-          title: r.title,
-          probability: r.probability,
-          impact: r.impact,
-          mappedProbability,
-          mappedImpact,
-          calculatedRiskLevel,
-          calculatedRiskLevelType: typeof calculatedRiskLevel,
-          calculatedRiskLevelLength: calculatedRiskLevel.length
-        })
-        calculatedRiskLevel = 'medium'
-      }
-      
-      // Final defensive check - ensure it's exactly one of the three values
-      if (calculatedRiskLevel !== 'high' && calculatedRiskLevel !== 'medium' && calculatedRiskLevel !== 'low') {
-        logger.error(`[EXTRACTION-RISKS] CRITICAL: risk_level still invalid after normalization: "${calculatedRiskLevel}", forcing to 'medium'`, {
-          title: r.title,
-          originalProbability: r.probability,
-          originalImpact: r.impact,
-          mappedProbability,
-          mappedImpact,
-          calculatedRiskLevel
-        })
-        calculatedRiskLevel = 'medium'
-      }
+      // IMPORTANT: risk_level is organizational level ('project', 'program', 'portfolio', 'systemic'), NOT severity
+      // For extracted risks from documents, risk_level should always be 'project'
+      // Severity is calculated separately and stored in the 'severity' column (if it exists)
+      const riskLevel = 'project' // Extracted risks are always project-level
       
       // Resolve source_document_id
       const sourceDocumentId = (r as any).source_document_id || null
@@ -5358,90 +5315,20 @@ Output valid JSON object with "performance_actuals" array only.`
         title: r.title,
         probability: mappedProbability,
         impact: mappedImpact,
-        risk_level: calculatedRiskLevel,
-        isValid: ['high', 'medium', 'low'].includes(calculatedRiskLevel)
+        risk_level: riskLevel, // Always 'project' for extracted risks
+        severity: 'calculated separately' // Severity is different from risk_level
       })
       
       // CRITICAL: Final validation before pushing to values array
-      // Ensure all three risk-related values are exactly 'high', 'medium', or 'low'
-      // Remove any whitespace, ensure lowercase, and validate
+      // Ensure probability and impact are valid
       const cleanProbability = String(mappedProbability || 'medium').toLowerCase().trim()
       const cleanImpact = String(mappedImpact || 'medium').toLowerCase().trim()
-      const cleanRiskLevel = String(calculatedRiskLevel || 'medium').toLowerCase().trim()
       
-      const finalProbability = (['high', 'medium', 'low'].includes(cleanProbability)) ? cleanProbability : 'medium'
-      const finalImpact = (['high', 'medium', 'low'].includes(cleanImpact)) ? cleanImpact : 'medium'
-      const finalRiskLevel = (['high', 'medium', 'low'].includes(cleanRiskLevel)) ? cleanRiskLevel : 'medium'
+      const finalProbability = (['very_high', 'high', 'medium', 'low', 'very_low'].includes(cleanProbability)) ? cleanProbability : 'medium'
+      const finalImpact = (['very_high', 'high', 'medium', 'low', 'very_low'].includes(cleanImpact)) ? cleanImpact : 'medium'
       
-      // CRITICAL: Double-check that finalRiskLevel is exactly one of the three valid values
-      // This is a defensive check to prevent any edge cases
-      if (finalRiskLevel !== 'high' && finalRiskLevel !== 'medium' && finalRiskLevel !== 'low') {
-        logger.error(`[EXTRACTION-RISKS] CRITICAL: finalRiskLevel is still invalid: "${finalRiskLevel}", forcing to 'medium'`, {
-          title: r.title,
-          cleanRiskLevel,
-          calculatedRiskLevel,
-          finalRiskLevel
-        })
-        // Force to medium as last resort
-        const forcedRiskLevel = 'medium'
-        values.push(
-          projectId,
-          r.title || '',        // name column
-          r.description || '',
-          r.category || null,
-          finalProbability,  // Use validated probability value
-          finalImpact,       // Use validated impact value
-          forcedRiskLevel,    // Use forced risk_level value
-          r.mitigation_strategy || null,
-          r.contingency_plan || null,
-          r.owner || null,      // owner column
-          'identified',        // status column (default)
-          r.title || '',        // title column (after name)
-          userId,              // created_by
-          sourceDocumentId     // source_document_id
-        )
-        return // Skip to next risk
-      }
-      
-      // Log if we had to fix any values
-      if (finalProbability !== mappedProbability || finalImpact !== mappedImpact || finalRiskLevel !== calculatedRiskLevel) {
-        logger.error(`[EXTRACTION-RISKS] Had to fix invalid risk values before insert`, {
-          title: r.title,
-          originalProbability: mappedProbability,
-          originalImpact: mappedImpact,
-          originalRiskLevel: calculatedRiskLevel,
-          finalProbability,
-          finalImpact,
-          finalRiskLevel
-        })
-      }
-      
-      // Final sanity check - ensure risk_level is exactly 'high', 'medium', or 'low' (no extra characters)
-      if (finalRiskLevel.length > 10 || !/^(high|medium|low)$/.test(finalRiskLevel)) {
-        logger.error(`[EXTRACTION-RISKS] CRITICAL: risk_level fails regex validation: "${finalRiskLevel}" (length: ${finalRiskLevel.length}), using 'medium'`, {
-          title: r.title,
-          finalRiskLevel,
-          finalRiskLevelLength: finalRiskLevel.length,
-          finalRiskLevelCharCodes: finalRiskLevel.split('').map(c => c.charCodeAt(0))
-        })
-        values.push(
-          projectId,
-          r.title || '',        // name column
-          r.description || '',
-          r.category || null,
-          finalProbability,
-          finalImpact,
-          'medium',    // Force to medium
-          r.mitigation_strategy || null,
-          r.contingency_plan || null,
-          r.owner || null,      // owner column
-          'identified',        // status column (default)
-          r.title || '',        // title column (after name)
-          userId,              // created_by
-          sourceDocumentId     // source_document_id
-        )
-        return // Skip to next risk
-      }
+      // Ensure risk_level is valid organizational level
+      const finalRiskLevel = 'project' // Always 'project' for extracted risks
       
       values.push(
         projectId,
@@ -5450,7 +5337,7 @@ Output valid JSON object with "performance_actuals" array only.`
         r.category || null,
         finalProbability,  // Use validated probability value
         finalImpact,       // Use validated impact value
-        finalRiskLevel,    // Use validated risk_level value
+        finalRiskLevel,    // Always 'project' for extracted risks (organizational level, not severity)
         r.mitigation_strategy || null,
         r.contingency_plan || null,
         r.owner || null,      // owner column
@@ -5464,7 +5351,12 @@ Output valid JSON object with "performance_actuals" array only.`
     // CRITICAL: Final validation pass - check all values before insert
     // Values array structure: [projectId, name, description, category, probability, impact, risk_level, mitigation_strategy, contingency_plan, owner, status, title, created_by, source_document_id]
     // For each risk (14 values per risk), validate probability (index 4), impact (index 5), risk_level (index 6)
-    const validRiskLevels = ['high', 'medium', 'low']
+    // NOTE: risk_level is organizational level ('project', 'program', 'portfolio', 'systemic'), NOT severity
+    // For extracted risks, risk_level should always be 'project'
+    const validRiskLevels = ['project', 'program', 'portfolio', 'systemic']
+    const validProbabilities = ['very_high', 'high', 'medium', 'low', 'very_low']
+    const validImpacts = ['very_high', 'high', 'medium', 'low', 'very_low']
+    
     for (let i = 0; i < uniqueRisks.length; i++) {
       const probabilityIndex = i * 14 + 4  // Updated index: 0=projectId, 1=name, 2=description, 3=category, 4=probability
       const impactIndex = i * 14 + 5       // Updated index: 5=impact
@@ -5475,8 +5367,8 @@ Output valid JSON object with "performance_actuals" array only.`
         const impact = String(values[impactIndex] || '').toLowerCase().trim()
         const riskLevel = String(values[riskLevelIndex] || '').toLowerCase().trim()
         
-        // Fix any invalid values
-        if (!validRiskLevels.includes(prob)) {
+        // Fix any invalid probability values
+        if (!validProbabilities.includes(prob)) {
           logger.error(`[EXTRACTION-RISKS] Invalid probability value in values array: "${prob}", fixing to 'medium'`, {
             index: probabilityIndex,
             riskIndex: i,
@@ -5485,7 +5377,8 @@ Output valid JSON object with "performance_actuals" array only.`
           values[probabilityIndex] = 'medium'
         }
         
-        if (!validRiskLevels.includes(impact)) {
+        // Fix any invalid impact values
+        if (!validImpacts.includes(impact)) {
           logger.error(`[EXTRACTION-RISKS] Invalid impact value in values array: "${impact}", fixing to 'medium'`, {
             index: impactIndex,
             riskIndex: i,
@@ -5494,26 +5387,22 @@ Output valid JSON object with "performance_actuals" array only.`
           values[impactIndex] = 'medium'
         }
         
+        // Fix risk_level - must be organizational level, not severity
+        // Always normalize risk_level value (trim and lowercase) before inserting
+        // For extracted risks, always use 'project' level
         if (!validRiskLevels.includes(riskLevel)) {
-          logger.error(`[EXTRACTION-RISKS] Invalid risk_level value in values array: "${riskLevel}", fixing to 'medium'`, {
+          logger.error(`[EXTRACTION-RISKS] Invalid risk_level value in values array: "${riskLevel}" (expected organizational level: project/program/portfolio/systemic), fixing to 'project'`, {
             index: riskLevelIndex,
             riskIndex: i,
             title: uniqueRisks[i].title,
             probability: prob,
             impact: impact
           })
-          // Recalculate risk_level based on probability and impact
-          const fixedProb = validRiskLevels.includes(prob) ? prob : 'medium'
-          const fixedImpact = validRiskLevels.includes(impact) ? impact : 'medium'
-          let fixedRiskLevel = 'medium'
-          if ((fixedProb === 'high' && fixedImpact === 'high') ||
-              (fixedProb === 'high' && fixedImpact === 'medium') ||
-              (fixedProb === 'medium' && fixedImpact === 'high')) {
-            fixedRiskLevel = 'high'
-          } else if (fixedProb === 'low' && fixedImpact === 'low') {
-            fixedRiskLevel = 'low'
-          }
-          values[riskLevelIndex] = fixedRiskLevel
+          // Extracted risks are always project-level
+          values[riskLevelIndex] = 'project'
+        } else {
+          // Normalize valid risk_level value to ensure no whitespace/casing issues
+          values[riskLevelIndex] = riskLevel
         }
       }
     }

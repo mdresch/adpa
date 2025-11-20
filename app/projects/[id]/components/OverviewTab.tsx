@@ -60,6 +60,13 @@ interface DocumentQualityMetrics {
   totalAssessed: number
 }
 
+interface IssueStats {
+  total_issues: number
+  open_issues: number
+  critical_issues: number
+  overdue_issues: number
+}
+
 interface OverviewTabProps {
   project: Project
   progress: number
@@ -79,6 +86,7 @@ export function OverviewTab({
 }: OverviewTabProps) {
   const [pmbok8Metrics, setPmbok8Metrics] = useState<PMBOK8DomainMetrics | null>(null)
   const [qualityMetrics, setQualityMetrics] = useState<DocumentQualityMetrics | null>(null)
+  const [issueStats, setIssueStats] = useState<IssueStats | null>(null)
   const [loadingMetrics, setLoadingMetrics] = useState(true)
 
   // Calculate team members count from stakeholders
@@ -157,6 +165,22 @@ export function OverviewTab({
             averageGrade: avgGrade,
             totalAssessed: assessedCount
           })
+        }
+
+        // Fetch issue stats
+        try {
+          const issuesResponse = await fetch(getApiUrl(`/issues/stats/${projectId}`), {
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+              'Content-Type': 'application/json',
+            },
+          })
+          if (issuesResponse.ok) {
+            const issuesData = await issuesResponse.json()
+            setIssueStats(issuesData.data || null)
+          }
+        } catch (error) {
+          console.error('Failed to fetch issue stats:', error)
         }
       } catch (error) {
         console.error('Failed to fetch metrics:', error)
@@ -249,6 +273,22 @@ export function OverviewTab({
             <p className="text-xs text-muted-foreground">Generated docs</p>
           </CardContent>
         </Card>
+
+        {issueStats && (
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Issues</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{issueStats.total_issues}</div>
+              <p className="text-xs text-muted-foreground">
+                {issueStats.open_issues} open, {issueStats.critical_issues} critical
+                {issueStats.overdue_issues > 0 && `, ${issueStats.overdue_issues} overdue`}
+              </p>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* PMBOK 8 Performance Domains & Document Quality */}

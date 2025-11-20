@@ -47,6 +47,7 @@ import {
   Server,
   Eye,
   Timer,
+  Search,
 } from "@/components/ui/icons-shim"
 
 // Mock data for analytics
@@ -114,7 +115,9 @@ export default function AnalyticsPage() {
     system_uptime?: string
     api_calls?: number
   } | null>(null)
+  const [searchAnalytics, setSearchAnalytics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [searchLoading, setSearchLoading] = useState(false)
 
   const fetchAnalytics = async () => {
     try {
@@ -139,8 +142,22 @@ export default function AnalyticsPage() {
     }
   }
 
+  const fetchSearchAnalytics = async () => {
+    try {
+      setSearchLoading(true)
+      const data = await apiClient.get(`/analytics/search?timeRange=${timeRange}`)
+      setSearchAnalytics(data)
+    } catch (error) {
+      console.error("Failed to fetch search analytics:", error)
+      setSearchAnalytics(null)
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
   useEffect(() => {
     void fetchAnalytics()
+    void fetchSearchAnalytics()
   }, [timeRange, hasPermission])
 
   // Stats with real data from API (fallback to mock if unavailable)
@@ -344,12 +361,13 @@ export default function AnalyticsPage() {
                 <Card className="glass border-0 shadow-lg">
                   <CardContent className="p-6">
                     <Tabs defaultValue="overview" className="space-y-6">
-                      <TabsList className="grid w-full grid-cols-5">
+                      <TabsList className="grid w-full grid-cols-6">
                         <TabsTrigger value="overview">Overview</TabsTrigger>
                         <TabsTrigger value="users">Users</TabsTrigger>
                         <TabsTrigger value="documents">Documents</TabsTrigger>
                         <TabsTrigger value="performance">Performance</TabsTrigger>
                         <TabsTrigger value="ai-usage">AI Usage</TabsTrigger>
+                        <TabsTrigger value="search">Search</TabsTrigger>
                       </TabsList>
 
                       <TabsContent value="overview" className="space-y-6">
@@ -817,6 +835,224 @@ export default function AnalyticsPage() {
                             </Card>
                           </AnimatedGridItem>
                         </div>
+                      </TabsContent>
+
+                      <TabsContent value="search" className="space-y-6">
+                        <div>
+                          <h2 className="text-2xl font-bold mb-4">Search Analytics</h2>
+                          <p className="text-muted-foreground mb-6">
+                            Insights into search usage, popular queries, and user behavior
+                          </p>
+                        </div>
+
+                        {searchLoading ? (
+                          <div className="flex items-center justify-center h-64">
+                            <div className="text-center">
+                              <Activity className="h-8 w-8 text-blue-500 mx-auto mb-2 animate-pulse" />
+                              <p className="text-muted-foreground">Loading search analytics...</p>
+                            </div>
+                          </div>
+                        ) : searchAnalytics ? (
+                          <>
+                            {/* Search Statistics */}
+                            <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                              <AnimatedGridItem>
+                                <Card className="glass border-0 shadow-lg">
+                                  <CardContent className="p-6">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Total Searches</p>
+                                        <p className="text-2xl font-bold">{searchAnalytics.statistics?.total_searches?.toLocaleString() || 0}</p>
+                                      </div>
+                                      <Search className="h-8 w-8 text-blue-500" />
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </AnimatedGridItem>
+
+                              <AnimatedGridItem>
+                                <Card className="glass border-0 shadow-lg">
+                                  <CardContent className="p-6">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Success Rate</p>
+                                        <p className="text-2xl font-bold">{Number(searchAnalytics.statistics?.success_rate || 0).toFixed(1)}%</p>
+                                      </div>
+                                      <TrendingUp className="h-8 w-8 text-green-500" />
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </AnimatedGridItem>
+
+                              <AnimatedGridItem>
+                                <Card className="glass border-0 shadow-lg">
+                                  <CardContent className="p-6">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Avg Results</p>
+                                        <p className="text-2xl font-bold">{Number(searchAnalytics.statistics?.avg_results_per_search || 0).toFixed(1)}</p>
+                                      </div>
+                                      <BarChart3 className="h-8 w-8 text-purple-500" />
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </AnimatedGridItem>
+
+                              <AnimatedGridItem>
+                                <Card className="glass border-0 shadow-lg">
+                                  <CardContent className="p-6">
+                                    <div className="flex items-center justify-between">
+                                      <div>
+                                        <p className="text-sm font-medium text-muted-foreground">Cache Hit Rate</p>
+                                        <p className="text-2xl font-bold">{Number(searchAnalytics.statistics?.cache_hit_rate || 0).toFixed(1)}%</p>
+                                      </div>
+                                      <Zap className="h-8 w-8 text-yellow-500" />
+                                    </div>
+                                  </CardContent>
+                                </Card>
+                              </AnimatedGridItem>
+                            </AnimatedGrid>
+
+                            {/* Popular Searches */}
+                            <Card className="glass border-0 shadow-lg">
+                              <CardHeader>
+                                <CardTitle>Popular Searches</CardTitle>
+                                <CardDescription>Most searched queries in the last 30 days</CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                {searchAnalytics.popularSearches && searchAnalytics.popularSearches.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {searchAnalytics.popularSearches.slice(0, 10).map((search: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                                        <div className="flex items-center gap-3">
+                                          <span className="text-sm font-medium text-muted-foreground">#{idx + 1}</span>
+                                          <span className="font-medium">{search.query}</span>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                          <span>{search.search_count} searches</span>
+                                          <span>{search.unique_users} users</span>
+                                          <span>{Number(search.success_rate || 0).toFixed(0)}% success</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-muted-foreground text-center py-8">No search data available yet</p>
+                                )}
+                              </CardContent>
+                            </Card>
+
+                            {/* Search Mode Usage */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                              <Card className="glass border-0 shadow-lg">
+                                <CardHeader>
+                                  <CardTitle>Search Mode Usage</CardTitle>
+                                  <CardDescription>Distribution of search modes</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                  {searchAnalytics.modeUsage && searchAnalytics.modeUsage.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={300}>
+                                      <PieChart>
+                                        <Pie
+                                          data={searchAnalytics.modeUsage.map((m: any) => ({
+                                            name: m.search_mode,
+                                            value: Number(m.usage_count) || 0
+                                          }))}
+                                          cx="50%"
+                                          cy="50%"
+                                          labelLine={false}
+                                          label={({ name, value, percent }) => `${name}: ${value} (${(percent * 100).toFixed(0)}%)`}
+                                          outerRadius={80}
+                                          fill="#8884d8"
+                                          dataKey="value"
+                                        >
+                                          {searchAnalytics.modeUsage.map((_: any, index: number) => (
+                                            <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#06b6d4'][index % 3]} />
+                                          ))}
+                                        </Pie>
+                                        <Tooltip 
+                                          formatter={(value: any, name: any) => [
+                                            `${value} searches`,
+                                            name
+                                          ]}
+                                        />
+                                        <Legend 
+                                          formatter={(value: any) => {
+                                            const item = searchAnalytics.modeUsage.find((m: any) => m.search_mode === value)
+                                            return item ? `${value}: ${Number(item.usage_count) || 0} searches` : value
+                                          }}
+                                        />
+                                      </PieChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <p className="text-muted-foreground text-center py-8">No mode usage data</p>
+                                  )}
+                                </CardContent>
+                              </Card>
+
+                              <Card className="glass border-0 shadow-lg">
+                                <CardHeader>
+                                  <CardTitle>Success Rate Over Time</CardTitle>
+                                  <CardDescription>Search success rate trends</CardDescription>
+                                </CardHeader>
+                                <CardContent>
+                                  {searchAnalytics.successRate && searchAnalytics.successRate.length > 0 ? (
+                                    <ResponsiveContainer width="100%" height={300}>
+                                      <LineChart data={searchAnalytics.successRate}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="date" />
+                                        <YAxis />
+                                        <Tooltip />
+                                        <Legend />
+                                        <Line type="monotone" dataKey="success_rate" stroke="#10b981" name="Success Rate %" />
+                                      </LineChart>
+                                    </ResponsiveContainer>
+                                  ) : (
+                                    <p className="text-muted-foreground text-center py-8">No success rate data</p>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </div>
+
+                            {/* Top Clicked Results */}
+                            <Card className="glass border-0 shadow-lg">
+                              <CardHeader>
+                                <CardTitle>Top Clicked Results</CardTitle>
+                                <CardDescription>Most clicked search results</CardDescription>
+                              </CardHeader>
+                              <CardContent>
+                                {searchAnalytics.topClickedResults && searchAnalytics.topClickedResults.length > 0 ? (
+                                  <div className="space-y-2">
+                                    {searchAnalytics.topClickedResults.slice(0, 10).map((result: any, idx: number) => (
+                                      <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                                        <div className="flex items-center gap-3">
+                                          <Badge variant="outline">{result.result_type}</Badge>
+                                          <span className="font-medium">{result.result_title || 'Untitled'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                                          <span>{result.click_count} clicks</span>
+                                          <span>Avg position: {Number(result.avg_position || 0).toFixed(1)}</span>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-muted-foreground text-center py-8">No click data available</p>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </>
+                        ) : (
+                          <Card className="glass border-0 shadow-lg">
+                            <CardContent className="p-12 text-center">
+                              <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                              <h3 className="text-lg font-semibold mb-2">No Search Analytics Available</h3>
+                              <p className="text-muted-foreground">
+                                Search analytics will appear here once users start searching.
+                              </p>
+                            </CardContent>
+                          </Card>
+                        )}
                       </TabsContent>
                     </Tabs>
                   </CardContent>
