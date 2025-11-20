@@ -2,6 +2,7 @@ import { logger } from "../utils/logger"
 import { runMigrations } from "./migrate"
 import { seedDatabase } from "./seed"
 import { seedAdpaDocuments } from "./seed-adpa-documents"
+import { seedSkillsAndCompetencies } from "./seed-skills-competencies"
 
 async function seedAll() {
   try {
@@ -17,8 +18,13 @@ async function seedAll() {
     await seedDatabase()
     logger.info("✅ Basic seeding completed")
 
-    // Step 3: Seed ADPA project documents
-    logger.info("📚 Step 3: Seeding ADPA project documents...")
+    // Step 3: Seed Skills and Competencies
+    logger.info("🛠️ Step 3: Seeding skills and competencies...")
+    await seedSkillsAndCompetencies()
+    logger.info("✅ Skills and competencies seeding completed")
+
+    // Step 4: Seed ADPA project documents
+    logger.info("📚 Step 4: Seeding ADPA project documents...")
     await seedAdpaDocuments()
     logger.info("✅ ADPA documents seeding completed")
 
@@ -26,6 +32,7 @@ async function seedAll() {
     logger.info("📊 Your ADPA system is now ready with:")
     logger.info("   - ✅ Database schema (migrations)")
     logger.info("   - ✅ Users and permissions")
+    logger.info("   - ✅ Skills and competencies catalog")
     logger.info("   - ✅ ADPA project with 126+ documents")
     logger.info("   - ✅ Ready for Confluence integration testing")
 

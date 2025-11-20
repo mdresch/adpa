@@ -378,3 +378,451 @@ export async function createTaskDependency(
   }
 }
 
+// ================================================================
+// TASK ROLE ASSIGNMENTS (Multiple Roles Per Task)
+// Migration: 209_stakeholder_role_skills_integration.sql
+// ================================================================
+
+export interface TaskRole {
+  id: string
+  taskId: string
+  roleId: string
+  roleName?: string
+  roleType: 'owner' | 'executor' | 'reviewer' | 'approver' | 'consultant'
+  isPrimary: boolean
+  requiredCount: number
+  assignedCount: number
+  createdAt?: Date
+}
+
+/**
+ * Assign role to task
+ */
+export async function assignRoleToTask(
+  taskId: string,
+  roleId: string,
+  roleType: 'owner' | 'executor' | 'reviewer' | 'approver' | 'consultant' = 'owner',
+  options?: {
+    isPrimary?: boolean
+    requiredCount?: number
+  }
+): Promise<TaskRole> {
+  try {
+    // Verify task exists
+    const taskCheck = await pool.query(
+      `SELECT id, project_id FROM project_tasks WHERE id = $1`,
+      [taskId]
+    )
+
+    if (taskCheck.rows.length === 0) {
+      throw new Error('Task not found')
+    }
+
+    // Verify role exists
+    const roleCheck = await pool.query(
+      `SELECT id, role_name FROM project_roles WHERE id = $1`,
+      [roleId]
+    )
+
+    if (roleCheck.rows.length === 0) {
+      throw new Error('Role not found')
+    }
+
+    const result = await pool.query(
+      `INSERT INTO task_roles (
+         task_id,
+         role_id,
+         role_type,
+         is_primary,
+         required_count
+       )
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (task_id, role_id, role_type) 
+       DO UPDATE SET 
+         is_primary = EXCLUDED.is_primary,
+         required_count = EXCLUDED.required_count
+       RETURNING 
+         id,
+         task_id as "taskId",
+         role_id as "roleId",
+         role_type as "roleType",
+         is_primary as "isPrimary",
+         required_count as "requiredCount",
+         assigned_count as "assignedCount",
+         created_at as "createdAt"`,
+      [
+        taskId,
+        roleId,
+        roleType,
+        options?.isPrimary || false,
+        options?.requiredCount || 1
+      ]
+    )
+
+    const taskRole = result.rows[0]
+    taskRole.roleName = roleCheck.rows[0].role_name
+
+    logger.info('Role assigned to task', {
+      taskId,
+      roleId,
+      roleType,
+      isPrimary: options?.isPrimary || false
+    })
+
+    return taskRole
+  } catch (error: any) {
+    if (error.code === '23505') { // Unique violation
+      throw new Error('Role already assigned to task with this role type')
+    }
+    logger.error('assignRoleToTask error', { error, taskId, roleId })
+    throw error
+  }
+}
+
+/**
+ * Get roles assigned to a task
+ */
+export async function getTaskRoles(taskId: string): Promise<TaskRole[]> {
+  try {
+    const result = await pool.query(
+      `SELECT 
+         tr.id,
+         tr.task_id as "taskId",
+         tr.role_id as "roleId",
+         pr.role_name as "roleName",
+         tr.role_type as "roleType",
+         tr.is_primary as "isPrimary",
+         tr.required_count as "requiredCount",
+         tr.assigned_count as "assignedCount",
+         tr.created_at as "createdAt"
+       FROM task_roles tr
+       INNER JOIN project_roles pr ON tr.role_id = pr.id
+       WHERE tr.task_id = $1
+       ORDER BY tr.is_primary DESC, tr.role_type, pr.role_name ASC`,
+      [taskId]
+    )
+
+    return result.rows
+  } catch (error) {
+    logger.error('getTaskRoles error', { error, taskId })
+    throw error
+  }
+}
+
+/**
+ * Get tasks by role
+ */
+export async function getTasksByRole(roleId: string, projectId?: string): Promise<any[]> {
+  try {
+    let query = `
+      SELECT 
+        tr.id as "taskRoleId",
+        tr.role_type as "roleType",
+        tr.is_primary as "isPrimary",
+        tr.required_count as "requiredCount",
+        tr.assigned_count as "assignedCount",
+        t.id,
+        t.project_id as "projectId",
+        t.task_number as "taskNumber",
+        t.task_name as "taskName",
+        t.status,
+        t.percent_complete as "percentComplete"
+      FROM task_roles tr
+      INNER JOIN project_tasks t ON tr.task_id = t.id
+      WHERE tr.role_id = $1
+    `
+
+    const params: any[] = [roleId]
+
+    if (projectId) {
+      query += ` AND t.project_id = $2`
+      params.push(projectId)
+    }
+
+    query += ` ORDER BY t.task_number ASC`
+
+    const result = await pool.query(query, params)
+
+    return result.rows
+  } catch (error) {
+    logger.error('getTasksByRole error', { error, roleId, projectId })
+    throw error
+  }
+}
+
+/**
+ * Remove role from task
+ */
+export async function removeRoleFromTask(
+  taskId: string,
+  roleId: string,
+  roleType?: string
+): Promise<boolean> {
+  try {
+    let query = `
+      DELETE FROM task_roles 
+      WHERE task_id = $1 AND role_id = $2
+    `
+    const params: any[] = [taskId, roleId]
+
+    if (roleType) {
+      query += ` AND role_type = $3`
+      params.push(roleType)
+    }
+
+    const result = await pool.query(query, params)
+
+    logger.info('Role removed from task', {
+      taskId,
+      roleId,
+      roleType
+    })
+
+    return result.rowCount > 0
+  } catch (error) {
+    logger.error('removeRoleFromTask error', { error, taskId, roleId })
+    throw error
+  }
+}
+
+/**
+ * Get available stakeholders for a task (matching roles and skills)
+ */
+export async function getAvailableStakeholdersForTask(taskId: string): Promise<any[]> {
+  try {
+    // Get task roles
+    const taskRoles = await getTaskRoles(taskId)
+
+    if (taskRoles.length === 0) {
+      return []
+    }
+
+    // Get project ID from task
+    const taskResult = await pool.query(
+      `SELECT project_id FROM project_tasks WHERE id = $1`,
+      [taskId]
+    )
+
+    if (taskResult.rows.length === 0) {
+      throw new Error('Task not found')
+    }
+
+    const projectId = taskResult.rows[0].project_id
+
+    // Get stakeholders assigned to these roles in this project
+    const roleIds = taskRoles.map(tr => tr.roleId)
+    const placeholders = roleIds.map((_, i) => `$${i + 1}`).join(', ')
+
+    const result = await pool.query(
+      `SELECT DISTINCT
+         s.id as "stakeholderId",
+         s.name as "stakeholderName",
+         s.email as "stakeholderEmail",
+         sra.role_id as "roleId",
+         pr.role_name as "roleName",
+         sra.assignment_type as "assignmentType",
+         sra.status,
+         sra.allocation_percentage as "allocationPercentage"
+       FROM stakeholders s
+       INNER JOIN stakeholder_role_assignments sra ON s.id = sra.stakeholder_id
+       INNER JOIN project_roles pr ON sra.role_id = pr.id
+       WHERE sra.role_id IN (${placeholders})
+         AND sra.project_id = $${roleIds.length + 1}
+         AND sra.status = 'active'
+       ORDER BY s.name ASC`,
+      [...roleIds, projectId]
+    )
+
+    return result.rows
+  } catch (error) {
+    logger.error('getAvailableStakeholdersForTask error', { error, taskId })
+    throw error
+  }
+}
+
+/**
+ * Suggest stakeholders for a task based on role and skill matching
+ * This is a simplified version - full AI-powered matching would be in a separate service
+ */
+export async function suggestStakeholdersForTask(taskId: string): Promise<any[]> {
+  try {
+    const taskRoles = await getTaskRoles(taskId)
+
+    if (taskRoles.length === 0) {
+      return []
+    }
+
+    // Get project ID
+    const taskResult = await pool.query(
+      `SELECT project_id FROM project_tasks WHERE id = $1`,
+      [taskId]
+    )
+
+    if (taskResult.rows.length === 0) {
+      throw new Error('Task not found')
+    }
+
+    const projectId = taskResult.rows[0].project_id
+
+    // For each role, get stakeholders with skill matches
+    const suggestions: any[] = []
+
+    for (const taskRole of taskRoles) {
+      // Get stakeholders with this role in the project
+      const stakeholdersResult = await pool.query(
+        `SELECT 
+           s.id,
+           s.name,
+           s.email,
+           sra.assignment_type,
+           sra.allocation_percentage
+         FROM stakeholders s
+         INNER JOIN stakeholder_role_assignments sra ON s.id = sra.stakeholder_id
+         WHERE sra.role_id = $1
+           AND sra.project_id = $2
+           AND sra.status = 'active'`,
+        [taskRole.roleId, projectId]
+      )
+
+      // Calculate skill match for each stakeholder
+      for (const stakeholder of stakeholdersResult.rows) {
+        try {
+          const { matchStakeholderToRole } = await import('./skillsManagementService')
+          const match = await matchStakeholderToRole(stakeholder.id, taskRole.roleId)
+
+          suggestions.push({
+            stakeholderId: stakeholder.id,
+            stakeholderName: stakeholder.name,
+            stakeholderEmail: stakeholder.email,
+            roleId: taskRole.roleId,
+            roleName: taskRole.roleName,
+            roleType: taskRole.roleType,
+            matchPercentage: match.matchPercentage,
+            matchedSkills: match.matchedSkills,
+            totalRequiredSkills: match.totalRequiredSkills,
+            missingSkills: match.missingSkills,
+            assignmentType: stakeholder.assignment_type,
+            allocationPercentage: stakeholder.allocation_percentage
+          })
+        } catch (error) {
+          logger.warn('Error calculating match for stakeholder', {
+            stakeholderId: stakeholder.id,
+            roleId: taskRole.roleId,
+            error
+          })
+        }
+      }
+    }
+
+    // Sort by match percentage descending
+    suggestions.sort((a, b) => b.matchPercentage - a.matchPercentage)
+
+    return suggestions
+  } catch (error) {
+    logger.error('suggestStakeholdersForTask error', { error, taskId })
+    throw error
+  }
+}
+
+/**
+ * Get skill gaps for a task (identify missing skills needed for completion)
+ */
+export async function getSkillGapsForTask(taskId: string): Promise<any[]> {
+  try {
+    const taskRoles = await getTaskRoles(taskId)
+
+    if (taskRoles.length === 0) {
+      return []
+    }
+
+    // Get project ID
+    const taskResult = await pool.query(
+      `SELECT project_id FROM project_tasks WHERE id = $1`,
+      [taskId]
+    )
+
+    if (taskResult.rows.length === 0) {
+      throw new Error('Task not found')
+    }
+
+    const projectId = taskResult.rows[0].project_id
+
+    const gaps: any[] = []
+
+    for (const taskRole of taskRoles) {
+      // Get required skills for this role
+      const requiredSkillsResult = await pool.query(
+        `SELECT 
+           s.id as "skillId",
+           s.name as "skillName",
+           rs.required_proficiency as "requiredProficiency",
+           rs.is_required
+         FROM role_skills rs
+         INNER JOIN skills s ON rs.skill_id = s.id
+         WHERE rs.role_id = $1 AND rs.is_required = TRUE`,
+        [taskRole.roleId]
+      )
+
+      // Get stakeholders with this role in the project
+      const stakeholdersResult = await pool.query(
+        `SELECT s.id, s.name, s.email
+         FROM stakeholders s
+         INNER JOIN stakeholder_role_assignments sra ON s.id = sra.stakeholder_id
+         WHERE sra.role_id = $1
+           AND sra.project_id = $2
+           AND sra.status = 'active'`,
+        [taskRole.roleId, projectId]
+      )
+
+      // Check which required skills are missing from stakeholders
+      for (const requiredSkill of requiredSkillsResult.rows) {
+        const stakeholdersWithSkill = await pool.query(
+          `SELECT COUNT(*) as count
+           FROM stakeholder_skills ss
+           WHERE ss.skill_id = $1
+             AND ss.stakeholder_id IN (
+               SELECT sra.stakeholder_id
+               FROM stakeholder_role_assignments sra
+               WHERE sra.role_id = $2
+                 AND sra.project_id = $3
+                 AND sra.status = 'active'
+             )
+             AND (
+               ($4 = 'beginner' AND ss.proficiency_level IN ('beginner', 'intermediate', 'advanced', 'expert'))
+               OR ($4 = 'intermediate' AND ss.proficiency_level IN ('intermediate', 'advanced', 'expert'))
+               OR ($4 = 'advanced' AND ss.proficiency_level IN ('advanced', 'expert'))
+               OR ($4 = 'expert' AND ss.proficiency_level = 'expert')
+             )`,
+          [
+            requiredSkill.skillId,
+            taskRole.roleId,
+            projectId,
+            requiredSkill.requiredProficiency
+          ]
+        )
+
+        const count = parseInt(stakeholdersWithSkill.rows[0].count)
+
+        if (count < taskRole.requiredCount) {
+          gaps.push({
+            roleId: taskRole.roleId,
+            roleName: taskRole.roleName,
+            roleType: taskRole.roleType,
+            skillId: requiredSkill.skillId,
+            skillName: requiredSkill.skillName,
+            requiredProficiency: requiredSkill.requiredProficiency,
+            requiredCount: taskRole.requiredCount,
+            availableCount: count,
+            gap: taskRole.requiredCount - count
+          })
+        }
+      }
+    }
+
+    return gaps
+  } catch (error) {
+    logger.error('getSkillGapsForTask error', { error, taskId })
+    throw error
+  }
+}
+

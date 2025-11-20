@@ -11,6 +11,7 @@
     "migrate:336": "tsx server/scripts/run-migration-336.ts",
     "migrate:337": "tsx server/scripts/run-migration-337.ts",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
+    "seed:skills": "tsx server/src/database/seed-skills-competencies.ts",
     "test:kv": "npx ts-node test-vercel-kv.ts",
     "test:db": "tsx scripts/test-db-connection.ts",
     "test:db-unit": "jest __tests__/lib/db.test.ts",

@@ -148,10 +148,14 @@ export async function processPipelineJob(job: any) {
           const estimatedCost = (totalTokens / 1000) * costPer1kTokens
           
           // Build comprehensive metadata from all pipeline stages
+          // Use database time for consistent, correct dates
+          const { getFormattedDateForTitle } = require('../utils/dateUtils')
+          const formattedDate = await getFormattedDateForTitle()
+          
           const pipelineMetadata = {
             // Document Properties
             document: {
-              name: `${templateName} - ${new Date().toLocaleDateString()}`,
+              name: `${templateName} - ${formattedDate}`,
               template_name: templateName,
               template_id: templateId,
               template_version: templateVersion,
@@ -289,7 +293,7 @@ export async function processPipelineJob(job: any) {
               gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW()
             ) RETURNING id`,
             [
-              `${templateName} - ${new Date().toLocaleDateString()}`,
+              `${templateName} - ${formattedDate}`,
               finalContent,
               projectId,
               templateId,
@@ -305,7 +309,7 @@ export async function processPipelineJob(job: any) {
           finalDocumentId = documentResult.rows[0].id
           logger.info('📄 Final document saved to project library with comprehensive metadata', {
             documentId: finalDocumentId,
-            documentName: `${templateName} - ${new Date().toLocaleDateString()}`,
+            documentName: `${templateName} - ${formattedDate}`,
             projectId,
             templateId,
             templateVersion,
