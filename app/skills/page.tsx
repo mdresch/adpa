@@ -78,7 +78,7 @@ export default function SkillsPage() {
     try {
       setLoading(true)
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl("/api/skills"), {
+  const response = await fetch(getApiUrl("/skills"), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -139,8 +139,8 @@ export default function SkillsPage() {
       setSubmitting(true)
       const token = localStorage.getItem("auth_token")
       const url = editingSkill
-        ? getApiUrl(`/api/skills/${editingSkill.id}`)
-        : getApiUrl("/api/skills")
+        ? getApiUrl(`/skills/${editingSkill.id}`)
+        : getApiUrl("/skills")
       
       const response = await fetch(url, {
         method: editingSkill ? "PUT" : "POST",
@@ -178,7 +178,7 @@ export default function SkillsPage() {
 
     try {
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl(`/api/skills/${skillId}`), {
+  const response = await fetch(getApiUrl(`/skills/${skillId}`), {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,

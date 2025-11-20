@@ -45,8 +45,8 @@ import {
   Target,
   Loader2,
   X,
-  CheckCircle2,
-} from "lucide-react"
+  CheckCircle,
+} from "@/components/ui/icons-shim"
 import { useRouter } from "next/navigation"
 
 interface Role {
@@ -122,7 +122,7 @@ export default function RolesPage() {
     try {
       setLoading(true)
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl("/api/cost-management/roles"), {
+  const response = await fetch(getApiUrl("/cost-management/roles"), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -145,7 +145,7 @@ export default function RolesPage() {
   const fetchSkills = async () => {
     try {
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl("/api/skills"), {
+  const response = await fetch(getApiUrl("/skills"), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -163,7 +163,7 @@ export default function RolesPage() {
   const fetchCompetencies = async () => {
     try {
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl("/api/competencies"), {
+  const response = await fetch(getApiUrl("/competencies"), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -184,7 +184,7 @@ export default function RolesPage() {
     try {
       setLoadingRoleDetails(true)
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl(`/api/skills/role/${selectedRole.id}`), {
+  const response = await fetch(getApiUrl(`/skills/role/${selectedRole.id}`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -206,7 +206,7 @@ export default function RolesPage() {
 
     try {
       const token = localStorage.getItem("auth_token")
-      const response = await fetch(getApiUrl(`/api/competencies/role/${selectedRole.id}`), {
+  const response = await fetch(getApiUrl(`/competencies/role/${selectedRole.id}`), {
         headers: {
           Authorization: `Bearer ${token}`,
         },
@@ -230,7 +230,7 @@ export default function RolesPage() {
     try {
       const token = localStorage.getItem("auth_token")
       const response = await fetch(
-        getApiUrl(`/api/skills/${assignFormData.skillId}/assign-to-role`),
+        getApiUrl(`/skills/${assignFormData.skillId}/assign-to-role`),
         {
           method: "POST",
           headers: {
@@ -274,7 +274,7 @@ export default function RolesPage() {
     try {
       const token = localStorage.getItem("auth_token")
       const response = await fetch(
-        getApiUrl(`/api/competencies/${assignFormData.competencyId}/assign-to-role`),
+        getApiUrl(`/competencies/${assignFormData.competencyId}/assign-to-role`),
         {
           method: "POST",
           headers: {
@@ -319,7 +319,7 @@ export default function RolesPage() {
     try {
       const token = localStorage.getItem("auth_token")
       const response = await fetch(
-        getApiUrl(`/api/skills/${skillId}/role/${selectedRole.id}`),
+        getApiUrl(`/skills/${skillId}/role/${selectedRole.id}`),
         {
           method: "DELETE",
           headers: {
@@ -350,7 +350,7 @@ export default function RolesPage() {
     try {
       const token = localStorage.getItem("auth_token")
       const response = await fetch(
-        getApiUrl(`/api/competencies/${competencyId}/role/${selectedRole.id}`),
+        getApiUrl(`/competencies/${competencyId}/role/${selectedRole.id}`),
         {
           method: "DELETE",
           headers: {
@@ -377,10 +377,10 @@ export default function RolesPage() {
   )
 
   const availableSkills = skills.filter(
-    (skill) => !roleSkills.some((rs) => rs.id === skill.id)
+  (skill) => !roleSkills.some((rs) => rs.id === skill.id)
   )
   const availableCompetencies = competencies.filter(
-    (competency) => !roleCompetencies.some((rc) => rc.id === competency.id)
+  (competency) => !roleCompetencies.some((rc) => rc.id === competency.id)
   )
 
   if (authLoading) {
@@ -392,7 +392,7 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="flex h-screen bg-background">
+  <div className="flex h-screen bg-background">
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
@@ -422,7 +422,7 @@ export default function RolesPage() {
                       <Input
                         placeholder="Search roles..."
                         value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
                         className="pl-9"
                       />
                     </div>
@@ -458,7 +458,7 @@ export default function RolesPage() {
                                   )}
                                 </div>
                                 {selectedRole?.id === role.id && (
-                                  <CheckCircle2 className="h-5 w-5 text-primary" />
+                                  <CheckCircle className="h-5 w-5 text-primary" />
                                 )}
                               </div>
                             </CardContent>
@@ -659,18 +659,18 @@ export default function RolesPage() {
             {/* Assign Skill Dialog */}
             <Dialog open={assignSkillDialogOpen} onOpenChange={setAssignSkillDialogOpen}>
               <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Assign Skill to Role</DialogTitle>
-                  <DialogDescription>
+                <DialogHeader children={[
+                  <DialogTitle key="title">Assign Skill to Role</DialogTitle>,
+                  <DialogDescription key="desc">
                     Select a skill to assign to {selectedRole?.roleName}
                   </DialogDescription>
-                </DialogHeader>
+                ]} />
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <Label htmlFor="skill">Skill *</Label>
                     <Select
                       value={assignFormData.skillId}
-                      onValueChange={(value) =>
+                      onValueChange={(value: string) =>
                         setAssignFormData({ ...assignFormData, skillId: value })
                       }
                     >
@@ -691,7 +691,7 @@ export default function RolesPage() {
                     <Label htmlFor="proficiency">Required Proficiency</Label>
                     <Select
                       value={assignFormData.proficiencyLevel}
-                      onValueChange={(value) =>
+                      onValueChange={(value: string) =>
                         setAssignFormData({ ...assignFormData, proficiencyLevel: value })
                       }
                     >
@@ -721,17 +721,18 @@ export default function RolesPage() {
                     </Label>
                   </div>
                 </div>
-                <DialogFooter>
+                <DialogFooter children={[
                   <Button
+                    key="cancel"
                     variant="outline"
                     onClick={() => setAssignSkillDialogOpen(false)}
                   >
                     Cancel
-                  </Button>
-                  <Button onClick={handleAssignSkill} disabled={!assignFormData.skillId}>
+                  </Button>,
+                  <Button key="assign" onClick={handleAssignSkill} disabled={!assignFormData.skillId}>
                     Assign Skill
                   </Button>
-                </DialogFooter>
+                ]} />
               </DialogContent>
             </Dialog>
 
@@ -741,18 +742,18 @@ export default function RolesPage() {
               onOpenChange={setAssignCompetencyDialogOpen}
             >
               <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Assign Competency to Role</DialogTitle>
-                  <DialogDescription>
+                <DialogHeader children={[
+                  <DialogTitle key="title">Assign Competency to Role</DialogTitle>,
+                  <DialogDescription key="desc">
                     Select a competency to assign to {selectedRole?.roleName}
                   </DialogDescription>
-                </DialogHeader>
+                ]} />
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
                     <Label htmlFor="competency">Competency *</Label>
                     <Select
                       value={assignFormData.competencyId}
-                      onValueChange={(value) =>
+                      onValueChange={(value: string) =>
                         setAssignFormData({ ...assignFormData, competencyId: value })
                       }
                     >
@@ -773,7 +774,7 @@ export default function RolesPage() {
                     <Label htmlFor="level">Required Level</Label>
                     <Select
                       value={assignFormData.proficiencyLevel}
-                      onValueChange={(value) =>
+                      onValueChange={(value: string) =>
                         setAssignFormData({ ...assignFormData, proficiencyLevel: value })
                       }
                     >
@@ -803,20 +804,22 @@ export default function RolesPage() {
                     </Label>
                   </div>
                 </div>
-                <DialogFooter>
+                <DialogFooter children={[
                   <Button
+                    key="cancel"
                     variant="outline"
                     onClick={() => setAssignCompetencyDialogOpen(false)}
                   >
                     Cancel
-                  </Button>
+                  </Button>,
                   <Button
+                    key="assign"
                     onClick={handleAssignCompetency}
                     disabled={!assignFormData.competencyId}
                   >
                     Assign Competency
                   </Button>
-                </DialogFooter>
+                ]} />
               </DialogContent>
             </Dialog>
           </div>
