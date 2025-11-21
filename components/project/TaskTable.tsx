@@ -166,9 +166,9 @@ export function TaskTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedTasks.map((task) => (
+          {sortedTasks.map((task, index) => (
             <TableRow 
-              key={task.id} 
+              key={task.id || `task-${index}`}
               className="hover:bg-accent cursor-pointer"
               onClick={() => onViewTask(task.id)}
             >
