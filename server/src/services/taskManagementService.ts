@@ -181,22 +181,111 @@ export async function getProjectTasks(
  */
 export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
   try {
-    const result = await pool.query(`
+    // Get the base task
+    const taskResult = await pool.query(`
       SELECT 
         t.*,
-        pr.role_name,
-        pr.default_hourly_rate,
-        COUNT(DISTINCT ta.id) as assignment_count,
-        STRING_AGG(DISTINCT u.name, ', ') as assigned_to_names
+        pr.role_name as required_role_name
       FROM project_tasks t
       LEFT JOIN project_roles pr ON t.required_role_id = pr.id
-      LEFT JOIN task_assignments ta ON t.id = ta.task_id
-      LEFT JOIN users u ON ta.user_id = u.id
       WHERE t.id = $1
-      GROUP BY t.id, pr.role_name, pr.default_hourly_rate
     `, [taskId])
     
-    return result.rows[0] || null
+    if (!taskResult.rows.length) {
+      return null
+    }
+    
+    const task = taskResult.rows[0]
+    
+    // Get task dependencies
+    const depsResult = await pool.query(`
+      SELECT 
+        td.id,
+        td.task_id,
+        td.depends_on_task_id,
+        td.dependency_type,
+        td.lag_days,
+        pt1.task_number as predecessor_task_number,
+        pt1.task_name as predecessor_task_name,
+        pt2.task_number as successor_task_number,
+        pt2.task_name as successor_task_name
+      FROM task_dependencies td
+      LEFT JOIN project_tasks pt1 ON td.depends_on_task_id = pt1.id
+      LEFT JOIN project_tasks pt2 ON td.task_id = pt2.id
+      WHERE td.task_id = $1 OR td.depends_on_task_id = $1
+    `, [taskId])
+    
+    const dependencies = depsResult.rows.map(dep => ({
+      id: dep.id,
+      predecessor_task_id: dep.depends_on_task_id,
+      successor_task_id: dep.task_id,
+      dependency_type: dep.dependency_type,
+      lag_days: dep.lag_days,
+      predecessor_task: {
+        task_number: dep.predecessor_task_number,
+        task_name: dep.predecessor_task_name
+      },
+      successor_task: {
+        task_number: dep.successor_task_number,
+        task_name: dep.successor_task_name
+      }
+    }))
+    
+    // Get task assignments/resources
+    const resourcesResult = await pool.query(`
+      SELECT 
+        ta.id,
+        ta.task_id,
+        ta.user_id,
+        ta.user_name,
+        ta.role_id,
+        ta.role_name,
+        ta.allocation_percentage,
+        ta.planned_hours,
+        ta.actual_hours,
+        ta.status
+      FROM task_assignments ta
+      WHERE ta.task_id = $1
+    `, [taskId])
+    
+    const assigned_resources = resourcesResult.rows.map(res => ({
+      id: res.id,
+      task_id: res.task_id,
+      user_id: res.user_id,
+      user_name: res.user_name,
+      role_id: res.role_id,
+      role_name: res.role_name,
+      allocation_percentage: res.allocation_percentage
+    }))
+    
+    // Get primary assignment (first one or the one with 100% allocation)
+    const primaryAssignment = assigned_resources.find(r => r.allocation_percentage === 100) || assigned_resources[0]
+    
+    return {
+      id: task.id,
+      project_id: task.project_id,
+      task_number: task.task_number,
+      wbs_code: task.wbs_code,
+      task_name: task.task_name,
+      description: task.description,
+      estimated_hours: task.estimated_hours,
+      actual_hours: task.actual_hours,
+      start_date: task.planned_start_date,
+      end_date: task.planned_end_date,
+      required_role_id: task.required_role_id,
+      required_role_name: task.required_role_name,
+      assigned_user_id: primaryAssignment?.user_id,
+      assigned_user_name: primaryAssignment?.user_name,
+      status: task.status,
+      progress_percentage: task.percent_complete || 0,
+      source_document_id: null,
+      source_entity_id: null,
+      imported_from_wbs: task.imported_from_wbs,
+      created_at: task.created_at,
+      updated_at: task.updated_at,
+      dependencies: dependencies,
+      assigned_resources: assigned_resources
+    } as any
   } catch (error) {
     logger.error('getTaskById error', { error, taskId })
     throw error
