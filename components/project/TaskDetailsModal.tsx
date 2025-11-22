@@ -113,6 +113,26 @@ export function TaskDetailsModal({
                     <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                       Imported from WBS
                     </Badge>
+                    {task.source_document_id && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <a
+                          href={`/documents/${task.source_document_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm underline flex items-center gap-2"
+                        >
+                          {task.source_document_title ? (
+                            task.source_document_title
+                          ) : (
+                            <>
+                              <span className="font-semibold">Document ID:</span>
+                              <span className="font-mono text-xs">{task.source_document_id}</span>
+                            </>
+                          )}
+                        </a>
+                      </>
+                    )}
                   </>
                 )}
               </DialogDescription>

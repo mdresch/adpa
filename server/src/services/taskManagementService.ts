@@ -184,10 +184,12 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
     // Get the base task
     const taskResult = await pool.query(`
       SELECT 
-        t.*,
-        pr.role_name as required_role_name
+        t.*, 
+        pr.role_name as required_role_name,
+        d.title as source_document_title
       FROM project_tasks t
       LEFT JOIN project_roles pr ON t.required_role_id = pr.id
+      LEFT JOIN documents d ON t.source_document_id = d.id
       WHERE t.id = $1
     `, [taskId])
     
@@ -278,8 +280,9 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
       assigned_user_name: primaryAssignment?.user_name,
       status: task.status,
       progress_percentage: task.percent_complete || 0,
-      source_document_id: null,
-      source_entity_id: null,
+      source_document_id: task.source_document_id,
+      source_document_title: task.source_document_title || null,
+      source_entity_id: task.source_entity_id || null,
       imported_from_wbs: task.imported_from_wbs,
       created_at: task.created_at,
       updated_at: task.updated_at,
