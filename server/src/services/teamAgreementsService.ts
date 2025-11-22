@@ -5,6 +5,7 @@
 
 import { pool } from '../database/connection'
 import { logger } from '../utils/logger'
+import { validate as isUuid } from 'uuid'
 
 export interface TeamAgreement {
   id: string
@@ -28,6 +29,15 @@ export interface TeamAgreement {
   created_at: Date
   updated_at: Date
   created_by?: string
+  created_by_name?: string | null
+  facilitated_by_name?: string | null
+  agreed_by_details?: AgreementParticipant[]
+}
+
+export interface AgreementParticipant {
+  id: string
+  name: string | null
+  email: string | null
 }
 
 export interface CreateTeamAgreementInput {
@@ -71,7 +81,14 @@ export interface TeamAgreementAdherenceLog {
   adherence_score?: number
   notes?: string
   recorded_by?: string
+  recorded_by_name?: string | null
   created_at: Date
+}
+
+interface UserSummary {
+  id: string
+  name: string | null
+  email: string | null
 }
 
 class TeamAgreementsService {
@@ -107,12 +124,13 @@ class TeamAgreementsService {
           ta.updated_at,
           ta.created_by,
           u.name as created_by_name,
-          ta.facilitated_by as facilitated_by_name
+          uf.name as facilitated_by_name
         FROM team_agreements ta
         LEFT JOIN users u ON ta.created_by = u.id
+        LEFT JOIN users uf ON ta.facilitated_by = uf.id
         WHERE ta.project_id::text = $1::text
       `
-      const params: any[] = [projectId]
+      const params: (string | number)[] = [projectId]
       let paramIndex = 2
 
       if (filters?.category) {
@@ -138,15 +156,19 @@ class TeamAgreementsService {
       })
 
       const result = await pool.query(query, params)
+      const userIds = this.collectUserIds(result.rows)
+      const userMap = await this.fetchUserSummaries(userIds)
       logger.debug('[TeamAgreementsService] Query result:', {
         rowCount: result.rows.length,
         firstRow: result.rows[0] ? Object.keys(result.rows[0]) : []
       })
-      return result.rows.map(this.mapRowToAgreement)
-    } catch (error: any) {
+      return result.rows.map(row => this.mapRowToAgreement(row, userMap))
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+      const errorStack = error instanceof Error ? error.stack : undefined
       logger.error('[TeamAgreementsService] Error getting agreements by project:', {
-        error: error.message,
-        stack: error.stack,
+        error: errorMessage,
+        stack: errorStack,
         projectId,
         filters
       })
@@ -177,7 +199,9 @@ class TeamAgreementsService {
         return null
       }
 
-      return this.mapRowToAgreement(result.rows[0])
+      const userIds = this.collectUserIds(result.rows)
+      const userMap = await this.fetchUserSummaries(userIds)
+      return this.mapRowToAgreement(result.rows[0], userMap)
     } catch (error) {
       logger.error('[TeamAgreementsService] Error getting agreement by ID:', error)
       throw error
@@ -231,7 +255,8 @@ class TeamAgreementsService {
         ]
       )
 
-      return this.mapRowToAgreement(result.rows[0])
+      const userMap = await this.fetchUserSummaries(this.collectUserIds(result.rows))
+      return this.mapRowToAgreement(result.rows[0], userMap)
     } catch (error) {
       logger.error('[TeamAgreementsService] Error creating agreement:', error)
       throw error
@@ -244,7 +269,7 @@ class TeamAgreementsService {
   async update(agreementId: string, input: UpdateTeamAgreementInput): Promise<TeamAgreement> {
     try {
       const updates: string[] = []
-      const params: any[] = []
+      const params: (string | number | string[] | Date | null | undefined)[] = []
       let paramIndex = 1
 
       if (input.title !== undefined) {
@@ -313,6 +338,7 @@ class TeamAgreementsService {
         return existing
       }
 
+      updates.push('updated_at = NOW()')
       params.push(agreementId)
       const result = await pool.query(
         `
@@ -328,7 +354,8 @@ class TeamAgreementsService {
         throw new Error('Team agreement not found')
       }
 
-      return this.mapRowToAgreement(result.rows[0])
+      const userMap = await this.fetchUserSummaries(this.collectUserIds(result.rows))
+      return this.mapRowToAgreement(result.rows[0], userMap)
     } catch (error) {
       logger.error('[TeamAgreementsService] Error updating agreement:', error)
       throw error
@@ -377,7 +404,15 @@ class TeamAgreementsService {
           notes,
           recorded_by
         ) VALUES ($1, $2, $3, $4)
-        RETURNING *
+        RETURNING 
+          id,
+          agreement_id,
+          date_recorded,
+          adherence_score,
+          notes,
+          recorded_by,
+          created_at,
+          (SELECT name FROM users WHERE id = $4) as recorded_by_name
         `,
         [agreementId, adherenceScore, notes || null, userId]
       )
@@ -386,7 +421,8 @@ class TeamAgreementsService {
       await pool.query(
         `
         UPDATE team_agreements
-        SET adherence_score = $1
+        SET adherence_score = $1,
+            updated_at = NOW()
         WHERE id = $2
         `,
         [adherenceScore, agreementId]
@@ -434,7 +470,8 @@ class TeamAgreementsService {
         UPDATE team_agreements
         SET 
           violations_count = violations_count + 1,
-          last_violation_date = NOW()
+          last_violation_date = NOW(),
+          updated_at = NOW()
         WHERE id = $1
         RETURNING *
         `,
@@ -445,7 +482,8 @@ class TeamAgreementsService {
         throw new Error('Team agreement not found')
       }
 
-      return this.mapRowToAgreement(result.rows[0])
+      const userMap = await this.fetchUserSummaries(this.collectUserIds(result.rows))
+      return this.mapRowToAgreement(result.rows[0], userMap)
     } catch (error) {
       logger.error('[TeamAgreementsService] Error recording violation:', error)
       throw error
@@ -455,70 +493,147 @@ class TeamAgreementsService {
   /**
    * Map database row to TeamAgreement object
    */
-  private mapRowToAgreement(row: any): TeamAgreement {
+  private mapRowToAgreement(row: Record<string, unknown>, userMap?: Record<string, UserSummary>): TeamAgreement {
     try {
-      // Handle agreed_by JSONB field - PostgreSQL returns it as JSONB which is already parsed
-      let agreedBy: string[] = []
-      if (row.agreed_by) {
-        if (Array.isArray(row.agreed_by)) {
-          agreedBy = row.agreed_by
-        } else if (typeof row.agreed_by === 'string') {
-          try {
-            agreedBy = JSON.parse(row.agreed_by)
-          } catch {
-            agreedBy = []
-          }
-        } else if (typeof row.agreed_by === 'object' && row.agreed_by !== null) {
-          // Handle case where JSONB is returned as an object
-          agreedBy = Array.isArray(row.agreed_by) ? row.agreed_by : []
+      const agreedBy = this.normalizeAgreedBy(row.agreed_by)
+      const agreedByDetails: AgreementParticipant[] = agreedBy.map(id => {
+        const user = userMap?.[id]
+        return {
+          id,
+          name: user?.name ?? null,
+          email: user?.email ?? null
         }
-      }
+      })
+
+      const id = String(row.id ?? '')
+      const projectId = String(row.project_id ?? '')
+      const facilitatedById = row.facilitated_by ? String(row.facilitated_by) : undefined
+      const createdById = row.created_by ? String(row.created_by) : undefined
 
       return {
-        id: row.id,
-        project_id: row.project_id,
-        title: row.title || '',
-        description: row.description || '',
-        category: row.category,
+        id,
+        project_id: projectId,
+        title: String(row.title ?? ''),
+        description: String(row.description ?? ''),
+        category: row.category as TeamAgreement['category'],
         agreed_by: agreedBy,
-        facilitated_by: row.facilitated_by || undefined,
-        effective_date: row.effective_date,
-        review_frequency: row.review_frequency || undefined,
-        next_review_date: row.next_review_date || undefined,
-        status: row.status || 'active',
+        agreed_by_details: agreedByDetails,
+        facilitated_by: facilitatedById,
+        facilitated_by_name: (row.facilitated_by_name ? String(row.facilitated_by_name) : null) || (facilitatedById && userMap?.[facilitatedById]?.name) || null,
+        effective_date: row.effective_date as Date,
+        review_frequency: (row.review_frequency as TeamAgreement['review_frequency']) || undefined,
+        next_review_date: (row.next_review_date as Date) || undefined,
+        status: (row.status as TeamAgreement['status']) || 'active',
         adherence_score: row.adherence_score ? parseFloat(String(row.adherence_score)) : undefined,
-        violations_count: row.violations_count || 0,
-        last_violation_date: row.last_violation_date || undefined,
-        source_document_id: row.source_document_id || undefined,
-        notes: row.notes || undefined,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        created_by: row.created_by || undefined
+        violations_count: Number(row.violations_count ?? 0),
+        last_violation_date: (row.last_violation_date as Date) || undefined,
+        source_document_id: row.source_document_id ? String(row.source_document_id) : undefined,
+        notes: row.notes ? String(row.notes) : undefined,
+        created_at: row.created_at as Date,
+        updated_at: row.updated_at as Date,
+        created_by: createdById,
+        created_by_name: (row.created_by_name ? String(row.created_by_name) : null) || (createdById && userMap?.[createdById]?.name) || null
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error'
       logger.error('[TeamAgreementsService] Error mapping row to agreement:', {
-        error: error.message,
+        error: errorMessage,
         row: row ? { id: row.id, keys: Object.keys(row) } : null
       })
-      throw new Error(`Failed to map team agreement row: ${error.message}`)
+      throw new Error(`Failed to map team agreement row: ${errorMessage}`)
     }
   }
 
   /**
    * Map database row to TeamAgreementAdherenceLog object
    */
-  private mapRowToAdherenceLog(row: any): TeamAgreementAdherenceLog {
+  private mapRowToAdherenceLog(row: Record<string, unknown>): TeamAgreementAdherenceLog {
     return {
-      id: row.id,
-      agreement_id: row.agreement_id,
-      date_recorded: row.date_recorded,
-      adherence_score: row.adherence_score ? parseFloat(row.adherence_score) : undefined,
-      notes: row.notes,
-      recorded_by: row.recorded_by,
-      created_at: row.created_at
+      id: String(row.id ?? ''),
+      agreement_id: String(row.agreement_id ?? ''),
+      date_recorded: row.date_recorded as Date,
+      adherence_score: row.adherence_score ? parseFloat(String(row.adherence_score)) : undefined,
+      notes: row.notes ? String(row.notes) : undefined,
+      recorded_by: row.recorded_by ? String(row.recorded_by) : undefined,
+      recorded_by_name: row.recorded_by_name ? String(row.recorded_by_name) : null,
+      created_at: row.created_at as Date
     }
+  }
+
+  private normalizeAgreedBy(raw: unknown): string[] {
+    if (!raw) {
+      return []
+    }
+
+    if (Array.isArray(raw)) {
+      return raw.filter((value): value is string => typeof value === 'string' && value.length > 0)
+    }
+
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed)
+          ? parsed.filter((value): value is string => typeof value === 'string' && value.length > 0)
+          : []
+      } catch {
+        return []
+      }
+    }
+
+    if (typeof raw === 'object' && raw !== null) {
+      return Array.isArray(raw)
+        ? raw.filter((value): value is string => typeof value === 'string' && value.length > 0)
+        : []
+    }
+
+    return []
+  }
+
+  private collectUserIds(rows: Record<string, unknown>[]): string[] {
+    const ids = new Set<string>()
+    for (const row of rows) {
+      this.normalizeAgreedBy(row.agreed_by).forEach(id => {
+        if (isUuid(id)) {
+          ids.add(id)
+        }
+      })
+      const facilitatedBy = row.facilitated_by ? String(row.facilitated_by) : null
+      if (facilitatedBy && isUuid(facilitatedBy)) {
+        ids.add(facilitatedBy)
+      }
+      const createdBy = row.created_by ? String(row.created_by) : null
+      if (createdBy && isUuid(createdBy)) {
+        ids.add(createdBy)
+      }
+    }
+    return Array.from(ids)
+  }
+
+  private async fetchUserSummaries(userIds: string[]): Promise<Record<string, UserSummary>> {
+    if (!userIds.length) {
+      return {}
+    }
+
+    const result = await pool.query(
+      `
+      SELECT id, name, email
+      FROM users
+      WHERE id = ANY($1::uuid[])
+      `,
+      [userIds]
+    )
+
+    return result.rows.reduce<Record<string, UserSummary>>((acc, user) => {
+      acc[user.id] = {
+        id: user.id,
+        name: user.name || null,
+        email: user.email || null
+      }
+      return acc
+    }, {})
   }
 }
 
-export default new TeamAgreementsService()
+const teamAgreementsService = new TeamAgreementsService()
+export default teamAgreementsService
 

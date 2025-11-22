@@ -4,11 +4,42 @@ import { authenticateToken, requirePermission } from "../middleware/auth"
 import { logger, childLogger } from "../utils/logger"
 import projectService from "../services/projectService"
 import * as programService from "../services/programService"
-import { v4 as uuidv4 } from "uuid"
+import { v4 as uuidv4, validate as isUuid } from "uuid"
 import { trackActivity } from "../middleware/analyticsMiddleware"
 import { extractionQueue } from "../services/queueService"
 
 const router = express.Router()
+
+const normalizeTeamMembers = (rawTeamMembers: any): string[] => {
+  if (!rawTeamMembers) {
+    return []
+  }
+
+  if (Array.isArray(rawTeamMembers)) {
+    return rawTeamMembers.filter((value): value is string => typeof value === 'string' && value.length > 0)
+  }
+
+  if (typeof rawTeamMembers === 'string') {
+    try {
+      const parsed = JSON.parse(rawTeamMembers)
+      if (Array.isArray(parsed)) {
+        return parsed.filter((value): value is string => typeof value === 'string' && value.length > 0)
+      }
+    } catch {
+      return rawTeamMembers
+        .split(',')
+        .map(value => value.trim())
+        .filter(value => value.length > 0)
+    }
+  }
+
+  if (typeof rawTeamMembers === 'object' && rawTeamMembers !== null) {
+    return Object.values(rawTeamMembers)
+      .filter((value): value is string => typeof value === 'string' && value.length > 0)
+  }
+
+  return []
+}
 
 // Get all projects
 router.get("/", authenticateToken, async (req, res) => {
@@ -354,6 +385,92 @@ router.get("/:projectId/risks", authenticateToken, async (req, res) => {
       error: "Internal server error",
       message: error?.message || "Unknown error",
       detail: process.env.NODE_ENV === 'development' ? error?.stack : undefined
+    })
+  }
+})
+
+// Get project team members with user details
+router.get("/:projectId/team-members", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { projectId } = req.params
+    const requesterId = req.user?.id
+    const requesterRole = req.user?.role
+
+    const projectResult = await pool.query(
+      `
+      SELECT id, owner_id, team_members
+      FROM projects
+      WHERE id = $1
+      `,
+      [projectId]
+    )
+
+    if (projectResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "Project not found"
+      })
+    }
+
+    const projectRow = projectResult.rows[0]
+    const teamMembers = normalizeTeamMembers(projectRow.team_members)
+    const teamMemberSet = new Set(teamMembers)
+
+    const hasAccess =
+      requesterRole === 'admin' ||
+      projectRow.owner_id === requesterId ||
+      (requesterId && teamMemberSet.has(requesterId))
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        success: false,
+        error: "Access denied"
+      })
+    }
+
+    const validUserIds = teamMembers.filter(id => isUuid(id))
+    let userMap = new Map<string, any>()
+
+    if (validUserIds.length > 0) {
+      const usersResult = await pool.query(
+        `
+        SELECT id, name, email, role, avatar_url
+        FROM users
+        WHERE id = ANY($1::uuid[])
+        `,
+        [validUserIds]
+      )
+
+      userMap = new Map(usersResult.rows.map(user => [user.id, user]))
+    }
+
+    const members = teamMembers.map(id => {
+      const user = userMap.get(id)
+      return {
+        id,
+        name: user?.name || null,
+        email: user?.email || null,
+        role: user?.role || null,
+        avatar_url: user?.avatar_url || null
+      }
+    })
+
+    res.json({
+      success: true,
+      data: members,
+      count: members.length
+    })
+  } catch (error: any) {
+    log.error('[ProjectsAPI] Error fetching project team members', {
+      error: error?.message,
+      stack: error?.stack,
+      projectId: req.params.projectId
+    })
+    res.status(500).json({
+      success: false,
+      error: "Failed to load team members",
+      message: process.env.NODE_ENV === 'development' ? error?.message : undefined
     })
   }
 })

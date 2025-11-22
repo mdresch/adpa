@@ -10,6 +10,7 @@
     "migrate:vercel": "tsx scripts/migrate-to-vercel.ts",
     "migrate:336": "tsx server/scripts/run-migration-336.ts",
     "migrate:337": "tsx server/scripts/run-migration-337.ts",
+    "migrate:325": "node server/migrate325.js",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
     "test:kv": "npx ts-node test-vercel-kv.ts",
     "test:db": "tsx scripts/test-db-connection.ts",
