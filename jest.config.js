@@ -10,6 +10,15 @@ const config = {
   transform: {
     '^.+\\.tsx?$': 'ts-jest',
   },
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        compilerOptions: {
+          jsx: 'react-jsx'
+        }
+      }
+    }
+  },
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
     'components/**/*.{ts,tsx}',
