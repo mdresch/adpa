@@ -21,7 +21,7 @@ interface WebSocketContextType {
   getRoomStatus: (room: string) => "joined" | "pending" | "failed" | undefined
 }
 
-const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined)
+export const WebSocketContext = createContext<WebSocketContextType | undefined>(undefined)
 
 export function useWebSocket() {
   const context = useContext(WebSocketContext)

@@ -1,8 +1,11 @@
+/**
+ * @jest-environment jsdom
+ */
+
 import React from 'react'
 import { render, screen } from '@testing-library/react'
 
 // Mock next/link so tests just render a normal anchor
-import React from 'react'
 jest.mock('next/link', () => ({
   __esModule: true,
   default: (props: any) => React.createElement('a', { href: props.href }, props.children),
