@@ -166,9 +166,9 @@ export function TaskTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sortedTasks.map((task) => (
+          {sortedTasks.map((task, index) => (
             <TableRow 
-              key={task.id} 
+              key={task.id || `task-${index}`}
               className="hover:bg-accent cursor-pointer"
               onClick={() => onViewTask(task.id)}
             >
@@ -230,33 +230,33 @@ export function TaskTable({
                   </span>
                 </div>
               </TableCell>
-              <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+              <TableCell className="text-right">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" style={{ border: '2px solid red' }}>
                       <MoreVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => onViewTask(task.id)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewTask(task.id); }}>
                       <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onEditTask(task.id)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onEditTask(task.id); }}>
                       <Edit className="mr-2 h-4 w-4" />
                       Edit Task
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onAssignTask(task.id)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onAssignTask(task.id); }}>
                       <UserPlus className="mr-2 h-4 w-4" />
                       Assign Resource
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => onLogHours(task.id)}>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onLogHours(task.id); }}>
                       <Clock className="mr-2 h-4 w-4" />
                       Log Hours
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem 
-                      onClick={() => onDeleteTask(task.id)}
+                      onClick={(e) => { e.stopPropagation(); onDeleteTask(task.id); }}
                       className="text-destructive"
                     >
                       <Trash className="mr-2 h-4 w-4" />

@@ -618,14 +618,62 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" })
     }
 
-    // Verify risk belongs to project
+    // Verify risk belongs to project and get current risk_level and severity for validation
     const riskCheck = await pool.query(
-      'SELECT id FROM risks WHERE id = $1 AND project_id = $2',
+      'SELECT id, risk_level, severity FROM risks WHERE id = $1 AND project_id = $2',
       [riskId, projectId]
     )
 
     if (riskCheck.rows.length === 0) {
       return res.status(404).json({ error: "Risk not found" })
+    }
+    
+    const currentRisk = riskCheck.rows[0]
+    const currentRiskLevel = currentRisk.risk_level
+    const currentSeverity = currentRisk.severity
+    
+    // CRITICAL: Check if existing severity has invalid value (like 'program' which is a risk_level value)
+    if (currentSeverity && !updates.hasOwnProperty('severity')) {
+      const normalizedSeverity = String(currentSeverity).trim().toLowerCase()
+      const validSeverities = ['critical', 'high', 'medium', 'low']
+      const riskLevelValues = ['project', 'program', 'portfolio', 'systemic']
+      
+      if (riskLevelValues.includes(normalizedSeverity)) {
+        log.error(`CRITICAL: Existing severity value "${currentSeverity}" is a risk_level value! Recalculating from probability/impact.`, {
+          currentSeverity,
+          riskId
+        })
+        // Recalculate severity from probability/impact
+        const probImpactCheck = await pool.query(
+          'SELECT probability, impact FROM risks WHERE id = $1',
+          [riskId]
+        )
+        if (probImpactCheck.rows.length > 0) {
+          const prob = probImpactCheck.rows[0].probability
+          const imp = probImpactCheck.rows[0].impact
+          const probScore = prob === 'very_high' ? 90 : prob === 'high' ? 70 : prob === 'medium' ? 50 : prob === 'low' ? 30 : 10
+          const impactScore = imp === 'very_high' ? 5 : imp === 'high' ? 4 : imp === 'medium' ? 3 : imp === 'low' ? 2 : 1
+          const score = (probScore / 100) * impactScore
+          updates.severity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
+          log.info(`Recalculated severity from "${currentSeverity}" to "${updates.severity}"`)
+        }
+      } else if (!validSeverities.includes(normalizedSeverity)) {
+        log.warn(`Current severity "${currentSeverity}" may be invalid, will be recalculated`)
+        // Trigger recalculation
+        if (!updates.probability && !updates.impact) {
+          updates.probability = probImpactCheck.rows[0]?.probability
+          updates.impact = probImpactCheck.rows[0]?.impact
+        }
+      }
+    }
+    
+    // If risk_level is not being updated, ensure current value will be normalized by trigger
+    if (!updates.hasOwnProperty('risk_level') && currentRiskLevel) {
+      const validLevels = ['project', 'program', 'portfolio', 'systemic']
+      const normalizedCurrent = String(currentRiskLevel).trim().toLowerCase()
+      if (!validLevels.includes(normalizedCurrent)) {
+        log.warn(`Current risk_level "${currentRiskLevel}" may be invalid, trigger will normalize it`)
+      }
     }
 
     // Recalculate severity if probability or impact changed
@@ -640,7 +688,29 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       const probScore = prob === 'very_high' ? 90 : prob === 'high' ? 70 : prob === 'medium' ? 50 : prob === 'low' ? 30 : 10
       const impactScore = imp === 'very_high' ? 5 : imp === 'high' ? 4 : imp === 'medium' ? 3 : imp === 'low' ? 2 : 1
       const score = (probScore / 100) * impactScore
-      updates.severity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
+      const calculatedSeverity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
+      
+      // Ensure severity is never set to a risk_level value
+      if (!['critical', 'high', 'medium', 'low'].includes(calculatedSeverity)) {
+        log.error(`CRITICAL: Calculated severity "${calculatedSeverity}" is invalid, defaulting to 'medium'`)
+        updates.severity = 'medium'
+      } else {
+        updates.severity = calculatedSeverity
+      }
+    }
+    
+    // CRITICAL: Prevent severity from being set to risk_level values
+    // If frontend accidentally sends severity with a risk_level value, remove it
+    if (updates.hasOwnProperty('severity')) {
+      const severityValue = String(updates.severity || '').trim().toLowerCase()
+      const riskLevelValues = ['project', 'program', 'portfolio', 'systemic']
+      if (riskLevelValues.includes(severityValue)) {
+        log.error(`CRITICAL: Frontend sent severity="${severityValue}" which is a risk_level value. Removing from updates.`, {
+          received: updates.severity,
+          suggestion: 'Frontend should use risk_level field, not severity'
+        })
+        delete updates.severity
+      }
     }
 
     // Check which new columns exist individually
@@ -690,14 +760,52 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       if (updates.hasOwnProperty(field)) {
         let fieldValue = updates[field]
         
-        // Validate risk_level if being updated
-        if (field === 'risk_level' && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
-          const validLevels = ['project', 'program', 'portfolio', 'systemic']
-          if (!validLevels.includes(fieldValue)) {
-            log.warn(`Invalid risk_level value: ${fieldValue}, skipping update`)
+        // Validate severity - ensure it's never set to a risk_level value
+        if (field === 'severity' && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
+          const normalizedSeverity = String(fieldValue).trim().toLowerCase()
+          const validSeverities = ['critical', 'high', 'medium', 'low']
+          const riskLevelValues = ['project', 'program', 'portfolio', 'systemic']
+          
+          if (riskLevelValues.includes(normalizedSeverity)) {
+            log.error(`CRITICAL: severity cannot be set to risk_level value "${fieldValue}". This should be risk_level, not severity.`, {
+              fieldValue,
+              normalizedSeverity,
+              suggestion: 'Use risk_level field instead'
+            })
             skippedFields.push(field)
             continue
           }
+          
+          if (!validSeverities.includes(normalizedSeverity)) {
+            log.warn(`Invalid severity value: "${fieldValue}" (normalized: "${normalizedSeverity}"), skipping update`)
+            skippedFields.push(field)
+            continue
+          }
+          // Use normalized value
+          fieldValue = normalizedSeverity
+        }
+        
+        // Validate and normalize risk_level if being updated
+        if (field === 'risk_level' && fieldValue !== undefined && fieldValue !== null && fieldValue !== '') {
+          // Strict normalization: remove all whitespace, convert to lowercase, remove any non-alphabetic characters
+          let normalizedValue = String(fieldValue)
+            .replace(/\s+/g, '') // Remove all whitespace
+            .replace(/[^a-z]/gi, '') // Remove non-alphabetic characters
+            .toLowerCase()
+          
+          const validLevels = ['project', 'program', 'portfolio', 'systemic']
+          if (!validLevels.includes(normalizedValue)) {
+            log.warn(`Invalid risk_level value: "${fieldValue}" (normalized: "${normalizedValue}"), skipping update`, {
+              originalValue: fieldValue,
+              normalizedValue,
+              charCodes: String(fieldValue).split('').map(c => `${c}:${c.charCodeAt(0)}`)
+            })
+            skippedFields.push(field)
+            continue
+          }
+          // Use normalized value (strictly cleaned)
+          fieldValue = normalizedValue
+          log.debug(`Normalized risk_level: "${String(fieldValue)}" -> "${normalizedValue}"`)
         }
         
         // Skip empty strings for optional fields to let trigger handle defaults
@@ -713,6 +821,28 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
                            (optionalFields.includes(field) && availableColumns.has(field))
         
         if (fieldExists) {
+          // Final normalization for risk_level - ensure it's exactly one of the valid values
+          if (field === 'risk_level' && fieldValue) {
+            // Strict normalization: remove all whitespace and non-alphabetic, convert to lowercase
+            const cleaned = String(fieldValue)
+              .replace(/\s+/g, '') // Remove all whitespace
+              .replace(/[^a-z]/gi, '') // Remove non-alphabetic characters
+              .toLowerCase()
+            
+            const validLevels = ['project', 'program', 'portfolio', 'systemic']
+            if (validLevels.includes(cleaned)) {
+              fieldValue = cleaned
+              log.debug(`risk_level normalized: "${String(updates[field])}" -> "${cleaned}"`)
+            } else {
+              log.error(`CRITICAL: risk_level failed final validation: "${fieldValue}" -> "${cleaned}"`, {
+                original: fieldValue,
+                cleaned,
+                charCodes: String(fieldValue).split('').map(c => `${c}:${c.charCodeAt(0)}`)
+              })
+              // Fallback to 'project' as safe default
+              fieldValue = 'project'
+            }
+          }
           updateFields.push(`${field} = $${paramCount}`)
           updateValues.push(fieldValue)
           paramCount++
@@ -736,6 +866,21 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       log.warn(`Some fields could not be updated (columns don't exist): ${skippedFields.join(', ')}`)
     }
 
+    // Always normalize risk_level even if not explicitly being updated (trigger will handle, but ensure it's valid)
+    if (availableColumns.has('risk_level') && !updates.hasOwnProperty('risk_level')) {
+      // Get current value and ensure it's normalized
+      const currentLevel = currentRiskLevel || 'project'
+      const normalized = String(currentLevel).trim().toLowerCase()
+      const validLevels = ['project', 'program', 'portfolio', 'systemic']
+      if (validLevels.includes(normalized)) {
+        // Explicitly set it to normalized value to ensure trigger sees valid value
+        updateFields.push(`risk_level = $${paramCount}`)
+        updateValues.push(normalized)
+        paramCount++
+        log.debug(`Normalizing existing risk_level: "${currentLevel}" -> "${normalized}"`)
+      }
+    }
+    
     // Always update updated_at if column exists
     if (availableColumns.has('updated_at')) {
       updateFields.push(`updated_at = NOW()`)
@@ -756,6 +901,19 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       WHERE id = $${paramCount} AND project_id = $${paramCount + 1}
       RETURNING *
     `
+
+    // Debug: Log risk_level value if present
+    const riskLevelIndex = updateFields.findIndex(f => f.includes('risk_level'))
+    if (riskLevelIndex !== -1) {
+      const riskLevelValue = updateValues[riskLevelIndex]
+      log.debug('risk_level value being set:', {
+        field: updateFields[riskLevelIndex],
+        value: riskLevelValue,
+        type: typeof riskLevelValue,
+        length: riskLevelValue?.length,
+        charCodes: riskLevelValue ? riskLevelValue.split('').map(c => c.charCodeAt(0)) : null
+      })
+    }
 
     log.debug('Update risk query:', {
       query,

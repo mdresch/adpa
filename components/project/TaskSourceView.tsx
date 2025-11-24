@@ -45,9 +45,23 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
                   </Badge>
                 )}
                 {task.source_entity_id && (
-                  <Badge variant="outline" className="font-mono text-xs">
-                    Entity: {task.source_entity_id}
-                  </Badge>
+                  // When we have a source document id, make the entity clickable
+                  // so users can jump directly to the source document and context
+                  task.source_document_id ? (
+                    <Link
+                      href={`/documents/${task.source_document_id}#entity-${task.source_entity_id}`}
+                      target="_blank"
+                      className="inline-block"
+                    >
+                      <Badge variant="outline" className="font-mono text-xs underline decoration-dotted">
+                        Entity: {task.source_entity_id}
+                      </Badge>
+                    </Link>
+                  ) : (
+                    <Badge variant="outline" className="font-mono text-xs">
+                      Entity: {task.source_entity_id}
+                    </Badge>
+                  )
                 )}
               </div>
             </div>
@@ -65,6 +79,18 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
               <p className="text-sm text-muted-foreground mb-3">
                 This task was extracted from a project document
               </p>
+              {task.source_document_title && (
+                <div className="mb-2 text-sm font-medium">{task.source_document_title}</div>
+              )}
+
+              {/* Expose the raw document id so users can copy or verify provenance */}
+              {task.source_document_id && (
+                <div className="mb-3 text-xs text-muted-foreground flex items-center gap-2">
+                  <span className="font-semibold">Document ID:</span>
+                  <code className="bg-background px-2 py-1 rounded font-mono text-sm">{task.source_document_id}</code>
+                </div>
+              )}
+
               <Link 
                 href={`/documents/${task.source_document_id}`}
                 target="_blank"
@@ -113,10 +139,18 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
           <p className="text-xs text-muted-foreground mb-2">
             This task was identified and extracted using AI-powered document analysis
           </p>
-          <div className="flex flex-wrap gap-2 text-xs">
-            <code className="bg-background px-2 py-1 rounded">
-              Entity ID: {task.source_entity_id}
-            </code>
+            <div className="flex flex-wrap gap-2 text-xs">
+            {task.source_entity_id && task.source_document_id ? (
+              <Link href={`/documents/${task.source_document_id}#entity-${task.source_entity_id}`} target="_blank">
+                <code className="bg-background px-2 py-1 rounded underline decoration-dotted text-xs">
+                  Entity ID: {task.source_entity_id}
+                </code>
+              </Link>
+            ) : (
+              <code className="bg-background px-2 py-1 rounded">
+                Entity ID: {task.source_entity_id}
+              </code>
+            )}
             {task.project_id && (
               <code className="bg-background px-2 py-1 rounded">
                 Project: {task.project_id.substring(0, 8)}...

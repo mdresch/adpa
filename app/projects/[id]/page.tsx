@@ -24,6 +24,7 @@ import { OverviewTab } from "./components/OverviewTab"
 import { DocumentsTab } from "./components/DocumentsTab"
 import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
 import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
+import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
 import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template } from "@/lib/api"
@@ -3020,6 +3021,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <AlertTriangle className="h-4 w-4 mr-2" />
                   Risks
                 </TabsTrigger>
+                <TabsTrigger value="issues">
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Issues
+                </TabsTrigger>
                 <TabsTrigger value="compliance-security">
                   <Shield className="h-4 w-4 mr-2" />
                   Compliance & Security
@@ -3070,6 +3075,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                 <StakeholdersTab
                   stakeholders={stakeholders}
                   stakeholdersLoading={stakeholdersLoading}
+                  projectId={projectId}
                   onAddStakeholder={handleAddStakeholder}
                   onEditStakeholder={handleEditStakeholder}
                   onDeleteStakeholder={handleDeleteStakeholder}
@@ -3104,6 +3110,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
               <TabsContent value="risks" className="space-y-4">
                 <ProjectRisksTab projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="issues" className="space-y-4">
+                <ProjectIssuesTab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="compliance-security" className="space-y-4">

@@ -8,7 +8,10 @@ const config = {
     '**/__tests__/**/*.test.tsx'
   ],
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }],
+  },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1'
   },
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
@@ -23,7 +26,7 @@ const config = {
     'lcov',
     'html'
   ],
-  setupFilesAfterEnv: [],
+  setupFilesAfterEnv: ['@testing-library/jest-dom'],
   testTimeout: 30000,
   verbose: true,
 };

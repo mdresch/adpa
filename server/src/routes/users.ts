@@ -28,7 +28,7 @@ router.get("/",
       const offset = (Number(page) - 1) * Number(limit)
 
       let query = `
-        SELECT id, email, name, role, is_active, avatar_url, last_login, created_at, updated_at
+        SELECT id, email, name, role, is_active, avatar_url, last_login, timezone, date_format, created_at, updated_at
         FROM users
         WHERE 1=1
       `
@@ -101,6 +101,124 @@ router.get("/",
   }
 )
 
+// Get current user's preferences (timezone, etc.)
+// IMPORTANT: This must be before /:id route to avoid route conflict
+router.get("/me/preferences",
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = req.user?.id
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" })
+      }
+
+      const result = await pool.query(
+        `SELECT id, email, name, timezone, date_format, created_at, updated_at
+         FROM users 
+         WHERE id = $1`,
+        [userId]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "User not found" })
+      }
+
+      const user = result.rows[0]
+      res.json({
+        preferences: {
+          timezone: user.timezone || 'UTC',
+          date_format: user.date_format || 'MM/DD/YYYY',
+          email: user.email,
+          name: user.name
+        }
+      })
+    } catch (error) {
+      log.error("Get preferences error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Update current user's preferences (timezone, etc.)
+// IMPORTANT: This must be before /:id route to avoid route conflict
+router.put("/me/preferences",
+  authenticateToken,
+  validate(Joi.object({
+    timezone: Joi.string().max(50).optional()
+      .pattern(/^[A-Za-z_]+\/[A-Za-z_]+$|^UTC$/)
+      .messages({
+        'string.pattern.base': 'Timezone must be a valid IANA timezone (e.g., America/New_York, Europe/Amsterdam) or UTC'
+      }),
+    date_format: Joi.string().valid('MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD').optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const userId = req.user?.id
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" })
+      }
+
+      const { timezone, date_format } = req.body
+
+      // Build update query dynamically
+      const updates: string[] = []
+      const params: any[] = []
+      let paramCount = 0
+
+      if (timezone !== undefined) {
+        paramCount++
+        updates.push(`timezone = $${paramCount}`)
+        params.push(timezone || 'UTC')
+      }
+
+      if (date_format !== undefined) {
+        paramCount++
+        updates.push(`date_format = $${paramCount}`)
+        params.push(date_format || 'MM/DD/YYYY')
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ error: "No preferences to update" })
+      }
+
+      // Always update updated_at
+      updates.push(`updated_at = NOW()`)
+      
+      // Add WHERE clause separately
+      paramCount++
+      params.push(userId)
+
+      const query = `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, name, timezone, date_format, updated_at`
+      
+      const result = await pool.query(query, params)
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "User not found" })
+      }
+
+      // Invalidate cache
+      await cache.del(`user:${userId}`)
+
+      log.info(`Preferences updated for user: ${userId} by ${req.user?.email}`)
+
+      res.json({
+        message: "Preferences updated successfully",
+        preferences: {
+          timezone: result.rows[0].timezone || 'UTC',
+          date_format: result.rows[0].date_format || 'MM/DD/YYYY',
+          email: result.rows[0].email,
+          name: result.rows[0].name
+        }
+      })
+    } catch (error) {
+      log.error("Update preferences error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
 // Get user by ID
 router.get("/:id", 
   authenticateToken,
@@ -124,7 +242,7 @@ router.get("/:id",
 
       const result = await pool.query(
         `
-        SELECT id, email, name, role, permissions, avatar_url, is_active, last_login, created_at, updated_at
+        SELECT id, email, name, role, permissions, avatar_url, is_active, last_login, timezone, date_format, created_at, updated_at
         FROM users 
         WHERE id = $1
       `,

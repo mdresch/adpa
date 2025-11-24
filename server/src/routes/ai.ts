@@ -272,9 +272,14 @@ router.post("/generate",
 
           const documentId = require('crypto').randomUUID()
           const templateData = template_id ? await pool.query('SELECT name FROM templates WHERE id = $1', [template_id]) : null
+          
+          // Use database time for consistent, correct dates
+          const { getFormattedDateForTitle } = require('../utils/dateUtils')
+          const formattedDate = await getFormattedDateForTitle()
+          
           const documentTitle = templateData?.rows[0]?.name 
-            ? `${templateData.rows[0].name} - ${new Date().toLocaleDateString()}`
-            : `AI Generated Document - ${new Date().toLocaleDateString()}`
+            ? `${templateData.rows[0].name} - ${formattedDate}`
+            : `AI Generated Document - ${formattedDate}`
 
           await pool.query(
             `INSERT INTO documents 

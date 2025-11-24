@@ -63,6 +63,8 @@ import processFlowRoutes from "./routes/process-flow"
 import aiModelsRoutes from "./routes/ai-models"
 import aiAnalyticsRoutes from "./routes/ai-analytics"
 import stakeholderRoutes from "./routes/stakeholders"
+import skillsRoutes from "./routes/skills"
+import competenciesRoutes from "./routes/competencies"
 import contentStructuringRoutes from "./routes/content-structuring"
 import compressionRoutes from "./routes/compression"
 import contextInjectionRoutes from "./routes/context-injection"
@@ -95,6 +97,10 @@ import searchRoutes from "./routes/search"
 import mitigationPlanRoutes from "./routes/mitigationPlanRoutes"
 import pmbok6Routes from "./routes/pmbok6Routes"
 import reviewRoutes from "./routes/reviewRoutes"
+import issueRoutes from "./routes/issueRoutes"
+import riskReportingRoutes from "./routes/riskReportingRoutes"
+import portfolioFinancialRoutes from "./routes/portfolioFinancial"
+import taskCostRoutes from "./routes/taskCosts"
 
 const app = express()
 const server = createServer(app)
@@ -249,6 +255,8 @@ app.use("/api/process-flow", processFlowRoutes)
 app.use("/api/ai-models", aiModelsRoutes)
 app.use("/api/ai-analytics", aiAnalyticsRoutes)
 app.use("/api/stakeholders", stakeholderRoutes)
+app.use("/api/skills", skillsRoutes)
+app.use("/api/competencies", competenciesRoutes)
 app.use("/api/settings", settingsRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
 app.use("/api/compression", compressionRoutes)
@@ -280,6 +288,11 @@ app.use("/api/search", searchRoutes)
 app.use("/api/mitigation-plans", mitigationPlanRoutes)
 app.use("/api/pmbok6", pmbok6Routes)
 app.use("/api", reviewRoutes)
+app.use("/api/issues", issueRoutes)
+app.use("/api/risks", riskReportingRoutes)
+app.use("/api/portfolio", portfolioFinancialRoutes)
+app.use("/api/tasks", taskCostRoutes)
+app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
 console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, and review scheduling)")
 
 // WebSocket connection handling

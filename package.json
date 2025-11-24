@@ -12,6 +12,7 @@
     "migrate:337": "tsx server/scripts/run-migration-337.ts",
     "migrate:325": "node server/migrate325.js",
     "seed:vercel": "tsx scripts/seed-vercel.ts",
+    "seed:skills": "tsx server/src/database/seed-skills-competencies.ts",
     "test:kv": "npx ts-node test-vercel-kv.ts",
     "test:db": "tsx scripts/test-db-connection.ts",
     "test:db-unit": "jest __tests__/lib/db.test.ts",
@@ -28,6 +29,9 @@
     "import-issues": "tsx scripts/import-github-issues.ts",
     "import-issues:stats": "tsx scripts/import-github-issues.ts --stats",
     "import-issues:dry-run": "tsx scripts/import-github-issues.ts --dry-run"
+    ,
+    "migrate:051": "node server/scripts/migrate-051.js",
+    "migrate:401": "node server/scripts/migrate-401.js"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",
