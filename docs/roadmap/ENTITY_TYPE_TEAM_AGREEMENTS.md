@@ -655,10 +655,11 @@ export default function ProjectTeamPage({ params }: { params: { id: string } }) 
 - [x] AI extraction working for team agreements ✅
 - [x] Agreements categorized correctly (>90% accuracy) ✅
 - [x] **Frontend displays agreements by category** ✅ **TASK-143 COMPLETE**
-- [ ] Manual add/edit functionality
-- [ ] Adherence tracking enabled
+- [x] Manual add/edit functionality (Nov 2025)
+- [x] Adherence tracking enabled (manual scoring + history UI)
+- [x] Violation tracking interface
 - [x] Integration with main extraction flow ✅
-- [ ] PMBOK 8 Team Domain requirements met (partial - frontend complete)
+- [ ] PMBOK 8 Team Domain requirements met (dashboard integration pending)
 
 ---
 
@@ -713,8 +714,6 @@ export default function ProjectTeamPage({ params }: { params: { id: string } }) 
 
 ### 📋 Remaining Tasks
 
-- Manual add/edit forms
-- Adherence score input/update UI
-- Violation reporting interface
-- Integration with PMBOK 8 Team Domain dashboard
+- Integrate Team Agreements metrics into PMBOK 8 Team Domain dashboard
+- Surface agreement insights across portfolio/program analytics
 
