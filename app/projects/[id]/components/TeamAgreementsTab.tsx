@@ -1,11 +1,12 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Loader2, Plus, Edit, Trash2, TrendingUp, Star, AlertCircle, BookOpen } from "lucide-react"
-import { User, Clock, MessageSquare, AlertTriangle, CheckCircle, Code, Zap, MoreHorizontal, Calendar, Users } from "@/components/ui/icons-shim"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Loader2, Plus, Edit, Trash2, TrendingUp, Star, AlertCircle, BookOpen, ShieldAlert } from "lucide-react"
+import { User, Users, Clock, MessageSquare, AlertTriangle, CheckCircle, Code, Zap, MoreHorizontal } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 import { toast } from "sonner"
 import { TeamAgreementDialog } from "./TeamAgreementDialog"
@@ -20,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import type { ProjectTeamMember, AgreementParticipant } from "./team-agreements.types"
 
 interface TeamAgreement {
   id: string
@@ -39,7 +41,9 @@ interface TeamAgreement {
     | 'knowledge_sharing'
     | 'other'
   agreed_by?: string[]
+  agreed_by_details?: AgreementParticipant[]
   facilitated_by?: string
+  facilitated_by_name?: string | null
   effective_date?: string
   review_frequency?: string
   next_review_date?: string
@@ -50,6 +54,7 @@ interface TeamAgreement {
   notes?: string
   created_at: string
   updated_at: string
+  created_by_name?: string | null
 }
 
 interface TeamAgreementsTabProps {
@@ -139,6 +144,9 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
   const [agreements, setAgreements] = useState<TeamAgreement[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [teamMembers, setTeamMembers] = useState<ProjectTeamMember[]>([])
+  const [teamMembersLoading, setTeamMembersLoading] = useState(true)
+  const [teamMembersError, setTeamMembersError] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingAgreement, setEditingAgreement] = useState<TeamAgreement | null>(null)
   const [adherenceDialogOpen, setAdherenceDialogOpen] = useState(false)
@@ -146,34 +154,86 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deletingAgreementId, setDeletingAgreementId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [violationLoadingId, setViolationLoadingId] = useState<string | null>(null)
 
-  useEffect(() => {
-    void fetchTeamAgreements()
-  }, [projectId])
 
-  const fetchTeamAgreements = async () => {
+  const fetchTeamAgreements = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
-      
       const response = await apiClient.get<{
         success: boolean
         data: TeamAgreement[]
         count: number
       }>(`/team-agreements/project/${projectId}`)
-      
       if (response.success && response.data) {
         setAgreements(response.data)
       } else {
         setAgreements([])
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error fetching team agreements:', err)
-      setError(err.message || 'Failed to load team agreements')
+      const message = err instanceof Error ? err.message : 'Failed to load team agreements'
+      setError(message)
       toast.error('Failed to load team agreements')
       setAgreements([])
     } finally {
       setLoading(false)
+    }
+  }, [projectId])
+
+  const fetchTeamMembers = useCallback(async () => {
+    try {
+      setTeamMembersLoading(true)
+      setTeamMembersError(null)
+      const response = await apiClient.get<{
+        success: boolean
+        data: ProjectTeamMember[]
+      }>(`/projects/${projectId}/team-members`)
+      if (response.success && Array.isArray(response.data)) {
+        setTeamMembers(response.data)
+      } else {
+        setTeamMembers([])
+      }
+    } catch (err: unknown) {
+      console.error('Error fetching team members:', err)
+      const message = err instanceof Error ? err.message : 'Failed to load team members'
+      setTeamMembersError(message)
+      toast.error(message)
+      setTeamMembers([])
+    } finally {
+      setTeamMembersLoading(false)
+    }
+  }, [projectId])
+
+  useEffect(() => {
+    void fetchTeamAgreements()
+  }, [fetchTeamAgreements])
+
+  useEffect(() => {
+    void fetchTeamMembers()
+  }, [fetchTeamMembers])
+
+  const handleRecordViolation = async (agreementId: string) => {
+    try {
+      setViolationLoadingId(agreementId)
+      const response = await apiClient.post<{
+        success: boolean
+        data: TeamAgreement
+      }>(`/team-agreements/${agreementId}/violation`)
+
+      if (response.success) {
+        toast.success('Violation recorded')
+        void fetchTeamAgreements()
+      } else {
+        throw new Error('Failed to record violation')
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to record violation'
+      console.error('Error recording violation:', err)
+      toast.error(message)
+    } finally {
+      setViolationLoadingId(null)
     }
   }
 
@@ -217,6 +277,28 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
     return freq.charAt(0).toUpperCase() + freq.slice(1)
   }
 
+  const formatDateTime = (dateString?: string) => {
+    if (!dateString) return null
+    try {
+      return new Date(dateString).toLocaleString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+      })
+    } catch {
+      return dateString
+    }
+  }
+
+  const formatParticipantName = (participant?: AgreementParticipant) => {
+    if (!participant) return ''
+    return participant.name || participant.email || participant.id
+  }
+
+  const hasAgreements = agreements.length > 0
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -234,16 +316,6 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
         <Button onClick={fetchTeamAgreements} variant="outline" size="sm">
           Try Again
         </Button>
-      </div>
-    )
-  }
-
-  if (agreements.length === 0) {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
-        <p className="font-medium mb-1">No Team Agreements Found</p>
-        <p className="text-sm">Run AI extraction to extract team agreements from project documents</p>
       </div>
     )
   }
@@ -274,7 +346,24 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
         </div>
       </div>
 
-      {sortedCategories.map((category) => {
+      {teamMembersError && (
+        <Alert variant="destructive">
+          <AlertTitle>Unable to load team members</AlertTitle>
+          <AlertDescription>{teamMembersError}</AlertDescription>
+        </Alert>
+      )}
+
+      {!teamMembersError && !teamMembersLoading && teamMembers.length === 0 && (
+        <Alert>
+          <AlertTitle>No project team configured</AlertTitle>
+          <AlertDescription>
+            Add team members to the project to assign agreements to individuals. Manual agreements can still be saved and edited.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {hasAgreements ? (
+        sortedCategories.map((category) => {
         const categoryAgreements = groupedAgreements[category]
         const categoryInfo = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.other
         const CategoryIcon = categoryInfo.icon
@@ -352,6 +441,20 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
                           >
                             <TrendingUp className="h-4 w-4" />
                           </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRecordViolation(agreement.id)}
+                          className="h-8 w-8 p-0"
+                          title="Record violation"
+                          disabled={violationLoadingId === agreement.id}
+                        >
+                          {violationLoadingId === agreement.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin text-destructive" />
+                          ) : (
+                            <ShieldAlert className="h-4 w-4 text-destructive" />
+                          )}
+                        </Button>
                           <Button
                             variant="ghost"
                             size="sm"
@@ -368,14 +471,25 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      {agreement.agreed_by && agreement.agreed_by.length > 0 && (
+                      {agreement.agreed_by_details && agreement.agreed_by_details.length > 0 ? (
+                        <div className="md:col-span-2">
+                          <span className="text-muted-foreground">Agreed by:</span>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {agreement.agreed_by_details.map(participant => (
+                              <Badge key={participant.id} variant="secondary">
+                                {formatParticipantName(participant)}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      ) : agreement.agreed_by && agreement.agreed_by.length > 0 ? (
                         <div>
                           <span className="text-muted-foreground">Agreed by:</span>
                           <p className="font-medium mt-0.5">
                             {agreement.agreed_by.length} member{agreement.agreed_by.length !== 1 ? 's' : ''}
                           </p>
                         </div>
-                      )}
+                      ) : null}
                       {agreement.facilitated_by && (
                         <div>
                           <span className="text-muted-foreground">Facilitated by:</span>
@@ -413,13 +527,41 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
                         <p className="text-xs text-muted-foreground">{agreement.notes}</p>
                       </div>
                     )}
+
+                    <div className="mt-3 text-xs text-muted-foreground flex flex-wrap gap-4">
+                      {agreement.created_by_name && (
+                        <span>Created by {agreement.created_by_name}</span>
+                      )}
+                      <span>Updated {formatDateTime(agreement.updated_at)}</span>
+                      {agreement.last_violation_date && (
+                        <span>Last violation {formatDateTime(agreement.last_violation_date)}</span>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </CardContent>
           </Card>
         )
-      })}
+        })
+      ) : (
+        <Card className="border-dashed">
+          <CardHeader>
+            <CardTitle>No Team Agreements yet</CardTitle>
+            <CardDescription>
+              Create agreements manually or rerun AI extraction to capture team norms automatically.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              Team Agreements capture working agreements, communication protocols, and decision-making rules for the project team.
+            </p>
+            <p>
+              Use the <span className="font-medium text-foreground">Add Agreement</span> button above to create one, or re-run AI extraction after updating your project documents.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Create/Edit Dialog */}
       <TeamAgreementDialog
@@ -432,6 +574,8 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
         }}
         projectId={projectId}
         agreement={editingAgreement}
+        teamMembers={teamMembers}
+        teamMembersLoading={teamMembersLoading}
         onSuccess={() => {
           void fetchTeamAgreements()
         }}
@@ -484,9 +628,10 @@ export function TeamAgreementsTab({ projectId }: TeamAgreementsTabProps) {
                   } else {
                     throw new Error('Failed to delete agreement')
                   }
-                } catch (error: any) {
+                } catch (error: unknown) {
                   console.error('Error deleting agreement:', error)
-                  toast.error(error.message || 'Failed to delete team agreement')
+                  const message = error instanceof Error ? error.message : 'Failed to delete team agreement'
+                  toast.error(message)
                 } finally {
                   setDeleting(false)
                 }
