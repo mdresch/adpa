@@ -13,11 +13,13 @@ export interface UniversalSearchRequest {
   types?: string[] // Filter: ['project', 'document', 'template', 'user']
   frameworks?: string[]
   authors?: string[] // Filter by author names
+  tags?: string[] // Filter by tags
   dateRange?: { start?: string; end?: string }
   limit?: number
   offset?: number
   sortBy?: 'relevance' | 'date' | 'title'
   useSemanticSearch?: boolean // Default: true
+  searchMode?: 'semantic' | 'keyword' | 'hybrid' // Search mode: semantic, keyword, or hybrid
 }
 
 export interface SearchResult {
@@ -163,15 +165,29 @@ export async function searchProjects(
     // Calculate relevance scores
     if (projects.length > 0 && request.query && request.query.trim()) {
       const queryLower = request.query.toLowerCase()
-      if (request.useSemanticSearch) {
-        // For semantic search, use keyword relevance for now
-        // Full semantic scoring would require embedding generation (expensive)
+      const searchMode = request.searchMode || (request.useSemanticSearch ? 'semantic' : 'keyword')
+      
+      if (searchMode === 'hybrid') {
+        // Hybrid mode: combine semantic and keyword scores
+        projects = projects.map(project => {
+          const keywordScore = calculateKeywordRelevance(project, queryLower)
+          const semanticScore = keywordScore // For now, use keyword as semantic proxy (will be enhanced later)
+          const recencyBoost = calculateRecencyBoost(project.updated_at)
+          const frameworkMatch = request.frameworks?.includes(project.framework) || false
+          
+          return {
+            ...project,
+            relevance_score: calculateHybridScore(semanticScore, keywordScore, recencyBoost, frameworkMatch)
+          }
+        })
+      } else if (searchMode === 'semantic' || request.useSemanticSearch) {
+        // Semantic search (currently using keyword as proxy)
         projects = projects.map(project => ({
           ...project,
           relevance_score: calculateKeywordRelevance(project, queryLower)
         }))
       } else {
-        // Simple keyword relevance scoring
+        // Keyword search
         projects = projects.map(project => ({
           ...project,
           relevance_score: calculateKeywordRelevance(project, queryLower)
@@ -183,6 +199,13 @@ export async function searchProjects(
         ...project,
         relevance_score: 0.5
       }))
+    }
+    
+    // Apply tag filter if specified
+    if (request.tags && request.tags.length > 0) {
+      projects = projects.filter(project => 
+        project.tags.some(tag => request.tags!.includes(tag))
+      )
     }
     
     return projects
@@ -300,12 +323,45 @@ export async function searchDocuments(
         }
       }
       
-      // Deduplicate by document ID and sort by relevance
+      // Deduplicate by document ID
       const uniqueResults = Array.from(
         new Map(allResults.map(r => [r.id, r])).values()
-      ).sort((a, b) => b.relevance_score - a.relevance_score)
+      )
       
-      return uniqueResults.slice(0, request.limit || 20)
+      // Apply hybrid scoring if needed
+      const searchMode = request.searchMode || (request.useSemanticSearch ? 'semantic' : 'keyword')
+      if (searchMode === 'hybrid') {
+        const queryLower = request.query.toLowerCase()
+        uniqueResults.forEach(result => {
+          const keywordScore = calculateKeywordRelevance(
+            { title: result.title, description: result.description },
+            queryLower
+          )
+          const semanticScore = result.relevance_score // Already calculated from semantic search
+          const recencyBoost = calculateRecencyBoost(result.updated_at)
+          const frameworkMatch = request.frameworks?.includes(result.framework) || false
+          
+          result.relevance_score = calculateHybridScore(
+            semanticScore,
+            keywordScore,
+            recencyBoost,
+            frameworkMatch
+          )
+        })
+      }
+      
+      // Sort by relevance
+      uniqueResults.sort((a, b) => b.relevance_score - a.relevance_score)
+      
+      // Apply tag filter if specified
+      let filteredResults = uniqueResults
+      if (request.tags && request.tags.length > 0) {
+        filteredResults = uniqueResults.filter(result => 
+          result.tags.some(tag => request.tags!.includes(tag))
+        )
+      }
+      
+      return filteredResults.slice(0, request.limit || 20)
     }
     
     // Fallback: Keyword search
@@ -364,26 +420,49 @@ export async function searchDocuments(
     const result = await pool.query(query, params)
     
     const queryLower = request.query.toLowerCase()
-    return result.rows.map((row: any) => ({
-      id: row.id,
-      type: 'document' as const,
-      title: row.title || 'Untitled Document',
-      description: (row.content || '').substring(0, 150),
-      content_preview: (row.content || '').substring(0, 200),
-      author: row.author || 'Unknown',
-      author_id: row.author_id || '',
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      tags: [],
-      framework: row.framework,
-      status: row.status,
-      relevance_score: calculateKeywordRelevance(
+    const searchMode = request.searchMode || 'keyword'
+    
+    let results = result.rows.map((row: any) => {
+      const keywordScore = calculateKeywordRelevance(
         { title: row.title || '', description: row.content || '' },
         queryLower
-      ),
-      project_id: row.project_id,
-      project_name: row.project_name
-    }))
+      )
+      
+      let relevanceScore = keywordScore
+      if (searchMode === 'hybrid') {
+        // For keyword search fallback, hybrid uses keyword + recency + framework
+        const recencyBoost = calculateRecencyBoost(row.updated_at)
+        const frameworkMatch = request.frameworks?.includes(row.framework) || false
+        relevanceScore = calculateHybridScore(keywordScore, keywordScore, recencyBoost, frameworkMatch)
+      }
+      
+      return {
+        id: row.id,
+        type: 'document' as const,
+        title: row.title || 'Untitled Document',
+        description: (row.content || '').substring(0, 150),
+        content_preview: (row.content || '').substring(0, 200),
+        author: row.author || 'Unknown',
+        author_id: row.author_id || '',
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        tags: [],
+        framework: row.framework,
+        status: row.status,
+        relevance_score: relevanceScore,
+        project_id: row.project_id,
+        project_name: row.project_name
+      }
+    })
+    
+    // Apply tag filter if specified
+    if (request.tags && request.tags.length > 0) {
+      results = results.filter(result => 
+        result.tags.some(tag => request.tags!.includes(tag))
+      )
+    }
+    
+    return results
     
   } catch (error: any) {
     logger.error('[SEARCH-DOCUMENTS] Search failed:', error)
@@ -443,25 +522,47 @@ export async function searchTemplates(
     const result = await pool.query(query, params)
     
     const queryLower = request.query.toLowerCase()
-    return result.rows.map((row: any) => ({
-      id: row.id,
-      type: 'template' as const,
-      title: row.title || 'Untitled Template',
-      description: row.description || '',
-      content_preview: (row.description || '').substring(0, 200),
-      author: row.author || 'Unknown',
-      author_id: row.author_id || '',
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      tags: row.category ? [row.category] : [],
-      framework: row.framework,
-      relevance_score: request.useSemanticSearch
-        ? 0.5
-        : calculateKeywordRelevance(
-            { title: row.title || '', description: row.description || '' },
-            queryLower
-          )
-    }))
+    const searchMode = request.searchMode || (request.useSemanticSearch ? 'semantic' : 'keyword')
+    
+    let results = result.rows.map((row: any) => {
+      const keywordScore = calculateKeywordRelevance(
+        { title: row.title || '', description: row.description || '' },
+        queryLower
+      )
+      
+      let relevanceScore = keywordScore
+      if (searchMode === 'hybrid') {
+        const recencyBoost = calculateRecencyBoost(row.updated_at)
+        const frameworkMatch = request.frameworks?.includes(row.framework) || false
+        relevanceScore = calculateHybridScore(keywordScore, keywordScore, recencyBoost, frameworkMatch)
+      } else if (request.useSemanticSearch) {
+        relevanceScore = 0.5 // Placeholder for semantic
+      }
+      
+      return {
+        id: row.id,
+        type: 'template' as const,
+        title: row.title || 'Untitled Template',
+        description: row.description || '',
+        content_preview: (row.description || '').substring(0, 200),
+        author: row.author || 'Unknown',
+        author_id: row.author_id || '',
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        tags: row.category ? [row.category] : [],
+        framework: row.framework,
+        relevance_score: relevanceScore
+      }
+    })
+    
+    // Apply tag filter if specified
+    if (request.tags && request.tags.length > 0) {
+      results = results.filter(result => 
+        result.tags.some(tag => request.tags!.includes(tag))
+      )
+    }
+    
+    return results
     
   } catch (error: any) {
     logger.error('[SEARCH-TEMPLATES] Search failed:', error)
@@ -498,23 +599,44 @@ export async function searchUsers(
     ])
     
     const queryLower = request.query.toLowerCase()
-    return result.rows.map((row: any) => ({
-      id: row.id,
-      type: 'user' as const,
-      title: row.title || row.email || 'Unknown User',
-      description: row.email || '',
-      content_preview: `Role: ${row.role || 'user'}`,
-      author: row.title || row.email || 'Unknown',
-      author_id: row.id,
-      created_at: row.created_at,
-      updated_at: row.updated_at,
-      tags: row.role ? [row.role] : [],
-      status: row.role,
-      relevance_score: calculateKeywordRelevance(
+    const searchMode = request.searchMode || 'keyword'
+    
+    let results = result.rows.map((row: any) => {
+      const keywordScore = calculateKeywordRelevance(
         { title: row.title || '', description: row.email || '' },
         queryLower
       )
-    }))
+      
+      let relevanceScore = keywordScore
+      if (searchMode === 'hybrid') {
+        const recencyBoost = calculateRecencyBoost(row.updated_at)
+        relevanceScore = calculateHybridScore(keywordScore, keywordScore, recencyBoost, false)
+      }
+      
+      return {
+        id: row.id,
+        type: 'user' as const,
+        title: row.title || row.email || 'Unknown User',
+        description: row.email || '',
+        content_preview: `Role: ${row.role || 'user'}`,
+        author: row.title || row.email || 'Unknown',
+        author_id: row.id,
+        created_at: row.created_at,
+        updated_at: row.updated_at,
+        tags: row.role ? [row.role] : [],
+        status: row.role,
+        relevance_score: relevanceScore
+      }
+    })
+    
+    // Apply tag filter if specified
+    if (request.tags && request.tags.length > 0) {
+      results = results.filter(result => 
+        result.tags.some(tag => request.tags!.includes(tag))
+      )
+    }
+    
+    return results
     
   } catch (error: any) {
     logger.error('[SEARCH-USERS] Search failed:', error)
@@ -585,5 +707,46 @@ function calculateKeywordRelevance(
   })
   
   return Math.min(1.0, score)
+}
+
+/**
+ * Calculate recency boost (0-1 scale, favors newer content)
+ */
+function calculateRecencyBoost(updatedAt: string): number {
+  const now = Date.now()
+  const updated = new Date(updatedAt).getTime()
+  const daysSinceUpdate = (now - updated) / (1000 * 60 * 60 * 24)
+  
+  // Boost decreases over time
+  // 0 days = 1.0, 30 days = 0.5, 90 days = 0.1, 365+ days = 0.0
+  if (daysSinceUpdate <= 7) return 1.0
+  if (daysSinceUpdate <= 30) return 0.8
+  if (daysSinceUpdate <= 90) return 0.5
+  if (daysSinceUpdate <= 180) return 0.3
+  if (daysSinceUpdate <= 365) return 0.1
+  return 0.0
+}
+
+/**
+ * Calculate hybrid search score combining multiple signals
+ * Formula: (0.6 × Semantic) + (0.2 × Keyword) + (0.1 × Recency) + (0.1 × Framework Match)
+ */
+function calculateHybridScore(
+  semanticScore: number,
+  keywordScore: number,
+  recencyBoost: number,
+  frameworkMatch: boolean
+): number {
+  const semanticWeight = 0.6
+  const keywordWeight = 0.2
+  const recencyWeight = 0.1
+  const frameworkWeight = 0.1
+  
+  return (
+    semanticWeight * semanticScore +
+    keywordWeight * keywordScore +
+    recencyWeight * recencyBoost +
+    frameworkWeight * (frameworkMatch ? 1 : 0)
+  )
 }
 

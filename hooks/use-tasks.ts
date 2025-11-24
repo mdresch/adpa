@@ -21,6 +21,7 @@ export interface Task {
   status: 'planned' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
   progress_percentage: number
   source_document_id?: string
+  source_document_title?: string
   source_entity_id?: string
   imported_from_wbs?: boolean
   created_at: string
@@ -69,10 +70,26 @@ export function useTasks(projectId: string) {
       const response = await apiClient.get<{ success: boolean; data: Task[] }>(
         `/tasks/project/${projectId}`
       )
-      setTasks(response.data || [])
-    } catch (err) {
+      // Normalize task rows from API/view to ensure a consistent `id` field.
+      const rawTasks = response.data || []
+      const normalized = rawTasks.map((t: any) => ({
+        // keep existing keys, and ensure `id` exists from either `id` or `task_id`
+        ...t,
+        id: t.id || t.task_id || t.taskId || null,
+      }))
+      setTasks(normalized)
+    } catch (err: any) {
       console.error('Error fetching tasks:', err)
-      setError(err instanceof Error ? err : new Error('Failed to fetch tasks'))
+      // Preserve the original error object (may include .status) so callers can react (401/403 handling)
+      if (err instanceof Error) {
+        // attach status if present
+        ;(err as any).status = (err as any).status || (err?.response?.status)
+        setError(err)
+      } else {
+        const e = new Error('Failed to fetch tasks') as any
+        e.status = err?.status || err?.response?.status
+        setError(e)
+      }
     } finally {
       setLoading(false)
     }

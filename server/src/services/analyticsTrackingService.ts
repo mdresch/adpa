@@ -96,6 +96,43 @@ interface JobExecutionLog {
   resultData?: any;
 }
 
+interface SearchAnalyticsLog {
+  userId?: string;
+  query: string;
+  searchMode: 'semantic' | 'keyword' | 'hybrid';
+  types?: string[];
+  frameworks?: string[];
+  authors?: string[];
+  tags?: string[];
+  hasDateFilter?: boolean;
+  totalResults: number;
+  resultsReturned: number;
+  hasResults: boolean;
+  responseTimeMs: number;
+  cacheHit?: boolean;
+  ipAddress?: string;
+  userAgent?: string;
+}
+
+interface SearchResultClickLog {
+  searchId: string;
+  resultId: string;
+  resultType: 'project' | 'document' | 'template' | 'user';
+  resultTitle?: string;
+  resultPosition: number;
+  relevanceScore?: number;
+  userId?: string;
+  actionType?: 'view' | 'download' | 'share';
+}
+
+interface SearchSuggestionClickLog {
+  userId?: string;
+  suggestionText: string;
+  suggestionType: 'autocomplete' | 'popular' | 'recent';
+  queryBefore?: string;
+  queryAfter?: string;
+}
+
 export class AnalyticsTrackingService {
   /**
    * Track AI API usage
@@ -431,6 +468,93 @@ export class AnalyticsTrackingService {
     const outputCost = (outputTokens / 1_000_000) * prices.output;
 
     return inputCost + outputCost;
+  }
+
+  /**
+   * Track search query analytics
+   */
+  static async trackSearchAnalytics(data: SearchAnalyticsLog): Promise<string | null> {
+    try {
+      const result = await query(
+        `INSERT INTO search_analytics (
+          user_id, query, query_length, search_mode, types, frameworks, authors, tags,
+          has_date_filter, total_results, results_returned, has_results,
+          response_time_ms, cache_hit, ip_address, user_agent
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        RETURNING id`,
+        [
+          data.userId || null,
+          data.query,
+          data.query.length,
+          data.searchMode,
+          data.types || null,
+          data.frameworks || null,
+          data.authors || null,
+          data.tags || null,
+          data.hasDateFilter || false,
+          data.totalResults,
+          data.resultsReturned,
+          data.hasResults,
+          data.responseTimeMs,
+          data.cacheHit || false,
+          data.ipAddress || null,
+          data.userAgent || null
+        ]
+      );
+
+      return result.rows[0]?.id || null;
+    } catch (error: any) {
+      console.error('[ANALYTICS] Failed to track search analytics:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Track search result click
+   */
+  static async trackSearchResultClick(data: SearchResultClickLog): Promise<void> {
+    try {
+      await query(
+        `INSERT INTO search_result_clicks (
+          search_id, result_id, result_type, result_title, result_position,
+          relevance_score, user_id, action_type
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          data.searchId,
+          data.resultId,
+          data.resultType,
+          data.resultTitle || null,
+          data.resultPosition,
+          data.relevanceScore || null,
+          data.userId || null,
+          data.actionType || 'view'
+        ]
+      );
+    } catch (error: any) {
+      console.error('[ANALYTICS] Failed to track search result click:', error);
+    }
+  }
+
+  /**
+   * Track search suggestion click
+   */
+  static async trackSearchSuggestionClick(data: SearchSuggestionClickLog): Promise<void> {
+    try {
+      await query(
+        `INSERT INTO search_suggestion_clicks (
+          user_id, suggestion_text, suggestion_type, query_before, query_after
+        ) VALUES ($1, $2, $3, $4, $5)`,
+        [
+          data.userId || null,
+          data.suggestionText,
+          data.suggestionType,
+          data.queryBefore || null,
+          data.queryAfter || null
+        ]
+      );
+    } catch (error: any) {
+      console.error('[ANALYTICS] Failed to track search suggestion click:', error);
+    }
   }
 }
 

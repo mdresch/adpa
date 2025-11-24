@@ -522,5 +522,166 @@ router.post('/:id/dependencies',
   }
 )
 
+// ================================================================
+// TASK ROLE ASSIGNMENTS (Multiple Roles Per Task)
+// Migration: 209_stakeholder_role_skills_integration.sql
+// ================================================================
+
+/**
+ * POST /api/tasks/:id/roles
+ * Assign role to task
+ */
+router.post('/:id/roles',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  validate(Joi.object({
+    roleId: Joi.string().uuid().required(),
+    roleType: Joi.string().valid('owner', 'executor', 'reviewer', 'approver', 'consultant').optional(),
+    isPrimary: Joi.boolean().optional(),
+    requiredCount: Joi.number().integer().min(1).optional()
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: taskId } = req.params
+      const { roleId, roleType, isPrimary, requiredCount } = req.body
+
+      const taskRole = await taskManagementService.assignRoleToTask(
+        taskId,
+        roleId,
+        roleType || 'owner',
+        {
+          isPrimary,
+          requiredCount
+        }
+      )
+
+      log.info(`Role ${roleId} assigned to task ${taskId}`)
+
+      res.status(201).json({
+        success: true,
+        data: taskRole
+      })
+    } catch (error: any) {
+      log.error('Failed to assign role to task', error)
+      if (error.message?.includes('not found')) {
+        return res.status(404).json({ error: error.message })
+      }
+      if (error.message?.includes('already assigned')) {
+        return res.status(409).json({ error: error.message })
+      }
+      res.status(500).json({ error: 'Failed to assign role to task' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id/roles
+ * Get roles assigned to a task
+ */
+router.get('/:id/roles',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: taskId } = req.params
+      const taskRoles = await taskManagementService.getTaskRoles(taskId)
+
+      res.json({
+        success: true,
+        data: taskRoles,
+        count: taskRoles.length
+      })
+    } catch (error) {
+      log.error('Failed to get task roles', error)
+      res.status(500).json({ error: 'Failed to get task roles' })
+    }
+  }
+)
+
+/**
+ * DELETE /api/tasks/:id/roles/:roleId
+ * Remove role from task
+ */
+router.delete('/:id/roles/:roleId',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: taskId, roleId } = req.params
+      const roleType = req.query.roleType as string | undefined
+
+      const removed = await taskManagementService.removeRoleFromTask(
+        taskId,
+        roleId,
+        roleType
+      )
+
+      if (!removed) {
+        return res.status(404).json({ error: 'Role assignment not found' })
+      }
+
+      log.info(`Role ${roleId} removed from task ${taskId}`)
+
+      res.json({
+        success: true,
+        message: 'Role removed from task successfully'
+      })
+    } catch (error) {
+      log.error('Failed to remove role from task', error)
+      res.status(500).json({ error: 'Failed to remove role from task' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id/suggested-stakeholders
+ * Get stakeholders matching task roles with skill match percentages
+ */
+router.get('/:id/suggested-stakeholders',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: taskId } = req.params
+      const suggestions = await taskManagementService.suggestStakeholdersForTask(taskId)
+
+      res.json({
+        success: true,
+        data: suggestions,
+        count: suggestions.length
+      })
+    } catch (error) {
+      log.error('Failed to get suggested stakeholders', error)
+      res.status(500).json({ error: 'Failed to get suggested stakeholders' })
+    }
+  }
+)
+
+/**
+ * GET /api/tasks/:id/skill-gaps
+ * Identify missing skills for task completion
+ */
+router.get('/:id/skill-gaps',
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id: taskId } = req.params
+      const gaps = await taskManagementService.getSkillGapsForTask(taskId)
+
+      res.json({
+        success: true,
+        data: gaps,
+        count: gaps.length
+      })
+    } catch (error) {
+      log.error('Failed to get skill gaps', error)
+      res.status(500).json({ error: 'Failed to get skill gaps' })
+    }
+  }
+)
+
 export default router
 
