@@ -38,13 +38,43 @@ export interface ProjectTask {
   actualEndDate?: Date
   deliverables?: string[]
   acceptanceCriteria?: string
-  percentComplete?: number
   status?: string
   actualHours?: number
   actualCost?: number
   phase?: string
   category?: string
   priority?: string
+  // Optional details returned by the details endpoint
+  assignedUserId?: string | null
+  assignedUserName?: string | null
+  sourceDocumentId?: string | null
+  sourceDocumentTitle?: string | null
+  sourceEntityId?: string | null
+  importedFromWbs?: boolean
+  createdAt?: Date
+  updatedAt?: Date
+  dependencies?: TaskDependency[]
+  assignedResources?: AssignedResource[]
+}
+
+export interface TaskDependency {
+  id: string
+  predecessorTaskId?: string | null
+  successorTaskId?: string | null
+  dependencyType?: string
+  lagDays?: number
+  predecessorTask?: { taskNumber?: string; taskName?: string }
+  successorTask?: { taskNumber?: string; taskName?: string }
+}
+
+export interface AssignedResource {
+  id: string
+  taskId: string
+  userId?: string | null
+  userName?: string | null
+  roleId?: string | null
+  roleName?: string | null
+  allocationPercentage?: number | null
 }
 
 export interface CreateTaskInput {
@@ -181,22 +211,131 @@ export async function getProjectTasks(
  */
 export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
   try {
-    const result = await pool.query(`
+    // Get the base task
+    const taskResult = await pool.query(`
       SELECT 
-        t.*,
-        pr.role_name,
-        pr.default_hourly_rate,
-        COUNT(DISTINCT ta.id) as assignment_count,
-        STRING_AGG(DISTINCT u.name, ', ') as assigned_to_names
+        t.*, 
+        pr.role_name as required_role_name,
+        d.title as source_document_title
       FROM project_tasks t
       LEFT JOIN project_roles pr ON t.required_role_id = pr.id
-      LEFT JOIN task_assignments ta ON t.id = ta.task_id
-      LEFT JOIN users u ON ta.user_id = u.id
+      LEFT JOIN documents d ON t.source_document_id = d.id
       WHERE t.id = $1
-      GROUP BY t.id, pr.role_name, pr.default_hourly_rate
     `, [taskId])
     
-    return result.rows[0] || null
+    if (!taskResult.rows.length) {
+      return null
+    }
+    
+    const task = taskResult.rows[0]
+    
+    // Get task dependencies — split into two reads to avoid duplicates/ambiguous ordering
+    // a) rows where this task is the successor (this task depends on another)
+    const depsAsSuccessor = await pool.query(
+      `SELECT td.*, pt1.task_number as predecessor_task_number, pt1.task_name as predecessor_task_name, pt2.task_number as successor_task_number, pt2.task_name as successor_task_name
+         FROM task_dependencies td
+         LEFT JOIN project_tasks pt1 ON td.depends_on_task_id = pt1.id
+         LEFT JOIN project_tasks pt2 ON td.task_id = pt2.id
+         WHERE td.task_id = $1`,
+      [taskId]
+    )
+
+    // b) rows where this task is the predecessor (other tasks depend on this task)
+    const depsAsPredecessor = await pool.query(
+      `SELECT td.*, pt1.task_number as predecessor_task_number, pt1.task_name as predecessor_task_name, pt2.task_number as successor_task_number, pt2.task_name as successor_task_name
+         FROM task_dependencies td
+         LEFT JOIN project_tasks pt1 ON td.depends_on_task_id = pt1.id
+         LEFT JOIN project_tasks pt2 ON td.task_id = pt2.id
+         WHERE td.depends_on_task_id = $1`,
+      [taskId]
+    )
+
+    // Merge both lists, deduplicate by dependency id just in case
+    const depsRows = [...depsAsSuccessor.rows, ...depsAsPredecessor.rows]
+    const seen = new Set<string>()
+    const dependencies: TaskDependency[] = []
+
+    for (const dep of depsRows) {
+      if (!dep.id || seen.has(dep.id)) continue
+      seen.add(dep.id)
+      dependencies.push({
+        id: dep.id,
+        predecessorTaskId: dep.depends_on_task_id || null,
+        successorTaskId: dep.task_id || null,
+        dependencyType: dep.dependency_type,
+        lagDays: dep.lag_days,
+        predecessorTask: {
+          taskNumber: dep.predecessor_task_number,
+          taskName: dep.predecessor_task_name
+        },
+        successorTask: {
+          taskNumber: dep.successor_task_number,
+          taskName: dep.successor_task_name
+        }
+      })
+    }
+    
+    // Get task assignments/resources
+    const resourcesResult = await pool.query(`
+      SELECT 
+        ta.id,
+        ta.task_id,
+        ta.user_id,
+        ta.user_name,
+        ta.role_id,
+        ta.role_name,
+        ta.allocation_percentage,
+        ta.planned_hours,
+        ta.actual_hours,
+        ta.status
+      FROM task_assignments ta
+      WHERE ta.task_id = $1
+    `, [taskId])
+    
+    const assigned_resources: AssignedResource[] = resourcesResult.rows.map(res => ({
+      id: res.id,
+      taskId: res.task_id,
+      userId: res.user_id || null,
+      userName: res.user_name || null,
+      roleId: res.role_id || null,
+      roleName: res.role_name || null,
+      allocationPercentage: res.allocation_percentage ?? null
+    }))
+    
+    // Get primary assignment (first one or the one with 100% allocation)
+    const primaryAssignment = assigned_resources.find(r => r.allocationPercentage === 100) || assigned_resources[0]
+    
+    // Map DB row to typed ProjectTask (camelCase properties)
+    const mapped: ProjectTask & { id: string; project_id?: string } = {
+      id: task.id,
+      projectId: task.project_id,
+      taskNumber: task.task_number,
+      wbsCode: task.wbs_code,
+      taskName: task.task_name,
+      description: task.description,
+      estimatedHours: task.estimated_hours,
+      actualHours: task.actual_hours,
+      plannedStartDate: task.planned_start_date,
+      plannedEndDate: task.planned_end_date,
+      requiredRoleId: task.required_role_id,
+      requiredRoleName: task.required_role_name,
+      assignedUserId: primaryAssignment?.userId ?? null,
+      assignedUserName: primaryAssignment?.userName ?? null,
+      status: task.status,
+      percentComplete: task.percent_complete ?? 0,
+      sourceDocumentId: task.source_document_id ?? null,
+      sourceDocumentTitle: task.source_document_title ?? null,
+      sourceEntityId: task.source_entity_id ?? null,
+      importedFromWbs: task.imported_from_wbs ?? false,
+      createdAt: task.created_at,
+      updatedAt: task.updated_at
+    }
+
+    // attach dependency / assignment payloads on the returned object
+    mapped.dependencies = dependencies
+    mapped.assignedResources = assigned_resources
+
+    return mapped
   } catch (error) {
     logger.error('getTaskById error', { error, taskId })
     throw error

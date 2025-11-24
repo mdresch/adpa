@@ -99,6 +99,8 @@ import pmbok6Routes from "./routes/pmbok6Routes"
 import reviewRoutes from "./routes/reviewRoutes"
 import issueRoutes from "./routes/issueRoutes"
 import riskReportingRoutes from "./routes/riskReportingRoutes"
+import portfolioFinancialRoutes from "./routes/portfolioFinancial"
+import taskCostRoutes from "./routes/taskCosts"
 
 const app = express()
 const server = createServer(app)
@@ -288,6 +290,9 @@ app.use("/api/pmbok6", pmbok6Routes)
 app.use("/api", reviewRoutes)
 app.use("/api/issues", issueRoutes)
 app.use("/api/risks", riskReportingRoutes)
+app.use("/api/portfolio", portfolioFinancialRoutes)
+app.use("/api/tasks", taskCostRoutes)
+app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
 console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, and review scheduling)")
 
 // WebSocket connection handling

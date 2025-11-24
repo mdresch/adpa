@@ -19,7 +19,7 @@ import { TaskResourcesView } from "./TaskResourcesView"
 import { TaskDependenciesView } from "./TaskDependenciesView"
 import { TaskHoursView } from "./TaskHoursView"
 import { TaskSourceView } from "./TaskSourceView"
-import { AlertCircle, FileText } from "lucide-react"
+import { AlertCircle, FileText, Briefcase } from "lucide-react"
 
 interface TaskDetailsModalProps {
   taskId: string | null
@@ -113,6 +113,26 @@ export function TaskDetailsModal({
                     <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                       Imported from WBS
                     </Badge>
+                    {task.source_document_id && (
+                      <>
+                        <span className="text-muted-foreground">•</span>
+                        <a
+                          href={`/documents/${task.source_document_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm underline flex items-center gap-2"
+                        >
+                          {task.source_document_title ? (
+                            task.source_document_title
+                          ) : (
+                            <>
+                              <span className="font-semibold">Document ID:</span>
+                              <span className="font-mono text-xs">{task.source_document_id}</span>
+                            </>
+                          )}
+                        </a>
+                      </>
+                    )}
                   </>
                 )}
               </DialogDescription>
@@ -135,12 +155,8 @@ export function TaskDetailsModal({
           </div>
         ) : error ? null : task ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-            <TabsList className="grid grid-cols-6 w-full">
+            <TabsList className="grid grid-cols-5 w-full">
               <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="roles">
-                <Briefcase className="h-4 w-4 mr-2" />
-                Roles
-              </TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
               <TabsTrigger value="hours">Hours</TabsTrigger>
@@ -149,24 +165,6 @@ export function TaskDetailsModal({
 
             <TabsContent value="details" className="mt-4">
               <TaskEditForm task={task} onSave={handleTaskUpdate} />
-            </TabsContent>
-
-            <TabsContent value="roles" className="mt-4">
-              {task.project_id && (
-                <TaskRoleAssignment
-                  taskId={task.id}
-                  projectId={task.project_id}
-                  onUpdate={handleTaskUpdate}
-                />
-              )}
-              {!task.project_id && (
-                <Alert>
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
-                    Project ID not available. Cannot load role assignments.
-                  </AlertDescription>
-                </Alert>
-              )}
             </TabsContent>
 
             <TabsContent value="resources" className="mt-4">

@@ -28,6 +28,9 @@
     "import-issues": "tsx scripts/import-github-issues.ts",
     "import-issues:stats": "tsx scripts/import-github-issues.ts --stats",
     "import-issues:dry-run": "tsx scripts/import-github-issues.ts --dry-run"
+    ,
+    "migrate:051": "node server/scripts/migrate-051.js",
+    "migrate:401": "node server/scripts/migrate-401.js"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",
