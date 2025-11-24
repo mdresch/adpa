@@ -10,6 +10,9 @@ const config = {
   transform: {
     '^.+\\.tsx?$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }],
   },
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/$1'
+  },
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
     'components/**/*.{ts,tsx}',
