@@ -8,16 +8,7 @@ const config = {
     '**/__tests__/**/*.test.tsx'
   ],
   transform: {
-    '^.+\\.tsx?$': 'ts-jest',
-  },
-  globals: {
-    'ts-jest': {
-      tsconfig: {
-        compilerOptions: {
-          jsx: 'react-jsx'
-        }
-      }
-    }
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }],
   },
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
