@@ -1,5 +1,9 @@
+/**
+ * @jest-environment jsdom
+ */
+
 import { renderHook, waitFor } from '@testing-library/react'
-import { useDriftDetection } from '@/contexts/WebSocketContext'
+import { useDriftDetection, WebSocketContext } from '@/contexts/WebSocketContext'
 import { toast } from 'sonner'
 
 // Mock the dependencies
@@ -36,7 +40,26 @@ describe('WebSocket Drift Detection', () => {
   })
 
   it('should return an empty array initially', () => {
-    const { result } = renderHook(() => useDriftDetection('test-project-id'))
+    // Provide a lightweight mock context so the hook can subscribe without
+    // triggering the full provider's lifecycle/side-effects.
+    const mockContext = {
+      socket: null,
+      isConnected: false,
+      joinRoom: jest.fn(),
+      leaveRoom: jest.fn(),
+      emit: jest.fn(),
+      on: jest.fn(),
+      off: jest.fn(),
+      roomStatuses: {},
+      getRoomStatus: () => undefined,
+    }
+
+    const wrapper = ({ children }: any) => (
+      <WebSocketContext.Provider value={mockContext as any}>
+        {children}
+      </WebSocketContext.Provider>
+    )
+    const { result } = renderHook(() => useDriftDetection('test-project-id'), { wrapper })
     expect(Array.isArray(result.current)).toBe(true)
     expect(result.current).toHaveLength(0)
   })

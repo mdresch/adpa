@@ -11,10 +11,9 @@
 
 import { jest } from '@jest/globals';
 
-// Mock @vercel/postgres
-const mockSql = {
-  query: jest.fn(),
-};
+// Mock @vercel/postgres — make sql both callable (tagged template) and have a query() method
+const mockSql: any = jest.fn()
+mockSql.query = jest.fn()
 
 const mockPool = {
   connect: jest.fn(),
@@ -140,8 +139,8 @@ describe('Database Connection Library', () => {
           db_version: 'PostgreSQL 14.0'
         }]
       };
-      // Mock the sql template literal
-      Object.assign(mockSql, mockResult);
+      // Mock the tagged template invocation (sql`...`) to resolve with our fake rows
+      mockSql.mockResolvedValueOnce(mockResult)
 
       const health = await testConnection();
 
@@ -153,11 +152,8 @@ describe('Database Connection Library', () => {
 
     test('should return unhealthy status on connection failure', async () => {
       const mockError = new Error('Connection failed');
-      // Reset the mock to throw an error
-      Object.assign(mockSql, {
-        then: () => Promise.reject(mockError),
-        catch: (fn: any) => fn(mockError)
-      });
+      // Make sql throw an error when invoked
+      mockSql.mockRejectedValueOnce(mockError)
 
       const health = await testConnection();
 
