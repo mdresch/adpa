@@ -10,7 +10,7 @@ import { extractionQueue } from "../services/queueService"
 
 const router = express.Router()
 
-const normalizeTeamMembers = (rawTeamMembers: any): string[] => {
+const normalizeTeamMembers = (rawTeamMembers: unknown): string[] => {
   if (!rawTeamMembers) {
     return []
   }
@@ -430,7 +430,7 @@ router.get("/:projectId/team-members", authenticateToken, async (req, res) => {
     }
 
     const validUserIds = teamMembers.filter(id => isUuid(id))
-    let userMap = new Map<string, any>()
+    let userMap = new Map<string, { id: string; name: string; email: string; role: string; avatar_url: string }>()
 
     if (validUserIds.length > 0) {
       const usersResult = await pool.query(

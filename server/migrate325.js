@@ -9,7 +9,14 @@ const path = require('path');
 // Load environment variables from .env if present
 require('dotenv').config();
 
+
 const MIGRATION_FILE = path.join(__dirname, 'migrations', '325_fix_team_agreements_uuid_types.sql');
+// Validate migration file exists
+if (!fs.existsSync(MIGRATION_FILE)) {
+  console.error(`Migration file not found: ${MIGRATION_FILE}`);
+  console.error('Please ensure the migration file exists before running this script.');
+  process.exit(1);
+}
 
 async function runMigration() {
   // Handle self-signed certificate errors for local/dev/test environments

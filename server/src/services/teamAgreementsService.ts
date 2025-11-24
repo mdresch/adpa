@@ -519,7 +519,7 @@ class TeamAgreementsService {
         agreed_by: agreedBy,
         agreed_by_details: agreedByDetails,
         facilitated_by: facilitatedById,
-        facilitated_by_name: (row.facilitated_by_name ? String(row.facilitated_by_name) : null) || (facilitatedById && userMap?.[facilitatedById]?.name) || null,
+        facilitated_by_name: (row.facilitated_by_name ? String(row.facilitated_by_name) : null) ?? (facilitatedById && userMap?.[facilitatedById]?.name) ?? null,
         effective_date: row.effective_date as Date,
         review_frequency: (row.review_frequency as TeamAgreement['review_frequency']) || undefined,
         next_review_date: (row.next_review_date as Date) || undefined,
@@ -532,7 +532,7 @@ class TeamAgreementsService {
         created_at: row.created_at as Date,
         updated_at: row.updated_at as Date,
         created_by: createdById,
-        created_by_name: (row.created_by_name ? String(row.created_by_name) : null) || (createdById && userMap?.[createdById]?.name) || null
+        created_by_name: (row.created_by_name ? String(row.created_by_name) : null) ?? (createdById && userMap?.[createdById]?.name) ?? null
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
