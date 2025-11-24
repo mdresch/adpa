@@ -23,7 +23,7 @@ const config = {
     'lcov',
     'html'
   ],
-  setupFilesAfterEnv: [],
+  setupFilesAfterEnv: ['@testing-library/jest-dom/extend-expect'],
   testTimeout: 30000,
   verbose: true,
 };
