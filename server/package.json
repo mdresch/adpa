@@ -25,6 +25,7 @@
     "migrate:300:rollback": "tsx scripts/rollback-migration-300.ts",
     "migrate:325:ccb": "tsx scripts/run-migration-325-ccb.ts",
     "migrate:326": "tsx scripts/run-migration-326.ts",
+    "migrate:999": "tsx scripts/run-migration-999.ts",
     "migrate:327": "tsx scripts/run-migration-327.ts",
     "migrate:328": "tsx scripts/run-migration-328.ts",
     "migrate:329": "tsx scripts/run-migration-329.ts",

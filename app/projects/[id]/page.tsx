@@ -18,6 +18,7 @@ import { ProjectDataExtraction } from "./components/ProjectDataExtraction"
 import { PerformanceDashboard } from "@/components/project/PerformanceDashboard"
 import { StakeholdersTab } from "./components/StakeholdersTab"
 import { TeamAgreementsTab } from "./components/TeamAgreementsTab"
+import LessonsTab from "./components/LessonsTab"
 import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
 import { OverviewTab } from "./components/OverviewTab"
@@ -3001,6 +3002,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Database className="h-4 w-4 mr-2" />
                   AI Extraction
                 </TabsTrigger>
+                <TabsTrigger value="lessons">
+                  <Lightbulb className="h-4 w-4 mr-2" />
+                  Lessons
+                </TabsTrigger>
                 <TabsTrigger value="performance">
                   <Activity className="h-4 w-4 mr-2" />
                   Performance
@@ -3064,6 +3069,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               <TabsContent value="extraction" className="space-y-4">
                 {/* AI Project Data Extraction - NEW RAG Integration */}
                 <ProjectDataExtraction projectId={projectId} documents={documents} />
+              </TabsContent>
+
+              <TabsContent value="lessons" className="space-y-4">
+                <LessonsTab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="performance" className="space-y-4">
