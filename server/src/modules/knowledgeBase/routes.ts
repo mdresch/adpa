@@ -31,4 +31,7 @@ router.get('/entries/:id/reviews', (req, res) => knowledgeBaseController.getRevi
 // Statistics
 router.get('/stats', (req, res) => knowledgeBaseController.getStats(req, res))
 
+// Recommendations (generated AI recommendations for a project)
+router.get('/recommendations/:projectId', (req, res) => knowledgeBaseController.getRecommendationsForProject(req, res))
+
 export default router

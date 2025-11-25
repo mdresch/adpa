@@ -424,8 +424,18 @@ class ApiClient {
       try {
         data = await response.json()
       } catch (jsonError) {
-        // If response is not JSON, create a text error
-        const text = await response.text()
+        // If response is not JSON or JSON parsing failed, read the raw text.
+        // Use `response.clone()` because some environments may have already
+        // consumed the body (or `response.json()` attempted to read it and
+        // failed) — cloning provides a fresh stream to safely call `text()`.
+        let text: string
+        try {
+          text = await response.clone().text()
+        } catch (_err) {
+          // Fallback if clone/text also fail; provide a generic message
+          text = `HTTP error! status: ${response.status}`
+        }
+
         data = { error: text || `HTTP error! status: ${response.status}`, message: text || `HTTP error! status: ${response.status}` }
       }
 
@@ -506,10 +516,17 @@ class ApiClient {
   // WebSocket connection
   connectWebSocket(): Socket {
     if (!this.socket) {
+      // Configure socket with safe reconnection settings and prefer websocket transport
       this.socket = io(WS_URL, {
         auth: {
           token: this.token,
         },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 10000,
+        timeout: 20000,
       })
 
       this.socket.on("connect", () => {

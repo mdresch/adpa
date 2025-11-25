@@ -5,6 +5,8 @@
 
 import { Request, Response } from 'express'
 import { knowledgeBaseService } from './service'
+// The global service contains AI-driven recommendations helper used by some endpoints
+import { knowledgeBaseService as coreKnowledgeBaseService } from '../../services/knowledgeBaseService'
 import { logger } from '../../utils/logger'
 import type {
   CreateKnowledgeBaseEntryRequest,
@@ -238,6 +240,50 @@ export class KnowledgeBaseController {
     } catch (error) {
       logger.error('Error in getStats controller:', error)
       res.status(500).json({ error: 'Failed to fetch statistics' })
+    }
+  }
+
+  /**
+   * Get generated recommendations for a project
+   * GET /api/knowledge-base/recommendations/:projectId
+   */
+  async getRecommendationsForProject(req: Request, res: Response): Promise<void> {
+    try {
+      const { projectId } = req.params
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10
+
+      const recommendations = await coreKnowledgeBaseService.getRecommendationsForProject(projectId, limit)
+
+      res.json({ success: true, data: recommendations })
+    } catch (error: any) {
+      logger.error('Error in getRecommendationsForProject controller:', error, { projectId: req.params?.projectId })
+
+      // When running in local development it's handy to return a friendly
+      // sample payload instead of 404 so the front-end can render a dev preview
+      // without requiring a populated database.
+      if ((process.env.NODE_ENV === 'development') && error.message && error.message.includes('Project not found')) {
+        const sample = [
+          {
+            knowledge_entry_id: 'dev-kb-1',
+            entry: { id: 'dev-kb-1', title: 'Dev sample: Keep meetings short', description: 'A simple lesson for local testing', entry_type: 'lesson_learned' },
+            relevance_score: 0.9,
+            reasoning: 'High-level practice that helps avoid long meetings',
+            expected_impact: 'Saves time',
+            ai_model: 'dev-fallback',
+            ai_confidence: 0.8
+          }
+        ]
+
+        res.json({ success: true, data: sample })
+        return
+      }
+
+      if (error.message && error.message.includes('Project not found')) {
+        res.status(404).json({ error: 'Project not found' })
+        return
+      }
+
+      res.status(500).json({ error: 'Failed to fetch recommendations' })
     }
   }
 }
