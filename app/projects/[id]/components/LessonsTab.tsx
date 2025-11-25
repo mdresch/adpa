@@ -10,8 +10,19 @@ interface LessonsTabProps {
   projectId: string
 }
 
+interface LessonItem {
+  knowledge_entry_id?: string
+  id?: string
+  title: string
+  reasoning?: string
+  description?: string
+  entry_type?: string
+  type?: string
+  source_project_name?: string
+}
+
 export default function LessonsTab({ projectId }: LessonsTabProps) {
-  const [items, setItems] = useState<any[]>([])
+  const [items, setItems] = useState<LessonItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 

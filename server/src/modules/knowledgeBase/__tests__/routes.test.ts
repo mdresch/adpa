@@ -60,21 +60,23 @@ describe('Knowledge Base recommendations route (modules)', () => {
   })
 
   test('GET /api/knowledge-base/recommendations/:projectId returns dev sample when project missing in development', async () => {
-    // Temporarily set NODE_ENV to development
-    const originalEnv = process.env.NODE_ENV
-    process.env.NODE_ENV = 'development'
+      // Temporarily set NODE_ENV to development and ensure cleanup in a finally block
+      const originalEnv = process.env.NODE_ENV
+      try {
+        process.env.NODE_ENV = 'development'
 
-    ;(coreService.getRecommendationsForProject as jest.Mock).mockRejectedValueOnce(new Error('Project not found: anything'))
+        ;(coreService.getRecommendationsForProject as jest.Mock).mockRejectedValueOnce(new Error('Project not found: anything'))
 
-    const res = await request(app)
-      .get('/api/knowledge-base/recommendations/missing-proj')
-      .set('Authorization', 'Bearer test-token')
+        const res = await request(app)
+          .get('/api/knowledge-base/recommendations/missing-proj')
+          .set('Authorization', 'Bearer test-token')
 
-    expect(res.status).toBe(200)
-    expect(res.body.success).toBe(true)
-    expect(Array.isArray(res.body.data)).toBe(true)
-
-    // Restore NODE_ENV
-    process.env.NODE_ENV = originalEnv
+        expect(res.status).toBe(200)
+        expect(res.body.success).toBe(true)
+        expect(Array.isArray(res.body.data)).toBe(true)
+      } finally {
+        // Restore NODE_ENV even if the test throws
+        process.env.NODE_ENV = originalEnv
+      }
   })
 })

@@ -261,7 +261,7 @@ export class KnowledgeBaseController {
       // When running in local development it's handy to return a friendly
       // sample payload instead of 404 so the front-end can render a dev preview
       // without requiring a populated database.
-      if ((process.env.NODE_ENV === 'development') && error.message && error.message.includes('Project not found')) {
+      if ((process.env.NODE_ENV === 'development') && typeof error?.message === 'string' && error.message.includes('Project not found')) {
         const sample = [
           {
             knowledge_entry_id: 'dev-kb-1',
@@ -278,7 +278,7 @@ export class KnowledgeBaseController {
         return
       }
 
-      if (error.message && error.message.includes('Project not found')) {
+      if (typeof error?.message === 'string' && error.message.includes('Project not found')) {
         res.status(404).json({ error: 'Project not found' })
         return
       }
