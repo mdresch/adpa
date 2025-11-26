@@ -19,7 +19,7 @@ Each domain card displays:
   - **Team**: Agreements count, adherence scores, violations
   - **Development Approach**: Iterations, velocity, story points
   - **Project Work**: Work items, blocked items, progress
-  - **Measurement**: CPI, SPI, variance tracking
+  - **Measurement**: CPI, SPI, variance tracking, performance actuals (schedule/cost variance, quality trends)
   - **Uncertainty**: Opportunities, risk responses, effectiveness
 
 ### 3. **Actionable Insights Engine**
@@ -85,6 +85,10 @@ PMBOK8DomainDashboard
 - Average variance percentage
 - Measured success criteria
 - EVM metrics (CPI, SPI, SV, CV)
+- Performance actuals coverage (counts, ahead/behind split)
+- Average schedule variance (days) and cost variance
+- Average progress variance and quality score
+- Total recorded defects and rework hours
 
 #### Uncertainty Performance Domain
 - Total opportunities

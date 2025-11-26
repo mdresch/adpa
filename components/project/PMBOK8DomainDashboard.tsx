@@ -305,6 +305,58 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
       })
     }
     
+    const measurementActuals = analytics.domains.measurement.actuals
+    if (measurementActuals?.total_actuals > 0) {
+      const scheduleVariance = measurementActuals.avg_schedule_variance_days ?? null
+      if (scheduleVariance !== null && scheduleVariance < -1) {
+        insights.push({
+          type: 'warning',
+          domain: 'Measurement',
+          message: `Average schedule variance is ${scheduleVariance.toFixed(1)} days behind. Investigate delays in actual execution.`,
+          icon: AlertTriangle,
+          priority: 'high'
+        })
+      } else if (scheduleVariance !== null && scheduleVariance > 1) {
+        insights.push({
+          type: 'success',
+          domain: 'Measurement',
+          message: `Projects are ahead of schedule by ${scheduleVariance.toFixed(1)} days on average.`,
+          icon: CheckCircle2,
+          priority: 'low'
+        })
+      }
+
+      if (measurementActuals.avg_cost_variance !== null && measurementActuals.avg_cost_variance < 0) {
+        insights.push({
+          type: 'warning',
+          domain: 'Measurement',
+          message: `Average cost variance is ${measurementActuals.avg_cost_variance.toFixed(0)} (over budget). Review spend controls.`,
+          icon: AlertTriangle,
+          priority: 'high'
+        })
+      }
+
+      if (measurementActuals.avg_quality_score !== null) {
+        if (measurementActuals.avg_quality_score < 7) {
+          insights.push({
+            type: 'warning',
+            domain: 'Measurement',
+            message: `Quality score averages ${measurementActuals.avg_quality_score.toFixed(1)}/10. Address defect and rework drivers.`,
+            icon: AlertTriangle,
+            priority: 'medium'
+          })
+        } else if (measurementActuals.avg_quality_score >= 8.5) {
+          insights.push({
+            type: 'success',
+            domain: 'Measurement',
+            message: `Quality holding strong at ${(measurementActuals.avg_quality_score).toFixed(1)}/10.`,
+            icon: CheckCircle2,
+            priority: 'low'
+          })
+        }
+      }
+    }
+
     // Uncertainty insights
     if (analytics.domains.uncertainty.realized_opportunities > 0) {
       insights.push({
@@ -691,6 +743,46 @@ export function PMBOK8DomainDashboard({ projectId }: PMBOK8DomainDashboardProps)
                           <div className="flex justify-between text-xs">
                             <span className="text-muted-foreground">Off Track:</span>
                             <span className="font-medium text-red-600">{domain.performance.off_track_count}</span>
+                          </div>
+                        )}
+                        {domain.actuals?.total_actuals ? (
+                          <>
+                            <div className="flex justify-between text-xs pt-1 border-t">
+                              <span className="text-muted-foreground">Performance Actuals:</span>
+                              <span className="font-medium">{domain.actuals.total_actuals}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Avg Schedule Var:</span>
+                              <span className={`font-medium ${domain.actuals.avg_schedule_variance_days != null && domain.actuals.avg_schedule_variance_days < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {domain.actuals.avg_schedule_variance_days != null
+                                  ? `${domain.actuals.avg_schedule_variance_days >= 0 ? '+' : ''}${domain.actuals.avg_schedule_variance_days.toFixed(1)}d`
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Avg Cost Var:</span>
+                              <span className={`font-medium ${domain.actuals.avg_cost_variance != null && domain.actuals.avg_cost_variance < 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                {domain.actuals.avg_cost_variance != null
+                                  ? `${domain.actuals.avg_cost_variance >= 0 ? '+' : ''}${domain.actuals.avg_cost_variance.toFixed(0)}`
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Avg Quality:</span>
+                              <span className="font-medium">
+                                {domain.actuals.avg_quality_score != null
+                                  ? `${domain.actuals.avg_quality_score.toFixed(1)}/10`
+                                  : 'N/A'}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">Defects (total):</span>
+                              <span className="font-medium text-red-600">{domain.actuals.total_defects ?? 0}</span>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="text-xs text-muted-foreground pt-1 border-t">
+                            No performance actuals recorded
                           </div>
                         )}
                       </>
