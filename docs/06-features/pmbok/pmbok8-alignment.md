@@ -771,5 +771,382 @@ New columns:
 
 ---
 
+## Appendix B: Focus Area by Domain Performance Mapping
+
+This appendix provides a comprehensive mapping between PMBOK 8 Performance Domains, Knowledge Area Domains, and the five traditional Project Management Focus Areas (phases). Each intersection defines specific project activities that can be extracted as entities.
+
+### B.1 Focus Area Overview
+
+| Focus Area | Purpose | Primary Outcomes | Active Domains |
+| --- | --- | --- | --- |
+| **Initiating** | Define and authorize the project | Project charter, stakeholder register, initial risk assessment | Stakeholders, Uncertainty, Governance |
+| **Planning** | Establish scope, objectives, and course of action | Baselines (scope, schedule, cost), plans, WBS | Planning, Development Approach, Measurement, Scope, Schedule, Finance, Resources |
+| **Executing** | Complete the work defined in plans | Deliverables, team performance, work completion | Team, Project Work, Delivery, Resources |
+| **Monitoring & Controlling** | Track, review, and regulate progress | Variance analysis, change control, corrective actions | Measurement, Project Work, Uncertainty, Schedule, Finance, Risk, Governance |
+| **Closing** | Formally complete the project | Acceptance, lessons learned, release | Delivery, Stakeholders, Governance, Finance |
+
+---
+
+### B.2 Initiating Phase – Domain Mapping
+
+**Purpose**: Define the project, identify stakeholders, establish governance, and assess initial uncertainties.
+
+#### Performance Domains (Tier 1)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Stakeholders** | Identify stakeholders, analyze influence/interest, define engagement strategies | `stakeholders`, `engagement_strategies` | Stakeholder coverage %, power-interest grid completion |
+| **Uncertainty** | Identify initial risks and opportunities, establish risk tolerance | `risks`, `opportunities`, `reserves` | Initial risk count, opportunity identification rate |
+
+#### Knowledge Domains (Tier 2)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Governance** | Establish project governance structure, define decision rights, create steering committee | `steering_committees`, `approval_workflows`, `governance_decisions` | Governance framework completeness |
+| **Stakeholders (Ops)** | Initial stakeholder communications, capture expectations | `communication_logs`, `stakeholder_issues` | Initial engagement action count |
+| **Risk** | Create initial risk register, define risk categories, establish risk thresholds | `risk_register`, `risk_assessments` | Risk register initialization % |
+
+#### Initiating Phase Entity Summary
+
+```
+Entities by Phase: INITIATING
+├── Stakeholders (Tier 1)
+│   ├── stakeholders (name, role, influence, interest, engagement_level)
+│   └── engagement_strategies (stakeholder_id, strategy_type, actions)
+├── Uncertainty (Tier 1)
+│   ├── risks (title, probability, impact, category, owner)
+│   └── opportunities (title, probability, benefit, exploitation_strategy)
+├── Governance (Tier 2)
+│   ├── steering_committees (members, mandate, meeting_cadence)
+│   ├── approval_workflows (gates, approvers, escalation_paths)
+│   └── governance_decisions (decision_type, outcome, rationale)
+├── Risk (Tier 2)
+│   ├── risk_register (risk_id, category, description, status)
+│   └── risk_assessments (probability, impact, detectability, rpn)
+└── Stakeholders Ops (Tier 2)
+    ├── communication_logs (stakeholder_id, channel, message, sentiment)
+    └── stakeholder_issues (issue_type, description, status)
+```
+
+---
+
+### B.3 Planning Phase – Domain Mapping
+
+**Purpose**: Define scope, develop schedules and budgets, plan resources, and establish baselines.
+
+#### Performance Domains (Tier 1)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Planning** | Define scope, create WBS, identify dependencies, establish milestones | `milestones`, `activities`, `requirements`, `constraints`, `dependencies`, `wbs_nodes` | WBS completeness, dependency coverage |
+| **Development Approach** | Select methodology, define iterations, establish quality gates | `development_approach`, `project_iterations`, `quality_gates`, `methodology_tailoring` | Methodology clarity score |
+| **Measurement** | Define success criteria, establish KPIs, plan measurement cadence | `performance_measurements`, `kpi_trends` | KPI definition coverage |
+| **Stakeholders** | Develop communication plan, refine engagement strategies | `communication_requirements`, `engagement_strategies` | Communication plan completeness |
+| **Uncertainty** | Perform qualitative/quantitative risk analysis, plan responses | `risks`, `risk_responses`, `reserves` | Risk response plan coverage |
+
+#### Knowledge Domains (Tier 2)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Scope** | Create scope statement, develop WBS dictionary, define acceptance criteria | `scope_baseline`, `wbs_nodes`, `requirements_traceability` | Scope baseline approval, requirements trace % |
+| **Schedule** | Develop schedule baseline, identify critical path, define activity sequences | `schedule_baseline`, `schedule_activities`, `critical_path` | Critical path definition, float analysis |
+| **Finance** | Develop budget baseline, plan funding tranches, estimate costs | `budget_baseline`, `cost_estimates`, `funding_tranches` | Budget variance tolerance, funding coverage |
+| **Resources** | Plan resource requirements, develop resource pool, forecast capacity | `resource_assignments`, `resource_pool`, `capacity_forecasts` | Resource allocation %, skill match score |
+| **Risk** | Develop risk response plans, define triggers, allocate reserves | `risk_response_plans`, `risk_triggers`, `contingency_reserves` | Response plan coverage, reserve adequacy |
+| **Governance** | Define change control process, establish decision thresholds | `change_control_boards`, `approval_workflows`, `policy_compliance` | CCB structure completion |
+
+#### Planning Phase Entity Summary
+
+```
+Entities by Phase: PLANNING
+├── Planning (Tier 1)
+│   ├── milestones (name, planned_date, type, success_criteria)
+│   ├── activities (name, duration, effort, predecessors, successors)
+│   ├── requirements (id, description, priority, source, status)
+│   ├── constraints (type, description, severity, mitigation)
+│   ├── dependencies (activity_from, activity_to, type, lag)
+│   └── wbs_nodes (code, name, level, parent, owner)
+├── Development Approach (Tier 1)
+│   ├── development_approach (methodology, tailoring_decisions)
+│   ├── project_iterations (name, start, end, goals, velocity)
+│   └── quality_gates (gate_name, criteria, status, gate_date)
+├── Measurement (Tier 1)
+│   └── performance_measurements (criterion, target, unit, cadence)
+├── Scope (Tier 2)
+│   ├── scope_baseline (statement, boundaries, exclusions, approved_date)
+│   ├── wbs_nodes (code, description, owner, status)
+│   └── requirements_traceability (requirement_id, deliverable_id, status)
+├── Schedule (Tier 2)
+│   ├── schedule_baseline (baseline_start, baseline_finish, milestones)
+│   ├── schedule_activities (id, name, duration, float, is_critical)
+│   └── critical_path (activities[], total_duration, slack)
+├── Finance (Tier 2)
+│   ├── budget_baseline (total_budget, by_phase, by_category, approved_date)
+│   ├── cost_estimates (item, estimate_type, amount, confidence)
+│   └── funding_tranches (source, amount, release_date, conditions)
+├── Resources (Tier 2)
+│   ├── resource_assignments (resource_id, activity_id, allocation_pct)
+│   ├── resource_pool (name, skills, availability, cost_rate)
+│   └── capacity_forecasts (period, role, available_hours, demand_hours)
+├── Risk (Tier 2)
+│   ├── risk_response_plans (risk_id, strategy, actions, owner, deadline)
+│   ├── risk_triggers (risk_id, trigger_condition, threshold)
+│   └── contingency_reserves (category, amount, allocated_to)
+└── Governance (Tier 2)
+    ├── change_control_boards (members, authority_level, meeting_schedule)
+    └── approval_workflows (stage, approvers, criteria, escalation)
+```
+
+---
+
+### B.4 Executing Phase – Domain Mapping
+
+**Purpose**: Perform the work, manage team, produce deliverables, and coordinate resources.
+
+#### Performance Domains (Tier 1)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Team** | Manage team performance, develop skills, resolve conflicts | `team_members`, `team_dynamics`, `skill_inventory`, `training_needs` | Team velocity, collaboration score, skill gap count |
+| **Project Work** | Execute work packages, track progress, manage impediments | `work_items`, `capacity_plans`, `impediments`, `work_logs` | Throughput, blocker resolution SLA |
+| **Delivery** | Produce deliverables, conduct quality reviews, prepare releases | `deliverables`, `releases`, `customer_feedback` | Deliverable completion %, quality score |
+| **Stakeholders** | Execute communication plan, manage engagement | `engagement_strategies`, `communication_requirements` | Communication compliance % |
+
+#### Knowledge Domains (Tier 2)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Resources** | Allocate resources to activities, manage utilization, resolve conflicts | `resource_assignments`, `utilization_records`, `resource_conflicts` | Utilization rate, conflict resolution time |
+| **Scope** | Manage scope delivery, validate requirements | `scope_verification`, `requirements_traceability` | Requirements delivered % |
+| **Stakeholders (Ops)** | Execute engagement actions, log communications, track satisfaction | `engagement_actions`, `communication_logs`, `satisfaction_surveys` | Engagement action completion rate |
+| **Governance** | Execute decisions, ensure policy compliance | `governance_decisions`, `policy_compliance` | Decision implementation rate |
+
+#### Executing Phase Entity Summary
+
+```
+Entities by Phase: EXECUTING
+├── Team (Tier 1)
+│   ├── team_members (name, role, skills, allocation, performance_rating)
+│   ├── team_dynamics (velocity_trend, collaboration_score, cohesion_rating)
+│   ├── skill_inventory (skill, team_members[], competency_level)
+│   └── training_needs (skill, gap_severity, training_plan, due_date)
+├── Project Work (Tier 1)
+│   ├── work_items (name, status, assigned_to, estimated_hours, actual_hours)
+│   ├── capacity_plans (period, resource, planned_hours, available_hours)
+│   ├── impediments (description, impact, owner, resolution_actions)
+│   └── work_logs (work_item_id, date, hours, notes)
+├── Delivery (Tier 1)
+│   ├── deliverables (name, status, owner, completion_pct, quality_score)
+│   ├── releases (version, release_date, features[], rollback_plan)
+│   └── customer_feedback (deliverable_id, feedback, sentiment, date)
+├── Resources (Tier 2)
+│   ├── resource_assignments (resource_id, activity_id, period, actual_hours)
+│   ├── utilization_records (resource_id, period, planned_util, actual_util)
+│   └── resource_conflicts (resource_id, activities[], conflict_type, resolution)
+├── Scope (Tier 2)
+│   ├── scope_verification (deliverable_id, criteria_met, verified_by, date)
+│   └── requirements_traceability (requirement_id, status, deliverable_id)
+├── Stakeholders Ops (Tier 2)
+│   ├── engagement_actions (stakeholder_id, action_type, outcome, date)
+│   ├── communication_logs (stakeholder_id, message, channel, sentiment)
+│   └── satisfaction_surveys (stakeholder_id, score, feedback, date)
+└── Governance (Tier 2)
+    ├── governance_decisions (decision_id, outcome, implementation_status)
+    └── policy_compliance (policy_id, status, audit_date, findings)
+```
+
+---
+
+### B.5 Monitoring & Controlling Phase – Domain Mapping
+
+**Purpose**: Track progress, compare actual to planned, identify variances, and implement corrective actions.
+
+#### Performance Domains (Tier 1)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Measurement** | Measure performance, calculate EVM metrics, track KPIs | `performance_measurements`, `earned_value_metrics`, `kpi_trends` | SPI, CPI, KPI on-track ratio |
+| **Project Work** | Monitor work progress, track utilization, manage blockers | `work_items`, `capacity_plans`, `impediments` | Work item update frequency |
+| **Uncertainty** | Monitor risks, track response effectiveness, update reserves | `risks`, `risk_responses`, `reserves` | Risk exposure trend, response effectiveness |
+
+#### Knowledge Domains (Tier 2)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Schedule** | Track schedule variance, update forecasts, analyze critical path | `schedule_variances`, `schedule_forecasts`, `critical_path` | SPI, milestone hit rate, float trend |
+| **Finance** | Track cost variance, update EAC/ETC, monitor funding | `cost_actuals`, `financial_variances`, `cost_estimates` | CPI, VAC, budget utilization |
+| **Risk** | Review risks, assess response effectiveness, update metrics | `risk_reviews`, `risk_metrics`, `risk_responses` | Risk exposure index, response coverage |
+| **Scope** | Monitor scope changes, track requirements status | `scope_change_requests`, `requirements_traceability` | Scope creep index, requirements coverage |
+| **Governance** | Process change requests, make decisions, ensure compliance | `governance_decisions`, `change_control_boards`, `policy_compliance` | Change approval cycle time |
+| **Resources** | Monitor utilization, forecast capacity gaps, resolve conflicts | `utilization_records`, `capacity_forecasts`, `resource_conflicts` | Utilization variance, conflict rate |
+
+#### Monitoring & Controlling Phase Entity Summary
+
+```
+Entities by Phase: MONITORING & CONTROLLING
+├── Measurement (Tier 1)
+│   ├── performance_measurements (criterion, actual, target, variance, status)
+│   ├── earned_value_metrics (pv, ev, ac, sv, cv, spi, cpi, eac, etc, vac)
+│   └── kpi_trends (kpi_name, period, value, trend_direction, status)
+├── Project Work (Tier 1)
+│   ├── work_items (status, progress_pct, blockers, last_updated)
+│   ├── capacity_plans (actual_hours, variance, utilization_pct)
+│   └── impediments (status, days_open, escalation_level)
+├── Uncertainty (Tier 1)
+│   ├── risks (current_probability, current_impact, status, trend)
+│   ├── risk_responses (effectiveness, cost_of_response, residual_risk)
+│   └── reserves (committed, consumed, remaining)
+├── Schedule (Tier 2)
+│   ├── schedule_variances (activity_id, planned_date, actual_date, variance_days, cause)
+│   ├── schedule_forecasts (eac_date, etc_duration, forecast_method)
+│   └── critical_path (current_slack, at_risk_activities[])
+├── Finance (Tier 2)
+│   ├── cost_actuals (period, category, actual_amount, variance)
+│   ├── financial_variances (category, planned, actual, variance, cause, action)
+│   └── cost_estimates (eac, etc, vac, forecast_method)
+├── Risk (Tier 2)
+│   ├── risk_reviews (review_date, risks_reviewed, status_changes, actions)
+│   ├── risk_metrics (exposure_index, new_risks, closed_risks, trend)
+│   └── risk_responses (action_status, effectiveness_score, notes)
+├── Scope (Tier 2)
+│   ├── scope_change_requests (id, description, impact, status, decision_date)
+│   └── requirements_traceability (status, completion_pct, blockers)
+├── Governance (Tier 2)
+│   ├── governance_decisions (request_date, decision_date, cycle_time)
+│   ├── change_control_boards (meeting_date, requests_reviewed, decisions)
+│   └── policy_compliance (audit_findings, remediation_status)
+└── Resources (Tier 2)
+    ├── utilization_records (variance_pct, over_allocated, under_allocated)
+    ├── capacity_forecasts (gap_identified, mitigation_plan)
+    └── resource_conflicts (resolution_date, resolution_method)
+```
+
+---
+
+### B.6 Closing Phase – Domain Mapping
+
+**Purpose**: Complete work, obtain acceptance, release resources, and document lessons learned.
+
+#### Performance Domains (Tier 1)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Delivery** | Obtain deliverable acceptance, complete final release, handover | `deliverable_acceptance`, `releases`, `customer_feedback` | First-pass acceptance rate, satisfaction score |
+| **Stakeholders** | Conduct final stakeholder review, capture satisfaction, close communications | `engagement_strategies`, `communication_requirements` | Final satisfaction score |
+| **Measurement** | Final performance report, lessons learned metrics | `performance_measurements`, `earned_value_metrics` | Final SPI, CPI |
+
+#### Knowledge Domains (Tier 2)
+
+| Domain | Activities | Entities Extracted | KPIs |
+| --- | --- | --- | --- |
+| **Governance** | Obtain final approvals, close governance structures, archive decisions | `governance_decisions`, `approval_workflows`, `steering_committees` | Final approval completion |
+| **Finance** | Final cost reconciliation, close funding, financial closeout | `cost_actuals`, `financial_variances`, `funding_tranches` | Final CPI, budget variance |
+| **Resources** | Release resources, update skills inventory, offboarding | `resource_assignments`, `onboarding_offboarding` | Resource release completion |
+| **Stakeholders (Ops)** | Final satisfaction surveys, relationship closure, lessons learned | `satisfaction_surveys`, `relationship_health`, `stakeholder_issues` | Final NPS, issue closure rate |
+| **Risk** | Close risk register, final reserve reconciliation, archive learnings | `risk_register`, `contingency_reserves`, `risk_metrics` | Reserve utilization, final exposure |
+
+#### Closing Phase Entity Summary
+
+```
+Entities by Phase: CLOSING
+├── Delivery (Tier 1)
+│   ├── deliverable_acceptance (deliverable_id, accepted_by, date, notes)
+│   ├── releases (final_version, release_notes, handover_complete)
+│   └── customer_feedback (final_satisfaction, recommendations)
+├── Stakeholders (Tier 1)
+│   └── engagement_strategies (closure_actions, final_communications)
+├── Measurement (Tier 1)
+│   ├── performance_measurements (final_actuals, lessons_learned)
+│   └── earned_value_metrics (final_spi, final_cpi, total_variance)
+├── Governance (Tier 2)
+│   ├── governance_decisions (closure_approvals, final_sign_off)
+│   ├── approval_workflows (closure_status, archived_date)
+│   └── steering_committees (dissolution_date, final_report)
+├── Finance (Tier 2)
+│   ├── cost_actuals (final_cost, variance_analysis)
+│   ├── financial_variances (total_variance, root_causes)
+│   └── funding_tranches (final_reconciliation, unused_funds)
+├── Resources (Tier 2)
+│   ├── resource_assignments (release_date, handover_status)
+│   └── onboarding_offboarding (offboarding_checklist, exit_date)
+├── Stakeholders Ops (Tier 2)
+│   ├── satisfaction_surveys (final_nps, improvement_suggestions)
+│   ├── relationship_health (final_status, follow_up_required)
+│   └── stakeholder_issues (closure_status, lessons_learned)
+└── Risk (Tier 2)
+    ├── risk_register (closure_status, materialized_risks)
+    ├── contingency_reserves (final_utilized, returned_to_sponsor)
+    └── risk_metrics (final_exposure, lessons_learned)
+```
+
+---
+
+### B.7 Domain Contribution Matrix
+
+This matrix shows the **intensity of each domain's contribution** across focus areas:
+
+| Domain | Tier | Initiating | Planning | Executing | M&C | Closing |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Stakeholders** | 1 | ●●●● | ●●○○ | ●●○○ | ●○○○ | ●●●○ |
+| **Team** | 1 | ○○○○ | ●●○○ | ●●●● | ●●○○ | ●○○○ |
+| **Development Approach** | 1 | ○○○○ | ●●●● | ●●○○ | ●○○○ | ○○○○ |
+| **Planning** | 1 | ●○○○ | ●●●● | ●○○○ | ●●○○ | ○○○○ |
+| **Project Work** | 1 | ○○○○ | ●○○○ | ●●●● | ●●●○ | ○○○○ |
+| **Delivery** | 1 | ○○○○ | ●○○○ | ●●●● | ●●○○ | ●●●● |
+| **Measurement** | 1 | ○○○○ | ●●●○ | ●●○○ | ●●●● | ●●○○ |
+| **Uncertainty** | 1 | ●●●○ | ●●●○ | ●●○○ | ●●●○ | ●○○○ |
+| **Governance** | 2 | ●●●● | ●●●○ | ●●○○ | ●●●○ | ●●●● |
+| **Scope** | 2 | ○○○○ | ●●●● | ●●○○ | ●●●○ | ○○○○ |
+| **Schedule** | 2 | ○○○○ | ●●●● | ●○○○ | ●●●● | ○○○○ |
+| **Finance** | 2 | ○○○○ | ●●●● | ●○○○ | ●●●● | ●●●○ |
+| **Resources** | 2 | ○○○○ | ●●●○ | ●●●● | ●●●○ | ●●○○ |
+| **Risk** | 2 | ●●●○ | ●●●○ | ●●○○ | ●●●● | ●●○○ |
+| **Stakeholders (Ops)** | 2 | ●●○○ | ●○○○ | ●●●○ | ●●○○ | ●●●○ |
+
+**Legend**: ●●●● = Primary, ●●●○ = Major, ●●○○ = Moderate, ●○○○ = Minor, ○○○○ = Minimal
+
+---
+
+### B.8 Extraction Priority by Focus Area
+
+When extracting entities for a project at a specific phase, prioritize domains as follows:
+
+#### Initiating Projects
+1. **Stakeholders** (Tier 1) → Stakeholder register
+2. **Governance** (Tier 2) → Governance framework
+3. **Uncertainty** (Tier 1) → Initial risks
+4. **Risk** (Tier 2) → Risk register setup
+
+#### Planning Projects
+1. **Scope** (Tier 2) → Scope baseline, WBS
+2. **Schedule** (Tier 2) → Schedule baseline
+3. **Finance** (Tier 2) → Budget baseline
+4. **Planning** (Tier 1) → Milestones, dependencies
+5. **Resources** (Tier 2) → Resource plan
+6. **Development Approach** (Tier 1) → Methodology
+
+#### Executing Projects
+1. **Project Work** (Tier 1) → Work items, progress
+2. **Team** (Tier 1) → Team performance
+3. **Delivery** (Tier 1) → Deliverables
+4. **Resources** (Tier 2) → Utilization tracking
+5. **Stakeholders (Ops)** (Tier 2) → Engagement actions
+
+#### Monitoring & Controlling Projects
+1. **Measurement** (Tier 1) → EVM, KPIs
+2. **Schedule** (Tier 2) → Variance analysis
+3. **Finance** (Tier 2) → Cost tracking
+4. **Risk** (Tier 2) → Risk reviews
+5. **Governance** (Tier 2) → Change control
+
+#### Closing Projects
+1. **Delivery** (Tier 1) → Acceptance
+2. **Governance** (Tier 2) → Final approvals
+3. **Finance** (Tier 2) → Financial closeout
+4. **Stakeholders** (Tier 1) → Final satisfaction
+5. **Risk** (Tier 2) → Risk closure
+
+---
+
 **Next Action:** Proceed with schema design (`schema-updates` task) using this specification as the reference baseline. Priority: Create Tier 2 tables and update `types/pmbok.ts` with extended domain enums.
 
