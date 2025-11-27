@@ -296,9 +296,9 @@ export type PmbokDomain = (typeof PMBOK_DOMAINS)[number]
 ### 6.2 New Tables/Columns
 
 **Performance Domain Tables (Tier 1):**
-- `team_members`, `team_dynamics`, `methodology_configs`, `sprints`, `quality_gates`
-- `work_items`, `capacity_plans`, `deliverable_acceptance`, `releases`
-- `measurements`, `earned_value_snapshots`, `opportunities`, `risk_responses`
+   - `team_members`, `team_dynamics`, `methodology_configs`, `sprints`, `quality_gates`
+   - `work_items`, `capacity_plans`, `deliverable_acceptance`, `releases`
+   - `measurements`, `earned_value_snapshots`, `opportunities`, `risk_responses`
 
 **Knowledge Area Domain Tables (Tier 2):**
 
@@ -389,27 +389,162 @@ const ScheduleActivitySchema = z.object({
 })
 ```
 
-### 7.3 AI Provider Strategy
+### 7.3 AI Provider Strategy – Leveraging Existing Fallback Mechanism
 
-Domain config declares preferred provider/model + fallback order:
+Domain extraction integrates with ADPA's **centralized multi-provider fallback system** implemented in `server/src/services/aiService.ts`. This ensures all 15 domains benefit from the robust, production-tested fallback architecture.
 
-| Domain | Tier | Primary Provider | Fallback Order | Rationale |
-| --- | --- | --- | --- | --- |
-| Stakeholders | 1 | `openai:gpt-4o` | `google:gemini-1.5-pro` | Stakeholder analysis, engagement |
-| Team | 1 | `mistral:large` | `openai:gpt-4o` | Team dynamics, velocity |
-| Development Approach | 1 | `google:gemini-1.5-pro` | `openai:gpt-4o-mini` | Methodology parsing |
-| Planning | 1 | `openai:gpt-4o` | `anthropic:claude-3-5-sonnet` | Dependency resolution |
-| Project Work | 1 | `mistral:large` | `groq:llama-3.1-70b` | Work item tracking |
-| Delivery | 1 | `openai:gpt-4o` | `anthropic:claude-3-5-sonnet` | Acceptance criteria |
-| Measurement | 1 | `openai:gpt-4o-mini` | `google:gemini-1.5-pro` | Numerical accuracy |
-| Uncertainty | 1 | `anthropic:claude-3-opus` | `openai:gpt-4o` | Risk assessment |
-| Governance | 2 | `anthropic:claude-3-5-sonnet` | `openai:gpt-4o` | Policy interpretation |
-| Scope | 2 | `openai:gpt-4o` | `anthropic:claude-3-5-sonnet` | WBS parsing |
-| Schedule | 2 | `openai:gpt-4o` | `google:gemini-1.5-pro` | Date handling, dependencies |
-| Finance | 2 | `openai:gpt-4o-mini` | `mistral:large` | Cost efficiency |
-| Resources | 2 | `mistral:large` | `openai:gpt-4o-mini` | Capacity planning |
-| Risk | 2 | `anthropic:claude-3-opus` | `openai:gpt-4o` | Risk assessment depth |
-| Stakeholders (Ops) | 2 | `openai:gpt-4o` | `google:gemini-1.5-pro` | Sentiment analysis |
+#### 7.3.1 Fallback System Architecture
+
+The `aiService.generateWithFallback()` method provides:
+
+| Feature | Implementation | Benefit for Domain Extraction |
+| --- | --- | --- |
+| **Database-Driven Priority** | Providers ordered by `priority` column in `ai_providers` table | Domains inherit global priority; per-domain overrides optional |
+| **Exponential Backoff** | 1s initial → 2× multiplier → 60s max + 10% jitter | Prevents thundering herd on provider outages |
+| **Provider Health Tracking** | Failure counts per provider with automatic recovery | Skips unhealthy providers, resumes after success |
+| **Auto-Disable on Credit Exhaustion** | Detects 402/429 errors, auto-deactivates provider | Prevents repeated failures; admin notified |
+| **Model Not Found Handling** | Triggers fallback without disabling provider | Graceful degradation when specific model unavailable |
+| **Progressive Retry Delays** | 1s → 2s → 3s... (max 5s) between providers | Reduces cascading failures |
+
+#### 7.3.2 Provider Chain Resolution
+
+```typescript
+// server/src/services/aiService.ts - generateWithFallback()
+// 1. Get active providers from database (ordered by priority)
+const activeProviders = await this.getActiveProviders()
+
+// 2. Build chain: requested provider first, then fallbacks
+let providers = [requestedProvider, ...activeProviders.filter(p => p !== requestedProvider)]
+
+// 3. Filter out providers in backoff period
+providers = providers.filter(p => this.isProviderAvailable(p))
+
+// 4. Try each provider with progressive delays
+for (const provider of providers) {
+  try {
+    const result = await this.generate({ ...request, provider })
+    this.resetProviderBackoff(provider)  // Success! Clear backoff
+    return { ...result, providerUsed: provider }
+  } catch (error) {
+    this.recordProviderFailure(provider)  // Apply backoff
+    // Continue to next provider...
+  }
+}
+```
+
+#### 7.3.3 Domain-Specific Provider Preferences
+
+Each domain config declares `recommendedProviders` which are used as **hints** but respect the fallback system:
+
+| Domain | Tier | Recommended Providers | Rationale |
+| --- | --- | --- | --- |
+| Stakeholders | 1 | `openai:gpt-4o`, `google:gemini-2.0-flash-exp` | Stakeholder analysis, engagement |
+| Team | 1 | `mistral:mistral-large-latest`, `openai:gpt-4o` | Team dynamics, velocity |
+| Development Approach | 1 | `google:gemini-2.0-flash-exp`, `openai:gpt-4o-mini` | Methodology parsing |
+| Planning | 1 | `openai:gpt-4o`, `anthropic:claude-3-5-sonnet` | Dependency resolution |
+| Project Work | 1 | `mistral:mistral-large-latest`, `groq:llama-3.3-70b-versatile` | Work item tracking |
+| Delivery | 1 | `openai:gpt-4o`, `anthropic:claude-3-5-sonnet` | Acceptance criteria |
+| Measurement | 1 | `openai:gpt-4o-mini`, `google:gemini-2.0-flash-exp` | Numerical accuracy, cost efficiency |
+| Uncertainty | 1 | `anthropic:claude-3-opus`, `openai:gpt-4o` | Risk assessment depth |
+| Governance | 2 | `anthropic:claude-3-5-sonnet`, `openai:gpt-4o` | Policy interpretation, nuanced decisions |
+| Scope | 2 | `openai:gpt-4o`, `anthropic:claude-3-5-sonnet` | WBS parsing, hierarchical structures |
+| Schedule | 2 | `openai:gpt-4o`, `google:gemini-2.0-flash-exp` | Date handling, dependency resolution |
+| Finance | 2 | `openai:gpt-4o-mini`, `mistral:mistral-small-latest` | Cost efficiency, numerical accuracy |
+| Resources | 2 | `mistral:mistral-large-latest`, `openai:gpt-4o-mini` | Capacity planning, skill matching |
+| Risk | 2 | `anthropic:claude-3-opus`, `openai:gpt-4o` | Risk assessment depth, response strategies |
+| Stakeholders (Ops) | 2 | `openai:gpt-4o`, `google:gemini-2.0-flash-exp` | Sentiment analysis, relationship patterns |
+
+#### 7.3.4 Supported Providers
+
+The fallback system supports all 10 configured provider types:
+
+| Provider | SDK | Fallback Support | Notes |
+| --- | --- | --- | --- |
+| OpenAI | `@ai-sdk/openai` | ✅ Full | AI Gateway + direct API |
+| Google AI | `@google/generative-ai` | ✅ Full | AI Gateway + direct API |
+| Anthropic | `@anthropic-ai/sdk` | ✅ Full | Direct API (bypasses Gateway for user credits) |
+| Mistral | `@ai-sdk/mistral` | ✅ Full | AI Gateway + direct API |
+| Groq | AI Gateway | ✅ Full | AI Gateway only |
+| DeepSeek | `@ai-sdk/deepseek` | ✅ Full | Direct API (OpenAI-compatible) |
+| Moonshot | Native OpenAI SDK | ✅ Full | Direct API (OpenAI-compatible) |
+| xAI | `@ai-sdk/xai` | ✅ Full | Direct API |
+| Ollama | Native HTTP | ✅ Full | Local deployment |
+| Azure OpenAI | AI Gateway | ✅ Full | AI Gateway only |
+
+#### 7.3.5 Fallback Mechanism Validation for New Domains
+
+**Confirmation: The existing fallback mechanism fully supports the 7 new Knowledge Area Domains.**
+
+| Requirement | Status | Implementation |
+| --- | --- | --- |
+| Dynamic provider discovery | ✅ Met | `getActiveProviders()` queries database |
+| Priority-based ordering | ✅ Met | `ORDER BY priority ASC` in SQL |
+| Exponential backoff | ✅ Met | `calculateBackoffDelay()` with jitter |
+| Auto-recovery | ✅ Met | `resetProviderBackoff()` on success |
+| Credit exhaustion handling | ✅ Met | `autoDisableProvider()` on 402/429 |
+| Model validation | ✅ Met | `buildGatewayModelId()` with mapping |
+| Analytics tracking | ✅ Met | `trackAIUsageAsync()` per request |
+| Per-domain metrics | ⏳ Enhancement | Add `domain` column to `ai_provider_usage` |
+
+**No changes required** to the core fallback mechanism. New domains simply:
+1. Define `recommendedProviders` in domain config
+2. Call `aiService.generateWithFallback()` with domain-specific prompt
+3. Inherit all fallback behavior automatically
+
+#### 7.3.6 Integration Pattern for Domain Extraction
+
+Domain extraction uses the fallback mechanism via `projectDataExtractionService.ts`:
+
+```typescript
+// server/src/services/projectDataExtractionService.ts
+import { aiService } from './aiService'
+
+async extractDomainEntities(
+  projectId: string,
+  domain: PmbokDomain,
+  documents: Document[],
+  options: { aiProvider?: string; aiModel?: string }
+) {
+  const domainConfig = getDomainExtractionConfig(domain)
+  
+  // Build domain-specific prompt
+  const prompt = buildDomainPrompt(domainConfig, documents)
+  
+  // Use generateWithFallback - inherits all fallback behavior
+  const response = await aiService.generateWithFallback({
+    prompt,
+    provider: options.aiProvider || domainConfig.recommendedProviders[0],
+    model: options.aiModel,
+    temperature: 0.3,  // Lower for extraction accuracy
+    max_tokens: 16000,  // Entity extraction needs large context
+    userId,
+    projectId,
+  })
+  
+  // Validate and parse response
+  this.validateAIResponse(response, domain, options)
+  return this.parseEntities(response.content, domain)
+}
+```
+
+#### 7.3.7 Error Handling in Domain Extraction
+
+The extraction service validates AI responses and triggers retries:
+
+```typescript
+// Validation triggers Bull retry and provider fallback
+private validateAIResponse(response: any, domain: string, options: any): void {
+  if (!response?.content || response.content.trim().length === 0) {
+    throw new Error(`Empty AI response for ${domain} - triggering fallback`)
+  }
+  
+  // Entity-specific validation
+  const parsed = JSON.parse(response.content)
+  if (!parsed.entities || parsed.entities.length === 0) {
+    throw new Error(`No entities extracted for ${domain} - may retry with different provider`)
+  }
+}
+```
 
 ### 7.4 Caching Tags
 
