@@ -87,47 +87,47 @@ export function TaskDetailsModal({
             <>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                <span className="font-mono">{task.task_number}</span>
+                <span className="font-mono">{task.taskNumber}</span>
                 <span className="text-muted-foreground">•</span>
-                <span>{task.task_name}</span>
+                <span>{task.taskName}</span>
               </DialogTitle>
               <DialogDescription className="flex items-center gap-2 flex-wrap">
-                {task.wbs_code && (
+                {task.wbsCode && (
                   <>
                     <Badge variant="outline" className="font-mono">
-                      WBS {task.wbs_code}
+                      WBS {task.wbsCode}
                     </Badge>
                     <span className="text-muted-foreground">•</span>
                   </>
                 )}
-                {task.required_role_name && (
+                {task.requiredRoleName && (
                   <>
-                    <Badge variant="outline">{task.required_role_name}</Badge>
+                    <Badge variant="outline">{task.requiredRoleName}</Badge>
                     <span className="text-muted-foreground">•</span>
                   </>
                 )}
                 <TaskStatusBadge status={task.status} />
-                {task.imported_from_wbs && (
+                {task.importedFromWbs && (
                   <>
                     <span className="text-muted-foreground">•</span>
                     <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                       Imported from WBS
                     </Badge>
-                    {task.source_document_id && (
+                    {task.sourceDocumentId && (
                       <>
                         <span className="text-muted-foreground">•</span>
                         <a
-                          href={`/documents/${task.source_document_id}`}
+                          href={`/documents/${task.sourceDocumentId}`}
                           target="_blank"
                           rel="noreferrer"
                           className="text-sm underline flex items-center gap-2"
                         >
-                          {task.source_document_title ? (
-                            task.source_document_title
+                          {task.sourceDocumentTitle ? (
+                            task.sourceDocumentTitle
                           ) : (
                             <>
                               <span className="font-semibold">Document ID:</span>
-                              <span className="font-mono text-xs">{task.source_document_id}</span>
+                              <span className="font-mono text-xs">{task.sourceDocumentId}</span>
                             </>
                           )}
                         </a>
