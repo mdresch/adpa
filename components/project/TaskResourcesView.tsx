@@ -91,37 +91,37 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
         <div>
           <h4 className="text-sm font-semibold mb-3">Additional Team Members</h4>
           <div className="space-y-2">
-            {task.assigned_resources.map((resource) => (
-              <div key={resource.id} className="border rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">
-                        {getInitials(resource.user_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-medium">{resource.user_name}</p>
-                      {resource.role_name && (
-                        <p className="text-xs text-muted-foreground">{resource.role_name}</p>
-                      )}
+              {task.assigned_resources.map((resource) => (
+                <div key={resource.id} className="border rounded-lg p-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs">
+                          {getInitials(resource.user_name)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">{resource.user_name}</p>
+                        {resource.roleName && (
+                          <p className="text-xs text-muted-foreground">{resource.roleName}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        {resource.allocationPercentage}%
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleUnassign(resource.userId)}
+                      >
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {resource.allocation_percentage}%
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUnassign(resource.user_id)}
-                    >
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
-                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
           </div>
         </div>
       )}

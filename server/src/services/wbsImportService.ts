@@ -25,7 +25,7 @@ interface ExtractedEntity {
   entityType: 'activity' | 'deliverable' | 'milestone' | 'phase' | 'work_item' | 'checklist_item';
   name: string;
   description?: string;
-  parentId?: string;
+  parent_task_id?: string;
   start_date?: string;
   end_date?: string;
   status?: string;
@@ -156,7 +156,7 @@ async function getExtractedEntities(documentId: string): Promise<ExtractedEntity
           entityType: 'activity',
           name: a.activity_name || a.name,
           description: a.description,
-          parentId: a.parent_id || a.parentId,
+          parent_task_id: a.parent_task_id || a.parentId || a.parent_id,
           start_date: a.start_date,
           end_date: a.end_date,
           status: a.status,
@@ -252,7 +252,7 @@ export async function importWBSFromProjectEntities(
     `, [projectId])
 
     const workItemsResult = await pool.query(`
-      SELECT id, name, description, parent_id, status, estimated_hours, assignee_id, sequence, source_document_id
+      SELECT id, name, description, parent_task_id, status, estimated_hours, assignee_id, sequence, source_document_id
       FROM work_items
       WHERE project_id = $1
       ORDER BY name
@@ -315,7 +315,7 @@ export async function importWBSFromProjectEntities(
             source_document_id,
             imported_from_wbs,
             created_by,
-            parent_id
+            parent_task_id
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
@@ -332,8 +332,8 @@ export async function importWBSFromProjectEntities(
           deliverable.id,
           deliverable.extracted_from_document_id || deliverable.source_document_id || null,
           true,
-          userId
-          , (deliverable.parent_id && sourceToTaskId[deliverable.parent_id]) ? sourceToTaskId[deliverable.parent_id] : deliverable.parent_id || null
+          userId,
+          (deliverable.parent_task_id && sourceToTaskId[deliverable.parent_task_id]) ? sourceToTaskId[deliverable.parent_task_id] : deliverable.parent_task_id || null
         ])
         
         const created = taskResult.rows[0]
@@ -371,9 +371,9 @@ export async function importWBSFromProjectEntities(
             source_document_id,
             imported_from_wbs,
             created_by,
-            parent_id,
+            parent_task_id,
             entity_type
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
             description = EXCLUDED.description,
@@ -390,7 +390,7 @@ export async function importWBSFromProjectEntities(
           phase.source_document_id || phase.extracted_from_document_id || null,
           true,
           userId,
-          (phase.parent_id && sourceToTaskId[phase.parent_id]) ? sourceToTaskId[phase.parent_id] : phase.parent_id || null,
+          (phase.parent_task_id && sourceToTaskId[phase.parent_task_id]) ? sourceToTaskId[phase.parent_task_id] : phase.parent_task_id || null,
           'phase'
         ])
 
@@ -424,9 +424,9 @@ export async function importWBSFromProjectEntities(
             source_document_id,
             imported_from_wbs,
             created_by,
-            parent_id,
+            parent_task_id,
             entity_type
-          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+          ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
             description = EXCLUDED.description,
@@ -443,7 +443,7 @@ export async function importWBSFromProjectEntities(
           milestone.source_document_id || milestone.extracted_from_document_id || null,
           true,
           userId,
-          (milestone.parent_id && sourceToTaskId[milestone.parent_id]) ? sourceToTaskId[milestone.parent_id] : milestone.parent_id || null,
+          (milestone.parent_task_id && sourceToTaskId[milestone.parent_task_id]) ? sourceToTaskId[milestone.parent_task_id] : milestone.parent_task_id || null,
           'milestone'
         ])
 
@@ -503,7 +503,7 @@ export async function importWBSFromProjectEntities(
             source_document_id,
             imported_from_wbs,
             created_by,
-            parent_id
+            parent_task_id
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           ON CONFLICT (project_id, task_number) DO UPDATE SET
             task_name = EXCLUDED.task_name,
@@ -525,7 +525,7 @@ export async function importWBSFromProjectEntities(
           activity.extracted_from_document_id || activity.source_document_id || null,
           true,
           userId,
-          (activity.parent_id && sourceToTaskId[activity.parent_id]) ? sourceToTaskId[activity.parent_id] : activity.parent_id || null
+          (activity.parent_task_id && sourceToTaskId[activity.parent_task_id]) ? sourceToTaskId[activity.parent_task_id] : activity.parent_task_id || null
         ])
         
         const task = taskResult.rows[0]
@@ -546,7 +546,7 @@ export async function importWBSFromProjectEntities(
       }
     }
 
-    // 5. Import work_items as checklist_items (use parent_id as task_id)
+    // 5. Import work_items as checklist_items (use parent_task_id as task_id)
     for (let i = 0; i < workItems.length; i++) {
       const item = workItems[i]
       try {
@@ -565,8 +565,8 @@ export async function importWBSFromProjectEntities(
             updated_at = NOW()
         `, [
           item.id,
-          // If we created a task for the parent entity, link to that id. Otherwise fall back to the raw parent_id
-          (item.parent_id && sourceToTaskId[item.parent_id]) ? sourceToTaskId[item.parent_id] : item.parent_id,
+          // If we created a task for the parent entity, link to that id. Otherwise fall back to the raw parent_task_id
+          (item.parent_task_id && sourceToTaskId[item.parent_task_id]) ? sourceToTaskId[item.parent_task_id] : item.parent_task_id,
           item.name,
           item.description,
           null,
@@ -650,7 +650,7 @@ export async function importWBSFromDocument(
 
       try {
         if (['activity', 'deliverable', 'milestone', 'phase'].includes(entity.entityType)) {
-          // Insert as project_task (with parent_id if present)
+          // Insert as project_task (with parent_task_id if present)
           const taskResult = await pool.query(`
             INSERT INTO project_tasks (
               project_id,
@@ -666,7 +666,7 @@ export async function importWBSFromDocument(
               source_entity_id,
               imported_from_wbs,
               created_by,
-              parent_id,
+              parent_task_id,
               entity_type
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (project_id, task_number) DO UPDATE SET
@@ -689,7 +689,7 @@ export async function importWBSFromDocument(
             entity.id,
             true,
             userId,
-            (entity.parentId && sourceToTaskId[entity.parentId]) ? sourceToTaskId[entity.parentId] : entity.parentId || null,
+            (entity.parent_task_id && sourceToTaskId[entity.parent_task_id]) ? sourceToTaskId[entity.parent_task_id] : entity.parent_task_id || null,
             entity.entityType
           ])
           const created = taskResult.rows[0]
@@ -698,7 +698,7 @@ export async function importWBSFromDocument(
           if (estimatedHours) result.totalEstimatedHours += estimatedHours
           if (!roleId && requiredRole) result.tasksNeedingRoleAssignment++
         } else if (['work_item', 'checklist_item'].includes(entity.entityType)) {
-          // Insert as checklist_item (with task_id = parentId)
+          // Insert as checklist_item (with task_id = parent_task_id)
           await pool.query(`
             INSERT INTO checklist_items (
               id, task_id, name, description, cost, status, assignee_id, estimated_hours, sequence, source_document_id
@@ -715,7 +715,7 @@ export async function importWBSFromDocument(
               updated_at = NOW()
           `, [
             entity.id,
-            (entity.parentId && sourceToTaskId[entity.parentId]) ? sourceToTaskId[entity.parentId] : entity.parentId,
+            (entity.parent_task_id && sourceToTaskId[entity.parent_task_id]) ? sourceToTaskId[entity.parent_task_id] : entity.parent_task_id,
             entity.name,
             entity.description,
             entity.cost,

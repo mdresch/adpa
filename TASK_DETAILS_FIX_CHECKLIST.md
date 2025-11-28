@@ -1,15 +1,15 @@
+- [ ] Each AI-extracted task should be traceable to its source document, and the document source should be mentioned in the task details.
+
+- [ ] Each task should have a start date, end date, and duration, with suggested resources/roles allocated to the task.
+- [ ] AI Extraction: Tasks may be generated from AI-extracted entities in documents (activities, deliverables, milestones, phases, work items).
+
+- [ ] Each AI-extracted task should be traceable to its source document, and the document source should be mentioned in the task details.
 # Task Details Modal Fix - Checklist & Verification
 
 ## Pre-Deployment Checklist
 
-- [x] Backend service method refactored (`getTaskById()`)
-- [x] Frontend component fixed (imports, undefined components, layout)
-- [x] API response format updated
-- [x] Database schema verified (from migration 208)
-- [x] Error handling in place
-- [x] Loading states configured
-- [x] All sub-components verified to exist
-- [x] TypeScript interfaces aligned
+
+- [ ] AI Extraction: Tasks may be generated from AI-extracted entities in documents (activities, deliverables, milestones, phases, work items).
 
 ## Deployment Steps
 
