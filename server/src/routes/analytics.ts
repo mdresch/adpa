@@ -563,6 +563,21 @@ router.get(
         WHERE project_id = $1
       `, [projectId])
 
+      const actualsMetrics = await pool.query(`
+        SELECT 
+          COUNT(*)::int as total_actuals,
+          COUNT(*) FILTER (WHERE schedule_variance_days >= 0)::int as ahead_of_schedule,
+          COUNT(*) FILTER (WHERE schedule_variance_days < 0)::int as behind_schedule,
+          AVG(schedule_variance_days) as avg_schedule_variance_days,
+          AVG(cost_variance) as avg_cost_variance,
+          AVG(progress_variance) as avg_progress_variance,
+          AVG(quality_score) as avg_quality_score,
+          COALESCE(SUM(defects_found), 0)::int as total_defects,
+          SUM(rework_hours) as total_rework_hours
+        FROM performance_actuals
+        WHERE project_id = $1
+      `, [projectId])
+
       // Uncertainty Performance Domain metrics
       // Note: Using separate subqueries to avoid Cartesian product from JOINing opportunities and risk_responses
       const uncertaintyMetrics = await pool.query(`
@@ -578,6 +593,61 @@ router.get(
       `, [projectId])
 
       // Aggregate domain health scores
+      const measurementTotals = parseInt(measurementMetrics.rows[0]?.total_measurements || '0', 10)
+      const onTrackCount = parseInt(measurementMetrics.rows[0]?.on_track_count || '0', 10)
+      const offTrackCount = parseInt(measurementMetrics.rows[0]?.off_track_count || '0', 10)
+
+      const actualsRaw = actualsMetrics.rows[0] || {}
+      const actualsData = {
+        total_actuals: parseInt(actualsRaw.total_actuals || '0', 10),
+        ahead_of_schedule: parseInt(actualsRaw.ahead_of_schedule || '0', 10),
+        behind_schedule: parseInt(actualsRaw.behind_schedule || '0', 10),
+        avg_schedule_variance_days: actualsRaw.avg_schedule_variance_days !== null && actualsRaw.avg_schedule_variance_days !== undefined
+          ? parseFloat(actualsRaw.avg_schedule_variance_days)
+          : null,
+        avg_cost_variance: actualsRaw.avg_cost_variance !== null && actualsRaw.avg_cost_variance !== undefined
+          ? parseFloat(actualsRaw.avg_cost_variance)
+          : null,
+        avg_progress_variance: actualsRaw.avg_progress_variance !== null && actualsRaw.avg_progress_variance !== undefined
+          ? parseFloat(actualsRaw.avg_progress_variance)
+          : null,
+        avg_quality_score: actualsRaw.avg_quality_score !== null && actualsRaw.avg_quality_score !== undefined
+          ? parseFloat(actualsRaw.avg_quality_score)
+          : null,
+        total_defects: parseInt(actualsRaw.total_defects || '0', 10),
+        total_rework_hours: actualsRaw.total_rework_hours !== null && actualsRaw.total_rework_hours !== undefined
+          ? parseFloat(actualsRaw.total_rework_hours)
+          : null
+      }
+
+      const measurementScoreFromMeasurements = measurementTotals > 0
+        ? (onTrackCount / measurementTotals) * 100
+        : null
+      const measurementScoreFromActuals = actualsData.total_actuals > 0
+        ? (actualsData.ahead_of_schedule / actualsData.total_actuals) * 100
+        : null
+      let measurementScore: number | null = null
+      if (measurementScoreFromMeasurements !== null && measurementScoreFromActuals !== null) {
+        measurementScore = (measurementScoreFromMeasurements + measurementScoreFromActuals) / 2
+      } else {
+        measurementScore = measurementScoreFromMeasurements ?? measurementScoreFromActuals
+      }
+
+      let measurementStatus: 'healthy' | 'needs_attention' | 'active' | 'inactive' | 'blocked' | 'at_risk' | 'on_track' | 'managed'
+        = (measurementTotals === 0 && actualsData.total_actuals === 0) ? 'inactive' : 'on_track'
+      if (offTrackCount > 0) {
+        measurementStatus = 'at_risk'
+      }
+      const avgScheduleVariance = actualsData.avg_schedule_variance_days ?? 0
+      const avgCostVariance = actualsData.avg_cost_variance ?? 0
+      if (actualsData.total_actuals > 0) {
+        if (avgScheduleVariance < -1 || avgCostVariance < 0) {
+          measurementStatus = 'at_risk'
+        } else if (measurementStatus !== 'at_risk' && avgScheduleVariance > 1 && avgCostVariance >= 0) {
+          measurementStatus = 'healthy'
+        }
+      }
+
       const domainHealth = {
         team: {
           score: teamMetrics.rows[0]?.avg_adherence_score 
@@ -600,10 +670,8 @@ router.get(
             : 'inactive'
         },
         measurement: {
-          score: measurementMetrics.rows[0]?.on_track_count 
-            ? (measurementMetrics.rows[0].on_track_count / measurementMetrics.rows[0].total_measurements) * 100
-            : null,
-          status: measurementMetrics.rows[0]?.off_track_count > 0 ? 'at_risk' : 'on_track'
+          score: measurementScore,
+          status: measurementStatus
         },
         uncertainty: {
           score: uncertaintyMetrics.rows[0]?.effective_responses 
@@ -635,6 +703,7 @@ router.get(
           measurement: {
             performance: measurementMetrics.rows[0],
             evm: evmMetrics.rows[0],
+            actuals: actualsData,
             health: domainHealth.measurement
           },
           uncertainty: {
