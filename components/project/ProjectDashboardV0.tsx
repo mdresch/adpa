@@ -66,11 +66,21 @@ const ENTITY_TYPE_MAP: Record<string, { label: string; icon: string }> = {
   phases: { label: "Phases", icon: "📅" },
   resources: { label: "Resources", icon: "💰" },
   qualityStandards: { label: "Quality", icon: "✅" },
+  complianceSecurity: { label: "Compliance & Security", icon: "🛡️" },
   deliverables: { label: "Deliverables", icon: "📦" },
   scopeItems: { label: "Scope Items", icon: "📋" },
   activities: { label: "Activities", icon: "📊" },
   technologies: { label: "Technologies", icon: "🔧" },
-  developmentApproaches: { label: "Development Approach", icon: "🔨" }
+  teamAgreements: { label: "Team Agreements", icon: "🤝" },
+  developmentApproaches: { label: "Development Approach", icon: "🧭" },
+  projectIterations: { label: "Project Iterations", icon: "🔁" },
+  workItems: { label: "Work Items", icon: "📌" },
+  capacityPlans: { label: "Capacity Plans", icon: "🗂️" },
+  performanceMeasurements: { label: "Performance Measurements", icon: "📈" },
+  earnedValueMetrics: { label: "EVM Metrics", icon: "💹" },
+  opportunities: { label: "Opportunities", icon: "🚀" },
+  riskResponses: { label: "Risk Responses", icon: "🛠️" },
+  performanceActuals: { label: "Performance Actuals", icon: "⚙️" }
 }
 
 export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Props) {
@@ -787,7 +797,7 @@ export default function ProjectDashboardV0({ projectId }: ProjectDashboardV0Prop
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle>AI Extraction Dashboard</CardTitle>
-                    <CardDescription>23 entity types extracted from PMBOK 8 standards (14 legacy + 9 Performance Domain entities)</CardDescription>
+                    <CardDescription>24 entity types extracted from PMBOK 8 standards (14 legacy + 10 Performance Domain entities)</CardDescription>
                   </div>
                   <div className="flex gap-2">
                     <Button 
