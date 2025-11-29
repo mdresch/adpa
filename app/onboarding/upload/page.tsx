@@ -72,24 +72,19 @@ export default function DocumentUploadPage() {
     }
   }, [isAuthenticated]);
 
-  // Show loading state while checking authentication
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
-        </div>
-      </div>
-    );
-  }
+  // Handle file selection - must be defined before useCallback hooks that use it
+  const handleFilesSelected = useCallback((selectedFiles: File[]) => {
+    const newFiles: UploadedFile[] = selectedFiles.map(file => ({
+      file,
+      id: Math.random().toString(36).substring(7),
+      status: 'pending',
+      progress: 0
+    }));
 
-  // Don't render content if not authenticated
-  if (!isAuthenticated) {
-    return null;
-  }
+    setFiles(prev => [...prev, ...newFiles]);
+  }, []);
 
-  // Handle drag events
+  // Handle drag events - ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -114,41 +109,43 @@ export default function DocumentUploadPage() {
 
     const droppedFiles = Array.from(e.dataTransfer.files);
     handleFilesSelected(droppedFiles);
-  }, []);
+  }, [handleFilesSelected]);
 
-  // Handle file selection
-  const handleFilesSelected = (selectedFiles: File[]) => {
-    const newFiles: UploadedFile[] = selectedFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substring(7),
-      status: 'pending',
-      progress: 0
-    }));
-
-    setFiles(prev => [...prev, ...newFiles]);
-  };
-
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       handleFilesSelected(Array.from(e.target.files));
     }
-  };
+  }, [handleFilesSelected]);
 
   // Upload files
   const uploadFiles = async () => {
-    // Validation
+    // Verify authentication first
+    if (!isAuthenticated) {
+      toast.error('Please log in to upload files');
+      router.push('/auth/login?redirect=/onboarding/upload');
+      return;
+    }
+
+    const token = localStorage.getItem('auth_token');
+    if (!token) {
+      toast.error('Authentication token missing. Please log in again.');
+      router.push('/auth/login?redirect=/onboarding/upload');
+      return;
+    }
+
+    // Form validation
     if (!assessmentName.trim()) {
-      alert('Please enter an assessment/project name');
+      toast.error('Please enter an assessment/project name');
       return;
     }
     
     if (!clientName.trim()) {
-      alert('Please enter a client name');
+      toast.error('Please enter a client name');
       return;
     }
     
     if (files.length === 0) {
-      alert('Please select files to upload');
+      toast.error('Please select at least one file to upload');
       return;
     }
     
@@ -170,9 +167,20 @@ export default function DocumentUploadPage() {
         formData.append('email', contactEmail);
       }
 
-      // Upload request
+      // Get authentication token
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Authentication required. Please log in.');
+        router.push('/auth/login?redirect=/onboarding/upload');
+        return;
+      }
+
+      // Upload request with authentication
       const response = await fetch('/api/onboarding/upload', {
         method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
         body: formData,
         credentials: 'include'
       });
@@ -287,12 +295,30 @@ export default function DocumentUploadPage() {
     errors: files.filter(f => f.status === 'error').length
   };
 
-  const canUpload = assessmentName.trim() && clientName.trim() && files.length > 0;
+  // Check if upload is allowed (authentication + form validation)
+  const canUpload = isAuthenticated && assessmentName.trim() && clientName.trim() && files.length > 0;
 
   const handleIntroComplete = () => {
     setShowIntro(false);
     localStorage.setItem('maturity_journey_intro_seen', 'true');
   };
+
+  // Show loading state while checking authentication (AFTER all hooks)
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render content if not authenticated (AFTER all hooks)
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <>
