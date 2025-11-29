@@ -190,12 +190,12 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
       )}
 
       {/* Resource Assignment Dialog */}
-      {task?.id && task?.project_id && (
+      {task?.id && (task?.project_id || task?.projectId) && (
         <ResourceAssignmentDialog
           open={dialogOpen}
           onOpenChange={setDialogOpen}
           taskId={task.id}
-          projectId={task.project_id}
+          projectId={task.project_id || task.projectId || ''}
           onSuccess={handleAssignmentSuccess}
         />
       )}
