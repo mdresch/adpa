@@ -207,6 +207,25 @@ export async function getProjectTasks(
 }
 
 /**
+ * Parse date string as local date to avoid timezone issues
+ * When database returns "2025-12-01", we want December 1st, not November 30th
+ */
+function parseLocalDate(dateStr: string | null | undefined): Date | undefined {
+  if (!dateStr) return undefined
+  const str = String(dateStr)
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    const year = parseInt(match[1], 10)
+    const month = parseInt(match[2], 10) - 1 // JavaScript months are 0-indexed
+    const day = parseInt(match[3], 10)
+    return new Date(year, month, day)
+  }
+  // Fallback for other formats
+  const date = new Date(str)
+  return isNaN(date.getTime()) ? undefined : date
+}
+
+/**
  * Get task by ID with full details
  */
 export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
@@ -319,10 +338,12 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
       estimatedCost: task.estimated_cost ? Number(task.estimated_cost) : undefined,
       actualHours: task.actual_hours ? Number(task.actual_hours) : undefined,
       actualCost: task.actual_cost ? Number(task.actual_cost) : undefined,
-      plannedStartDate: task.planned_start_date ? new Date(task.planned_start_date) : undefined,
-      plannedEndDate: task.planned_end_date ? new Date(task.planned_end_date) : undefined,
-      actualStartDate: task.actual_start_date ? new Date(task.actual_start_date) : undefined,
-      actualEndDate: task.actual_end_date ? new Date(task.actual_end_date) : undefined,
+      // Parse dates from database - PostgreSQL DATE columns return as YYYY-MM-DD strings
+      // Parse as local dates to avoid timezone conversion issues
+      plannedStartDate: parseLocalDate(task.planned_start_date),
+      plannedEndDate: parseLocalDate(task.planned_end_date),
+      actualStartDate: parseLocalDate(task.actual_start_date),
+      actualEndDate: parseLocalDate(task.actual_end_date),
       requiredRoleId: task.required_role_id || undefined,
       requiredRoleName: task.required_role_name || undefined,
       requiredSkills: task.required_skills || undefined,
@@ -368,11 +389,25 @@ export async function updateTask(
     let paramIndex = 1
     
     // Helper to convert date strings to Date objects or null
+    // IMPORTANT: Parse YYYY-MM-DD as local date to avoid timezone issues
+    // When user enters "2025-12-01", we want December 1st, not November 30th
     const parseDate = (value: any): Date | null => {
       if (!value || value === '') return null
       if (value instanceof Date) return value
       if (typeof value === 'string') {
         // Handle YYYY-MM-DD format from HTML date inputs
+        // Parse as local date to avoid timezone conversion issues
+        const dateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (dateMatch) {
+          // Extract year, month (0-indexed), day
+          const year = parseInt(dateMatch[1], 10)
+          const month = parseInt(dateMatch[2], 10) - 1 // JavaScript months are 0-indexed
+          const day = parseInt(dateMatch[3], 10)
+          // Create date in local timezone (not UTC)
+          const date = new Date(year, month, day)
+          return isNaN(date.getTime()) ? null : date
+        }
+        // Fallback for other date formats (ISO strings, etc.)
         const date = new Date(value)
         return isNaN(date.getTime()) ? null : date
       }

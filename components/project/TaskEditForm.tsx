@@ -19,12 +19,24 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
   const formatDate = (date: string | Date | undefined): string => {
     if (!date) return ''
     if (typeof date === 'string') {
-      // Handle ISO date strings
+      // If it's already in YYYY-MM-DD format, return as-is
+      if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        return date
+      }
+      // Handle ISO date strings - parse as local date to avoid timezone issues
       const d = new Date(date)
-      return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0]
+      if (isNaN(d.getTime())) return ''
+      // Use local date components, not UTC
+      const year = d.getFullYear()
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      const day = String(d.getDate()).padStart(2, '0')
+      return `${year}-${month}-${day}`
     }
-    // Date object
-    return date.toISOString().split('T')[0]
+    // Date object - use local date components
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
   }
 
   const [formData, setFormData] = useState({
