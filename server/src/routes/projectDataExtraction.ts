@@ -10,8 +10,30 @@ import { validate } from '../middleware/validation'
 import { logger } from '../utils/logger'
 import { pool } from '../database/connection'
 import { extractionQueue } from '../services/queueService'
+import { PMBOK_DOMAINS } from '@/types/pmbok'
+import { listDomainExtractionConfigs } from '@/modules/context'
 
 const router = express.Router()
+
+/**
+ * GET /api/project-data-extraction/domains
+ * Returns available PMBOK 8 domain extraction configs (metadata + prompts)
+ */
+router.get(
+  '/domains',
+  authenticateToken,
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      const domains = listDomainExtractionConfigs()
+      res.json({
+        success: true,
+        domains
+      })
+    } catch (error) {
+      next(error)
+    }
+  }
+)
 
 /**
  * POST /api/project-data-extraction/extract
@@ -21,7 +43,11 @@ const extractSchema = Joi.object({
   projectId: Joi.string().uuid().required(),
   aiProvider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'xai', 'mistral', 'groq', 'ollama').optional(),
   aiModel: Joi.string().optional(),
-  documentIds: Joi.array().items(Joi.string().uuid()).optional()
+  documentIds: Joi.array().items(Joi.string().uuid()).optional(),
+  domains: Joi.array()
+    .items(Joi.string().valid(...PMBOK_DOMAINS))
+    .max(PMBOK_DOMAINS.length)
+    .optional()
 })
 
 router.post(
@@ -30,13 +56,18 @@ router.post(
   validate(extractSchema),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { projectId, aiProvider, aiModel, documentIds } = req.body
+      const { projectId, aiProvider, aiModel, documentIds, domains } = req.body
       const userId = (req as any).user?.id
+      const normalizedDomains: string[] =
+        Array.isArray(domains) && domains.length > 0
+          ? Array.from(new Set(domains))
+          : [...PMBOK_DOMAINS]
 
       logger.info('[EXTRACTION-API] Extraction requested', {
         projectId,
         userId,
-        provider: aiProvider || 'default'
+        provider: aiProvider || 'default',
+        domains: normalizedDomains
       })
 
       // Create job record
@@ -48,7 +79,7 @@ router.post(
         [
           'project-data-extraction',
           'pending',
-          JSON.stringify({ projectId, aiProvider, aiModel, documentIds }),
+          JSON.stringify({ projectId, aiProvider, aiModel, documentIds, domains: normalizedDomains }),
           userId,
           projectId
         ]
@@ -63,7 +94,8 @@ router.post(
         userId,
         aiProvider,
         aiModel,
-        documentIds
+        documentIds,
+        domains: normalizedDomains
       })
 
       logger.info('[EXTRACTION-API] Extraction job enqueued', { jobId, projectId })
@@ -72,7 +104,8 @@ router.post(
         success: true,
         jobId,
         message: 'Project data extraction started. This may take a few minutes.',
-        estimatedTime: '2-5 minutes'
+        estimatedTime: '2-5 minutes',
+        domains: normalizedDomains
       })
     } catch (error: unknown) {
       logger.error('[EXTRACTION-API] Extraction failed', {

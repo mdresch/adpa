@@ -664,6 +664,136 @@ router.get(
 )
 
 /**
+ * GET /api/analytics/domain-extraction
+ * System-level PMBOK 8 domain extraction analytics (optionally scoped to a project)
+ */
+router.get(
+  '/domain-extraction',
+  authenticateToken,
+  requirePermission('analytics.system'),
+  validateQuery(Joi.object({
+    period: Joi.string().valid('7d', '30d', '90d', '1y').default('30d'),
+    projectId: Joi.string().uuid().optional()
+  })),
+  async (req: AuthRequest, res: express.Response) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { period = '30d', projectId } = req.query as { period?: string; projectId?: string }
+      const intervalMap = {
+        '7d': '7 days',
+        '30d': '30 days',
+        '90d': '90 days',
+        '1y': '1 year'
+      }
+      const interval = intervalMap[period as keyof typeof intervalMap] || '30 days'
+      const cacheKey = `analytics:domain:${period}:${projectId || 'all'}`
+      const cached = await cache.get(cacheKey)
+      if (cached) {
+        return res.json(cached)
+      }
+
+      const buildWhereClause = (columnName: string) => {
+        const params: any[] = []
+        let clause = `${columnName} >= NOW() - INTERVAL '${interval}'`
+        if (projectId) {
+          params.push(projectId)
+          clause += ` AND project_id = $${params.length}`
+        }
+        return { clause, params }
+      }
+
+      const domainWhere = buildWhereClause('requested_at')
+
+      const summaryResult = await pool.query(
+        `SELECT 
+          COUNT(*)::int as total_runs,
+          COUNT(*) FILTER (WHERE status = 'completed')::int as completed_runs,
+          COUNT(*) FILTER (WHERE status = 'failed')::int as failed_runs,
+          COUNT(*) FILTER (WHERE status = 'partial')::int as partial_runs,
+          COALESCE(AVG(success_rate), 0)::numeric as avg_success_rate,
+          COALESCE(AVG(total_entities), 0)::numeric as avg_entities,
+          COALESCE(AVG(extraction_runtime_ms), 0)::numeric as avg_runtime_ms
+        FROM domain_extraction_runs
+        WHERE ${domainWhere.clause}`,
+        domainWhere.params
+      )
+
+      const domainStats = await pool.query(
+        `SELECT 
+          domain,
+          COUNT(*)::int as total_runs,
+          COUNT(*) FILTER (WHERE status = 'completed')::int as completed_runs,
+          COUNT(*) FILTER (WHERE status = 'failed')::int as failed_runs,
+          COUNT(*) FILTER (WHERE status = 'partial')::int as partial_runs,
+          COALESCE(AVG(total_entities), 0)::numeric as avg_entities,
+          COALESCE(AVG(success_rate), 0)::numeric as avg_success_rate,
+          COALESCE(AVG(cache_hit_rate), 0)::numeric as avg_cache_hit_rate,
+          COALESCE(AVG(extraction_runtime_ms), 0)::numeric as avg_runtime_ms,
+          MAX(completed_at) as last_run_at
+        FROM domain_extraction_runs
+        WHERE ${domainWhere.clause}
+        GROUP BY domain
+        ORDER BY domain`,
+        domainWhere.params
+      )
+
+      const providerWhere = buildWhereClause('created_at')
+
+      const providerUsage = await pool.query(
+        `SELECT 
+          COALESCE(provider_name, 'unknown') as provider_name,
+          COALESCE(model_name, 'n/a') as model_name,
+          COUNT(*)::int as usage_count,
+          COALESCE(AVG(response_time_ms), 0)::numeric as avg_response_time_ms,
+          COALESCE(SUM(cost_usd), 0)::numeric as total_cost_usd
+        FROM ai_provider_usage
+        WHERE ${providerWhere.clause}
+        GROUP BY provider_name, model_name
+        ORDER BY usage_count DESC`,
+        providerWhere.params
+      )
+
+      const costByDomain = await pool.query(
+        `SELECT 
+          domain,
+          COALESCE(SUM(cost_usd), 0)::numeric as total_cost_usd,
+          COALESCE(SUM(total_tokens), 0)::numeric as total_tokens
+        FROM ai_provider_usage
+        WHERE domain IS NOT NULL AND ${providerWhere.clause}
+        GROUP BY domain
+        ORDER BY domain`,
+        providerWhere.params
+      )
+
+      const analytics = {
+        success: true,
+        period,
+        projectId: projectId || null,
+        generated_at: new Date().toISOString(),
+        summary: summaryResult.rows[0] || {
+          total_runs: 0,
+          completed_runs: 0,
+          failed_runs: 0,
+          partial_runs: 0,
+          avg_success_rate: 0,
+          avg_entities: 0,
+          avg_runtime_ms: 0
+        },
+        domains: domainStats.rows,
+        providerUsage: providerUsage.rows,
+        costByDomain: costByDomain.rows
+      }
+
+      await cache.set(cacheKey, analytics, 300)
+      res.json(analytics)
+    } catch (error) {
+      log.error('Get domain extraction analytics error:', error)
+      res.status(500).json({ error: 'Internal server error' })
+    }
+  }
+)
+
+/**
  * GET /api/analytics/search
  * Get search analytics data
  */

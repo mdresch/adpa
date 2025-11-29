@@ -82,8 +82,8 @@ export class ContextAwareAIService {
         variables: request.variables
       }
 
-      // Generate AI response
-      const aiResponse = await aiService.generate(aiRequest)
+      // Generate AI response with multi-provider fallback
+      const aiResponse = await aiService.generateWithFallback(aiRequest)
 
       // Combine responses
       const enhancedResponse: EnhancedAIResponse = {

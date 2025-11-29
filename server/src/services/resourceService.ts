@@ -493,6 +493,20 @@ export async function getResourceAllocations(
  */
 export async function getResourceConflicts(programId: string): Promise<ResourceConflict[]> {
   try {
+    // Check if the view exists first
+    const viewCheck = await pool.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.views 
+        WHERE table_schema = 'public' 
+        AND table_name = 'program_resource_conflicts'
+      )
+    `)
+    
+    if (!viewCheck.rows[0].exists) {
+      logger.warn('[RESOURCE] View program_resource_conflicts does not exist. Run migration 338 to create it.')
+      return []
+    }
+    
     const result = await pool.query(
       `SELECT 
         resource_id as "resourceId", resource_name as "resourceName",

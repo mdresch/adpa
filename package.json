@@ -31,7 +31,8 @@
     "import-issues:dry-run": "tsx scripts/import-github-issues.ts --dry-run"
     ,
     "migrate:051": "node server/scripts/migrate-051.js",
-    "migrate:401": "node server/scripts/migrate-401.js"
+    "migrate:401": "node server/scripts/migrate-401.js",
+    "migrate:350": "tsx server/scripts/migrate-350-pmbok8-domain-alignment.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "4.0.1",

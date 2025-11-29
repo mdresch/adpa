@@ -42,6 +42,7 @@ import {
   Square,
   FileDown,
   Printer,
+  X,
 } from "@/components/ui/icons-shim"
 import {
   Dialog,
@@ -147,6 +148,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [templateFilter, setTemplateFilter] = useState("all")
+  const [gradeFilter, setGradeFilter] = useState("all")
+  const [frameworkFilter, setFrameworkFilter] = useState("all")
   const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set())
   const [exporting, setExporting] = useState(false)
   const [pagination, setPagination] = useState<{
@@ -243,6 +246,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       if (searchTerm) params.search = searchTerm
       if (statusFilter !== "all") params.status = statusFilter
       if (templateFilter !== "all") params.template = templateFilter
+      if (gradeFilter !== "all") params.grade = gradeFilter
+      if (frameworkFilter !== "all") params.framework = frameworkFilter
       
       const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
       const docs = response.documents || []
@@ -497,6 +502,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
   // Selection handlers
   // Documents are now filtered server-side, so we use them directly
   const displayDocuments = documents
+  const [selectingAll, setSelectingAll] = useState(false)
+  const [allDocumentIds, setAllDocumentIds] = useState<string[]>([]) // Cache for all document IDs
 
   const toggleDocumentSelection = (documentId: string) => {
     setSelectedDocuments(prev => {
@@ -510,16 +517,64 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     })
   }
 
-  const selectAllDocuments = () => {
+  // Select all documents on current page only
+  const selectAllOnPage = () => {
     setSelectedDocuments(new Set(displayDocuments.map(doc => doc.id)))
+  }
+
+  // Select all documents across ALL pages
+  const selectAllDocuments = async () => {
+    if (pagination.total <= displayDocuments.length) {
+      // All documents are on current page, no need for API call
+      setSelectedDocuments(new Set(displayDocuments.map(doc => doc.id)))
+      return
+    }
+
+    try {
+      setSelectingAll(true)
+      
+      // Fetch all document IDs (without content for performance)
+      const params: Record<string, string> = {
+        page: '1',
+        limit: pagination.total.toString(), // Get all
+        fields: 'id', // Only fetch IDs for performance
+      }
+      if (searchTerm) params.search = searchTerm
+      if (statusFilter !== "all") params.status = statusFilter
+      if (templateFilter !== "all") params.template = templateFilter
+      if (gradeFilter !== "all") params.grade = gradeFilter
+      if (frameworkFilter !== "all") params.framework = frameworkFilter
+      
+      const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
+      const allDocs = response.documents || []
+      const allIds = allDocs.map((doc: any) => doc.id)
+      
+      setAllDocumentIds(allIds)
+      setSelectedDocuments(new Set(allIds))
+      toast.success(`Selected all ${allIds.length} documents across all pages`)
+    } catch (error) {
+      console.error("Failed to select all documents:", error)
+      toast.error("Failed to select all documents. Selecting current page only.")
+      setSelectedDocuments(new Set(displayDocuments.map(doc => doc.id)))
+    } finally {
+      setSelectingAll(false)
+    }
   }
 
   const clearSelection = () => {
     setSelectedDocuments(new Set())
+    setAllDocumentIds([])
   }
 
-  const isAllSelected = selectedDocuments.size > 0 && selectedDocuments.size === displayDocuments.length
-  const isSomeSelected = selectedDocuments.size > 0 && selectedDocuments.size < displayDocuments.length
+  // Check if all documents on current page are selected
+  const isAllOnPageSelected = displayDocuments.length > 0 && 
+    displayDocuments.every(doc => selectedDocuments.has(doc.id))
+  
+  // Check if ALL documents across all pages are selected
+  const isAllDocumentsSelected = pagination.total > 0 && 
+    selectedDocuments.size === pagination.total
+
+  const isSomeSelected = selectedDocuments.size > 0 && !isAllDocumentsSelected
 
   // Bulk export functions
   const handleBulkExport = async (format: 'pdf' | 'docx' | 'markdown') => {
@@ -645,7 +700,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     if (isAuthenticated && projectId) {
       fetchDocuments()
     }
-  }, [pagination.page, searchTerm, statusFilter, templateFilter])
+  }, [pagination.page, searchTerm, statusFilter, templateFilter, gradeFilter, frameworkFilter])
 
   // Fetch comprehensive stats (across all documents)
   const fetchStats = async () => {
@@ -839,9 +894,16 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                     className="mb-4 p-4 bg-primary/10 border border-primary/20 rounded-lg flex items-center justify-between"
                   >
                     <div className="flex items-center space-x-4">
-                      <span className="text-sm font-medium">
-                        {selectedDocuments.size} document{selectedDocuments.size > 1 ? 's' : ''} selected
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {selectedDocuments.size} document{selectedDocuments.size > 1 ? 's' : ''} selected
+                        </span>
+                        {selectedDocuments.size > displayDocuments.length && (
+                          <span className="text-xs text-muted-foreground">
+                            Including documents from other pages
+                          </span>
+                        )}
+                      </div>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -908,21 +970,29 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.4 }}
-                  className="flex items-center space-x-4 mb-6"
+                  className="mb-6"
                 >
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                    <Input
-                      placeholder="Search documents..."
-                      value={searchTerm}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Filter className="h-4 w-4 text-muted-foreground" />
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Search Input */}
+                    <div className="relative flex-1 min-w-[200px] max-w-md">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                      <Input
+                        placeholder="Search documents..."
+                        value={searchTerm}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    
+                    {/* Filter Icon */}
+                    <div className="flex items-center">
+                      <Filter className="h-4 w-4 text-muted-foreground mr-2" />
+                      <span className="text-sm text-muted-foreground mr-2">Filters:</span>
+                    </div>
+                    
+                    {/* Status Filter */}
                     <select
-                      className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[120px]"
                       value={statusFilter}
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusFilter(e.target.value)}
                     >
@@ -932,8 +1002,24 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       <option value="approved">Approved</option>
                       <option value="published">Published</option>
                     </select>
+                    
+                    {/* Framework Filter */}
                     <select
-                      className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[140px]"
+                      value={frameworkFilter}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFrameworkFilter(e.target.value)}
+                    >
+                      <option value="all">All Frameworks</option>
+                      {stats?.byFramework.map((fw, index) => (
+                        <option key={index} value={fw.framework}>
+                          {fw.framework} ({fw.count})
+                        </option>
+                      ))}
+                    </select>
+                    
+                    {/* Template Filter */}
+                    <select
+                      className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[160px]"
                       value={templateFilter}
                       onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTemplateFilter(e.target.value)}
                     >
@@ -944,7 +1030,92 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </option>
                       ))}
                     </select>
+                    
+                    {/* Audit Grade Filter */}
+                    <select
+                      className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[130px]"
+                      value={gradeFilter}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGradeFilter(e.target.value)}
+                    >
+                      <option value="all">All Grades</option>
+                      <option value="A">⭐ Grade A (90-100)</option>
+                      <option value="B">✓ Grade B (80-89)</option>
+                      <option value="C">◐ Grade C (70-79)</option>
+                      <option value="D">⚠ Grade D (60-69)</option>
+                      <option value="F">✗ Grade F (0-59)</option>
+                      <option value="not_audited">📋 Not Audited</option>
+                    </select>
+                    
+                    {/* Clear Filters Button */}
+                    {(statusFilter !== "all" || frameworkFilter !== "all" || templateFilter !== "all" || gradeFilter !== "all" || searchTerm) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setSearchTerm("")
+                          setStatusFilter("all")
+                          setFrameworkFilter("all")
+                          setTemplateFilter("all")
+                          setGradeFilter("all")
+                        }}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        <X className="h-4 w-4 mr-1" />
+                        Clear
+                      </Button>
+                    )}
                   </div>
+                  
+                  {/* Active Filters Summary */}
+                  {(statusFilter !== "all" || frameworkFilter !== "all" || templateFilter !== "all" || gradeFilter !== "all") && (
+                    <div className="flex flex-wrap items-center gap-2 mt-3">
+                      <span className="text-xs text-muted-foreground">Active filters:</span>
+                      {statusFilter !== "all" && (
+                        <Badge variant="secondary" className="text-xs">
+                          Status: {statusFilter}
+                          <button 
+                            onClick={() => setStatusFilter("all")} 
+                            className="ml-1 hover:text-destructive"
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      )}
+                      {frameworkFilter !== "all" && (
+                        <Badge variant="secondary" className="text-xs">
+                          Framework: {frameworkFilter}
+                          <button 
+                            onClick={() => setFrameworkFilter("all")} 
+                            className="ml-1 hover:text-destructive"
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      )}
+                      {templateFilter !== "all" && (
+                        <Badge variant="secondary" className="text-xs">
+                          Template: {templateFilter}
+                          <button 
+                            onClick={() => setTemplateFilter("all")} 
+                            className="ml-1 hover:text-destructive"
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      )}
+                      {gradeFilter !== "all" && (
+                        <Badge variant="secondary" className="text-xs">
+                          Grade: {gradeFilter}
+                          <button 
+                            onClick={() => setGradeFilter("all")} 
+                            className="ml-1 hover:text-destructive"
+                          >
+                            ×
+                          </button>
+                        </Badge>
+                      )}
+                    </div>
+                  )}
                 </motion.div>
 
                 {/* Documents List */}
@@ -960,7 +1131,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         <FileText className="h-16 w-16 text-muted-foreground mb-4" />
                         <h3 className="text-xl font-semibold mb-2">No documents found</h3>
                         <p className="text-muted-foreground mb-6 text-center max-w-md">
-                          {searchTerm || statusFilter !== "all" || templateFilter !== "all"
+                          {searchTerm || statusFilter !== "all" || templateFilter !== "all" || gradeFilter !== "all" || frameworkFilter !== "all"
                             ? "Try adjusting your search or filter criteria"
                             : "Get started by uploading or generating your first document"}
                         </p>
@@ -978,24 +1149,72 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                     </AnimatedCard>
                   ) : (
                     <>
-                      {/* Select All Checkbox */}
+                      {/* Select All Controls */}
                       {displayDocuments.length > 0 && (
-                        <div className="flex items-center space-x-2 mb-4 p-2 border-b">
-                          <button
-                            onClick={isAllSelected ? clearSelection : selectAllDocuments}
-                            className="flex items-center space-x-2 hover:bg-muted/50 rounded p-2 transition-colors"
-                          >
-                            {isAllSelected ? (
-                              <CheckSquare className="h-5 w-5 text-primary" />
-                            ) : isSomeSelected ? (
-                              <CheckSquare className="h-5 w-5 text-primary opacity-50" />
-                            ) : (
-                              <Square className="h-5 w-5 text-muted-foreground" />
+                        <div className="flex items-center justify-between mb-4 p-3 border-b bg-muted/30 rounded-t-lg">
+                          <div className="flex items-center space-x-4">
+                            {/* Select All on Page */}
+                            <button
+                              onClick={isAllOnPageSelected && !isAllDocumentsSelected ? clearSelection : selectAllOnPage}
+                              className="flex items-center space-x-2 hover:bg-muted rounded p-2 transition-colors"
+                              disabled={selectingAll}
+                            >
+                              {isAllOnPageSelected ? (
+                                <CheckSquare className="h-5 w-5 text-primary" />
+                              ) : isSomeSelected ? (
+                                <CheckSquare className="h-5 w-5 text-primary opacity-50" />
+                              ) : (
+                                <Square className="h-5 w-5 text-muted-foreground" />
+                              )}
+                              <span className="text-sm font-medium">
+                                {isAllOnPageSelected ? 'Deselect Page' : 'Select Page'}
+                              </span>
+                            </button>
+                            
+                            {/* Divider */}
+                            <div className="h-6 w-px bg-border" />
+                            
+                            {/* Select All Across Pages */}
+                            {pagination.total > displayDocuments.length && (
+                              <button
+                                onClick={isAllDocumentsSelected ? clearSelection : selectAllDocuments}
+                                className="flex items-center space-x-2 hover:bg-muted rounded p-2 transition-colors text-primary"
+                                disabled={selectingAll}
+                              >
+                                {selectingAll ? (
+                                  <Loader2 className="h-5 w-5 animate-spin" />
+                                ) : isAllDocumentsSelected ? (
+                                  <CheckSquare className="h-5 w-5" />
+                                ) : (
+                                  <Square className="h-5 w-5" />
+                                )}
+                                <span className="text-sm font-medium">
+                                  {selectingAll 
+                                    ? 'Selecting...' 
+                                    : isAllDocumentsSelected 
+                                      ? 'Deselect All' 
+                                      : `Select All ${pagination.total} Documents`}
+                                </span>
+                              </button>
                             )}
-                            <span className="text-sm font-medium">
-                              {isAllSelected ? 'Deselect All' : 'Select All'}
-                            </span>
-                          </button>
+                          </div>
+                          
+                          {/* Selection Summary */}
+                          <div className="text-sm text-muted-foreground">
+                            {selectedDocuments.size > 0 ? (
+                              <span>
+                                <span className="font-medium text-foreground">{selectedDocuments.size}</span>
+                                {' of '}
+                                <span className="font-medium">{pagination.total}</span>
+                                {' selected'}
+                                {selectedDocuments.size > displayDocuments.length && (
+                                  <span className="ml-1 text-primary">(across all pages)</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span>No documents selected</span>
+                            )}
+                          </div>
                         </div>
                       )}
 

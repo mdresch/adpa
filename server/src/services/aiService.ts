@@ -600,21 +600,51 @@ class AIService {
             apiKey: directApiKey
           })
           
-          // Normalize Anthropic model names - strip date suffixes (e.g., claude-3-5-sonnet-20241022 -> claude-3-5-sonnet)
+          // Anthropic model name mapping - use full model names with date suffixes or -latest
+          // Valid model names: claude-3-5-sonnet-20241022, claude-3-5-sonnet-latest, claude-3-opus-20240229, etc.
           const normalizeAnthropicModel = (model: string): string => {
-            if (!model) return 'claude-3-5-sonnet'
-            // Remove date suffix pattern: -YYYYMMDD
+            if (!model) return 'claude-sonnet-4-20250514'
+            
+            // Map short names to full valid Anthropic model names
+            const modelMappings: Record<string, string> = {
+              'claude-3-5-sonnet': 'claude-sonnet-4-20250514',
+              'claude-3.5-sonnet': 'claude-sonnet-4-20250514',
+              'claude-3-5-haiku': 'claude-3-5-haiku-20241022',
+              'claude-3.5-haiku': 'claude-3-5-haiku-20241022',
+              'claude-3-opus': 'claude-3-opus-20240229',
+              'claude-3.0-opus': 'claude-3-opus-20240229',
+              'claude-sonnet-4.0': 'claude-sonnet-4-20250514',
+              'claude-4-sonnet': 'claude-sonnet-4-20250514',
+              'claude-haiku-4.0': 'claude-3-5-haiku-20241022',
+              'claude-4-haiku': 'claude-3-5-haiku-20241022',
+              'claude-opus-4.0': 'claude-3-opus-20240229',
+              'claude-4-opus': 'claude-3-opus-20240229'
+            }
+            
+            // If model already has a date suffix (YYYYMMDD), it's already valid
             const dateSuffixPattern = /-\d{8}$/
             if (dateSuffixPattern.test(model)) {
-              const normalized = model.replace(dateSuffixPattern, '')
-              logger.debug(`[AI-SERVICE] Normalized Anthropic model: ${model} -> ${normalized}`)
-              return normalized
+              return model
             }
+            
+            // If model ends with -latest, it's already valid
+            if (model.endsWith('-latest')) {
+              return model
+            }
+            
+            // Map short name to full name
+            const mapped = modelMappings[model.toLowerCase()] || modelMappings[model]
+            if (mapped) {
+              logger.debug(`[AI-SERVICE] Mapped Anthropic model: ${model} -> ${mapped}`)
+              return mapped
+            }
+            
+            // If no mapping found, return as-is and let Anthropic API validate
             return model
           }
           
           // Use the model name provided by the user, normalized
-          const rawModelName = request.model || 'claude-3-5-sonnet'
+          const rawModelName = request.model || 'claude-sonnet-4-20250514'
           const modelName = normalizeAnthropicModel(rawModelName)
           
           logger.info(`[AI-SERVICE] Anthropic model: ${modelName}${rawModelName !== modelName ? ` (normalized from ${rawModelName})` : ''}`)
@@ -1522,7 +1552,7 @@ class AIService {
       case "mistral":
         return ["mistral-large-latest", "mistral-small-latest", "mistral-medium-latest"]
       case "anthropic":
-        return ["claude-3-5-sonnet", "claude-3-5-haiku", "claude-3-opus", "claude-sonnet-4.0", "claude-haiku-4.0", "claude-opus-4.0", "claude-4-sonnet", "claude-4-haiku", "claude-4-opus"]
+        return ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022", "claude-3-opus-20240229", "claude-3-5-sonnet-latest", "claude-3-5-haiku-latest"]
       case "deepseek":
         return ["deepseek-chat", "deepseek-reasoner", "deepseek-coder"]
       case "moonshot":

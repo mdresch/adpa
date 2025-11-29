@@ -30,11 +30,13 @@ import {
   CheckCircle,
   BookOpen,
   Target,
+  Gauge,
 } from "lucide-react"
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Projects", href: "/projects", icon: FolderOpen },
+  { name: "Resource Capacity", href: "/capacity", icon: Gauge },
   // { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true }, // Temporarily hidden for testing
   { name: "Search", href: "/search", icon: Search },
   { name: "AI Providers", href: "/ai-providers", icon: Zap },

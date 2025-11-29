@@ -61,7 +61,11 @@ export const requireRole = (roles: string[]) => {
       return res.status(401).json({ error: "Authentication required" })
     }
 
-    if (!roles.includes(req.user.role)) {
+    // Case-insensitive role comparison
+    const userRole = req.user.role?.toLowerCase()
+    const normalizedRoles = roles.map(r => r.toLowerCase())
+    
+    if (!userRole || !normalizedRoles.includes(userRole)) {
       return res.status(403).json({ error: "Insufficient permissions" })
     }
 
@@ -75,8 +79,8 @@ export const requirePermission = (permission: string) => {
       return res.status(401).json({ error: "Authentication required" })
     }
 
-    // Admins have all permissions
-    if (req.user.role === 'admin') {
+    // Admins have all permissions (case-insensitive comparison)
+    if (req.user.role?.toLowerCase() === 'admin') {
       return next()
     }
 

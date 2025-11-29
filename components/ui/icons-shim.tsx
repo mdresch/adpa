@@ -51,6 +51,14 @@ export const MoreHorizontal = (props: SvgProps) => (
   </svg>
 )
 
+export const MoreVertical = (props: SvgProps) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
+    <circle cx="12" cy="12" r="1" />
+    <circle cx="12" cy="5" r="1" />
+    <circle cx="12" cy="19" r="1" />
+  </svg>
+)
+
 export const Check = (props: SvgProps) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" {...props}>
     <polyline points="20 6 9 17 4 12" />
@@ -235,6 +243,19 @@ export const Square = LucideIcons.Square
 export const FileDown = LucideIcons.FileDown
 export const Printer = LucideIcons.Printer
 
+// PMBOK 8 Domain-specific icons
+export const CheckCircle2 = LucideIcons.CheckCircle2
+export const Building2 = LucideIcons.Building2
+export const Ruler = LucideIcons.Ruler
+export const Wallet = LucideIcons.Wallet
+export const UserCog = LucideIcons.UserCog
+
+// Resource Capacity Management icons
+export const Plane = LucideIcons.Plane
+export const Stethoscope = LucideIcons.Stethoscope
+export const GraduationCap = LucideIcons.GraduationCap
+export const Baby = LucideIcons.Baby
+
 // Default export with all icons
 export default {
   // Explicitly exported components
@@ -245,6 +266,7 @@ export default {
   ArrowLeft,
   ArrowRight,
   MoreHorizontal,
+  MoreVertical,
   Check,
   Circle,
   PanelLeft,
@@ -381,7 +403,13 @@ export default {
   CheckSquare,
   Square,
   FileDown,
-  Printer
+  Printer,
+  // PMBOK 8 Domain-specific icons
+  CheckCircle2,
+  Building2,
+  Ruler,
+  Wallet,
+  UserCog
 }
 
 // All icons are now properly exported above

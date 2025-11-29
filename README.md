@@ -56,6 +56,33 @@ The platform features a Next.js admin portal for intuitive management, a powerfu
 - Template builder with drag-and-drop interface
 - Advanced search and filtering capabilities
 
+## Intellectual Property & Standards Compliance
+
+ADPA is designed to be **inspired by** and **aligned with** industry standards such as PMBOK®, BABOK, and DMBOK, while strictly respecting their intellectual property rights.
+
+### Non-Commercial / Internal-Only Status
+
+- The current ADPA implementation is intended for **internal, non-commercial use** only.  
+- It **must not** be used to deliver billable products, licenses, or commercial services that embed PMBOK®, BABOK, DMBOK, or related proprietary content without explicit written agreements from the respective standards bodies.  
+- Any proposal to commercialize ADPA (including hosted services, APIs, or packaged toolkits) must trigger a **formal IP and licensing review** with legal counsel and the relevant standards organizations.
+
+### Use of PMBOK®, BABOK, DMBOK and Other Bodies of Knowledge
+
+- PMBOK®, BABOK, DMBOK and related materials are **copyrighted works** owned respectively by PMI, IIBA, and DAMA International.  
+- ADPA uses these frameworks at the **conceptual level only** (e.g., performance domains, knowledge areas, data governance concepts) and avoids storing or reproducing substantial proprietary text, diagrams, or tables from the official guides.  
+- Internal methods, taxonomies, and dashboards are **custom designs inspired by** these standards and do **not** claim to be official or exhaustive implementations.
+
+### External Review of References
+
+Before any external publication, demo, or commercialization, ADPA will:
+
+- Present representative screens, prompts, and documentation to **PMI**, **DAMA International**, and **IIBA** (as applicable) to validate that:
+  - References to their works clearly acknowledge them as **proprietary standards**, and  
+  - Attribution follows their branding and citation guidelines.  
+- Maintain an internal mapping that documents which concepts are influenced by which standards and how they are attributed, to support **IP audits and external review**.
+
+These guardrails are intended to ensure ADPA advances AI-supported project, business analysis, and data management practices **without infringing** on the IP of PMI, IIBA, DAMA International, or other standard-setting bodies.
+
 ## Installation
 
 ### 🚨 Prerequisites

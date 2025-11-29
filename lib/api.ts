@@ -363,6 +363,48 @@ export interface PMBOK8DomainAnalytics {
   generated_at: string
 }
 
+export interface DomainExtractionDomainStat {
+  domain: string
+  total_runs: number
+  completed_runs: number
+  failed_runs: number
+  partial_runs: number
+  avg_entities: number
+  avg_success_rate: number
+  avg_cache_hit_rate: number
+  avg_runtime_ms: number
+  last_run_at: string | null
+}
+
+export interface DomainExtractionAnalyticsResponse {
+  success: boolean
+  period: string
+  projectId: string | null
+  generated_at: string
+  summary: {
+    total_runs: number
+    completed_runs: number
+    failed_runs: number
+    partial_runs: number
+    avg_success_rate: number
+    avg_entities: number
+    avg_runtime_ms: number
+  }
+  domains: DomainExtractionDomainStat[]
+  providerUsage: Array<{
+    provider_name: string
+    model_name: string
+    usage_count: number
+    avg_response_time_ms: number
+    total_cost_usd: number
+  }>
+  costByDomain: Array<{
+    domain: string
+    total_cost_usd: number
+    total_tokens: number
+  }>
+}
+
 class ApiClient {
   private baseURL: string
   private token: string | null = null
@@ -1269,6 +1311,15 @@ class ApiClient {
 
   async getAITrends(period: string = "30d"): Promise<any> {
     const response = await this.request(`/ai-analytics/trends?period=${period}`)
+    return response
+  }
+
+  async getDomainExtractionAnalytics(period: string = "30d", projectId?: string): Promise<DomainExtractionAnalyticsResponse> {
+    const params = new URLSearchParams({ period })
+    if (projectId) {
+      params.append('projectId', projectId)
+    }
+    const response = await this.request<DomainExtractionAnalyticsResponse>(`/analytics/domain-extraction?${params.toString()}`)
     return response
   }
 

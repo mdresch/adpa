@@ -1,12 +1,30 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Task } from "@/hooks/use-tasks"
-import { UserPlus, Trash2 } from "lucide-react"
+import { UserPlus, Trash2, Loader2, Clock, DollarSign } from "lucide-react"
 import { toast } from "sonner"
+import { apiClient } from "@/lib/api"
+import { ResourceAssignmentDialog } from "./ResourceAssignmentDialog"
+
+interface TaskAssignment {
+  id: string
+  taskId: string
+  userId: string
+  userName: string
+  roleName?: string
+  plannedHours: number
+  actualHours?: number
+  allocationPercentage: number
+  status: string
+  scheduledStartDate?: string
+  scheduledEndDate?: string
+  hourlyRate?: number
+  plannedCost?: number
+}
 
 interface TaskResourcesViewProps {
   task: Task
@@ -14,6 +32,34 @@ interface TaskResourcesViewProps {
 }
 
 export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
+  const [assignments, setAssignments] = useState<TaskAssignment[]>([])
+  const [loading, setLoading] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  useEffect(() => {
+    if (task?.id) {
+      void fetchAssignments()
+    }
+  }, [task?.id])
+
+  const fetchAssignments = async () => {
+    if (!task?.id) return
+    
+    try {
+      setLoading(true)
+      const response = await apiClient.get<{ success: boolean; data: TaskAssignment[] }>(
+        `/tasks/${task.id}/assignments`
+      )
+      setAssignments(response.data || [])
+    } catch (error) {
+      console.error("Failed to fetch task assignments:", error)
+      // Don't show error toast if assignments endpoint doesn't exist yet
+      setAssignments([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getInitials = (name: string | undefined): string => {
     if (!name) return '??'
     return name
@@ -25,13 +71,28 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
   }
 
   const handleAssignResource = () => {
-    // TODO: Open ResourceAssignmentModal
-    toast.info('Resource assignment modal - Coming soon!')
+    setDialogOpen(true)
   }
 
-  const handleUnassign = (userId: string) => {
-    // TODO: Implement unassign
-    toast.info('Unassign functionality - Coming soon!')
+  const handleUnassign = async (assignmentId: string) => {
+    if (!confirm("Are you sure you want to unassign this resource from the task?")) {
+      return
+    }
+
+    try {
+      await apiClient.delete(`/tasks/assignments/${assignmentId}`)
+      toast.success("Resource unassigned successfully")
+      await fetchAssignments()
+      onUpdate()
+    } catch (error: any) {
+      console.error("Failed to unassign resource:", error)
+      toast.error(error.response?.data?.error || "Failed to unassign resource")
+    }
+  }
+
+  const handleAssignmentSuccess = async () => {
+    await fetchAssignments()
+    onUpdate()
   }
 
   return (
@@ -46,33 +107,64 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
           </Button>
         </div>
 
-        {task.assigned_user_id ? (
-          <div className="border rounded-lg p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Avatar>
-                  <AvatarFallback>
-                    {getInitials(task.assigned_user_name)}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <p className="font-medium">{task.assigned_user_name}</p>
-                  {task.required_role_name && (
-                    <p className="text-sm text-muted-foreground">{task.required_role_name}</p>
-                  )}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : assignments.length > 0 ? (
+          <div className="space-y-3">
+            {assignments.map((assignment) => (
+              <div key={assignment.id} className="border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3 flex-1">
+                    <Avatar>
+                      <AvatarFallback>
+                        {getInitials(assignment.userName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <p className="font-medium">{assignment.userName}</p>
+                      {assignment.roleName && (
+                        <p className="text-sm text-muted-foreground">{assignment.roleName}</p>
+                      )}
+                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {Number(assignment.plannedHours || 0).toFixed(1)}h planned
+                          {assignment.actualHours !== undefined && assignment.actualHours !== null && (
+                            <> / {Number(assignment.actualHours).toFixed(1)}h actual</>
+                          )}
+                        </span>
+                        {assignment.plannedCost && (
+                          <span className="flex items-center gap-1">
+                            <DollarSign className="h-3 w-3" />
+                            ${Number(assignment.plannedCost).toFixed(2)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline">{assignment.allocationPercentage}%</Badge>
+                    <Badge variant={assignment.status === 'completed' ? 'default' : 'secondary'}>
+                      {assignment.status}
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleUnassign(assignment.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
                 </div>
+                {assignment.scheduledStartDate && assignment.scheduledEndDate && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    Scheduled: {new Date(assignment.scheduledStartDate).toLocaleDateString()} - {new Date(assignment.scheduledEndDate).toLocaleDateString()}
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">100% Allocation</Badge>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleUnassign(task.assigned_user_id!)}
-                >
-                  <Trash2 className="h-4 w-4 text-destructive" />
-                </Button>
-              </div>
-            </div>
+            ))}
           </div>
         ) : (
           <div className="border border-dashed rounded-lg p-8 text-center">
@@ -86,45 +178,6 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
         )}
       </div>
 
-      {/* Additional Resources (if supported in future) */}
-      {task.assigned_resources && task.assigned_resources.length > 0 && (
-        <div>
-          <h4 className="text-sm font-semibold mb-3">Additional Team Members</h4>
-          <div className="space-y-2">
-            {task.assigned_resources.map((resource) => (
-              <div key={resource.id} className="border rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">
-                        {getInitials(resource.user_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-medium">{resource.user_name}</p>
-                      {resource.role_name && (
-                        <p className="text-xs text-muted-foreground">{resource.role_name}</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {resource.allocation_percentage}%
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleUnassign(resource.user_id)}
-                    >
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Resource Requirements */}
       {task.required_role_name && (
@@ -135,6 +188,17 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
             <Badge variant="secondary">{task.required_role_name}</Badge>
           </div>
         </div>
+      )}
+
+      {/* Resource Assignment Dialog */}
+      {task?.id && task?.project_id && (
+        <ResourceAssignmentDialog
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          taskId={task.id}
+          projectId={task.project_id}
+          onSuccess={handleAssignmentSuccess}
+        />
       )}
     </div>
   )

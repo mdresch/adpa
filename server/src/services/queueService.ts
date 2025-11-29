@@ -6,6 +6,8 @@ import { aiService } from "./aiService"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
 import { v4 as uuidv4 } from "uuid"
+import { PMBOK_DOMAINS } from "@/types/pmbok"
+import type { PmbokDomain } from "@/types/pmbok"
 
 // Helper function to parse Redis URL for Bull
 function parseBullRedisConfig() {
@@ -222,8 +224,8 @@ aiQueue.process("ai-generate", async (job) => {
         custom_context: job.data.custom_context,
       })
     } else {
-      // Fallback to original aiService
-      result = await aiService.generate({
+      // Fallback to original aiService with multi-provider fallback
+      result = await aiService.generateWithFallback({
         prompt,
         provider,
         model,
@@ -1149,8 +1151,7 @@ qualityAuditQueue.process("quality-audit", async (job) => {
       "failed", 
       0, 
       WORKER_ID, 
-      "quality-audit",
-      error instanceof Error ? error.message : String(error)
+      "quality-audit"
     )
     
     throw error
@@ -1168,39 +1169,269 @@ qualityAuditQueue.on("failed", (job, err) => {
 
 // Project Data Extraction job processor
 // Define entity types for granular extraction
-// Includes all PMBOK 8 performance domain entities
+// Includes all PMBOK 8 performance domain entities and knowledge area domain entities
 const ENTITY_TYPES = [
+  // Core entities (existing)
   'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
   'success_criteria', 'best_practices', 'phases', 'resources',
   'technologies', 'quality_standards', 'compliance_security', 'deliverables', 'scope_items', 'activities',
+  
   // PMBOK 8 Performance Domain entities
   'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
   'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
-  'performance_actuals'
+  'performance_actuals',
+  
+  // PMBOK 8 Knowledge Area Domain entities (Tier 2)
+  // Governance Domain
+  'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
+  // Scope Domain
+  'scope_baselines', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+  // Schedule Domain
+  'schedule_baselines', 'schedule_activities', 'critical_path_activities', 'schedule_variances', 'schedule_forecasts',
+  // Finance Domain
+  'budget_baselines', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
+  // Resources Domain
+  'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
+  // Risk Domain
+  'risk_assessments', 'risk_response_plans', 'risk_triggers', 'risk_reviews', 'contingency_reserves', 'risk_metrics',
+  // Stakeholders Ops Domain
+  'engagement_actions', 'communication_logs', 'satisfaction_surveys', 'stakeholder_issues', 'relationship_health'
 ] as const
 
 type EntityType = typeof ENTITY_TYPES[number]
+
+const DEFAULT_DOMAIN_ORDER: PmbokDomain[] = [...PMBOK_DOMAINS]
+
+const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
+  // =========================================================================
+  // TIER 1: Performance Domains (PMBOK 8)
+  // =========================================================================
+  stakeholders: ['stakeholders', 'success_criteria'],
+  team: ['resources', 'team_agreements', 'capacity_plans'],
+  development_approach: ['development_approaches', 'phases', 'project_iterations', 'activities'],
+  planning: ['milestones', 'requirements', 'constraints', 'scope_items', 'phases', 'activities'],
+  project_work: ['work_items', 'performance_actuals', 'capacity_plans'],
+  delivery: ['deliverables', 'scope_items', 'best_practices'],
+  measurement: ['success_criteria', 'performance_measurements', 'earned_value_metrics'],
+  uncertainty: ['risks', 'opportunities', 'risk_responses', 'constraints'],
+  
+  // =========================================================================
+  // TIER 2: Knowledge Area Domains (PMBOK 8 Supplementary)
+  // =========================================================================
+  governance: ['governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance'],
+  scope: ['scope_baselines', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification'],
+  schedule: ['schedule_baselines', 'schedule_activities', 'critical_path_activities', 'schedule_variances', 'schedule_forecasts'],
+  finance: ['budget_baselines', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs'],
+  resources: ['resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding'],
+  risk: ['risk_assessments', 'risk_response_plans', 'risk_triggers', 'risk_reviews', 'contingency_reserves', 'risk_metrics'],
+  stakeholders_ops: ['engagement_actions', 'communication_logs', 'satisfaction_surveys', 'stakeholder_issues', 'relationship_health']
+}
+
+type DomainCountSummary = {
+  // Core entities
+  stakeholders: number
+  requirements: number
+  risks: number
+  milestones: number
+  constraints: number
+  successCriteria: number
+  bestPractices: number
+  phases: number
+  resources: number
+  technologies: number
+  qualityStandards: number
+  complianceSecurity: number
+  deliverables: number
+  scopeItems: number
+  activities: number
+  // Performance Domain entities
+  teamAgreements: number
+  developmentApproaches: number
+  projectIterations: number
+  workItems: number
+  capacityPlans: number
+  performanceMeasurements: number
+  earnedValueMetrics: number
+  opportunities: number
+  riskResponses: number
+  performanceActuals: number
+  // Knowledge Area Domain entities
+  governanceDecisions: number
+  approvalWorkflows: number
+  steeringCommittees: number
+  changeControlBoards: number
+  policyCompliance: number
+  scopeBaselines: number
+  wbsNodes: number
+  scopeChangeRequests: number
+  requirementsTraceability: number
+  scopeVerification: number
+  scheduleBaselines: number
+  scheduleActivities: number
+  criticalPathActivities: number
+  scheduleVariances: number
+  scheduleForecasts: number
+  budgetBaselines: number
+  costActuals: number
+  costEstimates: number
+  fundingTranches: number
+  financialVariances: number
+  procurementCosts: number
+  resourceAssignments: number
+  resourcePool: number
+  capacityForecasts: number
+  utilizationRecords: number
+  resourceConflicts: number
+  onboardingOffboarding: number
+  riskAssessments: number
+  riskResponsePlans: number
+  riskTriggers: number
+  riskReviews: number
+  contingencyReserves: number
+  riskMetrics: number
+  engagementActions: number
+  communicationLogs: number
+  satisfactionSurveys: number
+  stakeholderIssues: number
+  relationshipHealth: number
+}
+
+const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
+  // Core entities
+  stakeholders: 'stakeholders',
+  requirements: 'requirements',
+  risks: 'risks',
+  milestones: 'milestones',
+  constraints: 'constraints',
+  success_criteria: 'successCriteria',
+  best_practices: 'bestPractices',
+  phases: 'phases',
+  resources: 'resources',
+  technologies: 'technologies',
+  quality_standards: 'qualityStandards',
+  compliance_security: 'complianceSecurity',
+  deliverables: 'deliverables',
+  scope_items: 'scopeItems',
+  activities: 'activities',
+  // Performance Domain entities
+  team_agreements: 'teamAgreements',
+  development_approaches: 'developmentApproaches',
+  project_iterations: 'projectIterations',
+  work_items: 'workItems',
+  capacity_plans: 'capacityPlans',
+  performance_measurements: 'performanceMeasurements',
+  earned_value_metrics: 'earnedValueMetrics',
+  opportunities: 'opportunities',
+  risk_responses: 'riskResponses',
+  performance_actuals: 'performanceActuals',
+  // Governance Domain
+  governance_decisions: 'governanceDecisions',
+  approval_workflows: 'approvalWorkflows',
+  steering_committees: 'steeringCommittees',
+  change_control_boards: 'changeControlBoards',
+  policy_compliance: 'policyCompliance',
+  // Scope Domain
+  scope_baselines: 'scopeBaselines',
+  wbs_nodes: 'wbsNodes',
+  scope_change_requests: 'scopeChangeRequests',
+  requirements_traceability: 'requirementsTraceability',
+  scope_verification: 'scopeVerification',
+  // Schedule Domain
+  schedule_baselines: 'scheduleBaselines',
+  schedule_activities: 'scheduleActivities',
+  critical_path_activities: 'criticalPathActivities',
+  schedule_variances: 'scheduleVariances',
+  schedule_forecasts: 'scheduleForecasts',
+  // Finance Domain
+  budget_baselines: 'budgetBaselines',
+  cost_actuals: 'costActuals',
+  cost_estimates: 'costEstimates',
+  funding_tranches: 'fundingTranches',
+  financial_variances: 'financialVariances',
+  procurement_costs: 'procurementCosts',
+  // Resources Domain
+  resource_assignments: 'resourceAssignments',
+  resource_pool: 'resourcePool',
+  capacity_forecasts: 'capacityForecasts',
+  utilization_records: 'utilizationRecords',
+  resource_conflicts: 'resourceConflicts',
+  onboarding_offboarding: 'onboardingOffboarding',
+  // Risk Domain
+  risk_assessments: 'riskAssessments',
+  risk_response_plans: 'riskResponsePlans',
+  risk_triggers: 'riskTriggers',
+  risk_reviews: 'riskReviews',
+  contingency_reserves: 'contingencyReserves',
+  risk_metrics: 'riskMetrics',
+  // Stakeholders Ops Domain
+  engagement_actions: 'engagementActions',
+  communication_logs: 'communicationLogs',
+  satisfaction_surveys: 'satisfactionSurveys',
+  stakeholder_issues: 'stakeholderIssues',
+  relationship_health: 'relationshipHealth'
+}
+
+type DomainRunIdMap = Partial<Record<PmbokDomain, string>>
+
+const resolveEntityTypesForDomains = (domains?: PmbokDomain[]): EntityType[] => {
+  const domainList = domains && domains.length ? domains : DEFAULT_DOMAIN_ORDER
+  const collected = domainList.flatMap((domain) => DOMAIN_ENTITY_MAP[domain] || [])
+  const deduped = Array.from(new Set(collected)) as EntityType[]
+  if (deduped.length === 0) {
+    logger.warn('[EXTRACTION-PARENT] No domain-specific entity map found, falling back to full set.')
+    return [...ENTITY_TYPES]
+  }
+  return deduped
+}
+
+const normalizeDomains = (domainsInput?: unknown): PmbokDomain[] => {
+  if (!Array.isArray(domainsInput)) {
+    return DEFAULT_DOMAIN_ORDER
+  }
+  const filtered = domainsInput.filter(
+    (domain): domain is PmbokDomain =>
+      typeof domain === 'string' && (PMBOK_DOMAINS as readonly string[]).includes(domain as PmbokDomain)
+  )
+  return filtered.length ? filtered : DEFAULT_DOMAIN_ORDER
+}
 
 /**
  * Parent Job: Orchestrate extraction by creating child jobs for each entity type
  */
 logger.info('[EXTRACTION-QUEUE] Registering extraction queue processor for "extract-project-data"')
 extractionQueue.process("extract-project-data", 1, async (job) => {
-  const { jobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+  const { jobId, projectId, userId, aiProvider, aiModel, documentIds, domains } = job.data
+  const selectedDomains = normalizeDomains(domains)
+  const entityTypesForRun = resolveEntityTypesForDomains(selectedDomains)
 
   try {
     logger.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, { 
       projectId, 
       userId,
       documentIds,
+      domains: selectedDomains,
       autoTriggered: job.data.autoTriggered || false,
       sourceDocumentId: job.data.sourceDocumentId
     })
     
     await updateJobStatus(jobId, "processing", 5, WORKER_ID, "project-data-extraction")
+
+    const domainRunIds = await registerDomainRuns({
+      jobId,
+      projectId,
+      userId,
+      aiProvider,
+      aiModel,
+      documentIds,
+      domains: selectedDomains
+    })
+
+    // ensure job data reflects selected domains for downstream processing
+    job.data.domains = selectedDomains
+    job.data.domainRunIds = domainRunIds
     
     // Create child jobs for each entity type (resilient, independent extraction)
-    const childJobPromises = ENTITY_TYPES.map((entityType, index) => {
+    const childJobPromises = entityTypesForRun.map((entityType, index) => {
       return extractionQueue.add(`extract-entity-${entityType}`, {
         parentJobId: jobId,
         projectId,
@@ -1210,7 +1441,7 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
         documentIds,
         entityType,
         entityIndex: index,
-        totalEntities: ENTITY_TYPES.length
+        totalEntities: entityTypesForRun.length
       }, {
         attempts: 3, // Retry each entity extraction up to 3 times
         backoff: {
@@ -1230,7 +1461,14 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
     // Store child job IDs in parent job data
     await pool.query(
       `UPDATE jobs SET data = data || $1 WHERE id = $2`,
-      [JSON.stringify({ childJobIds: childJobs.map(j => j.id) }), jobId]
+      [
+        JSON.stringify({
+          childJobIds: childJobs.map(j => j.id),
+          domains: selectedDomains,
+          domainRunIds
+        }),
+        jobId
+      ]
     )
     
     // Monitor child job completion with execution guard to prevent race conditions
@@ -1269,7 +1507,7 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
                       errorMessage = (job as any).failedReason
                     } else {
                       // Try to get from returnvalue (if error was returned)
-                      const returnValue = await job.getReturnvalue().catch(() => null)
+                      const returnValue = job.returnvalue ?? null
                       if (returnValue?.error) {
                         errorMessage = returnValue.error
                       } else if (returnValue?.message) {
@@ -1344,6 +1582,7 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
       `UPDATE jobs SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
       [error.message, jobId]
     )
+    await failDomainRuns(job.data.domainRunIds, error.message)
     throw error
   }
 })
@@ -1409,71 +1648,203 @@ async function finalizeExtractionJob(jobId: string, projectId: string, failedJob
     await updateJobStatus(jobId, "processing", 95, WORKER_ID, "project-data-extraction")
     
     // Query actual counts from database (child jobs already saved)
-    // Includes all entity types including PMBOK 8 performance domain entities
-    const countQueries = await Promise.all([
-      pool.query(`SELECT COUNT(*) as count FROM stakeholders WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM requirements WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM risks WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM milestones WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM constraints WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM success_criteria WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM best_practices WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM phases WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM resources WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM technologies WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM quality_standards WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM compliance_security WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM deliverables WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM scope_items WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM activities WHERE project_id = $1`, [projectId]),
-      // PMBOK 8 Performance Domain entities
-      pool.query(`SELECT COUNT(*) as count FROM team_agreements WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM development_approaches WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM project_iterations WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM work_items WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM capacity_plans WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM performance_measurements WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM earned_value_metrics WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM opportunities WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM risk_responses WHERE project_id = $1`, [projectId]),
-      pool.query(`SELECT COUNT(*) as count FROM performance_actuals WHERE project_id = $1`, [projectId])
-    ])
-    
-    const counts = {
-      stakeholders: parseInt(countQueries[0].rows[0].count),
-      requirements: parseInt(countQueries[1].rows[0].count),
-      risks: parseInt(countQueries[2].rows[0].count),
-      milestones: parseInt(countQueries[3].rows[0].count),
-      constraints: parseInt(countQueries[4].rows[0].count),
-      successCriteria: parseInt(countQueries[5].rows[0].count),
-      bestPractices: parseInt(countQueries[6].rows[0].count),
-      phases: parseInt(countQueries[7].rows[0].count),
-      resources: parseInt(countQueries[8].rows[0].count),
-      technologies: parseInt(countQueries[9].rows[0].count),
-      qualityStandards: parseInt(countQueries[10].rows[0].count),
-      deliverables: parseInt(countQueries[11].rows[0].count),
-      scopeItems: parseInt(countQueries[12].rows[0].count),
-      activities: parseInt(countQueries[13].rows[0].count),
-      // PMBOK 8 Performance Domain entities
-      teamAgreements: parseInt(countQueries[14].rows[0].count),
-      developmentApproaches: parseInt(countQueries[15].rows[0].count),
-      projectIterations: parseInt(countQueries[16].rows[0].count),
-      workItems: parseInt(countQueries[17].rows[0].count),
-      capacityPlans: parseInt(countQueries[18].rows[0].count),
-      performanceMeasurements: parseInt(countQueries[19].rows[0].count),
-      earnedValueMetrics: parseInt(countQueries[20].rows[0].count),
-      opportunities: parseInt(countQueries[21].rows[0].count),
-      riskResponses: parseInt(countQueries[22].rows[0].count),
-      performanceActuals: parseInt(countQueries[23].rows[0].count)
+    // Includes all entity types including PMBOK 8 Performance and Knowledge Area Domain entities
+    // Helper to safely query count (returns 0 if table doesn't exist)
+    const safeCount = async (table: string): Promise<number> => {
+      try {
+        const result = await pool.query(`SELECT COUNT(*) as count FROM ${table} WHERE project_id = $1`, [projectId])
+        return parseInt(result.rows[0].count)
+      } catch {
+        // Table might not exist yet (e.g., for new Knowledge Area tables)
+        return 0
+      }
     }
     
+    // Core entities (indices 0-14)
+    const countQueries = await Promise.all([
+      safeCount('stakeholders'),
+      safeCount('requirements'),
+      safeCount('risks'),
+      safeCount('milestones'),
+      safeCount('constraints'),
+      safeCount('success_criteria'),
+      safeCount('best_practices'),
+      safeCount('phases'),
+      safeCount('resources'),
+      safeCount('technologies'),
+      safeCount('quality_standards'),
+      safeCount('compliance_security'),
+      safeCount('deliverables'),
+      safeCount('scope_items'),
+      safeCount('activities'),
+      // Performance Domain entities (indices 15-24)
+      safeCount('team_agreements'),
+      safeCount('development_approaches'),
+      safeCount('project_iterations'),
+      safeCount('work_items'),
+      safeCount('capacity_plans'),
+      safeCount('performance_measurements'),
+      safeCount('earned_value_metrics'),
+      safeCount('opportunities'),
+      safeCount('risk_responses'),
+      safeCount('performance_actuals'),
+      // Knowledge Area Domain entities (indices 25-62)
+      // Governance (5)
+      safeCount('governance_decisions'),
+      safeCount('approval_workflows'),
+      safeCount('steering_committees'),
+      safeCount('change_control_boards'),
+      safeCount('policy_compliance'),
+      // Scope (5)
+      safeCount('scope_baselines'),
+      safeCount('wbs_nodes'),
+      safeCount('scope_change_requests'),
+      safeCount('requirements_traceability'),
+      safeCount('scope_verification'),
+      // Schedule (5)
+      safeCount('schedule_baselines'),
+      safeCount('schedule_activities'),
+      safeCount('critical_path_activities'),
+      safeCount('schedule_variances'),
+      safeCount('schedule_forecasts'),
+      // Finance (6)
+      safeCount('budget_baselines'),
+      safeCount('cost_actuals'),
+      safeCount('cost_estimates'),
+      safeCount('funding_tranches'),
+      safeCount('financial_variances'),
+      safeCount('procurement_costs'),
+      // Resources (6)
+      safeCount('resource_assignments'),
+      safeCount('resource_pool'),
+      safeCount('capacity_forecasts'),
+      safeCount('utilization_records'),
+      safeCount('resource_conflicts'),
+      safeCount('onboarding_offboarding'),
+      // Risk (6)
+      safeCount('risk_assessments'),
+      safeCount('risk_response_plans'),
+      safeCount('risk_triggers'),
+      safeCount('risk_reviews'),
+      safeCount('contingency_reserves'),
+      safeCount('risk_metrics'),
+      // Stakeholders Ops (5)
+      safeCount('engagement_actions'),
+      safeCount('communication_logs'),
+      safeCount('satisfaction_surveys'),
+      safeCount('stakeholder_issues'),
+      safeCount('relationship_health')
+    ])
+    
+    const counts: DomainCountSummary = {
+      // Core entities
+      stakeholders: countQueries[0],
+      requirements: countQueries[1],
+      risks: countQueries[2],
+      milestones: countQueries[3],
+      constraints: countQueries[4],
+      successCriteria: countQueries[5],
+      bestPractices: countQueries[6],
+      phases: countQueries[7],
+      resources: countQueries[8],
+      technologies: countQueries[9],
+      qualityStandards: countQueries[10],
+      complianceSecurity: countQueries[11],
+      deliverables: countQueries[12],
+      scopeItems: countQueries[13],
+      activities: countQueries[14],
+      // Performance Domain entities
+      teamAgreements: countQueries[15],
+      developmentApproaches: countQueries[16],
+      projectIterations: countQueries[17],
+      workItems: countQueries[18],
+      capacityPlans: countQueries[19],
+      performanceMeasurements: countQueries[20],
+      earnedValueMetrics: countQueries[21],
+      opportunities: countQueries[22],
+      riskResponses: countQueries[23],
+      performanceActuals: countQueries[24],
+      // Knowledge Area Domain entities
+      // Governance
+      governanceDecisions: countQueries[25],
+      approvalWorkflows: countQueries[26],
+      steeringCommittees: countQueries[27],
+      changeControlBoards: countQueries[28],
+      policyCompliance: countQueries[29],
+      // Scope
+      scopeBaselines: countQueries[30],
+      wbsNodes: countQueries[31],
+      scopeChangeRequests: countQueries[32],
+      requirementsTraceability: countQueries[33],
+      scopeVerification: countQueries[34],
+      // Schedule
+      scheduleBaselines: countQueries[35],
+      scheduleActivities: countQueries[36],
+      criticalPathActivities: countQueries[37],
+      scheduleVariances: countQueries[38],
+      scheduleForecasts: countQueries[39],
+      // Finance
+      budgetBaselines: countQueries[40],
+      costActuals: countQueries[41],
+      costEstimates: countQueries[42],
+      fundingTranches: countQueries[43],
+      financialVariances: countQueries[44],
+      procurementCosts: countQueries[45],
+      // Resources
+      resourceAssignments: countQueries[46],
+      resourcePool: countQueries[47],
+      capacityForecasts: countQueries[48],
+      utilizationRecords: countQueries[49],
+      resourceConflicts: countQueries[50],
+      onboardingOffboarding: countQueries[51],
+      // Risk
+      riskAssessments: countQueries[52],
+      riskResponsePlans: countQueries[53],
+      riskTriggers: countQueries[54],
+      riskReviews: countQueries[55],
+      contingencyReserves: countQueries[56],
+      riskMetrics: countQueries[57],
+      // Stakeholders Ops
+      engagementActions: countQueries[58],
+      communicationLogs: countQueries[59],
+      satisfactionSurveys: countQueries[60],
+      stakeholderIssues: countQueries[61],
+      relationshipHealth: countQueries[62]
+    }
+    
+    const entityCountLookup = Object.entries(ENTITY_COUNT_KEY_MAP).reduce(
+      (acc, [entityType, key]) => {
+        acc[entityType as EntityType] = counts[key]
+        return acc
+      },
+      {} as Record<EntityType, number>
+    )
+
+    const jobData = await pool.query(`SELECT created_by, data FROM jobs WHERE id = $1`, [jobId])
+    const jobRow = jobData.rows[0] || {}
+    const jobDataJson = (jobRow.data as Record<string, any>) || {}
+    const selectedDomains = normalizeDomains(jobDataJson.domains)
+    const domainRunIds: DomainRunIdMap = jobDataJson.domainRunIds || {}
+
+    const domainCounts = selectedDomains.reduce((acc, domain) => {
+      const keys = DOMAIN_ENTITY_MAP[domain] || []
+      acc[domain] = keys.reduce((sum, entityKey) => sum + (entityCountLookup[entityKey] || 0), 0)
+      return acc
+    }, {} as Record<PmbokDomain, number>)
+
+    const failedEntityTypes = failedJobs?.map(f => f.entityType) || []
+
+    await completeDomainRuns({
+      domainRunIds,
+      domainCounts,
+      failedEntityTypes
+    })
+
     const totalEntities = Object.values(counts).reduce((sum, count) => sum + count, 0)
     
     logger.info(`[EXTRACTION-PARENT] Total entities extracted: ${totalEntities}`)
     
-    // Get userId from job
-    const jobData = await pool.query(`SELECT created_by FROM jobs WHERE id = $1`, [jobId])
-    const userId = jobData.rows[0]?.created_by
+    const userId = jobRow?.created_by
     
     // Prepare result with optional failed entity info
     const result: any = {
@@ -1545,6 +1916,119 @@ async function finalizeExtractionJob(jobId: string, projectId: string, failedJob
     )
     throw error
   }
+}
+
+async function registerDomainRuns(params: {
+  jobId: string
+  projectId: string
+  userId?: string
+  aiProvider?: string
+  aiModel?: string
+  documentIds?: string[]
+  domains: PmbokDomain[]
+}): Promise<DomainRunIdMap> {
+  const {
+    jobId,
+    projectId,
+    userId,
+    aiProvider,
+    aiModel,
+    documentIds,
+    domains
+  } = params
+
+  const domainRunIds: DomainRunIdMap = {}
+  const docIds = documentIds && documentIds.length ? documentIds : null
+
+  for (const domain of domains) {
+    const entityTypes = DOMAIN_ENTITY_MAP[domain] || []
+    const result = await pool.query(
+      `INSERT INTO domain_extraction_runs (
+        project_id,
+        domain,
+        job_id,
+        user_id,
+        ai_provider,
+        ai_model,
+        document_ids,
+        metadata
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      RETURNING id`,
+      [
+        projectId,
+        domain,
+        jobId,
+        userId || null,
+        aiProvider || null,
+        aiModel || null,
+        docIds,
+        JSON.stringify({ entityTypes })
+      ]
+    )
+    domainRunIds[domain] = result.rows[0].id
+  }
+
+  return domainRunIds
+}
+
+async function completeDomainRuns(params: {
+  domainRunIds: DomainRunIdMap
+  domainCounts: Record<PmbokDomain, number>
+  failedEntityTypes: string[]
+}): Promise<void> {
+  const { domainRunIds, domainCounts, failedEntityTypes } = params
+  if (!domainRunIds) return
+
+  const failedSet = new Set(failedEntityTypes)
+  const updates = Object.entries(domainRunIds).map(async ([domainKey, runId]) => {
+    if (!runId) return
+    const domain = domainKey as PmbokDomain
+    const entityTypes = DOMAIN_ENTITY_MAP[domain] || []
+    const failedForDomain = entityTypes.filter((entity) => failedSet.has(entity))
+    const hasFailures = failedForDomain.length > 0
+    const totalEntities = domainCounts[domain] ?? 0
+    const totalEntityTypes = entityTypes.length
+    const successRate =
+      totalEntityTypes === 0 ? 100 : ((totalEntityTypes - failedForDomain.length) / totalEntityTypes) * 100
+    const status = hasFailures ? (totalEntities > 0 ? 'partial' : 'failed') : 'completed'
+
+    await pool.query(
+      `UPDATE domain_extraction_runs
+         SET status = $1,
+             completed_at = CURRENT_TIMESTAMP,
+             total_entities = $2,
+             success_rate = $3,
+             metadata = metadata || $4
+       WHERE id = $5`,
+      [
+        status,
+        totalEntities,
+        successRate,
+        JSON.stringify({ failedEntityTypes: failedForDomain }),
+        runId
+      ]
+    )
+  })
+
+  await Promise.all(updates)
+}
+
+async function failDomainRuns(domainRunIds?: DomainRunIdMap, reason?: string): Promise<void> {
+  if (!domainRunIds) return
+  const entries = Object.values(domainRunIds).filter((id): id is string => Boolean(id))
+  if (!entries.length) return
+  await Promise.all(
+    entries.map((runId) =>
+      pool.query(
+        `UPDATE domain_extraction_runs
+           SET status = 'failed',
+               completed_at = CURRENT_TIMESTAMP,
+               metadata = metadata || $1
+         WHERE id = $2`,
+        [JSON.stringify({ error: reason || 'Extraction job failed' }), runId]
+      )
+    )
+  )
 }
 
 // Extraction queue event listeners

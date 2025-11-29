@@ -3803,6 +3803,61 @@ Output valid JSON object with "performance_actuals" array only.`
   }
 
   /**
+   * Get the Knowledge Area Domain name for a given entity type
+   * Used for logging and domain-specific configuration
+   */
+  private getKnowledgeDomainForEntityType(entityType: string): string {
+    const domainMap: Record<string, string> = {
+      // Governance Domain
+      governance_decisions: 'governance',
+      approval_workflows: 'governance',
+      steering_committees: 'governance',
+      change_control_boards: 'governance',
+      policy_compliance: 'governance',
+      // Scope Domain
+      scope_baselines: 'scope',
+      wbs_nodes: 'scope',
+      scope_change_requests: 'scope',
+      requirements_traceability: 'scope',
+      scope_verification: 'scope',
+      // Schedule Domain
+      schedule_baselines: 'schedule',
+      schedule_activities: 'schedule',
+      critical_path_activities: 'schedule',
+      schedule_variances: 'schedule',
+      schedule_forecasts: 'schedule',
+      // Finance Domain
+      budget_baselines: 'finance',
+      cost_actuals: 'finance',
+      cost_estimates: 'finance',
+      funding_tranches: 'finance',
+      financial_variances: 'finance',
+      procurement_costs: 'finance',
+      // Resources Domain
+      resource_assignments: 'resources',
+      resource_pool: 'resources',
+      capacity_forecasts: 'resources',
+      utilization_records: 'resources',
+      resource_conflicts: 'resources',
+      onboarding_offboarding: 'resources',
+      // Risk Domain
+      risk_assessments: 'risk',
+      risk_response_plans: 'risk',
+      risk_triggers: 'risk',
+      risk_reviews: 'risk',
+      contingency_reserves: 'risk',
+      risk_metrics: 'risk',
+      // Stakeholders Ops Domain
+      engagement_actions: 'stakeholders_ops',
+      communication_logs: 'stakeholders_ops',
+      satisfaction_surveys: 'stakeholders_ops',
+      stakeholder_issues: 'stakeholders_ops',
+      relationship_health: 'stakeholders_ops'
+    }
+    return domainMap[entityType] || 'unknown'
+  }
+
+  /**
    * Build document title-to-ID mapping for source document resolution
    */
   private buildDocumentMap(
@@ -4062,6 +4117,12 @@ Output valid JSON object with "performance_actuals" array only.`
       return null
     }
 
+    // Skip keywords that aren't dates
+    const skipKeywords = ['relative', 'as needed', 'weekly', 'monthly', 'quarterly', 'ongoing', 'tbd', 'n/a']
+    if (skipKeywords.some(kw => trimmed.toLowerCase().includes(kw))) {
+      return null
+    }
+
     // Extract YYYY-MM-DD pattern from strings with extra text
     // Examples: "2025-12-31 (initial version)" -> "2025-12-31"
     //           "Monthly (first due 2025-11-30)" -> "2025-11-30"
@@ -4082,7 +4143,70 @@ Output valid JSON object with "performance_actuals" array only.`
       return trimmed
     }
 
-    // Attempt to parse other date formats (e.g., "March 2025", "2025-12-31")
+    // Month name to number mapping
+    const monthMap: Record<string, string> = {
+      'jan': '01', 'january': '01',
+      'feb': '02', 'february': '02',
+      'mar': '03', 'march': '03',
+      'apr': '04', 'april': '04',
+      'may': '05',
+      'jun': '06', 'june': '06',
+      'jul': '07', 'july': '07',
+      'aug': '08', 'august': '08',
+      'sep': '09', 'september': '09',
+      'oct': '10', 'october': '10',
+      'nov': '11', 'november': '11',
+      'dec': '12', 'december': '12'
+    }
+
+    // Try to extract "Month DD, YYYY" or "Month YYYY" patterns with extra text
+    // Examples: "Mar 15, 2026 (prototype approval)" -> "2026-03-15"
+    //           "Jan 2026" -> "2026-01-01"
+    //           "November 2026" -> "2026-11-01"
+    const monthDayYearMatch = trimmed.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{1,2})[\s,]+(\d{4})\b/i)
+    if (monthDayYearMatch) {
+      const [, monthStr, dayStr, yearStr] = monthDayYearMatch
+      const month = monthMap[monthStr.toLowerCase()]
+      if (month) {
+        const day = dayStr.padStart(2, '0')
+        const result = `${yearStr}-${month}-${day}`
+        if (isValidDate(result)) {
+          return result
+        }
+      }
+    }
+
+    // Try to extract "Month YYYY" pattern (set to first day of month)
+    // Examples: "Jan 2026" -> "2026-01-01"
+    //           "November 2026" -> "2026-11-01"
+    const monthYearMatch = trimmed.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\s+(\d{4})\b/i)
+    if (monthYearMatch) {
+      const [, monthStr, yearStr] = monthYearMatch
+      const month = monthMap[monthStr.toLowerCase()]
+      if (month) {
+        const result = `${yearStr}-${month}-01`
+        if (isValidDate(result)) {
+          return result
+        }
+      }
+    }
+
+    // Try to extract "DD Month YYYY" patterns
+    // Examples: "15 March 2026" -> "2026-03-15"
+    const dayMonthYearMatch = trimmed.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)[\s,]+(\d{4})\b/i)
+    if (dayMonthYearMatch) {
+      const [, dayStr, monthStr, yearStr] = dayMonthYearMatch
+      const month = monthMap[monthStr.toLowerCase()]
+      if (month) {
+        const day = dayStr.padStart(2, '0')
+        const result = `${yearStr}-${month}-${day}`
+        if (isValidDate(result)) {
+          return result
+        }
+      }
+    }
+
+    // Attempt to parse other date formats using Date.parse
     const parsed = Date.parse(trimmed)
     if (!Number.isNaN(parsed)) {
       const date = new Date(parsed)
@@ -5483,7 +5607,14 @@ Output valid JSON object with "performance_actuals" array only.`
       )
       
       // Convert quarter dates like '2025-Q4' to actual dates using utility function
-      const dueDate = convertQuarterDate(m.due_date)
+      // due_date is NOT NULL, so provide a default date if missing (1 year from now)
+      let dueDate = convertQuarterDate(m.due_date)
+      if (!dueDate) {
+        // Default to 1 year from now if no date provided
+        const defaultDate = new Date()
+        defaultDate.setFullYear(defaultDate.getFullYear() + 1)
+        dueDate = defaultDate.toISOString().split('T')[0]
+      }
       
       // Map AI status values to database CHECK constraint values
       // DB allows: planned, in_progress, completed, delayed
@@ -5823,8 +5954,9 @@ Output valid JSON object with "performance_actuals" array only.`
       )
       
       // Validate and sanitize dates using utility functions
-      let startDate = isValidDate(p.start_date) ? p.start_date : null
-      let endDate = isValidDate(p.end_date) ? p.end_date : null
+      // Use normalizeDate to extract dates from strings like "Prior to 2025-11-15"
+      let startDate = this.normalizeDate(p.start_date)
+      let endDate = this.normalizeDate(p.end_date)
       
       // start_date is NOT NULL in database - provide default if missing
       if (!startDate) {
@@ -6191,9 +6323,9 @@ Output valid JSON object with "performance_actuals" array only.`
     const placeholders: string[] = []
 
     uniqueItems.forEach((item, index) => {
-      const offset = index * 70 // Large number of columns
+      const offset = index * 72 // 72 columns total
       placeholders.push(
-        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19}, $${offset + 20}, $${offset + 21}, $${offset + 22}, $${offset + 23}, $${offset + 24}, $${offset + 25}, $${offset + 26}, $${offset + 27}, $${offset + 28}, $${offset + 29}, $${offset + 30}, $${offset + 31}, $${offset + 32}, $${offset + 33}, $${offset + 34}, $${offset + 35}, $${offset + 36}, $${offset + 37}, $${offset + 38}, $${offset + 39}, $${offset + 40}, $${offset + 41}, $${offset + 42}, $${offset + 43}, $${offset + 44}, $${offset + 45}, $${offset + 46}, $${offset + 47}, $${offset + 48}, $${offset + 49}, $${offset + 50}, $${offset + 51}, $${offset + 52}, $${offset + 53}, $${offset + 54}, $${offset + 55}, $${offset + 56}, $${offset + 57}, $${offset + 58}, $${offset + 59}, $${offset + 60}, $${offset + 61}, $${offset + 62}, $${offset + 63}, $${offset + 64}, $${offset + 65}, $${offset + 66}, $${offset + 67}, $${offset + 68}, $${offset + 69}, $${offset + 70})`
+        `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17}, $${offset + 18}, $${offset + 19}, $${offset + 20}, $${offset + 21}, $${offset + 22}, $${offset + 23}, $${offset + 24}, $${offset + 25}, $${offset + 26}, $${offset + 27}, $${offset + 28}, $${offset + 29}, $${offset + 30}, $${offset + 31}, $${offset + 32}, $${offset + 33}, $${offset + 34}, $${offset + 35}, $${offset + 36}, $${offset + 37}, $${offset + 38}, $${offset + 39}, $${offset + 40}, $${offset + 41}, $${offset + 42}, $${offset + 43}, $${offset + 44}, $${offset + 45}, $${offset + 46}, $${offset + 47}, $${offset + 48}, $${offset + 49}, $${offset + 50}, $${offset + 51}, $${offset + 52}, $${offset + 53}, $${offset + 54}, $${offset + 55}, $${offset + 56}, $${offset + 57}, $${offset + 58}, $${offset + 59}, $${offset + 60}, $${offset + 61}, $${offset + 62}, $${offset + 63}, $${offset + 64}, $${offset + 65}, $${offset + 66}, $${offset + 67}, $${offset + 68}, $${offset + 69}, $${offset + 70}, $${offset + 71}, $${offset + 72})`
       )
       
       // Resolve source_document_id
@@ -6470,21 +6602,11 @@ Output valid JSON object with "performance_actuals" array only.`
       }
       const mappedStatus = statusMap[(d.status || 'not_started').toLowerCase()] || 'not_started'
       
-      // Validate and parse due_date
-      let parsedDueDate = null
-      if (d.due_date) {
-        // Check if it's a valid date format
-        if (isValidDate(d.due_date)) {
-          parsedDueDate = d.due_date
-        } else {
-          // Try quarter date conversion (YYYY-Q1, etc.)
-          const quarterDate = convertQuarterDate(d.due_date)
-          if (quarterDate) {
-            parsedDueDate = quarterDate
-          } else {
-            logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid due_date: ${d.due_date}, setting to null`)
-          }
-        }
+      // Validate and parse due_date using the enhanced normalizeDate function
+      // This handles formats like "Mar 15, 2026 (prototype approval)", "Jan 2026", etc.
+      const parsedDueDate = this.normalizeDate(d.due_date)
+      if (d.due_date && !parsedDueDate) {
+        logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid due_date: ${d.due_date}, setting to null`)
       }
 
       // Resolve source_document_id
@@ -6850,23 +6972,52 @@ Output valid JSON object with "performance_actuals" array only.`
       const notes = notesSegments.length > 0 ? notesSegments.join('\n\n') : null
 
       // Resolve source_document_id
-      const sourceDocumentId = (agreement as any).source_document_id || null
+      // UUID validation regex
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      
+      // Validate source_document_id - must be a valid UUID or null
+      const rawSourceDocId = (agreement as any).source_document_id
+      let sourceDocumentId: string | null = null
+      if (rawSourceDocId && typeof rawSourceDocId === 'string') {
+        const trimmed = rawSourceDocId.trim()
+        if (uuidRegex.test(trimmed)) {
+          sourceDocumentId = trimmed
+        } else {
+          logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] source_document_id "${rawSourceDocId}" is not a valid UUID, setting to NULL`)
+        }
+      }
 
       // Ensure agreed_by is properly formatted as JSONB
       // Handle edge cases: null, undefined, empty arrays, and ensure valid JSON
+      // For PostgreSQL JSONB, pass the array directly (pg library handles conversion)
       const agreedByArray = this.ensureStringArray(agreement.agreed_by || [])
-      const agreedByJson = JSON.stringify(agreedByArray) // Always stringify, even if empty array
+      // Pass as array, not stringified - pg library will convert to JSONB
+      const agreedByJson = agreedByArray.length > 0 ? agreedByArray : []
 
       // effective_date is NOT NULL, so provide default (current date) if not provided
       const effectiveDate = this.normalizeDate(agreement.effective_date) || new Date().toISOString().split('T')[0]
 
+      // facilitated_by must be a UUID (references users.id), not a name string
+      // If it's not a valid UUID, set to NULL
+      const rawFacilitatedBy = agreement.facilitated_by
+      let facilitatedBy: string | null = null
+      
+      if (rawFacilitatedBy && typeof rawFacilitatedBy === 'string') {
+        const trimmed = rawFacilitatedBy.trim()
+        if (uuidRegex.test(trimmed)) {
+          facilitatedBy = trimmed
+        } else {
+          logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] facilitated_by "${rawFacilitatedBy}" is not a valid UUID, setting to NULL`)
+        }
+      }
+
       values.push(
         projectId,
         agreement.title?.substring(0, 200) || 'Team Agreement',
-        agreement.description || null,
+        agreement.description || 'No description provided', // NOT NULL constraint
         category,
         agreedByJson, // Explicitly stringified JSON for JSONB column
-        agreement.facilitated_by ? agreement.facilitated_by.substring(0, 255) : null,
+        facilitatedBy, // Only set if valid UUID, otherwise NULL
         effectiveDate, // Use current date as default if not provided (NOT NULL constraint)
         reviewFrequency,
         this.normalizeDate(agreement.next_review_date),
@@ -8465,6 +8616,63 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'performance_actuals':
         entities = await this.extractPerformanceActuals(documents, projectId, extractionOptions, documentMap, documentList)
         break
+      // ===========================================================================
+      // PMBOK 8 Knowledge Area Domain entity types (Tier 2)
+      // These are placeholders - full extraction methods to be implemented
+      // ===========================================================================
+      // Governance Domain
+      case 'governance_decisions':
+      case 'approval_workflows':
+      case 'steering_committees':
+      case 'change_control_boards':
+      case 'policy_compliance':
+      // Scope Domain  
+      case 'scope_baselines':
+      case 'wbs_nodes':
+      case 'scope_change_requests':
+      case 'requirements_traceability':
+      case 'scope_verification':
+      // Schedule Domain
+      case 'schedule_baselines':
+      case 'schedule_activities':
+      case 'critical_path_activities':
+      case 'schedule_variances':
+      case 'schedule_forecasts':
+      // Finance Domain
+      case 'budget_baselines':
+      case 'cost_actuals':
+      case 'cost_estimates':
+      case 'funding_tranches':
+      case 'financial_variances':
+      case 'procurement_costs':
+      // Resources Domain
+      case 'resource_assignments':
+      case 'resource_pool':
+      case 'capacity_forecasts':
+      case 'utilization_records':
+      case 'resource_conflicts':
+      case 'onboarding_offboarding':
+      // Risk Domain
+      case 'risk_assessments':
+      case 'risk_response_plans':
+      case 'risk_triggers':
+      case 'risk_reviews':
+      case 'contingency_reserves':
+      case 'risk_metrics':
+      // Stakeholders Ops Domain
+      case 'engagement_actions':
+      case 'communication_logs':
+      case 'satisfaction_surveys':
+      case 'stakeholder_issues':
+      case 'relationship_health':
+        // Log warning for Knowledge Area Domain entities (not yet implemented)
+        logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Knowledge Area Domain entity type not yet implemented, returning empty array`, {
+          entityType,
+          projectId,
+          domain: this.getKnowledgeDomainForEntityType(entityType)
+        })
+        entities = []
+        break
       default:
         throw new Error(`Unknown entity type: ${entityType}`)
       }
@@ -8605,6 +8813,66 @@ Output valid JSON object with "performance_actuals" array only.`
           break
         case 'performance_actuals':
           await this.savePerformanceActuals(client, projectId, userId, entities)
+          break
+        // ===========================================================================
+        // PMBOK 8 Knowledge Area Domain entity types (Tier 2)
+        // These are placeholders - full save methods to be implemented
+        // ===========================================================================
+        // Governance Domain
+        case 'governance_decisions':
+        case 'approval_workflows':
+        case 'steering_committees':
+        case 'change_control_boards':
+        case 'policy_compliance':
+        // Scope Domain  
+        case 'scope_baselines':
+        case 'wbs_nodes':
+        case 'scope_change_requests':
+        case 'requirements_traceability':
+        case 'scope_verification':
+        // Schedule Domain
+        case 'schedule_baselines':
+        case 'schedule_activities':
+        case 'critical_path_activities':
+        case 'schedule_variances':
+        case 'schedule_forecasts':
+        // Finance Domain
+        case 'budget_baselines':
+        case 'cost_actuals':
+        case 'cost_estimates':
+        case 'funding_tranches':
+        case 'financial_variances':
+        case 'procurement_costs':
+        // Resources Domain
+        case 'resource_assignments':
+        case 'resource_pool':
+        case 'capacity_forecasts':
+        case 'utilization_records':
+        case 'resource_conflicts':
+        case 'onboarding_offboarding':
+        // Risk Domain
+        case 'risk_assessments':
+        case 'risk_response_plans':
+        case 'risk_triggers':
+        case 'risk_reviews':
+        case 'contingency_reserves':
+        case 'risk_metrics':
+        // Stakeholders Ops Domain
+        case 'engagement_actions':
+        case 'communication_logs':
+        case 'satisfaction_surveys':
+        case 'stakeholder_issues':
+        case 'relationship_health':
+          // Log info for Knowledge Area Domain entities (save methods not yet implemented)
+          if (entities.length > 0) {
+            logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] Save method not yet implemented for Knowledge Area Domain entity`, {
+              entityType,
+              projectId,
+              entityCount: entities.length,
+              domain: this.getKnowledgeDomainForEntityType(entityType)
+            })
+          }
+          // Skip saving - these will be empty arrays from extraction anyway
           break
         default:
           throw new Error(`Unknown entity type: ${entityType}`)
