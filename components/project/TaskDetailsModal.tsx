@@ -19,7 +19,8 @@ import { TaskResourcesView } from "./TaskResourcesView"
 import { TaskDependenciesView } from "./TaskDependenciesView"
 import { TaskHoursView } from "./TaskHoursView"
 import { TaskSourceView } from "./TaskSourceView"
-import { AlertCircle, FileText, Briefcase } from "lucide-react"
+import { TaskChecklistPanel } from "@/components/capacity"
+import { AlertCircle, FileText, Briefcase, ClipboardList } from "lucide-react"
 
 interface TaskDetailsModalProps {
   taskId: string | null
@@ -155,11 +156,15 @@ export function TaskDetailsModal({
           </div>
         ) : error ? null : task ? (
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
-            <TabsList className="grid grid-cols-5 w-full">
+            <TabsList className="grid grid-cols-6 w-full">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="resources">Resources</TabsTrigger>
               <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
               <TabsTrigger value="hours">Hours</TabsTrigger>
+              <TabsTrigger value="checklist" className="flex items-center gap-1">
+                <ClipboardList className="h-3.5 w-3.5" />
+                Checklist
+              </TabsTrigger>
               <TabsTrigger value="source">Source</TabsTrigger>
             </TabsList>
 
@@ -177,6 +182,16 @@ export function TaskDetailsModal({
 
             <TabsContent value="hours" className="mt-4">
               <TaskHoursView task={task} onUpdate={handleTaskUpdate} />
+            </TabsContent>
+
+            <TabsContent value="checklist" className="mt-4">
+              {task.id && (
+                <TaskChecklistPanel 
+                  taskId={task.id} 
+                  taskName={task.task_name}
+                  onUpdate={handleTaskUpdate}
+                />
+              )}
             </TabsContent>
 
             <TabsContent value="source" className="mt-4">
