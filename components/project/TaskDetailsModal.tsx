@@ -88,47 +88,69 @@ export function TaskDetailsModal({
             <>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                <span className="font-mono">{task.task_number}</span>
+                <span className="font-mono">{task.taskNumber || task.task_number || '-'}</span>
                 <span className="text-muted-foreground">•</span>
-                <span>{task.task_name}</span>
+                <span>{task.taskName || task.task_name || 'Untitled Task'}</span>
               </DialogTitle>
               <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
-                {task.wbs_code && (
+                {(task.wbs_code || task.wbsCode) && (
                   <>
                     <Badge variant="outline" className="font-mono">
-                      WBS {task.wbs_code}
+                      WBS {task.wbsCode || task.wbs_code}
                     </Badge>
                     <span className="text-muted-foreground">•</span>
                   </>
                 )}
-                {task.required_role_name && (
+                {(task.required_role_name || task.requiredRoleName) && (
                   <>
-                    <Badge variant="outline">{task.required_role_name}</Badge>
+                    <Badge variant="outline">{task.requiredRoleName || task.required_role_name}</Badge>
                     <span className="text-muted-foreground">•</span>
                   </>
                 )}
                 <TaskStatusBadge status={task.status} />
-                {task.imported_from_wbs && (
+                {(task.priority || task.priority) && (
+                  <>
+                    <span className="text-muted-foreground">•</span>
+                    <Badge 
+                      variant="outline" 
+                      className={
+                        task.priority === 'critical' ? 'bg-red-50 text-red-700' :
+                        task.priority === 'high' ? 'bg-orange-50 text-orange-700' :
+                        task.priority === 'medium' ? 'bg-yellow-50 text-yellow-700' :
+                        'bg-gray-50 text-gray-700'
+                      }
+                    >
+                      {task.priority?.toUpperCase()}
+                    </Badge>
+                  </>
+                )}
+                {(task.phase || task.phase) && (
+                  <>
+                    <span className="text-muted-foreground">•</span>
+                    <Badge variant="secondary">{task.phase}</Badge>
+                  </>
+                )}
+                {(task.imported_from_wbs || task.importedFromWbs) && (
                   <>
                     <span className="text-muted-foreground">•</span>
                     <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                       Imported from WBS
                     </Badge>
-                    {task.source_document_id && (
+                    {(task.source_document_id || task.sourceDocumentId) && (
                       <>
                         <span className="text-muted-foreground">•</span>
                         <a
-                          href={`/documents/${task.source_document_id}`}
+                          href={`/documents/${task.sourceDocumentId || task.source_document_id}`}
                           target="_blank"
                           rel="noreferrer"
                           className="text-sm underline flex items-center gap-2"
                         >
-                          {task.source_document_title ? (
-                            task.source_document_title
+                          {(task.source_document_title || task.sourceDocumentTitle) ? (
+                            task.sourceDocumentTitle || task.source_document_title
                           ) : (
                             <>
                               <span className="font-semibold">Document ID:</span>
-                              <span className="font-mono text-xs">{task.source_document_id}</span>
+                              <span className="font-mono text-xs">{task.sourceDocumentId || task.source_document_id}</span>
                             </>
                           )}
                         </a>

@@ -5,44 +5,106 @@ import { apiClient } from "@/lib/api"
 
 export interface Task {
   id: string
-  project_id: string
-  task_number: string
+  project_id?: string
+  projectId?: string
+  parent_task_id?: string
+  parentTaskId?: string
+  task_number?: string
+  taskNumber?: string
   wbs_code?: string
-  task_name: string
+  wbsCode?: string
+  task_name?: string
+  taskName?: string
   description?: string
   estimated_hours?: number
+  estimatedHours?: number
+  estimated_duration_days?: number
+  estimatedDurationDays?: number
+  estimated_cost?: number
+  estimatedCost?: number
   actual_hours?: number
+  actualHours?: number
+  actual_cost?: number
+  actualCost?: number
   start_date?: string
   end_date?: string
+  plannedStartDate?: string | Date
+  plannedEndDate?: string | Date
+  actualStartDate?: string | Date
+  actualEndDate?: string | Date
   required_role_id?: string
+  requiredRoleId?: string
   required_role_name?: string
+  requiredRoleName?: string
+  required_skills?: string[]
+  requiredSkills?: string[]
+  required_resource_count?: number
+  requiredResourceCount?: number
   assigned_user_id?: string
+  assignedUserId?: string
   assigned_user_name?: string
-  status: 'planned' | 'in_progress' | 'completed' | 'blocked' | 'cancelled'
-  progress_percentage: number
+  assignedUserName?: string
+  status: 'planned' | 'in_progress' | 'completed' | 'blocked' | 'cancelled' | 'scheduled' | 'in-progress' | 'on-hold' | 'cancelled'
+  progress_percentage?: number
+  percentComplete?: number
+  priority?: 'low' | 'medium' | 'high' | 'critical'
+  phase?: string
+  category?: string
+  deliverables?: string[]
+  acceptance_criteria?: string
+  acceptanceCriteria?: string
   source_document_id?: string
+  sourceDocumentId?: string
   source_document_title?: string
+  sourceDocumentTitle?: string
   source_entity_id?: string
+  sourceEntityId?: string
   imported_from_wbs?: boolean
-  created_at: string
+  importedFromWbs?: boolean
+  created_at?: string
+  createdAt?: string | Date
   updated_at?: string
+  updatedAt?: string | Date
+  completed_at?: string
+  completedAt?: string | Date
   dependencies?: TaskDependency[]
   assigned_resources?: TaskResource[]
+  assignedResources?: TaskResource[]
 }
 
 export interface TaskDependency {
   id: string
-  predecessor_task_id: string
-  successor_task_id: string
-  dependency_type: 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish'
-  lag_days: number
+  predecessor_task_id?: string
+  predecessorTaskId?: string
+  successor_task_id?: string
+  successorTaskId?: string
+  dependency_type?: 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish'
+  dependencyType?: 'finish_to_start' | 'start_to_start' | 'finish_to_finish' | 'start_to_finish' | 'finishToStart' | 'startToStart' | 'finishToFinish' | 'startToFinish'
+  lag_days?: number
+  lagDays?: number
   predecessor_task?: {
-    task_number: string
-    task_name: string
+    task_number?: string
+    taskNumber?: string
+    task_name?: string
+    taskName?: string
+  }
+  predecessorTask?: {
+    task_number?: string
+    taskNumber?: string
+    task_name?: string
+    taskName?: string
   }
   successor_task?: {
-    task_number: string
-    task_name: string
+    task_number?: string
+    taskNumber?: string
+    task_name?: string
+    taskName?: string
+  }
+  successorTask?: {
+    task_number?: string
+    taskNumber?: string
+    task_name?: string
+    taskName?: string
   }
 }
 
