@@ -231,6 +231,10 @@ export default function ProjectDetail() {
   const [stakeholderDialogOpen, setStakeholderDialogOpen] = useState(false)
   const [editingStakeholder, setEditingStakeholder] = useState<Stakeholder | null>(null)
   const [savingStakeholder, setSavingStakeholder] = useState(false)
+  const [users, setUsers] = useState<any[]>([])
+  const [loadingUsers, setLoadingUsers] = useState(false)
+  const [selectedUserId, setSelectedUserId] = useState<string>("")
+  const [linkingUser, setLinkingUser] = useState(false)
   
   // Document upload state
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -1750,9 +1754,28 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Note: Team members are now managed through stakeholders (is_team_member flag)
   // Removed handleAddTeamMember and handleRemoveTeamMember functions
 
+  // Fetch users for linking
+  const fetchUsers = async () => {
+    try {
+      setLoadingUsers(true)
+      const usersList = await apiClient.getUsers()
+      // Handle different response formats
+      const usersArray = Array.isArray(usersList) ? usersList : 
+                        Array.isArray(usersList?.users) ? usersList.users :
+                        Array.isArray(usersList?.data) ? usersList.data : []
+      setUsers(usersArray)
+    } catch (error) {
+      console.error("Failed to fetch users:", error)
+      setUsers([])
+    } finally {
+      setLoadingUsers(false)
+    }
+  }
+
   // Handle opening new stakeholder dialog
   const handleAddStakeholder = () => {
     setEditingStakeholder(null)
+    setSelectedUserId("")
     setStakeholderForm({
       name: "",
       role: "",
@@ -1770,6 +1793,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       is_team_member: false
     })
     setStakeholderDialogOpen(true)
+    // Fetch users when dialog opens
+    void fetchUsers()
   }
 
   // Handle closing stakeholder dialog
@@ -1800,6 +1825,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Handle opening edit stakeholder dialog
   const handleEditStakeholder = (stakeholder: Stakeholder) => {
     setEditingStakeholder(stakeholder)
+    setSelectedUserId((stakeholder as any).user_id || "")
     setStakeholderForm({
       name: stakeholder.name ?? "",
       role: stakeholder.role ?? "",
@@ -1817,6 +1843,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       is_team_member: (stakeholder as any).is_team_member ?? false
     })
     setStakeholderDialogOpen(true)
+    // Fetch users when dialog opens
+    void fetchUsers()
   }
 
   // Save stakeholder (create or update)
@@ -1896,6 +1924,37 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       toast.error("Failed to save stakeholder")
     } finally {
       setSavingStakeholder(false)
+    }
+  }
+
+  // Link stakeholder to user manually
+  const handleLinkUser = async () => {
+    if (!selectedUserId) {
+      toast.error("Please select a user account")
+      return
+    }
+
+    if (!editingStakeholder) {
+      toast.error("Please save the stakeholder first before linking to a user account")
+      return
+    }
+
+    try {
+      setLinkingUser(true)
+      await apiClient.linkStakeholderToUser(editingStakeholder.id, selectedUserId)
+      toast.success("Stakeholder linked to user account successfully!")
+      // Refresh stakeholders to get updated data
+      await fetchStakeholders()
+      // Update editing stakeholder to reflect the link
+      const updated = stakeholders.find(s => s.id === editingStakeholder.id)
+      if (updated) {
+        setEditingStakeholder(updated)
+      }
+    } catch (error: any) {
+      console.error("Failed to link stakeholder to user:", error)
+      toast.error(error.response?.data?.error || "Failed to link stakeholder to user account")
+    } finally {
+      setLinkingUser(false)
     }
   }
 
@@ -2815,17 +2874,54 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               </span>
                             </div>
                             {stakeholderForm.is_team_member && !(editingStakeholder as any)?.user_id && (
-                              <div className="ml-6 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                                <p className="font-medium mb-1">⚠️ User Account Required</p>
-                                <p>
-                                  Team members must have a user account to be assigned to tasks. 
-                                  {stakeholderForm.email && (
-                                    <> The system will attempt to automatically link a user account with email <strong>{stakeholderForm.email}</strong> when you save.</>
-                                  )}
-                                  {!stakeholderForm.email && (
-                                    <> Please ensure the stakeholder has a user account with matching email.</>
-                                  )}
-                                </p>
+                              <div className="ml-6 p-3 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800 space-y-2">
+                                <div>
+                                  <p className="font-medium mb-1">⚠️ User Account Required</p>
+                                  <p className="mb-2">
+                                    Team members must have a user account to be assigned to tasks. 
+                                    {stakeholderForm.email && (
+                                      <> The system will attempt to automatically link a user account with email <strong>{stakeholderForm.email}</strong> when you save.</>
+                                    )}
+                                    {!stakeholderForm.email && (
+                                      <> Please ensure the stakeholder has a user account with matching email.</>
+                                    )}
+                                  </p>
+                                </div>
+                                {editingStakeholder && (
+                                  <div className="space-y-2 pt-2 border-t border-amber-300">
+                                    <p className="font-medium">Link to User Account Manually:</p>
+                                    {loadingUsers ? (
+                                      <p className="text-amber-700">Loading users...</p>
+                                    ) : users.length > 0 ? (
+                                      <div className="flex gap-2">
+                                        <select
+                                          value={selectedUserId}
+                                          onChange={(e) => setSelectedUserId(e.target.value)}
+                                          className="flex-1 h-8 rounded-md border border-amber-300 bg-white px-2 text-xs"
+                                        >
+                                          <option value="">Select a user account...</option>
+                                          {users.map((user) => (
+                                            <option key={user.id} value={user.id}>
+                                              {user.name || user.email} {user.email && user.name ? `(${user.email})` : ''}
+                                            </option>
+                                          ))}
+                                        </select>
+                                        <Button
+                                          type="button"
+                                          size="sm"
+                                          variant="outline"
+                                          onClick={handleLinkUser}
+                                          disabled={!selectedUserId || linkingUser}
+                                          className="text-xs h-8"
+                                        >
+                                          {linkingUser ? "Linking..." : "Link User"}
+                                        </Button>
+                                      </div>
+                                    ) : (
+                                      <p className="text-amber-700">No users available. Please create a user account first.</p>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                             )}
                           </div>
