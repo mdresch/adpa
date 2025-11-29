@@ -53,6 +53,70 @@ interface ModelStats {
   success_rate: number
 }
 
+interface DomainExtractionSummary {
+  total_runs: number
+  completed_runs: number
+  failed_runs: number
+  partial_runs: number
+  avg_success_rate: number
+  avg_entities: number
+  avg_runtime_ms: number
+}
+
+interface DomainExtractionDomainStat {
+  domain: string
+  total_runs: number
+  completed_runs: number
+  failed_runs: number
+  partial_runs: number
+  avg_entities: number
+  avg_success_rate: number
+  avg_cache_hit_rate: number
+  avg_runtime_ms: number
+  last_run_at: string | null
+}
+
+interface DomainProviderUsage {
+  provider_name: string
+  model_name: string
+  usage_count: number
+  avg_response_time_ms: number
+  total_cost_usd: number
+}
+
+interface DomainExtractionAnalytics {
+  success: boolean
+  period: string
+  projectId: string | null
+  generated_at: string
+  summary: DomainExtractionSummary
+  domains: DomainExtractionDomainStat[]
+  providerUsage: DomainProviderUsage[]
+  costByDomain: Array<{ domain: string; total_cost_usd: number; total_tokens: number }>
+}
+
+const DOMAIN_NAME_MAP: Record<string, string> = {
+  stakeholders: "Stakeholders",
+  team: "Team Performance",
+  development_approach: "Development Approach",
+  planning: "Planning",
+  project_work: "Project Work",
+  delivery: "Delivery",
+  measurement: "Measurement",
+  uncertainty: "Uncertainty"
+}
+
+const DOMAIN_COLOR_MAP: Record<string, string> = {
+  stakeholders: "#1872f0",
+  team: "#2563eb",
+  development_approach: "#8b5cf6",
+  planning: "#0ea5e9",
+  project_work: "#10b981",
+  delivery: "#f97316",
+  measurement: "#f59e0b",
+  uncertainty: "#ef4444"
+}
+
 export default function AIAnalyticsPage() {
   const { user, hasPermission } = useAuth()
   const { isConnected } = useWebSocket()
@@ -65,6 +129,7 @@ export default function AIAnalyticsPage() {
   const [modelStats, setModelStats] = useState<ModelStats[]>([])
   const [aiSummary, setAiSummary] = useState<Record<string, unknown> | null>(null)
   const [hourlyUsage, setHourlyUsage] = useState<Array<Record<string, unknown>>>([])
+  const [domainAnalytics, setDomainAnalytics] = useState<DomainExtractionAnalytics | null>(null)
 
   const fetchAIAnalytics = async () => {
     try {
@@ -89,6 +154,13 @@ export default function AIAnalyticsPage() {
           providers: response.providerStats?.length,
           models: response.modelStats?.length
         })
+      }
+
+      const domainResponse = await apiClient.getDomainExtractionAnalytics(timeRange).catch(() => null)
+      if (domainResponse) {
+        setDomainAnalytics(domainResponse)
+      } else {
+        setDomainAnalytics(null)
       }
       
     } catch (error) {
@@ -120,6 +192,12 @@ export default function AIAnalyticsPage() {
     const value = typeof ms === 'number' ? ms : parseFloat(ms as string) || 0
     if (value < 1000) return `${Math.round(value)}ms`
     return `${(value / 1000).toFixed(1)}s`
+  }
+
+  const formatPercent = (num: number | string | undefined | null) => {
+    if (num === null || num === undefined) return '0%'
+    const value = typeof num === 'number' ? num : parseFloat(num as string) || 0
+    return `${value.toFixed(1)}%`
   }
 
   const getProviderColor = (providerType: string) => {
@@ -1022,6 +1100,136 @@ export default function AIAnalyticsPage() {
                   </TabsContent>
                 </Tabs>
               </div>
+            )}
+            {domainAnalytics && (
+              <section className="mt-12 space-y-6">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <h2 className="text-2xl font-semibold text-slate-900 dark:text-slate-100">PMBOK 8 Domain Extraction</h2>
+                    <p className="text-muted-foreground">
+                      Domain-aware extraction success and provider performance
+                    </p>
+                  </div>
+                  <Badge variant="outline">
+                    Updated {new Date(domainAnalytics.generated_at).toLocaleString()}
+                  </Badge>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardDescription>Total Runs</CardDescription>
+                      <CardTitle className="text-3xl">{formatNumber(domainAnalytics.summary.total_runs)}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      Completed: {formatNumber(domainAnalytics.summary.completed_runs)} · Failed: {formatNumber(domainAnalytics.summary.failed_runs)}
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardDescription>Avg Success Rate</CardDescription>
+                      <CardTitle className="text-3xl">{formatPercent(domainAnalytics.summary.avg_success_rate)}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      Partial Runs: {formatNumber(domainAnalytics.summary.partial_runs)}
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardDescription>Avg Runtime</CardDescription>
+                      <CardTitle className="text-3xl">{formatDuration(Number(domainAnalytics.summary.avg_runtime_ms))}</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-sm text-muted-foreground">
+                      Avg Entities Captured: {formatNumber(domainAnalytics.summary.avg_entities)}
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {domainAnalytics.domains.map((domain) => {
+                    const label = DOMAIN_NAME_MAP[domain.domain] || domain.domain.replace('_', ' ')
+                    const successRate = Number(domain.avg_success_rate || 0)
+                    const completionRatio = domain.total_runs
+                      ? (domain.completed_runs / domain.total_runs) * 100
+                      : 0
+                    return (
+                      <Card key={domain.domain} className="border-l-4" style={{ borderColor: DOMAIN_COLOR_MAP[domain.domain] || '#0f172a' }}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-base">{label}</CardTitle>
+                            <Badge variant="secondary">{formatPercent(successRate)}</Badge>
+                          </div>
+                          <CardDescription>{formatNumber(domain.total_runs)} runs • {formatNumber(domain.completed_runs)} completed</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3 text-sm">
+                          <div>
+                            <p className="text-muted-foreground mb-1">Completion</p>
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div
+                                className="h-2 rounded-full"
+                                style={{
+                                  width: `${completionRatio.toFixed(1)}%`,
+                                  backgroundColor: DOMAIN_COLOR_MAP[domain.domain] || '#2563eb'
+                                }}
+                              ></div>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Avg Entities</span>
+                            <span className="font-medium">{formatNumber(domain.avg_entities)}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Avg Runtime</span>
+                            <span className="font-medium">{formatDuration(Number(domain.avg_runtime_ms))}</span>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Cache Hit Rate</span>
+                            <span className="font-medium">{formatPercent(domain.avg_cache_hit_rate)}</span>
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            Last run: {domain.last_run_at ? new Date(domain.last_run_at).toLocaleString() : 'N/A'}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+
+                {domainAnalytics.providerUsage.length > 0 && (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Provider Usage by Domain Runs</CardTitle>
+                      <CardDescription>Top models powering PMBOK 8 extractions</CardDescription>
+                    </CardHeader>
+                    <CardContent className="overflow-x-auto">
+                      <table className="min-w-full text-sm">
+                        <thead>
+                          <tr className="text-muted-foreground">
+                            <th className="text-left pb-2 pr-4">Provider</th>
+                            <th className="text-left pb-2 pr-4">Model</th>
+                            <th className="text-right pb-2 pr-4">Requests</th>
+                            <th className="text-right pb-2 pr-4">Avg Response</th>
+                            <th className="text-right pb-2">Total Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {domainAnalytics.providerUsage.slice(0, 6).map((provider, index) => (
+                            <tr key={`${provider.provider_name}-${provider.model_name}-${index}`} className="border-t border-muted/50">
+                              <td className="py-2 pr-4 font-medium">{provider.provider_name}</td>
+                              <td className="py-2 pr-4">{provider.model_name}</td>
+                              <td className="py-2 pr-4 text-right">{formatNumber(provider.usage_count)}</td>
+                              <td className="py-2 pr-4 text-right">{formatDuration(provider.avg_response_time_ms)}</td>
+                              <td className="py-2 text-right">
+                                ${typeof provider.total_cost_usd === 'number' ? provider.total_cost_usd.toFixed(2) : '0.00'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </CardContent>
+                  </Card>
+                )}
+              </section>
             )}
           </main>
         </div>

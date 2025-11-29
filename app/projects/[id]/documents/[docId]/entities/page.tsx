@@ -47,12 +47,25 @@ import {
   IterationCw,
   Info,
   Sparkles,
+  // Additional icons for Knowledge Area Domains
+  Building2,
+  Ruler,
+  Timer,
+  Wallet,
+  UserCog,
+  ShieldAlert,
+  MessageSquare,
+  Award,
+  Clock,
+  CheckCircle2,
+  AlertCircle,
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { getApiUrl } from "@/lib/api-url"
 import { toast } from "sonner"
 
 interface EntityCounts {
+  // Core entities (Legacy/PMBOK 7)
   stakeholders: number
   requirements: number
   risks: number
@@ -68,6 +81,7 @@ interface EntityCounts {
   deliverables: number
   scopeItems: number
   activities: number
+  // PMBOK 8 Performance Domain entities
   teamAgreements: number
   developmentApproaches: number
   projectIterations: number
@@ -78,6 +92,52 @@ interface EntityCounts {
   opportunities: number
   riskResponses: number
   performanceActuals: number
+  // PMBOK 8 Knowledge Area Domain entities (Tier 2)
+  // Governance Domain
+  governanceDecisions: number
+  approvalWorkflows: number
+  steeringCommittees: number
+  changeControlBoards: number
+  policyCompliance: number
+  // Scope Domain
+  scopeBaselines: number
+  wbsNodes: number
+  scopeChangeRequests: number
+  requirementsTraceability: number
+  scopeVerification: number
+  // Schedule Domain
+  scheduleBaselines: number
+  scheduleActivities: number
+  criticalPathActivities: number
+  scheduleVariances: number
+  scheduleForecasts: number
+  // Finance Domain
+  budgetBaselines: number
+  costActuals: number
+  costEstimates: number
+  fundingTranches: number
+  financialVariances: number
+  procurementCosts: number
+  // Resources Domain
+  resourceAssignments: number
+  resourcePool: number
+  capacityForecasts: number
+  utilizationRecords: number
+  resourceConflicts: number
+  onboardingOffboarding: number
+  // Risk Domain
+  riskAssessments: number
+  riskResponsePlans: number
+  riskTriggers: number
+  riskReviews: number
+  contingencyReserves: number
+  riskMetrics: number
+  // Stakeholders Ops Domain
+  engagementActions: number
+  communicationLogs: number
+  satisfactionSurveys: number
+  stakeholderIssues: number
+  relationshipHealth: number
 }
 
 interface EntityData {
@@ -85,7 +145,7 @@ interface EntityData {
 }
 
 const entityTypes = [
-  // Legacy entities (PMBOK 7)
+  // Core entities (Legacy/PMBOK 7)
   { key: 'stakeholders', label: 'Stakeholders', icon: Users, color: 'text-blue-500' },
   { key: 'requirements', label: 'Requirements', icon: Target, color: 'text-green-500' },
   { key: 'risks', label: 'Risks', icon: AlertTriangle, color: 'text-red-500' },
@@ -112,6 +172,52 @@ const entityTypes = [
   { key: 'opportunities', label: 'Opportunities', icon: Rocket, color: 'text-yellow-600' },
   { key: 'riskResponses', label: 'Risk Responses', icon: Zap, color: 'text-red-600' },
   { key: 'performanceActuals', label: 'Performance Actuals', icon: Activity, color: 'text-pink-600' },
+  // PMBOK 8 Knowledge Area Domain entities (Tier 2)
+  // Governance Domain
+  { key: 'governanceDecisions', label: 'Governance Decisions', icon: Building2, color: 'text-amber-600' },
+  { key: 'approvalWorkflows', label: 'Approval Workflows', icon: CheckCircle2, color: 'text-amber-500' },
+  { key: 'steeringCommittees', label: 'Steering Committees', icon: Users2, color: 'text-amber-600' },
+  { key: 'changeControlBoards', label: 'Change Control Boards', icon: Shield, color: 'text-amber-500' },
+  { key: 'policyCompliance', label: 'Policy Compliance', icon: Award, color: 'text-amber-600' },
+  // Scope Domain
+  { key: 'scopeBaselines', label: 'Scope Baselines', icon: Ruler, color: 'text-violet-600' },
+  { key: 'wbsNodes', label: 'WBS Nodes', icon: GitBranch, color: 'text-violet-500' },
+  { key: 'scopeChangeRequests', label: 'Scope Change Requests', icon: FileText, color: 'text-violet-600' },
+  { key: 'requirementsTraceability', label: 'Requirements Traceability', icon: ListOrdered, color: 'text-violet-500' },
+  { key: 'scopeVerification', label: 'Scope Verification', icon: CheckCircle, color: 'text-violet-600' },
+  // Schedule Domain
+  { key: 'scheduleBaselines', label: 'Schedule Baselines', icon: Timer, color: 'text-green-600' },
+  { key: 'scheduleActivities', label: 'Schedule Activities', icon: Calendar, color: 'text-green-500' },
+  { key: 'criticalPathActivities', label: 'Critical Path', icon: AlertCircle, color: 'text-green-600' },
+  { key: 'scheduleVariances', label: 'Schedule Variances', icon: TrendingUp, color: 'text-green-500' },
+  { key: 'scheduleForecasts', label: 'Schedule Forecasts', icon: Clock, color: 'text-green-600' },
+  // Finance Domain
+  { key: 'budgetBaselines', label: 'Budget Baselines', icon: Wallet, color: 'text-emerald-600' },
+  { key: 'costActuals', label: 'Cost Actuals', icon: DollarSign, color: 'text-emerald-500' },
+  { key: 'costEstimates', label: 'Cost Estimates', icon: BarChart3, color: 'text-emerald-600' },
+  { key: 'fundingTranches', label: 'Funding Tranches', icon: Layers, color: 'text-emerald-500' },
+  { key: 'financialVariances', label: 'Financial Variances', icon: TrendingUp, color: 'text-emerald-600' },
+  { key: 'procurementCosts', label: 'Procurement Costs', icon: DollarSign, color: 'text-emerald-500' },
+  // Resources Domain
+  { key: 'resourceAssignments', label: 'Resource Assignments', icon: UserCog, color: 'text-teal-600' },
+  { key: 'resourcePool', label: 'Resource Pool', icon: Users, color: 'text-teal-500' },
+  { key: 'capacityForecasts', label: 'Capacity Forecasts', icon: TrendingUp, color: 'text-teal-600' },
+  { key: 'utilizationRecords', label: 'Utilization Records', icon: BarChart3, color: 'text-teal-500' },
+  { key: 'resourceConflicts', label: 'Resource Conflicts', icon: AlertTriangle, color: 'text-teal-600' },
+  { key: 'onboardingOffboarding', label: 'Onboarding/Offboarding', icon: Users2, color: 'text-teal-500' },
+  // Risk Domain
+  { key: 'riskAssessments', label: 'Risk Assessments', icon: ShieldAlert, color: 'text-rose-600' },
+  { key: 'riskResponsePlans', label: 'Risk Response Plans', icon: Shield, color: 'text-rose-500' },
+  { key: 'riskTriggers', label: 'Risk Triggers', icon: Zap, color: 'text-rose-600' },
+  { key: 'riskReviews', label: 'Risk Reviews', icon: FileText, color: 'text-rose-500' },
+  { key: 'contingencyReserves', label: 'Contingency Reserves', icon: DollarSign, color: 'text-rose-600' },
+  { key: 'riskMetrics', label: 'Risk Metrics', icon: BarChart3, color: 'text-rose-500' },
+  // Stakeholders Ops Domain
+  { key: 'engagementActions', label: 'Engagement Actions', icon: MessageSquare, color: 'text-sky-600' },
+  { key: 'communicationLogs', label: 'Communication Logs', icon: FileText, color: 'text-sky-500' },
+  { key: 'satisfactionSurveys', label: 'Satisfaction Surveys', icon: Award, color: 'text-sky-600' },
+  { key: 'stakeholderIssues', label: 'Stakeholder Issues', icon: AlertCircle, color: 'text-sky-500' },
+  { key: 'relationshipHealth', label: 'Relationship Health', icon: Activity, color: 'text-sky-600' },
 ]
 
 export default function DocumentEntitiesPage() {

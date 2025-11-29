@@ -76,6 +76,7 @@ import {
   Lightbulb,
   Database,
   Shield,
+  ExternalLink,
 } from "@/components/ui/icons-shim"
 import { Users2 } from "lucide-react"
 import {
@@ -2548,7 +2549,20 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                       </div>
                       <DialogFooter className="flex flex-col sm:flex-row gap-2">
                         <div className="flex-1">
-                          {!(project as Project & { program_id?: string })?.program_id && (
+                          {(project as Project & { program_id?: string })?.program_id ? (
+                            <Button 
+                              type="button" 
+                              variant="outline" 
+                              onClick={() => {
+                                setEditProjectDialogOpen(false)
+                                router.push(`/programs/${(project as Project & { program_id?: string }).program_id}`)
+                              }}
+                              className="w-full sm:w-auto"
+                            >
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Go to Program
+                            </Button>
+                          ) : (
                             <Button 
                               type="button" 
                               variant="outline" 

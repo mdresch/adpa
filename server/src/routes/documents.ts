@@ -422,7 +422,7 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { projectId } = req.params
-    const { page = 1, limit = 10, status, search } = req.query
+    const { page = 1, limit = 10, status, search, template, framework, grade } = req.query
 
     // Check if user has access to project (including onboarding/guest-created projects)
     // Allow access if: owner, creator, team member, OR project created by guest (for admins/users to view onboarding assessments)
@@ -473,26 +473,91 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
       params.push(`%${search}%`)
     }
 
+    // Template filter - match by template name
+    if (template) {
+      paramCount++
+      query += ` AND t.name = $${paramCount}`
+      params.push(template)
+    }
+
+    // Framework filter - match by template framework
+    if (framework) {
+      paramCount++
+      query += ` AND t.framework = $${paramCount}`
+      params.push(framework)
+    }
+
+    // Grade filter - filter by quality audit grade based on quality_score
+    // Grades: A (90-100), B (80-89), C (70-79), D (60-69), F (0-59), not_audited (NULL)
+    if (grade) {
+      if (grade === 'not_audited') {
+        query += ` AND d.quality_score IS NULL`
+      } else if (grade === 'A') {
+        query += ` AND d.quality_score >= 90`
+      } else if (grade === 'B') {
+        query += ` AND d.quality_score >= 80 AND d.quality_score < 90`
+      } else if (grade === 'C') {
+        query += ` AND d.quality_score >= 70 AND d.quality_score < 80`
+      } else if (grade === 'D') {
+        query += ` AND d.quality_score >= 60 AND d.quality_score < 70`
+      } else if (grade === 'F') {
+        query += ` AND d.quality_score < 60 AND d.quality_score IS NOT NULL`
+      }
+    }
+
     query += ` ORDER BY d.updated_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
     params.push(limit, offset)
 
     const result = await pool.query(query, params)
 
     // Get total count (must match WHERE conditions of main query)
-    let countQuery = "SELECT COUNT(*) FROM documents WHERE project_id = $1 AND deleted_at IS NULL AND parent_document_id IS NULL"
-    const countParams = [projectId]
+    let countQuery = `
+      SELECT COUNT(*) 
+      FROM documents d
+      LEFT JOIN templates t ON d.template_id = t.id
+      WHERE d.project_id = $1 AND d.deleted_at IS NULL AND d.parent_document_id IS NULL
+    `
+    const countParams: any[] = [projectId]
     let countParamCount = 1
 
     if (status) {
       countParamCount++
-      countQuery += ` AND status = $${countParamCount}`
+      countQuery += ` AND d.status = $${countParamCount}`
       countParams.push(status as string)
     }
 
     if (search) {
       countParamCount++
-      countQuery += ` AND name ILIKE $${countParamCount}`
+      countQuery += ` AND d.name ILIKE $${countParamCount}`
       countParams.push(`%${search}%`)
+    }
+
+    if (template) {
+      countParamCount++
+      countQuery += ` AND t.name = $${countParamCount}`
+      countParams.push(template as string)
+    }
+
+    if (framework) {
+      countParamCount++
+      countQuery += ` AND t.framework = $${countParamCount}`
+      countParams.push(framework as string)
+    }
+
+    if (grade) {
+      if (grade === 'not_audited') {
+        countQuery += ` AND d.quality_score IS NULL`
+      } else if (grade === 'A') {
+        countQuery += ` AND d.quality_score >= 90`
+      } else if (grade === 'B') {
+        countQuery += ` AND d.quality_score >= 80 AND d.quality_score < 90`
+      } else if (grade === 'C') {
+        countQuery += ` AND d.quality_score >= 70 AND d.quality_score < 80`
+      } else if (grade === 'D') {
+        countQuery += ` AND d.quality_score >= 60 AND d.quality_score < 70`
+      } else if (grade === 'F') {
+        countQuery += ` AND d.quality_score < 60 AND d.quality_score IS NOT NULL`
+      }
     }
 
     const countResult = await pool.query(countQuery, countParams)

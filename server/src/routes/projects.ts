@@ -618,9 +618,9 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" })
     }
 
-    // Verify risk belongs to project and get current risk_level and severity for validation
+    // Verify risk belongs to project and get current risk_level for validation
     const riskCheck = await pool.query(
-      'SELECT id, risk_level, severity FROM risks WHERE id = $1 AND project_id = $2',
+      'SELECT id, risk_level, probability, impact FROM risks WHERE id = $1 AND project_id = $2',
       [riskId, projectId]
     )
 
@@ -630,42 +630,6 @@ router.put("/:projectId/risks/:riskId", authenticateToken, async (req, res) => {
     
     const currentRisk = riskCheck.rows[0]
     const currentRiskLevel = currentRisk.risk_level
-    const currentSeverity = currentRisk.severity
-    
-    // CRITICAL: Check if existing severity has invalid value (like 'program' which is a risk_level value)
-    if (currentSeverity && !updates.hasOwnProperty('severity')) {
-      const normalizedSeverity = String(currentSeverity).trim().toLowerCase()
-      const validSeverities = ['critical', 'high', 'medium', 'low']
-      const riskLevelValues = ['project', 'program', 'portfolio', 'systemic']
-      
-      if (riskLevelValues.includes(normalizedSeverity)) {
-        log.error(`CRITICAL: Existing severity value "${currentSeverity}" is a risk_level value! Recalculating from probability/impact.`, {
-          currentSeverity,
-          riskId
-        })
-        // Recalculate severity from probability/impact
-        const probImpactCheck = await pool.query(
-          'SELECT probability, impact FROM risks WHERE id = $1',
-          [riskId]
-        )
-        if (probImpactCheck.rows.length > 0) {
-          const prob = probImpactCheck.rows[0].probability
-          const imp = probImpactCheck.rows[0].impact
-          const probScore = prob === 'very_high' ? 90 : prob === 'high' ? 70 : prob === 'medium' ? 50 : prob === 'low' ? 30 : 10
-          const impactScore = imp === 'very_high' ? 5 : imp === 'high' ? 4 : imp === 'medium' ? 3 : imp === 'low' ? 2 : 1
-          const score = (probScore / 100) * impactScore
-          updates.severity = score >= 4 ? 'critical' : score >= 3 ? 'high' : score >= 2 ? 'medium' : 'low'
-          log.info(`Recalculated severity from "${currentSeverity}" to "${updates.severity}"`)
-        }
-      } else if (!validSeverities.includes(normalizedSeverity)) {
-        log.warn(`Current severity "${currentSeverity}" may be invalid, will be recalculated`)
-        // Trigger recalculation
-        if (!updates.probability && !updates.impact) {
-          updates.probability = probImpactCheck.rows[0]?.probability
-          updates.impact = probImpactCheck.rows[0]?.impact
-        }
-      }
-    }
     
     // If risk_level is not being updated, ensure current value will be normalized by trigger
     if (!updates.hasOwnProperty('risk_level') && currentRiskLevel) {

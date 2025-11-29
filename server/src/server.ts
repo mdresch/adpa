@@ -45,6 +45,7 @@ import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
 import costManagementRoutes from "./routes/costManagement"
 import tasksRoutes from "./routes/tasks"
+import resourceCapacityRoutes from "./routes/resourceCapacityRoutes"
 // import ecsAiRoutes from "./routes/ecs-ai"
 // import quantumStabilityRoutes from "./routes/quantum-stability"
 // import speedOfLightRoutes from "./routes/speed-of-light"
@@ -237,6 +238,7 @@ app.use("/api/templates", templateRoutes)
 app.use("/api/template-analytics", templateAnalyticsRoutes)
 app.use("/api/cost-management", costManagementRoutes)
 app.use("/api/tasks", tasksRoutes)
+app.use("/api/resource-capacity", resourceCapacityRoutes)
 app.use("/api/template-stats", templateStatsRoutes)
 app.use("/api/document-templates", documentTemplateRoutes)
 app.use("/api/document-generator", documentGeneratorRoutes)
@@ -453,6 +455,22 @@ async function startServer() {
         console.log("✅ document_summaries table ready (auto-migration)")
       } catch (migrationError) {
         console.warn("⚠️  Could not create document_summaries table:", migrationError)
+      }
+
+      // Auto-migrate is_curated column on risks table
+      try {
+        await pool.query(`
+          ALTER TABLE risks ADD COLUMN IF NOT EXISTS is_curated BOOLEAN DEFAULT FALSE
+        `)
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_risks_is_curated ON risks(is_curated)
+        `)
+        console.log("✅ risks.is_curated column ready (auto-migration)")
+      } catch (migrationError: any) {
+        // Ignore if column already exists
+        if (!migrationError.message?.includes('already exists')) {
+          console.warn("⚠️  Could not add is_curated column:", migrationError.message)
+        }
       }
     } catch (dbError) {
       console.warn(

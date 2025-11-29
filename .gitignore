@@ -109,7 +109,7 @@ server/src/services/ecsAIService.ts
 server/src/routes/azure-ai-foundry.ts
 
 # Frontend experimental pages
-app/ai-analytics/
+# app/ai-analytics/
 app/ecs-ai/
 # app/process-flow/  # NOW ENABLED FOR PRODUCTION
 
@@ -127,9 +127,11 @@ types/
 # BUT: Allow component-specific types directories
 !app/*/types/
 !app/*/*/types/
+# AND: Allow root types directory for PMBOK domain types
+!types/pmbok.ts
 
 # AI provider details pages (experimental)
-app/ai-providers/[id]/
+# app/ai-providers/[id]/
 
 # Backups and large files
 /backups/

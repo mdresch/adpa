@@ -8,11 +8,14 @@ import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { toast } from "sonner"
-import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered } from "@/components/ui/icons-shim"
+import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, Users, FileText, Target, AlertTriangle, Lightbulb, Calendar, DollarSign, Archive, ListOrdered, ChevronDown, ChevronRight, Layers, Gauge, Clock, Play, CheckCircle2, Building2, Ruler, Timer, Wallet, UserCog, ShieldAlert, MessageSquare, Award } from "@/components/ui/icons-shim"
 import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield, Activity } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
+import { DOMAIN_KPI_KEYS, type DomainKpiDefinition, type PmbokDomain } from "@/types/pmbok"
 
 interface ProjectDataExtractionProps {
   projectId: string
@@ -20,7 +23,7 @@ interface ProjectDataExtractionProps {
 }
 
 interface EntityCounts {
-  // Legacy entities (PMBOK 7 and earlier)
+  // Core entities (Legacy/PMBOK 7)
   stakeholders: number
   requirements: number
   risks: number
@@ -47,6 +50,52 @@ interface EntityCounts {
   opportunities: number
   riskResponses: number
   performanceActuals: number
+  // PMBOK 8 Knowledge Area Domain entities (Tier 2)
+  // Governance Domain
+  governanceDecisions: number
+  approvalWorkflows: number
+  steeringCommittees: number
+  changeControlBoards: number
+  policyCompliance: number
+  // Scope Domain
+  scopeBaselines: number
+  wbsNodes: number
+  scopeChangeRequests: number
+  requirementsTraceability: number
+  scopeVerification: number
+  // Schedule Domain
+  scheduleBaselines: number
+  scheduleActivities: number
+  criticalPathActivities: number
+  scheduleVariances: number
+  scheduleForecasts: number
+  // Finance Domain
+  budgetBaselines: number
+  costActuals: number
+  costEstimates: number
+  fundingTranches: number
+  financialVariances: number
+  procurementCosts: number
+  // Resources Domain
+  resourceAssignments: number
+  resourcePool: number
+  capacityForecasts: number
+  utilizationRecords: number
+  resourceConflicts: number
+  onboardingOffboarding: number
+  // Risk Domain
+  riskAssessments: number
+  riskResponsePlans: number
+  riskTriggers: number
+  riskReviews: number
+  contingencyReserves: number
+  riskMetrics: number
+  // Stakeholders Ops Domain
+  engagementActions: number
+  communicationLogs: number
+  satisfactionSurveys: number
+  stakeholderIssues: number
+  relationshipHealth: number
 }
 
 export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtractionProps) {
@@ -79,6 +128,14 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
   const [entityDetails, setEntityDetails] = useState<any[]>([])
   const [loadingEntityDetails, setLoadingEntityDetails] = useState(false)
+  
+  // KPI Source Traceability Dialog
+  const [showKpiSourceDialog, setShowKpiSourceDialog] = useState(false)
+  const [selectedKpi, setSelectedKpi] = useState<{
+    kpi: DomainKpiDefinition
+    mapping: { entities: string[]; calculationHint: string }
+    sourceEntityCounts: Array<{ key: string; label: string; count: number; color: string }>
+  } | null>(null)
 
   useEffect(() => {
     void fetchEntityCounts()
@@ -601,35 +658,589 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
 
   const hasData = getTotalEntities() > 0
 
-  const entityTypes = [
-    // Legacy entities (PMBOK 7 and earlier)
-    { key: 'stakeholders', label: 'Stakeholders', icon: Users, color: 'text-blue-500' },
-    { key: 'requirements', label: 'Requirements', icon: FileText, color: 'text-green-500' },
-    { key: 'risks', label: 'Risks', icon: AlertTriangle, color: 'text-red-500' },
-    { key: 'milestones', label: 'Milestones', icon: Target, color: 'text-purple-500' },
-    { key: 'constraints', label: 'Constraints', icon: AlertCircle, color: 'text-orange-500' },
-    { key: 'successCriteria', label: 'Success Criteria', icon: CheckCircle, color: 'text-teal-500' },
-    { key: 'bestPractices', label: 'Best Practices', icon: Lightbulb, color: 'text-yellow-500' },
-    { key: 'phases', label: 'Phases', icon: Calendar, color: 'text-indigo-500' },
-    { key: 'resources', label: 'Resources', icon: DollarSign, color: 'text-emerald-500' },
-    { key: 'technologies', label: 'Technologies', icon: Database, color: 'text-gray-500' },
-    { key: 'qualityStandards', label: 'Quality Standards', icon: CheckCircle, color: 'text-cyan-500' },
-    { key: 'complianceSecurity', label: 'Compliance & Security', icon: Shield, color: 'text-amber-500' },
-    { key: 'deliverables', label: 'Deliverables', icon: Archive, color: 'text-pink-500' },
-    { key: 'scopeItems', label: 'Scope Items', icon: ListOrdered, color: 'text-violet-500' },
-    { key: 'activities', label: 'Activities', icon: Target, color: 'text-lime-500' },
+  // =========================================================================
+  // PMBOK 8 Domain Configuration - Two-Tier Model
+  // =========================================================================
+  
+  // Entity type definitions with icons
+  const entityTypeConfig: Record<string, { label: string; icon: any; color: string }> = {
+    // Core entities (Legacy/PMBOK 7)
+    stakeholders: { label: 'Stakeholders', icon: Users, color: 'text-blue-500' },
+    requirements: { label: 'Requirements', icon: FileText, color: 'text-green-500' },
+    risks: { label: 'Risks', icon: AlertTriangle, color: 'text-red-500' },
+    milestones: { label: 'Milestones', icon: Target, color: 'text-purple-500' },
+    constraints: { label: 'Constraints', icon: AlertCircle, color: 'text-orange-500' },
+    successCriteria: { label: 'Success Criteria', icon: CheckCircle, color: 'text-teal-500' },
+    bestPractices: { label: 'Best Practices', icon: Lightbulb, color: 'text-yellow-500' },
+    phases: { label: 'Phases', icon: Calendar, color: 'text-indigo-500' },
+    resources: { label: 'Resources', icon: DollarSign, color: 'text-emerald-500' },
+    technologies: { label: 'Technologies', icon: Database, color: 'text-gray-500' },
+    qualityStandards: { label: 'Quality Standards', icon: CheckCircle, color: 'text-cyan-500' },
+    complianceSecurity: { label: 'Compliance & Security', icon: Shield, color: 'text-amber-500' },
+    deliverables: { label: 'Deliverables', icon: Archive, color: 'text-pink-500' },
+    scopeItems: { label: 'Scope Items', icon: ListOrdered, color: 'text-violet-500' },
+    activities: { label: 'Activities', icon: Target, color: 'text-lime-500' },
     // PMBOK 8 Performance Domain entities
-    { key: 'teamAgreements', label: 'Team Agreements', icon: Users2, color: 'text-blue-600' },
-    { key: 'developmentApproaches', label: 'Development Approach', icon: Code, color: 'text-orange-500' },
-    { key: 'projectIterations', label: 'Project Iterations', icon: GitBranch, color: 'text-purple-600' },
-    { key: 'workItems', label: 'Work Items', icon: Briefcase, color: 'text-slate-600' },
-    { key: 'capacityPlans', label: 'Capacity Plans', icon: TrendingUp, color: 'text-green-600' },
-    { key: 'performanceMeasurements', label: 'Performance Measurements', icon: BarChart3, color: 'text-indigo-600' },
-    { key: 'earnedValueMetrics', label: 'Earned Value Metrics', icon: BarChart3, color: 'text-cyan-600' },
-    { key: 'opportunities', label: 'Opportunities', icon: Zap, color: 'text-yellow-600' },
-    { key: 'riskResponses', label: 'Risk Responses', icon: Shield, color: 'text-red-600' },
-    { key: 'performanceActuals', label: 'Performance Actuals', icon: Activity, color: 'text-emerald-600' }
+    teamAgreements: { label: 'Team Agreements', icon: Users2, color: 'text-blue-600' },
+    developmentApproaches: { label: 'Development Approach', icon: Code, color: 'text-orange-500' },
+    projectIterations: { label: 'Project Iterations', icon: GitBranch, color: 'text-purple-600' },
+    workItems: { label: 'Work Items', icon: Briefcase, color: 'text-slate-600' },
+    capacityPlans: { label: 'Capacity Plans', icon: TrendingUp, color: 'text-green-600' },
+    performanceMeasurements: { label: 'Performance Measurements', icon: BarChart3, color: 'text-indigo-600' },
+    earnedValueMetrics: { label: 'Earned Value Metrics', icon: BarChart3, color: 'text-cyan-600' },
+    opportunities: { label: 'Opportunities', icon: Zap, color: 'text-yellow-600' },
+    riskResponses: { label: 'Risk Responses', icon: Shield, color: 'text-red-600' },
+    performanceActuals: { label: 'Performance Actuals', icon: Activity, color: 'text-emerald-600' },
+    // PMBOK 8 Knowledge Area Domain entities (Tier 2)
+    // Governance Domain
+    governanceDecisions: { label: 'Governance Decisions', icon: Building2, color: 'text-amber-600' },
+    approvalWorkflows: { label: 'Approval Workflows', icon: CheckCircle2, color: 'text-amber-500' },
+    steeringCommittees: { label: 'Steering Committees', icon: Users2, color: 'text-amber-600' },
+    changeControlBoards: { label: 'Change Control Boards', icon: Shield, color: 'text-amber-500' },
+    policyCompliance: { label: 'Policy Compliance', icon: Award, color: 'text-amber-600' },
+    // Scope Domain
+    scopeBaselines: { label: 'Scope Baselines', icon: Ruler, color: 'text-violet-600' },
+    wbsNodes: { label: 'WBS Nodes', icon: GitBranch, color: 'text-violet-500' },
+    scopeChangeRequests: { label: 'Scope Change Requests', icon: FileText, color: 'text-violet-600' },
+    requirementsTraceability: { label: 'Requirements Traceability', icon: ListOrdered, color: 'text-violet-500' },
+    scopeVerification: { label: 'Scope Verification', icon: CheckCircle, color: 'text-violet-600' },
+    // Schedule Domain
+    scheduleBaselines: { label: 'Schedule Baselines', icon: Timer, color: 'text-green-600' },
+    scheduleActivities: { label: 'Schedule Activities', icon: Calendar, color: 'text-green-500' },
+    criticalPathActivities: { label: 'Critical Path', icon: AlertCircle, color: 'text-green-600' },
+    scheduleVariances: { label: 'Schedule Variances', icon: TrendingUp, color: 'text-green-500' },
+    scheduleForecasts: { label: 'Schedule Forecasts', icon: Clock, color: 'text-green-600' },
+    // Finance Domain
+    budgetBaselines: { label: 'Budget Baselines', icon: Wallet, color: 'text-emerald-600' },
+    costActuals: { label: 'Cost Actuals', icon: DollarSign, color: 'text-emerald-500' },
+    costEstimates: { label: 'Cost Estimates', icon: BarChart3, color: 'text-emerald-600' },
+    fundingTranches: { label: 'Funding Tranches', icon: Layers, color: 'text-emerald-500' },
+    financialVariances: { label: 'Financial Variances', icon: TrendingUp, color: 'text-emerald-600' },
+    procurementCosts: { label: 'Procurement Costs', icon: DollarSign, color: 'text-emerald-500' },
+    // Resources Domain
+    resourceAssignments: { label: 'Resource Assignments', icon: UserCog, color: 'text-teal-600' },
+    resourcePool: { label: 'Resource Pool', icon: Users, color: 'text-teal-500' },
+    capacityForecasts: { label: 'Capacity Forecasts', icon: TrendingUp, color: 'text-teal-600' },
+    utilizationRecords: { label: 'Utilization Records', icon: BarChart3, color: 'text-teal-500' },
+    resourceConflicts: { label: 'Resource Conflicts', icon: AlertTriangle, color: 'text-teal-600' },
+    onboardingOffboarding: { label: 'Onboarding/Offboarding', icon: Users2, color: 'text-teal-500' },
+    // Risk Domain
+    riskAssessments: { label: 'Risk Assessments', icon: ShieldAlert, color: 'text-rose-600' },
+    riskResponsePlans: { label: 'Risk Response Plans', icon: Shield, color: 'text-rose-500' },
+    riskTriggers: { label: 'Risk Triggers', icon: Zap, color: 'text-rose-600' },
+    riskReviews: { label: 'Risk Reviews', icon: FileText, color: 'text-rose-500' },
+    contingencyReserves: { label: 'Contingency Reserves', icon: DollarSign, color: 'text-rose-600' },
+    riskMetrics: { label: 'Risk Metrics', icon: BarChart3, color: 'text-rose-500' },
+    // Stakeholders Ops Domain
+    engagementActions: { label: 'Engagement Actions', icon: MessageSquare, color: 'text-sky-600' },
+    communicationLogs: { label: 'Communication Logs', icon: FileText, color: 'text-sky-500' },
+    satisfactionSurveys: { label: 'Satisfaction Surveys', icon: Award, color: 'text-sky-600' },
+    stakeholderIssues: { label: 'Stakeholder Issues', icon: AlertCircle, color: 'text-sky-500' },
+    relationshipHealth: { label: 'Relationship Health', icon: Activity, color: 'text-sky-600' },
+  }
+  
+  // Performance Domains (Tier 1) - PMBOK 8
+  const performanceDomains: Array<{
+    key: string
+    pmbokDomain: PmbokDomain
+    name: string
+    description: string
+    icon: any
+    color: string
+    entities: string[]
+  }> = [
+    {
+      key: 'stakeholders_domain',
+      pmbokDomain: 'stakeholders',
+      name: 'Stakeholders',
+      description: 'Stakeholder identification, engagement, and communication',
+      icon: Users,
+      color: 'bg-blue-500',
+      entities: ['stakeholders']
+    },
+    {
+      key: 'team_domain',
+      pmbokDomain: 'team',
+      name: 'Team',
+      description: 'Team composition, skills, dynamics, and agreements',
+      icon: Users2,
+      color: 'bg-indigo-500',
+      entities: ['teamAgreements', 'resources']
+    },
+    {
+      key: 'development_approach_domain',
+      pmbokDomain: 'development_approach',
+      name: 'Development Approach',
+      description: 'Methodology, iterations, and quality gates',
+      icon: Code,
+      color: 'bg-orange-500',
+      entities: ['developmentApproaches', 'projectIterations', 'phases']
+    },
+    {
+      key: 'planning_domain',
+      pmbokDomain: 'planning',
+      name: 'Planning',
+      description: 'Milestones, activities, requirements, and constraints',
+      icon: Target,
+      color: 'bg-purple-500',
+      entities: ['milestones', 'activities', 'requirements', 'constraints', 'scopeItems']
+    },
+    {
+      key: 'project_work_domain',
+      pmbokDomain: 'project_work',
+      name: 'Project Work',
+      description: 'Work items, capacity plans, and execution tracking',
+      icon: Briefcase,
+      color: 'bg-slate-500',
+      entities: ['workItems', 'capacityPlans']
+    },
+    {
+      key: 'delivery_domain',
+      pmbokDomain: 'delivery',
+      name: 'Delivery',
+      description: 'Deliverables, quality standards, and success criteria',
+      icon: Archive,
+      color: 'bg-pink-500',
+      entities: ['deliverables', 'qualityStandards', 'successCriteria']
+    },
+    {
+      key: 'measurement_domain',
+      pmbokDomain: 'measurement',
+      name: 'Measurement',
+      description: 'Performance measurements and earned value metrics',
+      icon: BarChart3,
+      color: 'bg-cyan-500',
+      entities: ['performanceMeasurements', 'earnedValueMetrics', 'performanceActuals']
+    },
+    {
+      key: 'uncertainty_domain',
+      pmbokDomain: 'uncertainty',
+      name: 'Uncertainty',
+      description: 'Risks, opportunities, and risk responses',
+      icon: AlertTriangle,
+      color: 'bg-red-500',
+      entities: ['risks', 'opportunities', 'riskResponses']
+    }
   ]
+  
+  // Knowledge Domains (Tier 2) - Supplementary
+  // Now includes all Knowledge Area Domain entities from the 38 new database tables
+  const knowledgeDomains: Array<{
+    key: string
+    pmbokDomain: PmbokDomain
+    name: string
+    description: string
+    icon: any
+    color: string
+    entities: string[]
+  }> = [
+    {
+      key: 'governance_domain',
+      pmbokDomain: 'governance',
+      name: 'Governance',
+      description: 'Decision-making, approvals, steering committees, and compliance',
+      icon: Building2,
+      color: 'bg-amber-600',
+      entities: ['governanceDecisions', 'approvalWorkflows', 'steeringCommittees', 'changeControlBoards', 'policyCompliance', 'complianceSecurity']
+    },
+    {
+      key: 'scope_domain',
+      pmbokDomain: 'scope',
+      name: 'Scope',
+      description: 'Scope baseline, WBS, change requests, and requirements traceability',
+      icon: Ruler,
+      color: 'bg-violet-500',
+      entities: ['scopeBaselines', 'wbsNodes', 'scopeChangeRequests', 'requirementsTraceability', 'scopeVerification', 'scopeItems', 'requirements', 'deliverables']
+    },
+    {
+      key: 'schedule_domain',
+      pmbokDomain: 'schedule',
+      name: 'Schedule',
+      description: 'Schedule baseline, critical path, variances, and forecasts',
+      icon: Timer,
+      color: 'bg-green-600',
+      entities: ['scheduleBaselines', 'scheduleActivities', 'criticalPathActivities', 'scheduleVariances', 'scheduleForecasts', 'milestones', 'activities', 'phases']
+    },
+    {
+      key: 'finance_domain',
+      pmbokDomain: 'finance',
+      name: 'Finance',
+      description: 'Budget baseline, cost tracking, funding, and procurement',
+      icon: Wallet,
+      color: 'bg-emerald-600',
+      entities: ['budgetBaselines', 'costActuals', 'costEstimates', 'fundingTranches', 'financialVariances', 'procurementCosts', 'earnedValueMetrics']
+    },
+    {
+      key: 'resources_domain',
+      pmbokDomain: 'resources',
+      name: 'Resources',
+      description: 'Resource allocation, capacity, utilization, and onboarding',
+      icon: UserCog,
+      color: 'bg-teal-500',
+      entities: ['resourceAssignments', 'resourcePool', 'capacityForecasts', 'utilizationRecords', 'resourceConflicts', 'onboardingOffboarding', 'resources', 'capacityPlans', 'teamAgreements']
+    },
+    {
+      key: 'risk_domain',
+      pmbokDomain: 'risk',
+      name: 'Risk',
+      description: 'Risk assessments, response plans, triggers, and reserves',
+      icon: ShieldAlert,
+      color: 'bg-rose-500',
+      entities: ['riskAssessments', 'riskResponsePlans', 'riskTriggers', 'riskReviews', 'contingencyReserves', 'riskMetrics', 'risks', 'riskResponses', 'opportunities']
+    },
+    {
+      key: 'stakeholders_ops_domain',
+      pmbokDomain: 'stakeholders_ops',
+      name: 'Stakeholders (Ops)',
+      description: 'Engagement actions, communications, surveys, and relationship health',
+      icon: MessageSquare,
+      color: 'bg-sky-500',
+      entities: ['engagementActions', 'communicationLogs', 'satisfactionSurveys', 'stakeholderIssues', 'relationshipHealth', 'stakeholders']
+    }
+  ]
+  
+  // Project Phases / Focus Areas
+  const projectPhases = [
+    {
+      key: 'initiating',
+      name: 'Initiating',
+      description: 'Project authorization and stakeholder identification',
+      icon: Play,
+      color: 'bg-green-500',
+      entities: ['stakeholders', 'risks', 'constraints']
+    },
+    {
+      key: 'planning',
+      name: 'Planning',
+      description: 'Scope, schedule, and resource planning',
+      icon: Target,
+      color: 'bg-blue-500',
+      entities: ['milestones', 'activities', 'requirements', 'scopeItems', 'resources', 'risks', 'deliverables', 'phases', 'developmentApproaches', 'projectIterations', 'capacityPlans']
+    },
+    {
+      key: 'executing',
+      name: 'Executing',
+      description: 'Work execution and team management',
+      icon: Activity,
+      color: 'bg-orange-500',
+      entities: ['workItems', 'teamAgreements', 'deliverables', 'qualityStandards']
+    },
+    {
+      key: 'monitoring_controlling',
+      name: 'Monitoring & Controlling',
+      description: 'Performance tracking and change control',
+      icon: Gauge,
+      color: 'bg-purple-500',
+      entities: ['performanceMeasurements', 'earnedValueMetrics', 'performanceActuals', 'riskResponses', 'successCriteria']
+    },
+    {
+      key: 'closing',
+      name: 'Closing',
+      description: 'Project completion and lessons learned',
+      icon: CheckCircle2,
+      color: 'bg-teal-500',
+      entities: ['deliverables', 'successCriteria', 'bestPractices']
+    }
+  ]
+  
+  // All entity types (flat list for backward compatibility)
+  const entityTypes = Object.entries(entityTypeConfig).map(([key, config]) => ({
+    key,
+    ...config
+  }))
+  
+  // KPI to Entity Mapping - defines which entities feed into each KPI
+  const kpiEntityMapping: Record<string, { entities: string[]; calculationHint: string }> = {
+    // Stakeholders Domain
+    'engagement_score': { 
+      entities: ['stakeholders'], 
+      calculationHint: 'Average of (interest + influence) / 2 for stakeholders with both values populated' 
+    },
+    'freshness': { 
+      entities: ['stakeholders'], 
+      calculationHint: 'Percentage of stakeholders updated within last 30 days' 
+    },
+    // Team Domain
+    'skills_coverage': { 
+      entities: ['teamAgreements', 'resources'], 
+      calculationHint: 'Required skills matched by team member competencies' 
+    },
+    'velocity_trend': { 
+      entities: ['projectIterations', 'workItems'], 
+      calculationHint: 'Slope of story points completed across last 3 iterations' 
+    },
+    // Development Approach Domain
+    'iteration_predictability': { 
+      entities: ['projectIterations', 'workItems'], 
+      calculationHint: 'Variance between planned vs actual completion per iteration' 
+    },
+    // Planning Domain
+    'dependency_coverage': { 
+      entities: ['milestones', 'activities'], 
+      calculationHint: 'Percentage of items with upstream/downstream dependencies defined' 
+    },
+    'planning_confidence': { 
+      entities: ['requirements', 'resources', 'risks', 'milestones'], 
+      calculationHint: 'Composite: scope clarity + resource readiness + risk mitigation' 
+    },
+    // Project Work Domain
+    'blocker_sla': { 
+      entities: ['workItems'], 
+      calculationHint: 'Average days to resolve blockers in work items' 
+    },
+    'utilization_alignment': { 
+      entities: ['capacityPlans', 'resources'], 
+      calculationHint: 'Variance between planned vs actual utilization' 
+    },
+    // Delivery Domain
+    'first_pass_acceptance': { 
+      entities: ['deliverables', 'qualityStandards'], 
+      calculationHint: 'Percentage of deliverables accepted without rework' 
+    },
+    'release_success_rate': { 
+      entities: ['deliverables'], 
+      calculationHint: 'Ratio of releases completed without rollback' 
+    },
+    // Measurement Domain
+    'kpi_on_track_ratio': { 
+      entities: ['successCriteria', 'performanceMeasurements'], 
+      calculationHint: 'Percentage of success criteria with on_track status' 
+    },
+    'spi': { 
+      entities: ['earnedValueMetrics', 'performanceActuals'], 
+      calculationHint: 'Earned Value / Planned Value from EVM data' 
+    },
+    // Uncertainty Domain
+    'risk_response_coverage': { 
+      entities: ['risks', 'riskResponses'], 
+      calculationHint: 'Percentage of medium+ risks with active response plans' 
+    },
+    'opportunity_conversion': { 
+      entities: ['opportunities'], 
+      calculationHint: 'Ratio of realized vs identified opportunities' 
+    },
+    // Governance Domain (uses new Knowledge Area tables)
+    'decision_cycle_time': { 
+      entities: ['governanceDecisions', 'approvalWorkflows', 'complianceSecurity'], 
+      calculationHint: 'Average days from decision request to approval' 
+    },
+    'escalation_rate': { 
+      entities: ['governanceDecisions', 'steeringCommittees', 'complianceSecurity'], 
+      calculationHint: 'Percentage of decisions escalated beyond initial authority' 
+    },
+    'governance_health_score': { 
+      entities: ['governanceDecisions', 'policyCompliance', 'changeControlBoards', 'complianceSecurity'], 
+      calculationHint: 'Composite of compliance status and decision velocity' 
+    },
+    'audit_findings_open': { 
+      entities: ['policyCompliance', 'complianceSecurity'], 
+      calculationHint: 'Count of critical audit findings open > 30 days' 
+    },
+    // Scope Domain (uses new Knowledge Area tables)
+    'scope_creep_index': { 
+      entities: ['scopeBaselines', 'scopeChangeRequests', 'scopeItems', 'requirements'], 
+      calculationHint: 'Unapproved scope additions relative to baseline' 
+    },
+    'requirements_coverage': { 
+      entities: ['requirementsTraceability', 'requirements', 'deliverables'], 
+      calculationHint: 'Percentage of requirements linked to deliverables' 
+    },
+    'wbs_completeness': { 
+      entities: ['wbsNodes', 'scopeItems', 'activities', 'resources'], 
+      calculationHint: 'WBS nodes with assigned resources and estimates' 
+    },
+    // Schedule Domain (uses new Knowledge Area tables)
+    'critical_path_float': { 
+      entities: ['criticalPathActivities', 'scheduleActivities', 'activities', 'milestones'], 
+      calculationHint: 'Average float on critical path activities' 
+    },
+    'milestone_hit_rate': { 
+      entities: ['scheduleBaselines', 'milestones'], 
+      calculationHint: 'Percentage of milestones completed on/before target' 
+    },
+    'schedule_variance_trend': { 
+      entities: ['scheduleVariances', 'scheduleForecasts', 'milestones', 'activities', 'performanceActuals'], 
+      calculationHint: 'Direction of schedule variance over periods' 
+    },
+    // Finance Domain (uses new Knowledge Area tables)
+    'cpi': { 
+      entities: ['budgetBaselines', 'costActuals', 'earnedValueMetrics'], 
+      calculationHint: 'Earned Value / Actual Cost ratio' 
+    },
+    'budget_utilization': { 
+      entities: ['budgetBaselines', 'costActuals', 'financialVariances', 'earnedValueMetrics', 'resources'], 
+      calculationHint: 'Budget consumed relative to timeline progress' 
+    },
+    'vac': { 
+      entities: ['budgetBaselines', 'costEstimates', 'earnedValueMetrics'], 
+      calculationHint: 'Budget at Completion minus Estimate at Completion' 
+    },
+    'funding_runway': { 
+      entities: ['fundingTranches', 'procurementCosts', 'earnedValueMetrics', 'resources'], 
+      calculationHint: 'Months of runway at current burn rate' 
+    },
+    // Resources Domain (uses new Knowledge Area tables)
+    'utilization_rate': { 
+      entities: ['utilizationRecords', 'resourceAssignments', 'resources', 'capacityPlans'], 
+      calculationHint: 'Actual hours / available hours ratio' 
+    },
+    'resource_conflict_rate': { 
+      entities: ['resourceConflicts', 'resourceAssignments', 'resources', 'capacityPlans'], 
+      calculationHint: 'Percentage of resources with overallocation' 
+    },
+    'skill_match_score': { 
+      entities: ['resourcePool', 'resourceAssignments', 'resources', 'teamAgreements'], 
+      calculationHint: 'Assignments where skill level meets requirement' 
+    },
+    'bench_rate': { 
+      entities: ['resourcePool', 'capacityForecasts', 'resources'], 
+      calculationHint: 'Percentage of available resources unassigned' 
+    },
+    // Risk Domain (uses new Knowledge Area tables)
+    'risk_exposure_index': { 
+      entities: ['riskAssessments', 'riskMetrics', 'risks'], 
+      calculationHint: 'Sum of probability × impact for all open risks' 
+    },
+    'response_plan_coverage': { 
+      entities: ['riskResponsePlans', 'riskResponses', 'risks'], 
+      calculationHint: 'Medium+ risks with active response plans' 
+    },
+    'risk_velocity': { 
+      entities: ['riskReviews', 'riskTriggers', 'risks'], 
+      calculationHint: 'Rate of new risks identified per period' 
+    },
+    'reserve_adequacy': { 
+      entities: ['contingencyReserves', 'riskMetrics', 'risks', 'earnedValueMetrics'], 
+      calculationHint: 'Ratio of reserves to current risk exposure' 
+    },
+    // Stakeholders Ops Domain (uses new Knowledge Area tables)
+    'communication_compliance': { 
+      entities: ['communicationLogs', 'engagementActions', 'stakeholders'], 
+      calculationHint: 'Actual vs planned communications ratio' 
+    },
+    'issue_resolution_time': { 
+      entities: ['stakeholderIssues', 'stakeholders'], 
+      calculationHint: 'Average days to resolve stakeholder issues' 
+    },
+    'satisfaction_trend': { 
+      entities: ['satisfactionSurveys', 'relationshipHealth', 'stakeholders'], 
+      calculationHint: 'NPS or satisfaction score trend' 
+    },
+    'engagement_action_completion': { 
+      entities: ['engagementActions', 'stakeholders'], 
+      calculationHint: 'Planned engagement actions completed' 
+    }
+  }
+  
+  // KPI Display Component - only shows KPIs with available source data
+  const renderKpiSection = (pmbokDomain: PmbokDomain, domainEntities: string[]) => {
+    const kpis = DOMAIN_KPI_KEYS[pmbokDomain] || []
+    if (kpis.length === 0) return null
+    
+    // Filter KPIs to only those with available entity data
+    const calculableKpis = kpis.filter(kpi => {
+      const mapping = kpiEntityMapping[kpi.key]
+      if (!mapping) return false
+      
+      // Check if we have data for at least one required entity
+      return mapping.entities.some(entityKey => {
+        const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
+        return count > 0
+      })
+    })
+    
+    if (calculableKpis.length === 0) {
+      return (
+        <div className="mt-3 pt-3 border-t border-dashed">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Gauge className="h-3.5 w-3.5" />
+            <span className="text-xs italic">
+              No KPIs available - extract more entity types to enable KPI calculations
+            </span>
+          </div>
+        </div>
+      )
+    }
+    
+    return (
+      <div className="mt-3 pt-3 border-t border-dashed">
+        <div className="flex items-center gap-2 mb-2">
+          <Gauge className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Domain KPIs ({calculableKpis.length} calculable)
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {calculableKpis.map((kpi) => {
+            const mapping = kpiEntityMapping[kpi.key]
+            const sourceEntities = mapping?.entities || []
+            const sourceEntityCounts = sourceEntities.map(e => ({
+              key: e,
+              label: entityTypeConfig[e]?.label || e,
+              count: entityCounts?.[e as keyof EntityCounts] || 0
+            })).filter(e => e.count > 0)
+            
+            const totalSourceCount = sourceEntityCounts.reduce((sum, e) => sum + e.count, 0)
+            
+            // Handle KPI click - open source traceability dialog
+            const handleKpiClick = () => {
+              setSelectedKpi({
+                kpi,
+                mapping: mapping!,
+                sourceEntityCounts
+              })
+              setShowKpiSourceDialog(true)
+            }
+            
+            return (
+              <div 
+                key={kpi.key} 
+                className="p-2 bg-muted/30 rounded-md border border-dashed hover:bg-muted/50 hover:border-primary cursor-pointer transition-all group"
+                onClick={handleKpiClick}
+                title={`Click to view source dependencies and calculations`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium text-foreground truncate flex items-center gap-1">
+                      {kpi.label}
+                      <ChevronRight className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                    <div className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
+                      {mapping?.calculationHint || kpi.description}
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 bg-slate-50 dark:bg-slate-900">
+                        📊 {totalSourceCount} source entities
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex-shrink-0">
+                    {kpi.targetDirection === 'higher_is_better' && (
+                      <Badge variant="outline" className="text-[10px] bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300 border-green-200">
+                        ↑ {kpi.targetValue !== undefined ? `${(kpi.targetValue * 100).toFixed(0)}%` : 'Higher'}
+                      </Badge>
+                    )}
+                    {kpi.targetDirection === 'lower_is_better' && (
+                      <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-200">
+                        ↓ {kpi.targetValue !== undefined ? (kpi.units === 'days' ? `${kpi.targetValue}d` : `${(kpi.targetValue * 100).toFixed(0)}%`) : 'Lower'}
+                      </Badge>
+                    )}
+                    {kpi.targetDirection === 'range' && (
+                      <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300 border-amber-200">
+                        {kpi.minValue !== undefined && kpi.maxValue !== undefined 
+                          ? `${(kpi.minValue * 100).toFixed(0)}-${(kpi.maxValue * 100).toFixed(0)}%` 
+                          : 'Range'}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
@@ -685,40 +1296,739 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                 Click on any entity type below to view details
               </p>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                {entityTypes.map(({ key, label, icon: Icon, color }) => {
-                  const count = entityCounts?.[key as keyof EntityCounts] || 0
-                  const isClickable = count > 0
-                  
-                  return (
-                  <div
-                    key={key}
-                      className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
-                        isClickable 
-                          ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm' 
-                          : 'opacity-50 cursor-not-allowed'
-                      }`}
-                      onClick={() => isClickable && fetchEntityDetails(key)}
-                      role={isClickable ? 'button' : undefined}
-                      tabIndex={isClickable ? 0 : undefined}
-                      onKeyDown={(e) => {
-                        if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
-                          e.preventDefault()
-                          fetchEntityDetails(key)
-                        }
-                      }}
-                  >
-                    <div className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${color}`} />
-                      <span className="text-sm font-medium">{label}</span>
+              {/* System for Value Delivery */}
+              {entityCounts && (
+                (entityCounts.successCriteria > 0 || entityCounts.deliverables > 0 || entityCounts.stakeholders > 0)
+              ) && (
+                <Card className="border-2 border-dashed border-emerald-500/30 bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <TrendingUp className="h-5 w-5 text-emerald-600" />
+                      System for Value Delivery
+                    </CardTitle>
+                    <CardDescription>
+                      Creating tangible and intangible value through strategic alignment
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    
+                    {/* Value Types - Tangible vs Intangible */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Tangible Value */}
+                      <div className="p-3 rounded-lg border-2 border-emerald-300 bg-white dark:bg-emerald-950/50">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 rounded bg-emerald-100 dark:bg-emerald-900">
+                            <Archive className="h-4 w-4 text-emerald-700 dark:text-emerald-300" />
+                          </div>
+                          <span className="font-semibold text-sm">Tangible Value</span>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          <div 
+                            className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                            onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
+                          >
+                            <span>📦 Deliverables</span>
+                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.deliverables || 0}</Badge>
+                          </div>
+                          <div 
+                            className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                            onClick={() => entityCounts?.earnedValueMetrics && entityCounts.earnedValueMetrics > 0 && fetchEntityDetails('earnedValueMetrics')}
+                          >
+                            <span>💰 Financial Metrics</span>
+                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.earnedValueMetrics || 0}</Badge>
+                          </div>
+                          <div 
+                            className="flex items-center justify-between p-1.5 bg-emerald-50 dark:bg-emerald-900/30 rounded cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                            onClick={() => entityCounts?.qualityStandards && entityCounts.qualityStandards > 0 && fetchEntityDetails('qualityStandards')}
+                          >
+                            <span>✅ Quality Standards</span>
+                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.qualityStandards || 0}</Badge>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      {/* Intangible Value */}
+                      <div className="p-3 rounded-lg border-2 border-purple-300 bg-white dark:bg-purple-950/50">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="p-1.5 rounded bg-purple-100 dark:bg-purple-900">
+                            <Sparkles className="h-4 w-4 text-purple-700 dark:text-purple-300" />
+                          </div>
+                          <span className="font-semibold text-sm">Intangible Value</span>
+                        </div>
+                        <div className="space-y-1.5 text-xs">
+                          <div 
+                            className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                            onClick={() => entityCounts?.stakeholders && entityCounts.stakeholders > 0 && fetchEntityDetails('stakeholders')}
+                          >
+                            <span>👥 Stakeholder Satisfaction</span>
+                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.stakeholders || 0}</Badge>
+                          </div>
+                          <div 
+                            className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                            onClick={() => entityCounts?.bestPractices && entityCounts.bestPractices > 0 && fetchEntityDetails('bestPractices')}
+                          >
+                            <span>💡 Knowledge & Learning</span>
+                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.bestPractices || 0}</Badge>
+                          </div>
+                          <div 
+                            className="flex items-center justify-between p-1.5 bg-purple-50 dark:bg-purple-900/30 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-900/50 transition-colors"
+                            onClick={() => entityCounts?.teamAgreements && entityCounts.teamAgreements > 0 && fetchEntityDetails('teamAgreements')}
+                          >
+                            <span>🤝 Team Capability</span>
+                            <Badge variant="secondary" className="text-[10px]">{entityCounts?.teamAgreements || 0}</Badge>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                      <Badge variant={isClickable ? "default" : "outline"}>
-                        {count}
+
+                    {/* Value Delivery Hierarchy */}
+                    <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Layers className="h-4 w-4 text-blue-600" />
+                        <span className="font-semibold text-sm">Value Delivery Hierarchy</span>
+                      </div>
+                      <div className="relative pl-4 border-l-2 border-blue-200 dark:border-blue-800 space-y-2">
+                        {/* Vision & Mission */}
+                        <div className="relative">
+                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-blue-600 flex items-center justify-center">
+                            <span className="text-white text-[8px] font-bold">V</span>
+                          </div>
+                          <div className="ml-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
+                            <div className="font-medium">Vision & Mission</div>
+                            <div className="text-muted-foreground">Strategic direction and purpose</div>
+                          </div>
+                        </div>
+                        
+                        {/* Organizational Strategy */}
+                        <div className="relative">
+                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-blue-500 flex items-center justify-center">
+                            <span className="text-white text-[8px] font-bold">S</span>
+                          </div>
+                          <div className="ml-2 p-2 bg-blue-50 dark:bg-blue-950/30 rounded text-xs">
+                            <div className="font-medium">Organizational Strategy & Objectives</div>
+                            <div className="text-muted-foreground">Business goals alignment</div>
+                          </div>
+                        </div>
+                        
+                        {/* Portfolio Management */}
+                        <div className="relative">
+                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center">
+                            <span className="text-white text-[8px] font-bold">P</span>
+                          </div>
+                          <div 
+                            className="ml-2 p-2 bg-indigo-50 dark:bg-indigo-950/30 rounded text-xs cursor-pointer hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                            onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
+                          >
+                            <div className="font-medium flex items-center justify-between">
+                              <span>Portfolio & Strategic Planning</span>
+                              <Badge variant="outline" className="text-[9px]">{entityCounts?.successCriteria || 0} criteria</Badge>
+                            </div>
+                            <div className="text-muted-foreground">Investment prioritization</div>
+                          </div>
+                        </div>
+                        
+                        {/* Program & Product Management */}
+                        <div className="relative">
+                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-violet-500 flex items-center justify-center">
+                            <span className="text-white text-[8px] font-bold">M</span>
+                          </div>
+                          <div 
+                            className="ml-2 p-2 bg-violet-50 dark:bg-violet-950/30 rounded text-xs cursor-pointer hover:bg-violet-100 dark:hover:bg-violet-900/50 transition-colors"
+                            onClick={() => entityCounts?.phases && entityCounts.phases > 0 && fetchEntityDetails('phases')}
+                          >
+                            <div className="font-medium flex items-center justify-between">
+                              <span>Programs, Products & Operations</span>
+                              <Badge variant="outline" className="text-[9px]">{entityCounts?.phases || 0} phases</Badge>
+                            </div>
+                            <div className="text-muted-foreground">Coordinated value streams</div>
+                          </div>
+                        </div>
+                        
+                        {/* Project Execution */}
+                        <div className="relative">
+                          <div className="absolute -left-[21px] w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center">
+                            <span className="text-white text-[8px] font-bold">X</span>
+                          </div>
+                          <div 
+                            className="ml-2 p-2 bg-emerald-50 dark:bg-emerald-950/30 rounded text-xs cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-colors"
+                            onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
+                          >
+                            <div className="font-medium flex items-center justify-between">
+                              <span>Authorized Projects & Deliverables</span>
+                              <Badge variant="outline" className="text-[9px]">{entityCounts?.deliverables || 0} deliverables</Badge>
+                            </div>
+                            <div className="text-muted-foreground">Value realization</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Value Propositions & Benefits */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Value Propositions */}
+                      <div 
+                        className="p-3 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800 cursor-pointer hover:shadow-md transition-all"
+                        onClick={() => entityCounts?.requirements && entityCounts.requirements > 0 && fetchEntityDetails('requirements')}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <Target className="h-4 w-4 text-amber-600" />
+                          <span className="font-semibold text-sm">Value Propositions</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mb-2">
+                          What value is promised to stakeholders?
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className="text-[9px] bg-amber-100 dark:bg-amber-900">
+                            📋 {entityCounts?.requirements || 0} requirements
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] bg-amber-100 dark:bg-amber-900">
+                            📦 {entityCounts?.scopeItems || 0} scope items
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {/* Benefits Realization */}
+                      <div 
+                        className="p-3 rounded-lg border bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800 cursor-pointer hover:shadow-md transition-all"
+                        onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
+                      >
+                        <div className="flex items-center gap-2 mb-2">
+                          <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          <span className="font-semibold text-sm">Benefits Realization</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mb-2">
+                          How is value measured and tracked?
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          <Badge variant="outline" className="text-[9px] bg-green-100 dark:bg-green-900">
+                            ✅ {entityCounts?.successCriteria || 0} success criteria
+                          </Badge>
+                          <Badge variant="outline" className="text-[9px] bg-green-100 dark:bg-green-900">
+                            📊 {entityCounts?.performanceMeasurements || 0} measurements
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Assessing Project Success */}
+                    <div className="p-3 bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-950/30 dark:to-green-950/30 rounded-lg border">
+                      <div className="flex items-center gap-2 mb-2">
+                        <Award className="h-4 w-4 text-blue-600" />
+                        <span className="font-semibold text-sm">Assessing Project Success</span>
+                      </div>
+                      <div className="grid grid-cols-4 gap-2 text-center">
+                        <div 
+                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-blue-400 transition-colors"
+                          onClick={() => entityCounts?.successCriteria && entityCounts.successCriteria > 0 && fetchEntityDetails('successCriteria')}
+                        >
+                          <div className="text-lg font-bold text-blue-600">{entityCounts?.successCriteria || 0}</div>
+                          <div className="text-[10px] text-muted-foreground">Success Criteria</div>
+                        </div>
+                        <div 
+                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-green-400 transition-colors"
+                          onClick={() => entityCounts?.performanceMeasurements && entityCounts.performanceMeasurements > 0 && fetchEntityDetails('performanceMeasurements')}
+                        >
+                          <div className="text-lg font-bold text-green-600">{entityCounts?.performanceMeasurements || 0}</div>
+                          <div className="text-[10px] text-muted-foreground">Performance KPIs</div>
+                        </div>
+                        <div 
+                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-purple-400 transition-colors"
+                          onClick={() => entityCounts?.stakeholders && entityCounts.stakeholders > 0 && fetchEntityDetails('stakeholders')}
+                        >
+                          <div className="text-lg font-bold text-purple-600">{entityCounts?.stakeholders || 0}</div>
+                          <div className="text-[10px] text-muted-foreground">Stakeholders</div>
+                        </div>
+                        <div 
+                          className="p-2 bg-white dark:bg-slate-900 rounded border cursor-pointer hover:border-amber-400 transition-colors"
+                          onClick={() => entityCounts?.deliverables && entityCounts.deliverables > 0 && fetchEntityDetails('deliverables')}
+                        >
+                          <div className="text-lg font-bold text-amber-600">{entityCounts?.deliverables || 0}</div>
+                          <div className="text-[10px] text-muted-foreground">Deliverables</div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Value Artifacts Summary */}
+                    <div className="flex items-center gap-4 pt-2 border-t text-xs text-muted-foreground">
+                      <span className="font-medium">Value Artifacts:</span>
+                      <div className="flex items-center gap-1">
+                        <span>Tangible: {(entityCounts?.deliverables || 0) + (entityCounts?.earnedValueMetrics || 0) + (entityCounts?.qualityStandards || 0)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>Intangible: {(entityCounts?.stakeholders || 0) + (entityCounts?.bestPractices || 0) + (entityCounts?.teamAgreements || 0)}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span>Total: {
+                          (entityCounts?.deliverables || 0) + 
+                          (entityCounts?.earnedValueMetrics || 0) + 
+                          (entityCounts?.qualityStandards || 0) +
+                          (entityCounts?.stakeholders || 0) + 
+                          (entityCounts?.bestPractices || 0) + 
+                          (entityCounts?.teamAgreements || 0)
+                        }</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Project Lifecycle Methodology Indicator */}
+              {entityCounts && (entityCounts.developmentApproaches > 0 || entityCounts.projectIterations > 0) && (
+                <Card className="border-2 border-dashed border-primary/30 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-slate-900/50 dark:to-blue-900/20">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <GitBranch className="h-5 w-5 text-primary" />
+                      Project Lifecycle Methodology
+                    </CardTitle>
+                    <CardDescription>
+                      Constraint configuration determines the recommended delivery approach
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Iron Triangle Visualization */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* Scope */}
+                      <div 
+                        className="p-3 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all"
+                        style={{ 
+                          borderColor: 'rgb(139, 92, 246)',
+                          backgroundColor: 'rgba(139, 92, 246, 0.1)'
+                        }}
+                        onClick={() => entityCounts?.scopeItems && entityCounts.scopeItems > 0 && fetchEntityDetails('scopeItems')}
+                      >
+                        <div className="text-center">
+                          <Ruler className="h-6 w-6 mx-auto text-violet-600 mb-1" />
+                          <div className="font-semibold text-sm">Scope</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {entityCounts?.scopeItems || 0} items
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className="mt-2 text-[10px] bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200"
+                          >
+                            {(entityCounts?.scopeItems || 0) > 0 ? 'Defined' : 'Pending'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {/* Budget/Cost */}
+                      <div 
+                        className="p-3 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all"
+                        style={{ 
+                          borderColor: 'rgb(16, 185, 129)',
+                          backgroundColor: 'rgba(16, 185, 129, 0.1)'
+                        }}
+                        onClick={() => entityCounts?.earnedValueMetrics && entityCounts.earnedValueMetrics > 0 && fetchEntityDetails('earnedValueMetrics')}
+                      >
+                        <div className="text-center">
+                          <Wallet className="h-6 w-6 mx-auto text-emerald-600 mb-1" />
+                          <div className="font-semibold text-sm">Budget</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {entityCounts?.earnedValueMetrics || 0} metrics
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className="mt-2 text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200"
+                          >
+                            {(entityCounts?.earnedValueMetrics || 0) > 0 ? 'Tracked' : 'Pending'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      {/* Schedule/Time */}
+                      <div 
+                        className="p-3 rounded-lg border-2 cursor-pointer hover:shadow-md transition-all"
+                        style={{ 
+                          borderColor: 'rgb(59, 130, 246)',
+                          backgroundColor: 'rgba(59, 130, 246, 0.1)'
+                        }}
+                        onClick={() => entityCounts?.milestones && entityCounts.milestones > 0 && fetchEntityDetails('milestones')}
+                      >
+                        <div className="text-center">
+                          <Timer className="h-6 w-6 mx-auto text-blue-600 mb-1" />
+                          <div className="font-semibold text-sm">Schedule</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            {entityCounts?.milestones || 0} milestones
+                          </div>
+                          <Badge 
+                            variant="outline" 
+                            className="mt-2 text-[10px] bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                          >
+                            {(entityCounts?.milestones || 0) > 0 ? 'Planned' : 'Pending'}
+                          </Badge>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Methodology Approaches */}
+                    <div className="grid grid-cols-3 gap-2 pt-3 border-t">
+                      {/* Predictive Approach */}
+                      <div 
+                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${
+                          entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0
+                            ? 'border-orange-300 bg-orange-50 dark:bg-orange-950/30'
+                            : 'border-dashed opacity-60'
+                        }`}
+                        onClick={() => entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0 && fetchEntityDetails('developmentApproaches')}
+                      >
+                        <div className="text-2xl mb-1">📋</div>
+                        <div className="font-semibold text-sm">Predictive</div>
+                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                          Scope Fixed<br/>
+                          Budget & Schedule Variable
+                        </div>
+                        <div className="text-[9px] text-orange-600 dark:text-orange-400 mt-2 font-medium">
+                          Waterfall / Sequential
+                        </div>
+                      </div>
+                      
+                      {/* Adaptive Approach */}
+                      <div 
+                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${
+                          entityCounts?.projectIterations && entityCounts.projectIterations > 0
+                            ? 'border-purple-300 bg-purple-50 dark:bg-purple-950/30'
+                            : 'border-dashed opacity-60'
+                        }`}
+                        onClick={() => entityCounts?.projectIterations && entityCounts.projectIterations > 0 && fetchEntityDetails('projectIterations')}
+                      >
+                        <div className="text-2xl mb-1">🔄</div>
+                        <div className="font-semibold text-sm">Adaptive</div>
+                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                          Budget & Schedule Fixed<br/>
+                          Scope Variable
+                        </div>
+                        <div className="text-[9px] text-purple-600 dark:text-purple-400 mt-2 font-medium">
+                          Agile / Iterative
+                        </div>
+                      </div>
+                      
+                      {/* Hybrid Approach */}
+                      <div 
+                        className={`p-3 rounded-lg border text-center transition-all cursor-pointer hover:shadow-md ${
+                          (entityCounts?.developmentApproaches || 0) > 0 && (entityCounts?.projectIterations || 0) > 0
+                            ? 'border-teal-300 bg-teal-50 dark:bg-teal-950/30'
+                            : 'border-dashed opacity-60'
+                        }`}
+                        onClick={() => {
+                          if (entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0) {
+                            fetchEntityDetails('developmentApproaches')
+                          } else if (entityCounts?.projectIterations && entityCounts.projectIterations > 0) {
+                            fetchEntityDetails('projectIterations')
+                          }
+                        }}
+                      >
+                        <div className="text-2xl mb-1">⚡</div>
+                        <div className="font-semibold text-sm">Hybrid</div>
+                        <div className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                          Mixed Constraints<br/>
+                          Tailored Approach
+                        </div>
+                        <div className="text-[9px] text-teal-600 dark:text-teal-400 mt-2 font-medium">
+                          Best of Both
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Source Data Summary */}
+                    <div className="flex items-center gap-4 pt-3 border-t text-xs text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Code className="h-3.5 w-3.5" />
+                        <span>{entityCounts?.developmentApproaches || 0} approaches</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <GitBranch className="h-3.5 w-3.5" />
+                        <span>{entityCounts?.projectIterations || 0} iterations</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        <span>{entityCounts?.phases || 0} phases</span>
+                      </div>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="ml-auto h-6 text-xs"
+                        onClick={() => entityCounts?.developmentApproaches && entityCounts.developmentApproaches > 0 && fetchEntityDetails('developmentApproaches')}
+                      >
+                        View Details →
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* PMBOK 8 Domain Tabs */}
+              <Tabs defaultValue="performance" className="w-full">
+                <TabsList className="grid w-full grid-cols-4 h-auto p-1">
+                  <TabsTrigger value="performance" className="text-xs py-2 px-3">
+                    <Layers className="h-3.5 w-3.5 mr-1.5" />
+                    Performance Domains
+                  </TabsTrigger>
+                  <TabsTrigger value="knowledge" className="text-xs py-2 px-3">
+                    <Database className="h-3.5 w-3.5 mr-1.5" />
+                    Knowledge Domains
+                  </TabsTrigger>
+                  <TabsTrigger value="phases" className="text-xs py-2 px-3">
+                    <Clock className="h-3.5 w-3.5 mr-1.5" />
+                    Project Phases
+                  </TabsTrigger>
+                  <TabsTrigger value="all" className="text-xs py-2 px-3">
+                    <ListOrdered className="h-3.5 w-3.5 mr-1.5" />
+                    All Entities
+                  </TabsTrigger>
+                </TabsList>
+                
+                {/* Performance Domains (Tier 1) */}
+                <TabsContent value="performance" className="mt-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                      Tier 1: Outcome-Focused
                     </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      8 Performance Domains from PMBOK 8
+                    </span>
                   </div>
-                  )
-                })}
-              </div>
+                  {performanceDomains.map((domain) => {
+                    const domainEntityCounts = domain.entities.map(e => entityCounts?.[e as keyof EntityCounts] || 0)
+                    const totalCount = domainEntityCounts.reduce((sum, count) => sum + count, 0)
+                    const DomainIcon = domain.icon
+                    
+                    return (
+                      <Collapsible key={domain.key} className="border rounded-lg">
+                        <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${domain.color} text-white`}>
+                              <DomainIcon className="h-4 w-4" />
+                            </div>
+                            <div className="text-left">
+                              <div className="font-medium">{domain.name}</div>
+                              <div className="text-xs text-muted-foreground">{domain.description}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={totalCount > 0 ? "default" : "outline"}>
+                              {totalCount} entities
+                            </Badge>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 [&[data-state=open]>svg]:rotate-180" />
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-3 pb-3">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t mt-2">
+                            {domain.entities.map((entityKey) => {
+                              const config = entityTypeConfig[entityKey]
+                              if (!config) return null
+                              const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
+                              const isClickable = count > 0
+                              const EntityIcon = config.icon
+                              
+                              return (
+                                <div
+                                  key={entityKey}
+                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${
+                                    isClickable 
+                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary' 
+                                      : 'opacity-50'
+                                  }`}
+                                  onClick={() => isClickable && fetchEntityDetails(entityKey)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color}`} />
+                                    <span className="text-xs">{config.label}</span>
+                                  </div>
+                                  <Badge variant={isClickable ? "secondary" : "outline"} className="text-xs">
+                                    {count}
+                                  </Badge>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {/* Domain KPIs */}
+                          {renderKpiSection(domain.pmbokDomain, domain.entities)}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )
+                  })}
+                </TabsContent>
+                
+                {/* Knowledge Domains (Tier 2) */}
+                <TabsContent value="knowledge" className="mt-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300">
+                      Tier 2: Function-Focused
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      7 Knowledge Area Domains (Supplementary)
+                    </span>
+                  </div>
+                  {knowledgeDomains.map((domain) => {
+                    const domainEntityCounts = domain.entities.map(e => entityCounts?.[e as keyof EntityCounts] || 0)
+                    const totalCount = domainEntityCounts.reduce((sum, count) => sum + count, 0)
+                    const DomainIcon = domain.icon
+                    
+                    return (
+                      <Collapsible key={domain.key} className="border rounded-lg">
+                        <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${domain.color} text-white`}>
+                              <DomainIcon className="h-4 w-4" />
+                            </div>
+                            <div className="text-left">
+                              <div className="font-medium">{domain.name}</div>
+                              <div className="text-xs text-muted-foreground">{domain.description}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={totalCount > 0 ? "default" : "outline"}>
+                              {totalCount} entities
+                            </Badge>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-3 pb-3">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t mt-2">
+                            {domain.entities.map((entityKey) => {
+                              const config = entityTypeConfig[entityKey]
+                              if (!config) return null
+                              const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
+                              const isClickable = count > 0
+                              const EntityIcon = config.icon
+                              
+                              return (
+                                <div
+                                  key={entityKey}
+                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${
+                                    isClickable 
+                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary' 
+                                      : 'opacity-50'
+                                  }`}
+                                  onClick={() => isClickable && fetchEntityDetails(entityKey)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color}`} />
+                                    <span className="text-xs">{config.label}</span>
+                                  </div>
+                                  <Badge variant={isClickable ? "secondary" : "outline"} className="text-xs">
+                                    {count}
+                                  </Badge>
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {/* Domain KPIs */}
+                          {renderKpiSection(domain.pmbokDomain, domain.entities)}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )
+                  })}
+                </TabsContent>
+                
+                {/* Project Phases / Focus Areas */}
+                <TabsContent value="phases" className="mt-4 space-y-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Badge variant="outline" className="bg-purple-50 text-purple-700 dark:bg-purple-950 dark:text-purple-300">
+                      Project Lifecycle
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      5 Focus Areas / Project Phases
+                    </span>
+                  </div>
+                  {projectPhases.map((phase) => {
+                    const phaseEntityCounts = phase.entities.map(e => entityCounts?.[e as keyof EntityCounts] || 0)
+                    const totalCount = phaseEntityCounts.reduce((sum, count) => sum + count, 0)
+                    const PhaseIcon = phase.icon
+                    
+                    return (
+                      <Collapsible key={phase.key} className="border rounded-lg">
+                        <CollapsibleTrigger className="flex items-center justify-between w-full p-3 hover:bg-muted/50 transition-colors">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${phase.color} text-white`}>
+                              <PhaseIcon className="h-4 w-4" />
+                            </div>
+                            <div className="text-left">
+                              <div className="font-medium">{phase.name}</div>
+                              <div className="text-xs text-muted-foreground">{phase.description}</div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant={totalCount > 0 ? "default" : "outline"}>
+                              {totalCount} entities
+                            </Badge>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="px-3 pb-3">
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t mt-2">
+                            {phase.entities.map((entityKey) => {
+                              const config = entityTypeConfig[entityKey]
+                              if (!config) return null
+                              const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
+                              const isClickable = count > 0
+                              const EntityIcon = config.icon
+                              
+                              return (
+                                <div
+                                  key={entityKey}
+                                  className={`flex items-center justify-between p-2 border rounded-md text-sm transition-all ${
+                                    isClickable 
+                                      ? 'cursor-pointer hover:bg-muted/50 hover:border-primary' 
+                                      : 'opacity-50'
+                                  }`}
+                                  onClick={() => isClickable && fetchEntityDetails(entityKey)}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color}`} />
+                                    <span className="text-xs">{config.label}</span>
+                                  </div>
+                                  <Badge variant={isClickable ? "secondary" : "outline"} className="text-xs">
+                                    {count}
+                                  </Badge>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )
+                  })}
+                </TabsContent>
+                
+                {/* All Entities (Flat View) */}
+                <TabsContent value="all" className="mt-4">
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {entityTypes.map(({ key, label, icon: Icon, color }) => {
+                      const count = entityCounts?.[key as keyof EntityCounts] || 0
+                      const isClickable = count > 0
+                      
+                      return (
+                        <div
+                          key={key}
+                          className={`flex items-center justify-between p-3 border rounded-lg transition-all ${
+                            isClickable 
+                              ? 'cursor-pointer hover:bg-muted/50 hover:border-primary hover:shadow-sm' 
+                              : 'opacity-50 cursor-not-allowed'
+                          }`}
+                          onClick={() => isClickable && fetchEntityDetails(key)}
+                          role={isClickable ? 'button' : undefined}
+                          tabIndex={isClickable ? 0 : undefined}
+                          onKeyDown={(e) => {
+                            if (isClickable && (e.key === 'Enter' || e.key === ' ')) {
+                              e.preventDefault()
+                              fetchEntityDetails(key)
+                            }
+                          }}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${color}`} />
+                            <span className="text-sm font-medium">{label}</span>
+                          </div>
+                          <Badge variant={isClickable ? "default" : "outline"}>
+                            {count}
+                          </Badge>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </TabsContent>
+              </Tabs>
 
               <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                 <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
@@ -857,6 +2167,186 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
             <Button variant="outline" onClick={() => setShowEntityDialog(false)}>
               Close
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* KPI Source Traceability Dialog */}
+      <Dialog open={showKpiSourceDialog} onOpenChange={setShowKpiSourceDialog}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gauge className="h-5 w-5" />
+              KPI Source Traceability
+            </DialogTitle>
+            <DialogDescription>
+              View all source entities and understand how this KPI is calculated
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedKpi && (
+            <div className="flex-1 overflow-y-auto space-y-4">
+              {/* KPI Overview */}
+              <Card className="border-2 border-primary/20">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{selectedKpi.kpi.label}</CardTitle>
+                      <CardDescription className="mt-1">
+                        {selectedKpi.kpi.description}
+                      </CardDescription>
+                    </div>
+                    <div>
+                      {selectedKpi.kpi.targetDirection === 'higher_is_better' && (
+                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
+                          ↑ Target: {selectedKpi.kpi.targetValue !== undefined 
+                            ? `${(selectedKpi.kpi.targetValue * 100).toFixed(0)}%` 
+                            : 'Higher is better'}
+                        </Badge>
+                      )}
+                      {selectedKpi.kpi.targetDirection === 'lower_is_better' && (
+                        <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200">
+                          ↓ Target: {selectedKpi.kpi.targetValue !== undefined 
+                            ? (selectedKpi.kpi.units === 'days' 
+                              ? `${selectedKpi.kpi.targetValue} days` 
+                              : `${(selectedKpi.kpi.targetValue * 100).toFixed(0)}%`)
+                            : 'Lower is better'}
+                        </Badge>
+                      )}
+                      {selectedKpi.kpi.targetDirection === 'range' && (
+                        <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                          ⟷ Range: {selectedKpi.kpi.minValue !== undefined && selectedKpi.kpi.maxValue !== undefined 
+                            ? `${(selectedKpi.kpi.minValue * 100).toFixed(0)}% - ${(selectedKpi.kpi.maxValue * 100).toFixed(0)}%`
+                            : 'Within range'}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="p-3 bg-muted/50 rounded-lg border border-dashed">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-1">
+                      <Info className="h-4 w-4" />
+                      Calculation Method
+                    </div>
+                    <p className="text-sm text-foreground">
+                      {selectedKpi.mapping.calculationHint}
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Source Entities Section */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="font-semibold">Source Entities ({selectedKpi.sourceEntityCounts.reduce((s, e) => s + e.count, 0)} total)</h3>
+                </div>
+                
+                <div className="space-y-2">
+                  {selectedKpi.sourceEntityCounts.map((source, index) => {
+                    const config = entityTypeConfig[source.key]
+                    const EntityIcon = config?.icon || Database
+                    
+                    return (
+                      <Card 
+                        key={source.key} 
+                        className="cursor-pointer hover:border-primary hover:shadow-sm transition-all"
+                        onClick={() => {
+                          setShowKpiSourceDialog(false)
+                          fetchEntityDetails(source.key)
+                        }}
+                      >
+                        <CardContent className="p-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg bg-muted`}>
+                                <EntityIcon className={`h-5 w-5 ${config?.color || 'text-gray-500'}`} />
+                              </div>
+                              <div>
+                                <div className="font-medium">{source.label}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {source.count} {source.count === 1 ? 'entity' : 'entities'} extracted
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary">{source.count}</Badge>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                            </div>
+                          </div>
+                          
+                          {/* Relationship indicator */}
+                          {index < selectedKpi.sourceEntityCounts.length - 1 && (
+                            <div className="mt-3 pt-3 border-t border-dashed flex items-center gap-2 text-xs text-muted-foreground">
+                              <span className="px-2 py-0.5 bg-muted rounded">Combined with ↓</span>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Dependency Diagram */}
+              <Card className="bg-slate-50 dark:bg-slate-900/50">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <GitBranch className="h-4 w-4" />
+                    Dependency Structure
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="font-mono text-xs bg-background p-3 rounded border overflow-x-auto">
+                    <div className="text-primary font-semibold">{selectedKpi.kpi.label}</div>
+                    <div className="ml-2 border-l-2 border-muted-foreground/30 pl-2 mt-1">
+                      {selectedKpi.sourceEntityCounts.map((source, i) => (
+                        <div key={source.key} className="flex items-center gap-2 py-0.5">
+                          <span className="text-muted-foreground">├──</span>
+                          <span className={entityTypeConfig[source.key]?.color || 'text-gray-500'}>
+                            {source.label}
+                          </span>
+                          <span className="text-muted-foreground">({source.count})</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-dashed text-muted-foreground">
+                      └── Formula: {selectedKpi.mapping.calculationHint.split(' ').slice(0, 6).join(' ')}...
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Data Quality Note */}
+              <div className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                <div className="text-sm text-amber-900 dark:text-amber-100">
+                  <p className="font-medium">Data Quality Note</p>
+                  <p className="text-amber-700 dark:text-amber-300 text-xs mt-1">
+                    This KPI is calculated from {selectedKpi.sourceEntityCounts.length} entity type(s). 
+                    For accurate results, ensure all source entities have complete and up-to-date data.
+                    Click on any source entity above to review the underlying data.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter className="mt-4 border-t pt-4">
+            <Button variant="outline" onClick={() => setShowKpiSourceDialog(false)}>
+              Close
+            </Button>
+            {selectedKpi && selectedKpi.sourceEntityCounts.length > 0 && (
+              <Button 
+                onClick={() => {
+                  setShowKpiSourceDialog(false)
+                  fetchEntityDetails(selectedKpi.sourceEntityCounts[0].key)
+                }}
+              >
+                View Primary Source ({selectedKpi.sourceEntityCounts[0]?.label})
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

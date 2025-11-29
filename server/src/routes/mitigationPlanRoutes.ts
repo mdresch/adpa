@@ -449,7 +449,7 @@ router.post(
     due_date: Joi.string().isoDate().optional().allow(null),
     priority: Joi.string().valid('critical', 'high', 'medium', 'low').default('medium'),
     expected_effectiveness: Joi.number().min(0).max(100).optional().allow(null),
-    completion_notes: Joi.string().optional().max(5000)
+    completion_notes: Joi.string().optional().allow('', null).max(5000)
   })),
   async (req: Request, res: Response) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -498,7 +498,7 @@ router.put(
     priority: Joi.string().valid('critical', 'high', 'medium', 'low').optional(),
     expected_effectiveness: Joi.number().min(0).max(100).optional().allow(null),
     progress_notes: Joi.array().items(Joi.string()).optional(),
-    completion_notes: Joi.string().optional().max(5000),
+    completion_notes: Joi.string().optional().allow('', null).max(5000),
     completion_evidence: Joi.object().optional()
   })),
   async (req: Request, res: Response) => {

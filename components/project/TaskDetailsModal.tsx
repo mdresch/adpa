@@ -67,67 +67,67 @@ export function TaskDetailsModal({
               <DialogTitle>
                 <Skeleton className="h-6 w-48" />
               </DialogTitle>
-              <DialogDescription>
+              <div className="text-sm text-muted-foreground">
                 <Skeleton className="h-4 w-32 mt-2" />
-              </DialogDescription>
+              </div>
             </>
           ) : error ? (
             <>
               <DialogTitle>Error Loading Task</DialogTitle>
-              <DialogDescription>
-                <Alert variant="destructive" className="mt-2">
+              <div className="mt-2">
+                <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>
                     Failed to load task details: {error.message}
                   </AlertDescription>
                 </Alert>
-              </DialogDescription>
+              </div>
             </>
           ) : task ? (
             <>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="h-5 w-5" />
-                <span className="font-mono">{task.taskNumber}</span>
+                <span className="font-mono">{task.task_number}</span>
                 <span className="text-muted-foreground">•</span>
-                <span>{task.taskName}</span>
+                <span>{task.task_name}</span>
               </DialogTitle>
-              <DialogDescription className="flex items-center gap-2 flex-wrap">
-                {task.wbsCode && (
+              <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
+                {task.wbs_code && (
                   <>
                     <Badge variant="outline" className="font-mono">
-                      WBS {task.wbsCode}
+                      WBS {task.wbs_code}
                     </Badge>
                     <span className="text-muted-foreground">•</span>
                   </>
                 )}
-                {task.requiredRoleName && (
+                {task.required_role_name && (
                   <>
-                    <Badge variant="outline">{task.requiredRoleName}</Badge>
+                    <Badge variant="outline">{task.required_role_name}</Badge>
                     <span className="text-muted-foreground">•</span>
                   </>
                 )}
                 <TaskStatusBadge status={task.status} />
-                {task.importedFromWbs && (
+                {task.imported_from_wbs && (
                   <>
                     <span className="text-muted-foreground">•</span>
                     <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                       Imported from WBS
                     </Badge>
-                    {task.sourceDocumentId && (
+                    {task.source_document_id && (
                       <>
                         <span className="text-muted-foreground">•</span>
                         <a
-                          href={`/documents/${task.sourceDocumentId}`}
+                          href={`/documents/${task.source_document_id}`}
                           target="_blank"
                           rel="noreferrer"
                           className="text-sm underline flex items-center gap-2"
                         >
-                          {task.sourceDocumentTitle ? (
-                            task.sourceDocumentTitle
+                          {task.source_document_title ? (
+                            task.source_document_title
                           ) : (
                             <>
                               <span className="font-semibold">Document ID:</span>
-                              <span className="font-mono text-xs">{task.sourceDocumentId}</span>
+                              <span className="font-mono text-xs">{task.source_document_id}</span>
                             </>
                           )}
                         </a>
@@ -135,7 +135,7 @@ export function TaskDetailsModal({
                     )}
                   </>
                 )}
-              </DialogDescription>
+              </div>
             </>
           ) : (
             <>

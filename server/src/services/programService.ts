@@ -158,7 +158,7 @@ export async function getProgramProjects(programId: string): Promise<Record<stri
     const reviewJoin = hasReviewMeetings 
       ? `LEFT JOIN review_meetings rm ON rm.program_id = $1
          LEFT JOIN review_decisions rd ON rd.review_meeting_id = rm.id 
-           AND (rd.affected_projects @> ARRAY[p.id::text] OR rd.affected_projects @> ARRAY[p.id::uuid::text])`
+           AND (p.id = ANY(rd.affected_projects::uuid[]))`
       : ''
     
     const reviewSelects = hasReviewMeetings
@@ -276,7 +276,6 @@ export async function getProgramProjects(programId: string): Promise<Record<stri
       LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
       ${reviewJoin}
       WHERE p.program_id = $1
-        AND p.deleted_at IS NULL
       GROUP BY p.id, u.email, u.name
       ORDER BY p.created_at DESC
     `

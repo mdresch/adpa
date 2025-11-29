@@ -41,6 +41,13 @@ export {
   batchGenerateWithContext
 } from './integration'
 
+export {
+  DOMAIN_EXTRACTION_CONFIGS,
+  getDomainExtractionConfig,
+  listDomainExtractionConfigs,
+  type DomainExtractionConfig
+} from './domainExtractionConfig'
+
 // Re-export all types
 export * from './types'
 

@@ -197,16 +197,16 @@ export function CapacityPlanningDashboard({ programId }: CapacityPlanningDashboa
                     <div className="space-y-1 text-sm">
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Capacity:</span>
-                        <span className="font-medium">{forecast.humanCapacityFte?.toFixed(1) || 'N/A'} FTE</span>
+                        <span className="font-medium">{forecast.humanCapacityFte != null ? Number(forecast.humanCapacityFte).toFixed(1) : 'N/A'} FTE</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Demand:</span>
-                        <span className="font-medium">{forecast.humanDemandFte?.toFixed(1) || 'N/A'} FTE</span>
+                        <span className="font-medium">{forecast.humanDemandFte != null ? Number(forecast.humanDemandFte).toFixed(1) : 'N/A'} FTE</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Utilization:</span>
                         <span className="font-medium">
-                          {forecast.humanUtilization ? `${Math.round(forecast.humanUtilization)}%` : 'N/A'}
+                          {forecast.humanUtilization != null ? `${Math.round(Number(forecast.humanUtilization))}%` : 'N/A'}
                         </span>
                       </div>
                     </div>
@@ -219,24 +219,24 @@ export function CapacityPlanningDashboard({ programId }: CapacityPlanningDashboa
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Capacity:</span>
                         <span className="font-medium">
-                          {forecast.financialCapacity 
-                            ? `$${forecast.financialCapacity.toLocaleString()}` 
+                          {forecast.financialCapacity != null 
+                            ? `$${Number(forecast.financialCapacity).toLocaleString()}` 
                             : 'N/A'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Demand:</span>
                         <span className="font-medium">
-                          {forecast.financialDemand 
-                            ? `$${forecast.financialDemand.toLocaleString()}` 
+                          {forecast.financialDemand != null 
+                            ? `$${Number(forecast.financialDemand).toLocaleString()}` 
                             : 'N/A'}
                         </span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Utilization:</span>
                         <span className="font-medium">
-                          {forecast.financialUtilization 
-                            ? `${Math.round(forecast.financialUtilization)}%` 
+                          {forecast.financialUtilization != null 
+                            ? `${Math.round(Number(forecast.financialUtilization))}%` 
                             : 'N/A'}
                         </span>
                       </div>
