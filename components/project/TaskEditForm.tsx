@@ -17,13 +17,13 @@ interface TaskEditFormProps {
 
 export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
   const [formData, setFormData] = useState({
-    task_name: task.task_name,
+    taskName: task.taskName,
     description: task.description || '',
-    estimated_hours: task.estimated_hours?.toString() || '',
-    start_date: task.start_date || '',
-    end_date: task.end_date || '',
+    estimatedHours: task.estimatedHours?.toString() || '',
+    startDate: task.plannedStartDate || '',
+    endDate: task.plannedEndDate || '',
     status: task.status,
-    progress_percentage: task.progress_percentage?.toString() || '0',
+    percentComplete: (task.percentComplete ?? 0).toString(),
   })
 
   const { updateTask, updating } = useTaskMutations(task.project_id, onSave)
@@ -33,13 +33,13 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
 
     try {
       await updateTask(task.id, {
-        task_name: formData.task_name,
+        taskName: formData.taskName,
         description: formData.description,
-        estimated_hours: formData.estimated_hours ? parseFloat(formData.estimated_hours) : undefined,
-        start_date: formData.start_date || undefined,
-        end_date: formData.end_date || undefined,
+        estimatedHours: formData.estimatedHours ? parseFloat(formData.estimatedHours) : undefined,
+        plannedStartDate: formData.startDate || undefined,
+        plannedEndDate: formData.endDate || undefined,
         status: formData.status as Task['status'],
-        progress_percentage: parseInt(formData.progress_percentage),
+        percentComplete: parseInt(formData.percentComplete),
       })
       toast.success('Task updated successfully')
     } catch (error) {
@@ -55,11 +55,11 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Task Name */}
       <div className="space-y-2">
-        <Label htmlFor="task_name">Task Name *</Label>
+        <Label htmlFor="taskName">Task Name *</Label>
         <Input
-          id="task_name"
-          value={formData.task_name}
-          onChange={(e) => handleChange('task_name', e.target.value)}
+          id="taskName"
+          value={formData.taskName}
+          onChange={(e) => handleChange('taskName', e.target.value)}
           required
         />
       </div>
@@ -79,21 +79,21 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
       {/* Dates */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="start_date">Start Date</Label>
+          <Label htmlFor="startDate">Start Date</Label>
           <Input
-            id="start_date"
+            id="startDate"
             type="date"
-            value={formData.start_date}
-            onChange={(e) => handleChange('start_date', e.target.value)}
+            value={formData.startDate}
+            onChange={(e) => handleChange('startDate', e.target.value)}
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="end_date">End Date</Label>
+          <Label htmlFor="endDate">End Date</Label>
           <Input
-            id="end_date"
+            id="endDate"
             type="date"
-            value={formData.end_date}
-            onChange={(e) => handleChange('end_date', e.target.value)}
+            value={formData.endDate}
+            onChange={(e) => handleChange('endDate', e.target.value)}
           />
         </div>
       </div>
@@ -101,26 +101,26 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
       {/* Hours and Progress */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="estimated_hours">Estimated Hours</Label>
+          <Label htmlFor="estimatedHours">Estimated Hours</Label>
           <Input
-            id="estimated_hours"
+            id="estimatedHours"
             type="number"
             step="0.5"
             min="0"
-            value={formData.estimated_hours}
-            onChange={(e) => handleChange('estimated_hours', e.target.value)}
+            value={formData.estimatedHours}
+            onChange={(e) => handleChange('estimatedHours', e.target.value)}
             placeholder="0"
           />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="progress_percentage">Progress %</Label>
+          <Label htmlFor="percentComplete">Progress %</Label>
           <Input
-            id="progress_percentage"
+            id="percentComplete"
             type="number"
             min="0"
             max="100"
-            value={formData.progress_percentage}
-            onChange={(e) => handleChange('progress_percentage', e.target.value)}
+            value={formData.percentComplete}
+            onChange={(e) => handleChange('percentComplete', e.target.value)}
           />
         </div>
       </div>
@@ -146,24 +146,24 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
       <div className="grid grid-cols-2 gap-4 pt-4 border-t">
         <div className="space-y-1">
           <Label className="text-sm text-muted-foreground">Task Number</Label>
-          <p className="text-sm font-mono">{task.task_number}</p>
+          <p className="text-sm font-mono">{task.taskNumber}</p>
         </div>
-        {task.wbs_code && (
+        {task.wbsCode && (
           <div className="space-y-1">
             <Label className="text-sm text-muted-foreground">WBS Code</Label>
-            <p className="text-sm font-mono">{task.wbs_code}</p>
+            <p className="text-sm font-mono">{task.wbsCode}</p>
           </div>
         )}
-        {task.actual_hours !== undefined && (
+        {task.actualHours !== undefined && (
           <div className="space-y-1">
             <Label className="text-sm text-muted-foreground">Actual Hours</Label>
-            <p className="text-sm">{task.actual_hours}h</p>
+            <p className="text-sm">{task.actualHours}h</p>
           </div>
         )}
-        {task.required_role_name && (
+        {task.requiredRoleName && (
           <div className="space-y-1">
             <Label className="text-sm text-muted-foreground">Required Role</Label>
-            <p className="text-sm">{task.required_role_name}</p>
+            <p className="text-sm">{task.requiredRoleName}</p>
           </div>
         )}
       </div>

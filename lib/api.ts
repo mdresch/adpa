@@ -239,6 +239,7 @@ export interface PMBOK8EntityCounts {
   resources: number
   technologies: number
   qualityStandards: number
+  complianceSecurity: number
   deliverables: number
   scopeItems: number
   activities: number
@@ -252,6 +253,7 @@ export interface PMBOK8EntityCounts {
   earnedValueMetrics: number
   opportunities: number
   riskResponses: number
+  performanceActuals: number
 }
 
 export interface PMBOK8DomainCounts {
@@ -341,6 +343,17 @@ export interface PMBOK8DomainAnalytics {
         avg_sv: number | null
         avg_cv: number | null
         latest_measurement_date: string | null
+      }
+      actuals: {
+        total_actuals: number
+        ahead_of_schedule: number
+        behind_schedule: number
+        avg_schedule_variance_days: number | null
+        avg_cost_variance: number | null
+        avg_progress_variance: number | null
+        avg_quality_score: number | null
+        total_defects: number
+        total_rework_hours: number | null
       }
       health: DomainHealth
     }

@@ -258,7 +258,7 @@ export function ResourceAssignmentDialog({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Estimated Cost:</span>
                   <span className="font-medium">
-                    ${(parseFloat(plannedHours) * (selectedAssignment.hourly_rate || 0)).toFixed(2)}
+                    ${(isNaN(parseFloat(plannedHours)) ? 0 : parseFloat(plannedHours) * (selectedAssignment.hourly_rate || 0)).toFixed(2)}
                   </span>
                 </div>
               </div>
@@ -284,4 +284,5 @@ export function ResourceAssignmentDialog({
     </Dialog>
   )
 }
+
 

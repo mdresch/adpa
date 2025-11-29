@@ -427,11 +427,16 @@ export function CapacitySettingsDialog({
                     min={1}
                     max={7}
                     value={settings.contractedDaysPerWeek || 5}
-                    onChange={(e) => setSettings(prev => ({ 
-                      ...prev, 
-                      contractedDaysPerWeek: Number(e.target.value),
-                      contractedHoursPerDay: (prev.contractedHoursPerWeek || 40) / Number(e.target.value)
-                    }))}
+                    onChange={(e) => {
+                      const daysValue = Number(e.target.value)
+                      if (daysValue > 0) {
+                        setSettings(prev => ({ 
+                          ...prev, 
+                          contractedDaysPerWeek: daysValue,
+                          contractedHoursPerDay: (prev.contractedHoursPerWeek || 40) / daysValue
+                        }))
+                      }
+                    }}
                   />
                 </div>
                 <div className="space-y-2">

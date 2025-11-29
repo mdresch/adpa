@@ -1155,7 +1155,18 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                           <div className="flex items-center space-x-4">
                             {/* Select All on Page */}
                             <button
-                              onClick={isAllOnPageSelected && !isAllDocumentsSelected ? clearSelection : selectAllOnPage}
+                              onClick={() => {
+                                if (isAllOnPageSelected) {
+                                  // Deselect only current page documents
+                                  setSelectedDocuments(prev => {
+                                    const newSet = new Set(prev)
+                                    displayDocuments.forEach(doc => newSet.delete(doc.id))
+                                    return newSet
+                                  })
+                                } else {
+                                  selectAllOnPage()
+                                }
+                              }}
                               className="flex items-center space-x-2 hover:bg-muted rounded p-2 transition-colors"
                               disabled={selectingAll}
                             >

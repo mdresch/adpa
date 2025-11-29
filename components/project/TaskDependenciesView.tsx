@@ -18,22 +18,26 @@ export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewPro
   }
 
   const predecessors = task.dependencies?.filter(
-    (dep) => dep.successor_task_id === task.id
+    (dep) => dep.successorTaskId === task.id
   ) || []
 
   const successors = task.dependencies?.filter(
-    (dep) => dep.predecessor_task_id === task.id
+    (dep) => dep.predecessorTaskId === task.id
   ) || []
 
   const getDependencyTypeLabel = (type: string) => {
     switch (type) {
       case 'finish_to_start':
+      case 'finishToStart':
         return 'Finish-to-Start (FS)'
       case 'start_to_start':
+      case 'startToStart':
         return 'Start-to-Start (SS)'
       case 'finish_to_finish':
+      case 'finishToFinish':
         return 'Finish-to-Finish (FF)'
       case 'start_to_finish':
+      case 'startToFinish':
         return 'Start-to-Finish (SF)'
       default:
         return type
@@ -60,25 +64,25 @@ export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewPro
                   <div className="flex items-center gap-3">
                     <div>
                       <p className="font-medium">
-                        {dep.predecessor_task?.task_number || 'Unknown Task'}
+                        {dep.predecessorTask?.taskNumber || 'Unknown Task'}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {dep.predecessor_task?.task_name || 'No description'}
+                        {dep.predecessorTask?.taskName || 'No description'}
                       </p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                     <div>
-                      <p className="font-medium">{task.task_number}</p>
-                      <p className="text-sm text-muted-foreground">{task.task_name}</p>
+                      <p className="font-medium">{task.taskNumber}</p>
+                      <p className="text-sm text-muted-foreground">{task.taskName}</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">
-                      {getDependencyTypeLabel(dep.dependency_type)}
+                      {getDependencyTypeLabel(dep.dependencyType)}
                     </Badge>
-                    {dep.lag_days !== 0 && (
+                    {dep.lagDays !== 0 && (
                       <Badge variant="secondary">
-                        {dep.lag_days > 0 ? '+' : ''}{dep.lag_days}d lag
+                        {dep.lagDays > 0 ? '+' : ''}{dep.lagDays}d lag
                       </Badge>
                     )}
                   </div>
@@ -106,26 +110,26 @@ export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewPro
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div>
-                      <p className="font-medium">{task.task_number}</p>
-                      <p className="text-sm text-muted-foreground">{task.task_name}</p>
+                      <p className="font-medium">{task.taskNumber}</p>
+                      <p className="text-sm text-muted-foreground">{task.taskName}</p>
                     </div>
                     <ArrowRight className="h-4 w-4 text-muted-foreground" />
                     <div>
                       <p className="font-medium">
-                        {dep.successor_task?.task_number || 'Unknown Task'}
+                        {dep.successorTask?.taskNumber || 'Unknown Task'}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        {dep.successor_task?.task_name || 'No description'}
+                        {dep.successorTask?.taskName || 'No description'}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="outline">
-                      {getDependencyTypeLabel(dep.dependency_type)}
+                      {getDependencyTypeLabel(dep.dependencyType)}
                     </Badge>
-                    {dep.lag_days !== 0 && (
+                    {dep.lagDays !== 0 && (
                       <Badge variant="secondary">
-                        {dep.lag_days > 0 ? '+' : ''}{dep.lag_days}d lag
+                        {dep.lagDays > 0 ? '+' : ''}{dep.lagDays}d lag
                       </Badge>
                     )}
                   </div>

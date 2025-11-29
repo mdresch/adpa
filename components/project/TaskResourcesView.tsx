@@ -178,7 +178,6 @@ export function TaskResourcesView({ task, onUpdate }: TaskResourcesViewProps) {
         )}
       </div>
 
-
       {/* Resource Requirements */}
       {task.required_role_name && (
         <div className="border-t pt-4">
