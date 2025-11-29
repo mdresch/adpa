@@ -187,10 +187,21 @@ router.put('/:id',
     description: Joi.string().optional(),
     estimatedHours: Joi.number().min(0).optional(),
     requiredRoleId: Joi.string().uuid().optional(),
-    plannedStartDate: Joi.date().optional(),
-    plannedEndDate: Joi.date().optional(),
+    plannedStartDate: Joi.alternatives().try(
+      Joi.date(),
+      Joi.string().isoDate(),
+      Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).allow('', null)
+    ).optional().allow(null),
+    plannedEndDate: Joi.alternatives().try(
+      Joi.date(),
+      Joi.string().isoDate(),
+      Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).allow('', null)
+    ).optional().allow(null),
     priority: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
-    phase: Joi.string().optional()
+    phase: Joi.string().optional().allow('', null),
+    category: Joi.string().optional().allow('', null),
+    status: Joi.string().valid('planned', 'scheduled', 'in_progress', 'in-progress', 'completed', 'blocked', 'on-hold', 'cancelled').optional(),
+    percentComplete: Joi.number().min(0).max(100).optional()
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })

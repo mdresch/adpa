@@ -360,30 +360,53 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
  */
 export async function updateTask(
   taskId: string,
-  updates: Partial<CreateTaskInput>
+  updates: Partial<CreateTaskInput & { status?: string; percentComplete?: number; category?: string }>
 ): Promise<ProjectTask | null> {
   try {
     const setClauses: string[] = []
     const values: any[] = []
     let paramIndex = 1
     
-    const fieldMap: { [key: string]: string } = {
-      taskName: 'task_name',
-      description: 'description',
-      estimatedHours: 'estimated_hours',
-      requiredRoleId: 'required_role_id',
-      plannedStartDate: 'planned_start_date',
-      plannedEndDate: 'planned_end_date',
-      priority: 'priority',
-      phase: 'phase',
-      parentTaskId: 'parent_task_id'
+    // Helper to convert date strings to Date objects or null
+    const parseDate = (value: any): Date | null => {
+      if (!value || value === '') return null
+      if (value instanceof Date) return value
+      if (typeof value === 'string') {
+        // Handle YYYY-MM-DD format from HTML date inputs
+        const date = new Date(value)
+        return isNaN(date.getTime()) ? null : date
+      }
+      return null
+    }
+    
+    const fieldMap: { [key: string]: { dbField: string; transform?: (val: any) => any } } = {
+      taskName: { dbField: 'task_name' },
+      description: { dbField: 'description' },
+      estimatedHours: { dbField: 'estimated_hours' },
+      requiredRoleId: { dbField: 'required_role_id' },
+      plannedStartDate: { dbField: 'planned_start_date', transform: parseDate },
+      plannedEndDate: { dbField: 'planned_end_date', transform: parseDate },
+      priority: { dbField: 'priority' },
+      phase: { dbField: 'phase' },
+      category: { dbField: 'category' },
+      status: { dbField: 'status' },
+      percentComplete: { dbField: 'percent_complete' },
+      parentTaskId: { dbField: 'parent_task_id' }
     }
     
     // Security: Validate key exists in fieldMap to prevent prototype pollution
     Object.entries(updates).forEach(([key, value]) => {
       if (value !== undefined && fieldMap.hasOwnProperty(key) && fieldMap[key]) {
-        setClauses.push(`${fieldMap[key]} = $${paramIndex++}`)
-        values.push(value)
+        const fieldConfig = fieldMap[key]
+        const transformedValue = fieldConfig.transform ? fieldConfig.transform(value) : value
+        
+        // Skip null values for optional fields (except dates which can be null)
+        if (transformedValue === null && !['plannedStartDate', 'plannedEndDate'].includes(key)) {
+          return
+        }
+        
+        setClauses.push(`${fieldConfig.dbField} = $${paramIndex++}`)
+        values.push(transformedValue)
       }
     })
     
@@ -403,9 +426,14 @@ export async function updateTask(
     
     const result = await pool.query(query, values)
     
+    if (!result.rows.length) {
+      return null
+    }
+    
     logger.info('Task updated', { taskId, updates })
     
-    return result.rows[0] || null
+    // Return the updated task using getTaskById to ensure consistent format
+    return getTaskById(taskId)
   } catch (error) {
     logger.error('updateTask error', { error, taskId, updates })
     throw error
