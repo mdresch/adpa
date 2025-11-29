@@ -1837,17 +1837,55 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setSavingStakeholder(true)
       
+      let savedStakeholder: Stakeholder
+      
       if (editingStakeholder) {
         // Update existing stakeholder
-        await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
+        const response = await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
+        savedStakeholder = response.stakeholder
         toast.success("Stakeholder updated successfully!")
       } else {
         // Create new stakeholder
-        await apiClient.createStakeholder({
+        const response = await apiClient.createStakeholder({
           project_id: projectId,
           ...stakeholderForm
         })
+        savedStakeholder = response.stakeholder
         toast.success("Stakeholder added successfully!")
+      }
+      
+      // If marked as team member, ensure they have a user account linked
+      if (stakeholderForm.is_team_member) {
+        // Check if stakeholder has user_id (from the saved response or existing stakeholder)
+        const stakeholderId = savedStakeholder.id || editingStakeholder?.id
+        const hasUserId = (savedStakeholder as any).user_id || (editingStakeholder as any)?.user_id
+        
+        if (!hasUserId) {
+          // Try to find a user by email
+          try {
+            const users = await apiClient.getUsers()
+            const matchingUser = users.find((u: any) => 
+              u.email?.toLowerCase() === stakeholderForm.email.toLowerCase()
+            )
+            
+            if (matchingUser) {
+              // Link stakeholder to user
+              await apiClient.linkStakeholderToUser(stakeholderId, matchingUser.id)
+              toast.success("Stakeholder linked to user account automatically")
+            } else {
+              toast.warning(
+                `Team member must have a user account. No user found with email ${stakeholderForm.email}. ` +
+                `Please create a user account first or link an existing one.`
+              )
+            }
+          } catch (linkError) {
+            console.error("Failed to link stakeholder to user:", linkError)
+            toast.warning(
+              `Team member should have a user account. Could not automatically link to user with email ${stakeholderForm.email}. ` +
+              `Please link manually after creating a user account.`
+            )
+          }
+        }
       }
       
       handleCloseStakeholderDialog(false)
@@ -2760,20 +2798,36 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
                         {/* Team Member Checkbox - Only show for internal stakeholders */}
                         {stakeholderForm.stakeholder_type === 'internal' && (
-                          <div className="flex items-center space-x-2 pt-2">
-                            <input
-                              type="checkbox"
-                              id="is-team-member"
-                              checked={stakeholderForm.is_team_member}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, is_team_member: e.target.checked}))}
-                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
-                            />
-                            <Label htmlFor="is-team-member" className="text-sm font-medium cursor-pointer">
-                              Mark as Team Member
-                            </Label>
-                            <span className="text-xs text-muted-foreground">
-                              (This stakeholder will appear in the project's team members list)
-                            </span>
+                          <div className="space-y-2 pt-2">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="checkbox"
+                                id="is-team-member"
+                                checked={stakeholderForm.is_team_member}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, is_team_member: e.target.checked}))}
+                                className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                              />
+                              <Label htmlFor="is-team-member" className="text-sm font-medium cursor-pointer">
+                                Mark as Team Member
+                              </Label>
+                              <span className="text-xs text-muted-foreground">
+                                (Can be assigned to tasks)
+                              </span>
+                            </div>
+                            {stakeholderForm.is_team_member && !(editingStakeholder as any)?.user_id && (
+                              <div className="ml-6 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                                <p className="font-medium mb-1">⚠️ User Account Required</p>
+                                <p>
+                                  Team members must have a user account to be assigned to tasks. 
+                                  {stakeholderForm.email && (
+                                    <> The system will attempt to automatically link a user account with email <strong>{stakeholderForm.email}</strong> when you save.</>
+                                  )}
+                                  {!stakeholderForm.email && (
+                                    <> Please ensure the stakeholder has a user account with matching email.</>
+                                  )}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         )}
 

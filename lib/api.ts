@@ -1393,6 +1393,10 @@ class ApiClient {
     return this.delete<{ message: string; deleted_stakeholder: { name: string; project_id: string } }>(`/stakeholders/${stakeholderId}`)
   }
 
+  async linkStakeholderToUser(stakeholderId: string, userId: string): Promise<{ success: boolean; message: string }> {
+    return this.post<{ success: boolean; message: string }>(`/stakeholders/${stakeholderId}/link-user`, { userId })
+  }
+
   async getStakeholderEngagementMatrix(projectId: string): Promise<{
     stakeholders: Stakeholder[]
     engagement_matrix: {

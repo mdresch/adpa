@@ -28,14 +28,16 @@ interface ResourceAssignment {
   user_id: string
   user_name: string
   user_email: string
-  role_id: string
-  role_name: string
+  role_id?: string | null
+  role_name?: string
   role_type?: string
   seniority_level?: string
-  hourly_rate: number
+  hourly_rate?: number
   estimated_hours?: number
   start_date?: string
   end_date?: string
+  assignment_source?: 'resource_assignment' | 'stakeholder'
+  stakeholder_id?: string
 }
 
 interface ResourceAssignmentDialogProps {
@@ -152,9 +154,19 @@ export function ResourceAssignmentDialog({
                 Loading available resources...
               </div>
             ) : assignments.length === 0 ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <AlertCircle className="h-4 w-4" />
-                No resources assigned to this project. Please assign resources to the project first.
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <AlertCircle className="h-4 w-4" />
+                  No resources available for task assignment.
+                </div>
+                <div className="text-xs text-muted-foreground pl-6">
+                  To assign resources to tasks, you need to:
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    <li>Add stakeholders in the Stakeholders tab</li>
+                    <li>Mark internal stakeholders as "Team Member"</li>
+                    <li>Ensure stakeholders are linked to user accounts</li>
+                  </ul>
+                </div>
               </div>
             ) : (
               <Select
@@ -169,10 +181,18 @@ export function ResourceAssignmentDialog({
                   {assignments.map((assignment) => (
                     <SelectItem key={assignment.id} value={assignment.id}>
                       <div className="flex flex-col">
-                        <span className="font-medium">{assignment.user_name}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{assignment.user_name}</span>
+                          {(assignment as any).assignment_source === 'stakeholder' && (
+                            <span className="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">
+                              Team Member
+                            </span>
+                          )}
+                        </div>
                         <span className="text-xs text-muted-foreground">
-                          {assignment.role_name}
-                          {assignment.hourly_rate && ` • $${assignment.hourly_rate}/hr`}
+                          {assignment.role_name || 'No role'}
+                          {assignment.hourly_rate && assignment.hourly_rate > 0 && ` • $${assignment.hourly_rate}/hr`}
+                          {(!assignment.hourly_rate || assignment.hourly_rate === 0) && ' • Rate not set'}
                         </span>
                       </div>
                     </SelectItem>
@@ -187,12 +207,21 @@ export function ResourceAssignmentDialog({
               <div className="text-sm space-y-1">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Hourly Rate:</span>
-                  <span className="font-medium">${selectedAssignment.hourly_rate?.toFixed(2) || "0.00"}</span>
+                  <span className="font-medium">
+                    {selectedAssignment.hourly_rate && selectedAssignment.hourly_rate > 0
+                      ? `$${selectedAssignment.hourly_rate.toFixed(2)}`
+                      : "Not set"}
+                  </span>
                 </div>
                 {selectedAssignment.estimated_hours && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Estimated Hours:</span>
                     <span className="font-medium">{selectedAssignment.estimated_hours}h</span>
+                  </div>
+                )}
+                {(selectedAssignment as any).assignment_source === 'stakeholder' && (
+                  <div className="text-xs text-muted-foreground mt-2 pt-2 border-t">
+                    This is a team member from the Stakeholders tab. You may want to set an hourly rate in the Stakeholders tab.
                   </div>
                 )}
               </div>

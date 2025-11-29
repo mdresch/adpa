@@ -67,26 +67,73 @@ export async function assignResourceToTask(
   }
 ): Promise<TaskAssignment> {
   try {
-    // Get resource assignment details (role, rate, etc.)
-    const resourceResult = await pool.query(`
-      SELECT 
-        pra.user_id,
-        pra.hourly_rate,
-        pra.role_id,
-        u.name as user_name,
-        pr.role_name
-      FROM project_resource_assignments pra
-      JOIN users u ON pra.user_id = u.id
-      JOIN project_roles pr ON pra.role_id = pr.id
-      WHERE pra.id = $1
-    `, [resourceAssignmentId])
+    let resource: any
+    let isStakeholder = false
     
-    if (resourceResult.rows.length === 0) {
-      throw new Error('Resource assignment not found')
+    // Check if this is a stakeholder-based assignment (prefixed with "stakeholder-")
+    if (resourceAssignmentId.startsWith('stakeholder-')) {
+      isStakeholder = true
+      const stakeholderId = resourceAssignmentId.replace('stakeholder-', '')
+      
+      // Get stakeholder details who is a team member
+      const stakeholderResult = await pool.query(`
+        SELECT 
+          s.id as stakeholder_id,
+          s.user_id,
+          s.name as user_name,
+          s.email,
+          s.role as role_name,
+          s.project_id,
+          -- Try to find matching project_role
+          pr.id as role_id,
+          pr.default_hourly_rate,
+          -- Get hourly rate from stakeholder metadata or role default
+          -- Handle case where metadata might not exist or be null
+          COALESCE(
+            CASE WHEN s.metadata IS NOT NULL THEN (s.metadata->>'hourly_rate')::numeric ELSE NULL END,
+            pr.default_hourly_rate,
+            0
+          ) as hourly_rate
+        FROM stakeholders s
+        LEFT JOIN project_roles pr ON pr.project_id = s.project_id 
+          AND LOWER(TRIM(pr.role_name)) = LOWER(TRIM(s.role))
+        WHERE s.id = $1
+          AND s.is_team_member = true
+          AND s.stakeholder_type = 'internal'
+          AND s.user_id IS NOT NULL
+      `, [stakeholderId])
+      
+      if (stakeholderResult.rows.length === 0) {
+        throw new Error('Stakeholder team member not found or not eligible for task assignment')
+      }
+      
+      resource = stakeholderResult.rows[0]
+      // For stakeholders, we don't have a resource_assignment_id, so we'll set it to null
+      resource.resource_assignment_id = null
+    } else {
+      // Get resource assignment details (role, rate, etc.) from project_resource_assignments
+      const resourceResult = await pool.query(`
+        SELECT 
+          pra.id as resource_assignment_id,
+          pra.user_id,
+          pra.hourly_rate,
+          pra.role_id,
+          u.name as user_name,
+          pr.role_name
+        FROM project_resource_assignments pra
+        JOIN users u ON pra.user_id = u.id
+        JOIN project_roles pr ON pra.role_id = pr.id
+        WHERE pra.id = $1
+      `, [resourceAssignmentId])
+      
+      if (resourceResult.rows.length === 0) {
+        throw new Error('Resource assignment not found')
+      }
+      
+      resource = resourceResult.rows[0]
     }
     
-    const resource = resourceResult.rows[0]
-    const plannedCost = plannedHours * resource.hourly_rate
+    const plannedCost = plannedHours * (resource.hourly_rate || 0)
     
     // Create task assignment
     const result = await pool.query(`
@@ -114,13 +161,13 @@ export async function assignResourceToTask(
         planned_cost as "plannedCost"
     `, [
       taskId,
-      resourceAssignmentId,
+      resource.resource_assignment_id, // null for stakeholders
       resource.user_id,
       resource.user_name,
-      resource.role_id,
+      resource.role_id, // may be null for stakeholders without matching role
       resource.role_name,
       plannedHours,
-      resource.hourly_rate,
+      resource.hourly_rate || 0,
       plannedCost,
       options?.scheduledStartDate,
       options?.scheduledEndDate,
@@ -134,12 +181,14 @@ export async function assignResourceToTask(
       taskId,
       userId: resource.user_id,
       plannedHours,
-      plannedCost
+      plannedCost,
+      isStakeholder,
+      resourceAssignmentId
     })
     
     return assignment
   } catch (error) {
-    logger.error('assignResourceToTask error', { error, taskId })
+    logger.error('assignResourceToTask error', { error, taskId, resourceAssignmentId })
     throw error
   }
 }

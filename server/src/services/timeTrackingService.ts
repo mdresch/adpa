@@ -141,7 +141,8 @@ export async function createResourceAssignment(
  */
 export async function getProjectResourceAssignments(projectId: string): Promise<any[]> {
   try {
-    const result = await pool.query(
+    // Get project_resource_assignments (existing resource assignments)
+    const assignmentsResult = await pool.query(
       `SELECT 
         pra.*,
         u.name as user_name,
@@ -157,7 +158,82 @@ export async function getProjectResourceAssignments(projectId: string): Promise<
       [projectId]
     )
     
-    return result.rows
+    // Get stakeholders who are team members (is_team_member = true)
+    // These should also be available for task assignment
+    const teamMembersResult = await pool.query(
+      `SELECT 
+        s.id,
+        s.project_id,
+        s.user_id,
+        s.name as user_name,
+        s.email as user_email,
+        s.role as role_name,
+        s.is_team_member,
+        s.stakeholder_type,
+        -- Try to find a matching project_role by role name
+        pr.id as role_id,
+        pr.role_type,
+        pr.seniority_level,
+        -- Use a default hourly rate if not set (could be from role or stakeholder metadata)
+        -- Handle case where metadata might not exist or be null
+        COALESCE(
+          CASE WHEN s.metadata IS NOT NULL THEN (s.metadata->>'hourly_rate')::numeric ELSE NULL END,
+          pr.default_hourly_rate,
+          0
+        ) as hourly_rate,
+        -- Mark as stakeholder-based assignment
+        'stakeholder' as assignment_source
+      FROM stakeholders s
+      LEFT JOIN project_roles pr ON pr.project_id = s.project_id 
+        AND LOWER(TRIM(pr.role_name)) = LOWER(TRIM(s.role))
+      WHERE s.project_id = $1
+        AND s.is_team_member = true
+        AND s.stakeholder_type = 'internal'
+        AND s.user_id IS NOT NULL
+      ORDER BY s.name ASC`,
+      [projectId]
+    )
+    
+    // Combine both results
+    const assignments = assignmentsResult.rows.map(row => ({
+      ...row,
+      assignment_source: 'resource_assignment'
+    }))
+    
+    const teamMembers = teamMembersResult.rows.map(row => ({
+      id: `stakeholder-${row.id}`, // Prefix to distinguish from resource assignments
+      project_id: row.project_id,
+      user_id: row.user_id,
+      user_name: row.user_name,
+      user_email: row.user_email,
+      role_id: row.role_id,
+      role_name: row.role_name,
+      role_type: row.role_type,
+      seniority_level: row.seniority_level,
+      hourly_rate: row.hourly_rate || 0,
+      assignment_source: 'stakeholder',
+      stakeholder_id: row.id, // Keep reference to original stakeholder
+      // Default values for fields that might not exist for stakeholders
+      assignment_type: 'full-time',
+      allocation_percentage: 100,
+      start_date: null,
+      end_date: null,
+      estimated_hours: null,
+      status: 'active'
+    }))
+    
+    // Combine and deduplicate by user_id (prefer resource assignments over stakeholders)
+    const combined = [...assignments]
+    const assignedUserIds = new Set(assignments.map(a => a.user_id))
+    
+    // Only add stakeholders that aren't already in resource assignments
+    teamMembers.forEach(tm => {
+      if (!assignedUserIds.has(tm.user_id)) {
+        combined.push(tm)
+      }
+    })
+    
+    return combined
   } catch (error) {
     logger.error('getProjectResourceAssignments error', { error, projectId })
     throw error
