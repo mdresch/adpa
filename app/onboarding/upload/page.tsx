@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { MaturityCard } from '@/components/onboarding/MaturityCard';
@@ -38,6 +39,7 @@ interface UploadedFile {
 
 export default function DocumentUploadPage() {
   const router = useRouter();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -52,13 +54,40 @@ export default function DocumentUploadPage() {
   const [contactEmail, setContactEmail] = useState('');
   const [assessmentPurpose, setAssessmentPurpose] = useState('Initial Onboarding');
 
-  // Check if first visit
+  // Require authentication - redirect to login if not authenticated
   useEffect(() => {
-    const hasSeenIntro = localStorage.getItem('maturity_journey_intro_seen');
-    if (!hasSeenIntro) {
-      setShowIntro(true);
+    if (!authLoading && !isAuthenticated) {
+      toast.error('Please register or log in to access the onboarding assessment');
+      router.push('/auth/login?redirect=/onboarding/upload');
     }
-  }, []);
+  }, [isAuthenticated, authLoading, router]);
+
+  // Check if first visit (only if authenticated)
+  useEffect(() => {
+    if (isAuthenticated) {
+      const hasSeenIntro = localStorage.getItem('maturity_journey_intro_seen');
+      if (!hasSeenIntro) {
+        setShowIntro(true);
+      }
+    }
+  }, [isAuthenticated]);
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render content if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
 
   // Handle drag events
   const handleDragEnter = useCallback((e: React.DragEvent) => {

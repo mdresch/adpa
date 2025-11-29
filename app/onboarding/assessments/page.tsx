@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 import { MaturityCard } from '@/components/onboarding/MaturityCard';
 import { MaturityScore } from '@/components/onboarding/MaturityScore';
 import { maturityTheme, getMaturityColor } from '@/lib/theme/maturity-portal-theme';
@@ -66,6 +67,7 @@ interface Assessment {
 
 export default function AssessmentsListPage() {
   const router = useRouter();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -73,40 +75,57 @@ export default function AssessmentsListPage() {
   const [filterStatus, setFilterStatus] = useState('all');
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
 
+  // Require authentication - redirect to login if not authenticated
   useEffect(() => {
-    loadAssessments();
-    
-    // Set up auto-refresh for processing assessments
-    const interval = setInterval(() => {
+    if (!authLoading && !isAuthenticated) {
+      toast.error('Please register or log in to view assessments');
+      router.push('/auth/login?redirect=/onboarding/assessments');
+    }
+  }, [isAuthenticated, authLoading, router]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
       loadAssessments();
-    }, 5000); // Poll every 5 seconds
-    
-    return () => clearInterval(interval);
-  }, []); // Only run once on mount
+      
+      // Set up auto-refresh for processing assessments
+      const interval = setInterval(() => {
+        loadAssessments();
+      }, 5000); // Poll every 5 seconds
+      
+      return () => clearInterval(interval);
+    }
+  }, [isAuthenticated]); // Only run when authenticated
 
   const loadAssessments = async () => {
+    if (!isAuthenticated) return;
+    
     try {
+      const token = localStorage.getItem('auth_token');
       const response = await fetch('/api/assessment/list', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
         credentials: 'include'
       });
 
-      if (!response.ok && response.status === 401) {
-        // Try without auth for guest access
-        const retryResponse = await fetch('/api/assessment/list');
-        const retryData = await retryResponse.json();
-        if (retryData.success) {
-          setAssessments(retryData.data || []);
+      if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Authentication required. Please log in.');
+          router.push('/auth/login?redirect=/onboarding/assessments');
+          return;
         }
-      } else {
-        const data = await response.json();
-        if (data.success) {
-          setAssessments(data.data || []);
-          // Extract unique projects from assessments for filter
-          const uniqueProjects = Array.from(
-            new Set(data.data?.map((a: Assessment) => a.projectName) || [])
-          ).map(name => ({ id: String(name), name: String(name) }));
-          setProjects(uniqueProjects);
-        }
+        throw new Error(`Failed to load assessments: ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      if (data.success) {
+        setAssessments(data.data || []);
+        // Extract unique projects from assessments for filter
+        const uniqueProjects = Array.from(
+          new Set(data.data?.map((a: Assessment) => a.projectName) || [])
+        ).map(name => ({ id: String(name), name: String(name) }));
+        setProjects(uniqueProjects);
       }
     } catch (error) {
       console.error('Failed to load assessments:', error);
@@ -115,6 +134,23 @@ export default function AssessmentsListPage() {
       setLoading(false);
     }
   };
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render content if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
 
   const handleView = (assessment: Assessment) => {
     // Use batch ID for the URL since the detail page expects batch ID

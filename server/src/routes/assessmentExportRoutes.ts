@@ -13,100 +13,43 @@ import { portfolioAssessmentService } from '../services/portfolioAssessmentServi
 
 const router = express.Router();
 
-// Optional auth middleware for guest access
-const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (token) {
-      return authenticate(req, res, next);
-    }
-    
-    // For guest users, find or create system guest user
-    const guestEmail = 'onboarding-guest@system.local';
-    const guestResult = await pool.query(
-      'SELECT id, email, role FROM users WHERE email = $1',
-      [guestEmail]
-    );
-    
-    if (guestResult.rows.length === 0) {
-      // Create guest user if doesn't exist
-      const newGuestResult = await pool.query(
-        `INSERT INTO users (id, email, name, role, is_active, created_at) 
-         VALUES (gen_random_uuid(), $1, 'Guest User', 'guest', true, NOW())
-         RETURNING id, email, role`,
-        [guestEmail]
-      );
-      (req as any).user = newGuestResult.rows[0];
-    } else {
-      (req as any).user = guestResult.rows[0];
-    }
-    
-    (req as any).user.isGuest = true;
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+/**
+ * Authentication is now required for all assessment routes.
+ * Users must register and authenticate before accessing assessments.
+ */
 
 // ============================================================================
 // GET /api/assessment/list
 // Get all assessments for current user (authenticated or guest)
 // ============================================================================
 
-router.get('/list', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/list', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const userId = (req as any).user.id;
-    const isGuest = (req as any).user.isGuest;
 
     // Removed noisy logging (was flooding console with polling requests)
-    // logger.info('Fetching assessments list', { userId, isGuest });
-
-    // For guest users, get assessments from upload_batches (all guest uploads)
-    // For authenticated users, get assessments from their projects
-    let query: string;
-    let params: any[];
-
-    if (isGuest) {
-      query = `
-        SELECT 
-          a.*,
-          p.name as project_name,
-          ub.uploaded_by,
-          ub.batch_metadata,
-          ub.total_files,
-          ub.processed_files,
-          ub.successful_files,
-          ub.failed_files,
-          ub.status as batch_status
-        FROM assessments a
-        JOIN projects p ON a.project_id = p.id
-        LEFT JOIN upload_batches ub ON a.batch_id = ub.id
-        WHERE ub.uploaded_by = $1
-        ORDER BY a.created_at DESC
-        LIMIT 100
-      `;
-      params = [userId];
-    } else {
-      query = `
-        SELECT 
-          a.*,
-          p.name as project_name,
-          ub.uploaded_by,
-          ub.batch_metadata,
-          ub.total_files,
-          ub.processed_files,
-          ub.successful_files,
-          ub.failed_files,
-          ub.status as batch_status
-        FROM assessments a
-        JOIN projects p ON a.project_id = p.id
-        LEFT JOIN upload_batches ub ON a.batch_id = ub.id
-        WHERE p.created_by = $1
-        ORDER BY a.created_at DESC
-        LIMIT 100
-`;
-      params = [userId];
-    }
+    // logger.info('Fetching assessments list', { userId });
+    
+    // Get assessments for authenticated user
+    const query = `
+      SELECT 
+        a.*,
+        p.name as project_name,
+        ub.uploaded_by,
+        ub.batch_metadata,
+        ub.total_files,
+        ub.processed_files,
+        ub.successful_files,
+        ub.failed_files,
+        ub.status as batch_status
+      FROM assessments a
+      JOIN projects p ON a.project_id = p.id
+      LEFT JOIN upload_batches ub ON a.batch_id = ub.id
+      WHERE p.owner_id = $1 OR p.created_by = $1 OR ub.uploaded_by = $1
+      ORDER BY a.created_at DESC
+      LIMIT 100
+    `;
+    const params = [userId];
 
     const result = await pool.query(query, params);
 
@@ -154,42 +97,12 @@ router.get('/list', optionalAuth, async (req: Request, res: Response, next: Next
 // Get assessment data
 // ============================================================================
 
-// Optional auth for viewing assessments (guests can view their own assessments)
-const optionalAuthForView = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const token = req.headers.authorization?.split(' ')[1];
-    if (token) {
-      return authenticate(req, res, next);
-    }
-    
-    // For guest users, use the system guest user (not string 'guest')
-    const guestEmail = 'onboarding-guest@system.local';
-    const guestResult = await pool.query(
-      'SELECT id, email, role FROM users WHERE email = $1',
-      [guestEmail]
-    );
-    
-    if (guestResult.rows.length === 0) {
-      // Create guest user if doesn't exist
-      const newGuestResult = await pool.query(
-        `INSERT INTO users (id, email, name, role, is_active, created_at) 
-         VALUES (gen_random_uuid(), $1, 'Guest User', 'guest', true, NOW())
-         RETURNING id, email, role`,
-        [guestEmail]
-      );
-      (req as any).user = newGuestResult.rows[0];
-    } else {
-      (req as any).user = guestResult.rows[0];
-    }
-    
-    (req as any).user.isGuest = true;
-    next();
-  } catch (error) {
-    next(error);
-  }
-};
+/**
+ * Authentication is now required for viewing assessments.
+ * Users must register and authenticate before accessing assessment data.
+ */
 
-router.get('/:assessmentId', optionalAuthForView, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:assessmentId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;
     const userId = (req as any).user.id;
@@ -228,7 +141,7 @@ router.get('/:assessmentId', optionalAuthForView, async (req: Request, res: Resp
 // Export assessment report
 // ============================================================================
 
-router.get('/:assessmentId/export', optionalAuthForView, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/:assessmentId/export', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;
     const { format = 'pdf' } = req.query;
@@ -342,7 +255,7 @@ router.post('/:assessmentId/regenerate', authenticate, async (req: Request, res:
 // Manually trigger assessment generation for a completed batch
 // ============================================================================
 
-router.post('/batch/:batchId/complete', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/batch/:batchId/complete', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { batchId } = req.params;
     const userId = (req as any).user.id;
@@ -509,7 +422,7 @@ router.post('/batch/:batchId/complete', optionalAuth, async (req: Request, res: 
 // Get assessment by batch ID
 // ============================================================================
 
-router.get('/batch/:batchId', optionalAuthForView, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { batchId } = req.params;
     const userId = (req as any).user.id;
@@ -624,7 +537,7 @@ router.post('/project/quick-create', authenticate, async (req: Request, res: Res
  * Add more documents to an existing assessment batch
  * This allows users to enhance their assessment with additional documents
  */
-router.post('/batch/:batchId/add-documents', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/batch/:batchId/add-documents', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { batchId } = req.params;
     const userId = (req as any).user?.id;
@@ -648,11 +561,8 @@ router.post('/batch/:batchId/add-documents', optionalAuth, async (req: Request, 
     const batch = batchResult.rows[0];
     
     // Check permissions
-    const isGuestBatch = batch.project_owner === (await pool.query(
-      "SELECT id FROM users WHERE email = 'onboarding-guest@system.local'"
-    )).rows[0]?.id;
-    
-    if (!isGuestBatch && batch.uploaded_by !== userId) {
+    // Verify user has access to this batch
+    if (batch.uploaded_by !== userId && batch.project_owner !== userId) {
       return res.status(403).json({
         success: false,
         error: 'Access denied to this batch'
@@ -684,7 +594,7 @@ router.post('/batch/:batchId/add-documents', optionalAuth, async (req: Request, 
  * Regenerate assessment after adding new documents
  * This recalculates all metrics with the updated document set
  */
-router.post('/batch/:batchId/regenerate', optionalAuth, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/batch/:batchId/regenerate', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { batchId } = req.params;
     const userId = (req as any).user?.id;

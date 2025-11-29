@@ -307,7 +307,6 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
          p.owner_id = $2 
          OR p.created_by = $2 
          OR p.team_members ? $2::text
-         OR u.email = 'onboarding-guest@system.local'
        )`,
       [projectId, req.user?.id]
     )
@@ -435,7 +434,6 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
          p.owner_id = $2 
          OR p.created_by = $2 
          OR p.team_members ? $2::text
-         OR u.email = 'onboarding-guest@system.local'
        )`,
       [projectId, req.user?.id]
     )
