@@ -31,6 +31,7 @@ import {
   BookOpen,
   Target,
   Gauge,
+  Building2,
 } from "lucide-react"
 
 const navigation = [
@@ -39,19 +40,20 @@ const navigation = [
   { name: "Resource Capacity", href: "/capacity", icon: Gauge },
   // { name: "Approvals", href: "/approvals", icon: CheckCircle, badge: true }, // Temporarily hidden for testing
   { name: "Search", href: "/search", icon: Search },
-  { name: "AI Providers", href: "/ai-providers", icon: Zap },
+  { name: "AI Providers", href: "/ai-providers", icon: Zap, adminOnly: true },
   { name: "AI Analytics", href: "/ai-analytics", icon: TrendingUp },
   { name: "AI Readiness", href: "/ai-readiness", icon: Target },
-  { name: "Integrations", href: "/integrations", icon: LinkIcon },
+  { name: "Integrations", href: "/integrations", icon: LinkIcon, adminOnly: true },
   { name: "Templates", href: "/templates", icon: FileText },
-  { name: "Template Builder", href: "/templates/builder", icon: Layers },
+  { name: "Template Builder", href: "/templates/builder", icon: Layers, adminOnly: true },
   // { name: "PMBOK 6 Processes", href: "/pmbok6", icon: BookOpen }, // Temporarily hidden for testing
-  { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow },
-  { name: "Users & Roles", href: "/users", icon: Users },
-  { name: "Job Monitor", href: "/jobs", icon: Activity },
+  { name: "Process Flow Workflow", href: "/process-flow", icon: Workflow, adminOnly: true },
+  { name: "Users & Roles", href: "/users", icon: Users, adminOnly: true },
+  { name: "Companies", href: "/companies", icon: Building2, adminOnly: true },
+  { name: "Job Monitor", href: "/jobs", icon: Activity, adminOnly: true },
   { name: "Analytics", href: "/analytics", icon: BarChart3 },
-  { name: "Security", href: "/security", icon: Shield },
-  { name: "System Settings", href: "/settings", icon: Settings },
+  { name: "Security", href: "/security", icon: Shield, adminOnly: true },
+  { name: "System Settings", href: "/settings", icon: Settings, adminOnly: true },
 ]
 
 export function Sidebar() {
@@ -122,7 +124,17 @@ export function Sidebar() {
       {/* Navigation */}
       <ScrollArea className="flex-1 px-3 py-6 custom-scrollbar">
         <nav className="space-y-2">
-          {navigation.map((item, index) => {
+          {navigation
+            .filter((item) => {
+              // Hide admin-only items for non-admin/super-admin users
+              // Super admin has all admin privileges
+              const isAdminOrSuperAdmin = user?.role === "admin" || user?.role === "super_admin"
+              if (item.adminOnly && !isAdminOrSuperAdmin) {
+                return false
+              }
+              return true
+            })
+            .map((item, index) => {
             const isActive = pathname === item.href
             const showBadge = item.badge && pendingCount > 0
             return (

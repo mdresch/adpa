@@ -12,7 +12,7 @@ import { Parser } from 'json2csv'
 const router = express.Router()
 
 /**
- * Middleware to check if user is admin
+ * Middleware to check if user is admin or super_admin
  */
 const requireAdmin = async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -23,7 +23,8 @@ const requireAdmin = async (req: Request, res: Response, next: NextFunction) => 
       [userId]
     )
 
-    if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+    const userRole = userResult.rows[0]?.role?.toLowerCase()
+    if (userResult.rows.length === 0 || (userRole !== 'admin' && userRole !== 'super_admin')) {
       return res.status(403).json({
         success: false,
         error: 'Admin access required'

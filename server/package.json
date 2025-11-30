@@ -58,6 +58,10 @@
     "migrate:354": "tsx scripts/run-migration-354.ts",
     "migrate:355": "tsx scripts/run-migration-355.ts",
     "migrate:356": "tsx scripts/run-migration-356.ts",
+    "migrate:357": "tsx scripts/run-migration-357.ts",
+    "migrate:358": "tsx scripts/run-migration-358.ts",
+    "migrate:359": "tsx scripts/run-migration-359.ts",
+    "setup:super-admin": "tsx scripts/setup-super-admin.ts",
     "cache:clear-team-agreements": "tsx scripts/clear-team-agreements-cache.ts",
     "migrate:401": "node scripts/migrate-401.js",
     "migrate:209": "tsx scripts/run-migration-209.ts",
@@ -95,7 +99,8 @@
     "reset-batches": "tsx scripts/reset-failed-batches.ts",
     "clear-jobs": "tsx scripts/clear-failed-jobs.ts",
     "diagnose:extraction": "tsx scripts/diagnose-extraction.ts",
-    "clear:adpa-drifts": "tsx scripts/clear-adpa-drifts.ts"
+    "clear:adpa-drifts": "tsx scripts/clear-adpa-drifts.ts",
+    "setup:demo-company": "tsx scripts/setup-demo-company.ts"
   },
   "dependencies": {
     "@adobe/pdfservices-node-sdk": "^4.1.0",

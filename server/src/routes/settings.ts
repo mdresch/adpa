@@ -212,7 +212,7 @@ function maskApiKey(key: string): string {
 }
 
 // Get AI Gateway settings
-router.get("/ai-gateway", authenticateToken, requireRole(['admin']), async (req, res) => {
+router.get("/ai-gateway", authenticateToken, requireRole(['admin', 'super_admin']), async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT setting_value, is_encrypted 
@@ -253,7 +253,7 @@ router.get("/ai-gateway", authenticateToken, requireRole(['admin']), async (req,
 })
 
 // Save AI Gateway settings
-router.post("/ai-gateway", authenticateToken, requireRole(['admin']), async (req, res) => {
+router.post("/ai-gateway", authenticateToken, requireRole(['admin', 'super_admin']), async (req, res) => {
   try {
     const { api_key, enabled } = req.body
 

@@ -79,8 +79,9 @@ export const requirePermission = (permission: string) => {
       return res.status(401).json({ error: "Authentication required" })
     }
 
-    // Admins have all permissions (case-insensitive comparison)
-    if (req.user.role?.toLowerCase() === 'admin') {
+    // Super admins and admins have all permissions (case-insensitive comparison)
+    const userRole = req.user.role?.toLowerCase()
+    if (userRole === 'super_admin' || userRole === 'admin') {
       return next()
     }
 

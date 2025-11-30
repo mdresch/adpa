@@ -35,6 +35,7 @@ import {
   Sparkles,
   Activity,
   AlertCircle,
+  Building2,
 } from "lucide-react"
 import {
   Dialog,
@@ -52,6 +53,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 // Role mapping: backend role -> display name
 const ROLE_DISPLAY_NAMES: Record<string, string> = {
+  super_admin: "Super Administrator",
   admin: "Administrator",
   manager: "Project Manager",
   user: "User",
@@ -61,11 +63,26 @@ const ROLE_DISPLAY_NAMES: Record<string, string> = {
 
 // Reverse mapping: display name -> backend role
 const DISPLAY_TO_ROLE: Record<string, string> = {
+  "Super Administrator": "super_admin",
   "Administrator": "admin",
   "Project Manager": "manager",
   "User": "user",
   "Viewer": "viewer",
   "Change Control Board": "ccb",
+}
+
+// Get available roles based on current user's role
+// Only super_admin can see and assign super_admin role
+const getAvailableRoles = (currentUserRole: string | undefined): Array<[string, string]> => {
+  const allRoles = Object.entries(ROLE_DISPLAY_NAMES)
+  
+  // If current user is super_admin, show all roles including super_admin
+  if (currentUserRole === "super_admin") {
+    return allRoles
+  }
+  
+  // Otherwise, filter out super_admin role
+  return allRoles.filter(([backendRole]) => backendRole !== "super_admin")
 }
 
 interface User {
@@ -92,11 +109,13 @@ export default function UsersAndRoles() {
     email: string
     role: string
     is_active: boolean
+    companyName: string
   }>({
     name: "",
     email: "",
     role: "user",
     is_active: true,
+    companyName: "",
   })
   const [showCreateDialog, setShowCreateDialog] = useState(false)
   const [createFormData, setCreateFormData] = useState<{
@@ -105,6 +124,7 @@ export default function UsersAndRoles() {
     role: string
     password: string
     department: string
+    companyName: string
     notes: string
     sendInvite: boolean
   }>({
@@ -113,6 +133,7 @@ export default function UsersAndRoles() {
     role: "user",
     password: "",
     department: "",
+    companyName: "",
     notes: "",
     sendInvite: false,
   })
@@ -190,13 +211,41 @@ export default function UsersAndRoles() {
     }
   }, [isAuthenticated, authLoading, router])
 
-  // Check if user is admin
+  // Check if user is admin or super_admin (case-insensitive)
+  // Note: This check is informational - the API will enforce access control
   useEffect(() => {
-    if (!authLoading && user && user.role !== "admin") {
-      router.push("/")
-      toast.error("Access denied: Admin role required")
+    // Don't check until auth is fully loaded
+    if (authLoading) {
+      return
     }
-  }, [user, authLoading, router])
+    
+    // If no user, don't block (let the auth redirect handle it)
+    if (!user) {
+      return
+    }
+    
+    // Debug logging
+    console.log("[Users] Access check:", {
+      userRole: user?.role,
+      userRoleLower: user?.role?.toLowerCase(),
+      userObject: user,
+      isAuthenticated,
+      authLoading
+    })
+    
+    const userRole = user?.role?.toLowerCase()
+    const isAdminOrSuperAdmin = userRole === "admin" || userRole === "super_admin"
+    
+    // Only show warning, don't redirect - let the API call handle access control
+    // If API succeeds, user has access; if it fails, show error
+    if (!isAdminOrSuperAdmin) {
+      console.warn("[Users] User role check failed - user role:", user?.role, "Full user object:", user)
+      // Don't redirect immediately - let the API call attempt first
+      // The API will return 403 if access is truly denied
+    } else {
+      console.log("[Users] Access granted - user role:", user?.role)
+    }
+  }, [user, authLoading, router, isAuthenticated])
 
   // Fetch users from API
   useEffect(() => {
@@ -206,11 +255,21 @@ export default function UsersAndRoles() {
         return
       }
 
-      // Don't fetch if not authenticated or not admin
-      if (!isAuthenticated || !user || user.role !== "admin") {
+      // Try to fetch users - let the API handle access control
+      // If user doesn't have access, API will return 403
+      if (!isAuthenticated || !user) {
         setLoading(false)
         return
       }
+      
+      // Log user info for debugging
+      console.log("[Users] Fetching users - Current user:", {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        roleLower: user?.role?.toLowerCase(),
+        fullUserObject: user
+      })
 
       try {
         setLoading(true)
@@ -227,6 +286,8 @@ export default function UsersAndRoles() {
         // Request all users with a higher limit (max 100 per backend validation)
         const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
         console.log("[Users] API Response:", response)
+        console.log("[Users] Current user object:", user)
+        console.log("[Users] Current user role:", user?.role)
         
         // Handle paginated response
         const usersList = response?.users || []
@@ -251,15 +312,27 @@ export default function UsersAndRoles() {
         let errorMessage = "Failed to load users. Please try again."
         
         if (err?.status === 403 || err?.response?.status === 403) {
-          errorMessage = "Access denied. Admin role required to view users."
+          errorMessage = "Access denied. Admin or Super Admin role required to view users."
         } else if (err?.status === 401 || err?.response?.status === 401) {
           errorMessage = "Authentication required. Please log in."
           // Redirect to login
           router.push("/auth/login")
-        } else if (err?.response?.data?.error) {
-          errorMessage = err.response.data.error
-        } else if (err?.message) {
+        } else if (err?.response?.data) {
+          const errorData = err.response.data
+          if (typeof errorData === 'string') {
+            errorMessage = errorData
+          } else if (errorData?.error && typeof errorData.error === 'string') {
+            errorMessage = errorData.error
+          } else if (errorData?.message && typeof errorData.message === 'string') {
+            errorMessage = errorData.message
+          }
+        } else if (err?.message && typeof err.message === 'string') {
           errorMessage = err.message
+        }
+        
+        // Ensure errorMessage is always a string
+        if (typeof errorMessage !== 'string') {
+          errorMessage = "Failed to load users. Please try again."
         }
         
         setError(errorMessage)
@@ -275,11 +348,36 @@ export default function UsersAndRoles() {
   // Handle edit user
   const handleEditUser = (user: User) => {
     setEditingUser(user)
+    // Extract company name from metadata if available
+    let companyName = ''
+    try {
+      const metadata = (user as any).metadata
+      if (metadata) {
+        if (typeof metadata === 'string') {
+          // Try to parse as JSON
+          try {
+            const parsed = JSON.parse(metadata)
+            companyName = parsed?.company_name || ''
+          } catch (e) {
+            // If parsing fails, metadata might be a plain string
+            companyName = ''
+          }
+        } else if (typeof metadata === 'object' && metadata !== null) {
+          // Already an object (PostgreSQL JSONB is returned as object by pg library)
+          companyName = metadata?.company_name || ''
+        }
+      }
+    } catch (error) {
+      console.warn('Error parsing user metadata:', error)
+      companyName = ''
+    }
+    
     setEditFormData({
       name: user.name || "",
       email: user.email || "",
       role: user.role || "user",
       is_active: user.is_active ?? true,
+      companyName: companyName,
     })
     setShowEditDialog(true)
   }
@@ -301,23 +399,105 @@ export default function UsersAndRoles() {
     }
 
     try {
-      await apiClient.updateUser(editingUser.id, {
+      const updateResponse = await apiClient.updateUser<{ message: string; user: User }>(editingUser.id, {
         name: editFormData.name,
         email: editFormData.email,
         role: editFormData.role,
         is_active: editFormData.is_active,
+        companyName: editFormData.companyName,
       })
 
-      // Refresh users list
-      const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
-      setUsers(response?.users || [])
+      // Use the updated user from the response if available
+      if (updateResponse?.user) {
+        // Update the user in the users list immediately
+        setUsers(prevUsers => 
+          prevUsers.map(u => u.id === editingUser.id ? updateResponse.user : u)
+        )
+        // Update editingUser state
+        setEditingUser(updateResponse.user)
+      }
+
+      // Also refresh users list to ensure we have the latest data
+      try {
+        const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+        const updatedUsers = response?.users || []
+        setUsers(updatedUsers)
+        
+        // Find and update editingUser with fresh data
+        const freshUser = updatedUsers.find(u => u.id === editingUser.id)
+        if (freshUser) {
+          setEditingUser(freshUser)
+        }
+      } catch (refreshError) {
+        console.warn("Failed to refresh users list, but update was successful:", refreshError)
+      }
 
       toast.success("User updated successfully")
       setShowEditDialog(false)
       setEditingUser(null)
     } catch (err: any) {
       console.error("Failed to update user:", err)
-      const errorMessage = err?.response?.data?.message || err?.response?.data?.error || err?.message || "Failed to update user"
+      
+      // Extract error message from various possible error structures
+      let errorMessage = "Failed to update user"
+      
+      // Helper to safely extract string from nested object
+      const extractString = (obj: any, ...paths: string[]): string | null => {
+        for (const path of paths) {
+          const keys = path.split('.')
+          let value = obj
+          for (const key of keys) {
+            if (value && typeof value === 'object' && key in value) {
+              value = value[key]
+            } else {
+              value = null
+              break
+            }
+          }
+          if (typeof value === 'string' && value) {
+            return value
+          }
+        }
+        return null
+      }
+      
+      // Try to extract error message from various locations
+      const extracted = extractString(
+        err,
+        'response.data.message',
+        'response.data.error',
+        'data.message',
+        'data.error',
+        'message',
+        'error'
+      )
+      
+      if (extracted) {
+        errorMessage = extracted
+      } else if (typeof err === 'string') {
+        errorMessage = err
+      } else if (err?.response?.data) {
+        const errorData = err.response.data
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (typeof errorData === 'object' && errorData !== null) {
+          // If it's an object, try to stringify it or use a default message
+          errorMessage = errorData.message || errorData.error || "Failed to update user"
+        }
+      } else if (err?.data) {
+        const errorData = err.data
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (typeof errorData === 'object' && errorData !== null) {
+          errorMessage = errorData.message || errorData.error || "Failed to update user"
+        }
+      }
+      
+      // Final safety check - ensure we always have a string
+      if (typeof errorMessage !== 'string') {
+        errorMessage = "Failed to update user"
+      }
+      
       toast.error(errorMessage)
     }
   }
@@ -359,6 +539,7 @@ export default function UsersAndRoles() {
         email: createFormData.email,
         password: createFormData.password,
         role: createFormData.role,
+        companyName: createFormData.companyName || undefined,
       })
 
       // Refresh users list
@@ -374,6 +555,7 @@ export default function UsersAndRoles() {
         role: "user",
         password: "",
         department: "",
+        companyName: "",
         notes: "",
         sendInvite: false,
       })
@@ -386,7 +568,27 @@ export default function UsersAndRoles() {
       }
     } catch (err: any) {
       console.error("Failed to create user:", err)
-      const errorMessage = err?.response?.data?.error || err?.response?.data?.message || err?.message || "Failed to create user"
+      
+      // Extract error message safely
+      let errorMessage = "Failed to create user"
+      if (err?.response?.data) {
+        const errorData = err.response.data
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.error && typeof errorData.error === 'string') {
+          errorMessage = errorData.error
+        } else if (errorData?.message && typeof errorData.message === 'string') {
+          errorMessage = errorData.message
+        }
+      } else if (err?.message && typeof err.message === 'string') {
+        errorMessage = err.message
+      }
+      
+      // Ensure errorMessage is always a string
+      if (typeof errorMessage !== 'string') {
+        errorMessage = "Failed to create user"
+      }
+      
       toast.error(errorMessage)
     } finally {
       setCreating(false)
@@ -395,21 +597,39 @@ export default function UsersAndRoles() {
 
   // Delete user
   const handleDeleteUser = async (user: User) => {
-    if (!confirm(`Are you sure you want to delete ${user.name || user.email}?`)) {
+    if (!confirm(`Are you sure you want to deactivate ${user.name || user.email}? The account will be deactivated and the user will no longer be able to log in. All associated data will be preserved.`)) {
       return
     }
 
     try {
-      await apiClient.delete(`/users/${user.id}`)
+      const response = await apiClient.delete<{ message: string; user?: any }>(`/users/${user.id}`)
       
       // Refresh users list
-      const response = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
-      setUsers(response?.users || [])
+      const usersResponse = await apiClient.request<{ users: User[]; pagination: any }>("/users?limit=100")
+      setUsers(usersResponse?.users || [])
 
-      toast.success("User deleted successfully")
-    } catch (err) {
-      console.error("Failed to delete user:", err)
-      toast.error("Failed to delete user")
+      toast.success(response.message || "User deactivated successfully")
+    } catch (err: any) {
+      console.error("Failed to deactivate user:", err)
+      
+      // Extract error message
+      let errorMessage = "Failed to deactivate user"
+      if (err?.response?.data) {
+        const errorData = err.response.data
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.error && typeof errorData.error === 'string') {
+          errorMessage = errorData.error
+        } else if (errorData?.message && typeof errorData.message === 'string') {
+          errorMessage = errorData.message
+        } else if (typeof errorData === 'object' && errorData !== null) {
+          errorMessage = errorData.error || errorData.message || "Failed to deactivate user"
+        }
+      } else if (err?.message && typeof err.message === 'string') {
+        errorMessage = err.message
+      }
+      
+      toast.error(errorMessage)
     }
   }
 
@@ -424,7 +644,22 @@ export default function UsersAndRoles() {
   })
 
   // Get unique roles for filter dropdown
-  const availableRoles = Array.from(new Set(users.map(u => ROLE_DISPLAY_NAMES[u.role] || u.role)))
+  // Filter available roles based on current user's role
+  // Only super_admin can see super_admin role in the filter
+  const availableRoles = Array.from(
+    new Set(
+      users
+        .map(u => ROLE_DISPLAY_NAMES[u.role] || u.role)
+        .filter(role => {
+          // If current user is not super_admin, filter out super_admin role (case-insensitive)
+          const userRole = user?.role?.toLowerCase()
+          if (userRole !== "super_admin") {
+            return role !== "Super Administrator" && role !== "super_admin"
+          }
+          return true
+        })
+    )
+  )
 
   const getStatusColor = (isActive: boolean) => {
     return isActive
@@ -473,8 +708,10 @@ export default function UsersAndRoles() {
     )
   }
 
-  // Show access denied if not authenticated or not admin
-  if (!isAuthenticated || !user || user.role !== "admin") {
+  // Show access denied if not authenticated or not admin/super_admin (case-insensitive)
+  const userRole = user?.role?.toLowerCase()
+  const isAdminOrSuperAdmin = userRole === "admin" || userRole === "super_admin"
+  if (!isAuthenticated || !user || !isAdminOrSuperAdmin) {
     return (
       <div className="flex h-screen items-center justify-center">
         <div className="text-center">
@@ -482,7 +719,7 @@ export default function UsersAndRoles() {
           <p className="text-slate-500 dark:text-slate-400">
             {!isAuthenticated 
               ? "Please log in to access this page."
-              : "Admin role required to view users."}
+              : "Admin or Super Admin role required to view users."}
           </p>
         </div>
       </div>
@@ -670,7 +907,7 @@ export default function UsersAndRoles() {
                                   <SelectValue placeholder="Select role" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {Object.entries(ROLE_DISPLAY_NAMES).map(([backendRole, displayName]) => (
+                                  {getAvailableRoles(user?.role).map(([backendRole, displayName]) => (
                                     <SelectItem key={backendRole} value={displayName}>
                                       {displayName}
                                     </SelectItem>
@@ -679,17 +916,31 @@ export default function UsersAndRoles() {
                               </Select>
                             </div>
                           </div>
-                          <div>
-                            <Label htmlFor="user-department" className="text-sm font-semibold">
-                              Department (Optional)
-                            </Label>
-                            <Input
-                              id="user-department"
-                              placeholder="e.g., Engineering, Product"
-                              value={createFormData.department}
-                              onChange={(e) => setCreateFormData({ ...createFormData, department: e.target.value })}
-                              className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
-                            />
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <Label htmlFor="user-department" className="text-sm font-semibold">
+                                Department (Optional)
+                              </Label>
+                              <Input
+                                id="user-department"
+                                placeholder="e.g., Engineering, Product"
+                                value={createFormData.department}
+                                onChange={(e) => setCreateFormData({ ...createFormData, department: e.target.value })}
+                                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor="user-company" className="text-sm font-semibold">
+                                Company Name (Optional)
+                              </Label>
+                              <Input
+                                id="user-company"
+                                placeholder="Enter company name"
+                                value={createFormData.companyName}
+                                onChange={(e) => setCreateFormData({ ...createFormData, companyName: e.target.value })}
+                                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+                              />
+                            </div>
                           </div>
                           <div>
                             <Label htmlFor="user-notes" className="text-sm font-semibold">
@@ -726,6 +977,7 @@ export default function UsersAndRoles() {
                                 role: "user",
                                 password: "",
                                 department: "",
+                                companyName: "",
                                 notes: "",
                                 sendInvite: false,
                               })
@@ -1183,6 +1435,20 @@ export default function UsersAndRoles() {
               />
             </div>
             <div>
+              <Label htmlFor="edit-company" className="text-sm font-semibold flex items-center gap-2">
+                <Building2 className="h-4 w-4" />
+                Company Name
+              </Label>
+              <Input
+                id="edit-company"
+                type="text"
+                value={editFormData.companyName}
+                onChange={(e) => setEditFormData({ ...editFormData, companyName: e.target.value })}
+                placeholder="Enter company name"
+                className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors"
+              />
+            </div>
+            <div>
               <Label htmlFor="edit-role" className="text-sm font-semibold">
                 Role
               </Label>
@@ -1191,8 +1457,10 @@ export default function UsersAndRoles() {
                 onValueChange={(value) => {
                   const backendRole = DISPLAY_TO_ROLE[value] || value
                   
-                  // Warn if admin is trying to change their own role
-                  if (user && editingUser && editingUser.id === user.id && user.role === "admin" && backendRole !== "admin") {
+                  // Warn if admin/super_admin is trying to change their own role
+                  const userRole = user?.role?.toLowerCase()
+                  const isAdminOrSuperAdmin = userRole === "admin" || userRole === "super_admin"
+                  if (user && editingUser && editingUser.id === user.id && isAdminOrSuperAdmin && backendRole !== user.role) {
                     if (!confirm("⚠️ WARNING: Changing your own role from Admin will remove your admin access!\n\nYou will lose access to:\n- User management\n- System configuration\n- Admin-only features\n\nConsider creating a separate CCB user account instead.\n\nDo you want to continue?")) {
                       return
                     }
@@ -1200,20 +1468,20 @@ export default function UsersAndRoles() {
                   
                   setEditFormData({ ...editFormData, role: backendRole })
                 }}
-                disabled={user && editingUser && editingUser.id === user.id && user.role === "admin"}
+                disabled={user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin")}
               >
                 <SelectTrigger className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors">
                   <SelectValue placeholder="Select role" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(ROLE_DISPLAY_NAMES).map(([backendRole, displayName]) => (
+                  {getAvailableRoles(user?.role).map(([backendRole, displayName]) => (
                     <SelectItem key={backendRole} value={displayName}>
                       {displayName}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              {user && editingUser && editingUser.id === user.id && user.role === "admin" && (
+              {user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin") && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                   ⚠️ You cannot change your own role from Admin. Create a separate CCB user account instead.
                 </p>
@@ -1231,12 +1499,12 @@ export default function UsersAndRoles() {
                   }
                   setEditFormData({ ...editFormData, is_active: checked })
                 }}
-                disabled={user && editingUser && editingUser.id === user.id && user.role === "admin"}
+                disabled={user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin")}
               />
               <Label htmlFor="edit-active" className="text-sm font-semibold">
                 Active User
               </Label>
-              {user && editingUser && editingUser.id === user.id && user.role === "admin" && (
+              {user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin") && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 ml-2">
                   ⚠️ Cannot deactivate your own account
                 </p>

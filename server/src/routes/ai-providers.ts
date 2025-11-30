@@ -15,7 +15,7 @@ import { authenticateToken } from '../middleware/auth'
 
 const router = express.Router()
 
-// Middleware to require admin role
+// Middleware to require admin or super_admin role
 const requireAdmin = (req: express.Request, res: express.Response, next: express.NextFunction) => {
   const user = (req as any).user;
   
@@ -23,7 +23,8 @@ const requireAdmin = (req: express.Request, res: express.Response, next: express
     return res.status(401).json({ error: 'Authentication required' });
   }
   
-  if (user.role !== 'admin') {
+  const userRole = user.role?.toLowerCase();
+  if (userRole !== 'admin' && userRole !== 'super_admin') {
     return res.status(403).json({ 
       error: 'Admin access required',
       message: 'AI provider configuration is admin-only. Guest users cannot modify system-wide AI settings.'

@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { MaturityCard } from '@/components/onboarding/MaturityCard';
@@ -26,8 +28,11 @@ import {
   Loader2,
   Upload,
   RefreshCw,
-  Plus
+  Plus,
+  ChevronRight,
+  X
 } from '@/components/ui/icons-shim';
+import apiClient from '@/lib/api';
 
 interface AssessmentData {
   batchId: string;
@@ -53,7 +58,10 @@ interface AssessmentData {
     recommendation?: string;
     estimatedEffort?: string;
     estimated_improvement_points?: number;
+    documentTitle?: string;
+    issueCategory?: string;
   }[];
+  recommendations?: string[];
   benchmarks: {
     industryAverage: number;
     topPerformers: number;
@@ -67,18 +75,46 @@ interface AssessmentData {
     roi: number;
     paybackPeriod: string;
   };
+  assessment_data?: {
+    breakdown?: {
+      by_performance_domain?: Array<{
+        domain?: string;
+        name?: string;
+        score?: number;
+        maturity_level?: number;
+      }>;
+      by_document_type?: Record<string, any>;
+    };
+    domain_scores?: Array<{
+      domain?: string;
+      name?: string;
+      score?: number;
+      maturity_level?: number;
+    }>;
+    performance_domains?: Array<{
+      domain?: string;
+      name?: string;
+      score?: number;
+      maturity_level?: number;
+    }>;
+  };
 }
 
 export default function AssessmentResultsPage() {
   const router = useRouter();
+  const params = useParams();
+  const { isAuthenticated, loading: authLoading } = useAuth();
   
-  // Get batchId from URL
-  const [batchId, setBatchId] = useState<string>('');
+  // Get batchId from route params
+  const batchId = params?.batchId as string || '';
+  
+  // Require authentication - redirect to login if not authenticated
   useEffect(() => {
-    const pathSegments = window.location.pathname.split('/');
-    const id = pathSegments[pathSegments.length - 1];
-    setBatchId(id);
-  }, []);
+    if (!authLoading && !isAuthenticated) {
+      toast.error('Please register or log in to view assessment details');
+      router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+    }
+  }, [isAuthenticated, authLoading, router]);
   
   const [assessment, setAssessment] = useState<AssessmentData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -92,18 +128,122 @@ export default function AssessmentResultsPage() {
   const [processingNewDocuments, setProcessingNewDocuments] = useState(false);
   const [processingStatus, setProcessingStatus] = useState('');
   const [uploadedFileCount, setUploadedFileCount] = useState(0);
+  
+  // Document dialogs state
+  const [documentTypeDialogOpen, setDocumentTypeDialogOpen] = useState(false);
+  const [selectedDocumentType, setSelectedDocumentType] = useState<string | null>(null);
+  const [documentsOfType, setDocumentsOfType] = useState<any[]>([]);
+  const [documentTypeAverages, setDocumentTypeAverages] = useState<any>(null);
+  const [loadingDocuments, setLoadingDocuments] = useState(false);
+  const [documentDetailDialogOpen, setDocumentDetailDialogOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
+  const [documentQualityAudit, setDocumentQualityAudit] = useState<any | null>(null);
+  const [loadingDocumentDetails, setLoadingDocumentDetails] = useState(false);
 
   useEffect(() => {
     loadAssessment();
   }, [batchId]);
 
-  const loadAssessment = async (retryCount = 0) => {
+  // Handler for clicking on a document type
+  const handleDocumentTypeClick = async (documentType: string) => {
+    setSelectedDocumentType(documentType);
+    setDocumentTypeDialogOpen(true);
+    setLoadingDocuments(true);
+    
     try {
-      const response = await fetch(`/api/assessment/batch/${batchId}`, {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+
+      const response = await fetch(`/api/assessment/batch/${batchId}/documents?type=${encodeURIComponent(documentType)}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
         credentials: 'include'
       });
 
       if (!response.ok) {
+        throw new Error('Failed to fetch documents');
+      }
+
+      const result = await response.json();
+      setDocumentsOfType(result.data || []);
+      setDocumentTypeAverages(result.averages || null);
+    } catch (error: any) {
+      console.error('Error fetching documents:', error);
+      toast.error('Failed to load documents');
+      setDocumentsOfType([]);
+    } finally {
+      setLoadingDocuments(false);
+    }
+  };
+
+  // Handler for clicking on a specific document
+  const handleDocumentClick = async (document: any) => {
+    setSelectedDocument(document);
+    setDocumentDetailDialogOpen(true);
+    setLoadingDocumentDetails(true);
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Authentication required');
+        return;
+      }
+
+      const response = await fetch(`/api/documents/${document.id}/quality-audit`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch quality audit');
+      }
+
+      const result = await response.json();
+      setDocumentQualityAudit(result.data || null);
+    } catch (error: any) {
+      console.error('Error fetching quality audit:', error);
+      toast.error('Failed to load quality audit details');
+      setDocumentQualityAudit(null);
+    } finally {
+      setLoadingDocumentDetails(false);
+    }
+  };
+
+  const loadAssessment = async (retryCount = 0) => {
+    if (!isAuthenticated || !batchId) {
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Authentication required. Please log in.');
+        router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+      
+      const response = await fetch(`/api/assessment/batch/${batchId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          toast.error('Authentication required. Please log in.');
+          router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+          return;
+        }
         throw new Error('Failed to load assessment');
       }
 
@@ -182,17 +322,31 @@ export default function AssessmentResultsPage() {
   };
 
   const handleRegenerateAssessment = async () => {
+    if (!isAuthenticated) {
+      toast.error('Authentication required. Please log in.');
+      router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    
     if (!confirm('Regenerate assessment with all documents?\n\nThis will recalculate all metrics and may take a few minutes.')) {
       return;
     }
 
     try {
       setRegenerating(true);
+      
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Authentication required. Please log in.');
+        router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
 
       const response = await fetch(`/api/assessment/batch/${batchId}/regenerate`, {
         method: 'POST',
         credentials: 'include',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         }
       });
@@ -217,9 +371,26 @@ export default function AssessmentResultsPage() {
   };
 
   const exportReport = async (format: 'pdf' | 'csv' | 'json') => {
+    if (!isAuthenticated) {
+      toast.error('Authentication required. Please log in.');
+      router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+      return;
+    }
+    
     setExporting(true);
     try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Authentication required. Please log in.');
+        router.push(`/auth/login?redirect=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
+      
       const response = await fetch(`/api/assessment/${batchId}/export?format=${format}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
         credentials: 'include'
       });
 
@@ -247,49 +418,82 @@ export default function AssessmentResultsPage() {
   // Show processing screen when adding new documents
   if (processingNewDocuments) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
-        <Card className="border-2 border-blue-200 bg-gradient-to-br from-blue-50 to-white">
+      <div 
+        className="container mx-auto p-6 max-w-4xl min-h-screen"
+        style={{ 
+          background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+        }}
+      >
+        <MaturityCard variant="elevated">
           <CardHeader className="text-center pb-4">
             <div className="flex justify-center mb-4">
               <div className="relative">
-                <Loader2 className="h-20 w-20 animate-spin text-blue-600" />
-                <FileText className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-8 w-8 text-blue-600" />
+                <Loader2 className="h-20 w-20 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
+                <FileText className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-8 w-8" style={{ color: maturityTheme.colors.info.text }} />
               </div>
             </div>
-            <CardTitle className="text-3xl font-bold text-blue-900">
+            <CardTitle className="text-3xl font-bold" style={{ color: maturityTheme.colors.text.primary }}>
               Processing Additional Documents
             </CardTitle>
-            <CardDescription className="text-lg mt-2">
+            <CardDescription className="text-lg mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
               Adding {uploadedFileCount} document(s) to your assessment
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="flex items-center justify-center">
               <div className="text-center">
-                <div className="text-6xl font-bold text-blue-600 mb-2">
+                <div className="text-6xl font-bold mb-2" style={{ color: maturityTheme.colors.info.text }}>
                   ⏳
                 </div>
-                <p className="text-lg font-semibold text-blue-900">{processingStatus}</p>
+                <p className="text-lg font-semibold" style={{ color: maturityTheme.colors.text.primary }}>
+                  {processingStatus}
+                </p>
               </div>
             </div>
 
-            <div className="space-y-3 bg-white p-6 rounded-lg border border-blue-100">
-              <h3 className="font-semibold text-sm text-blue-900 mb-4">Processing Steps:</h3>
+            <div 
+              className="space-y-3 p-6 rounded-lg"
+              style={{ 
+                backgroundColor: maturityTheme.colors.background.tertiary,
+                borderColor: maturityTheme.colors.border.default,
+                borderWidth: '1px',
+              }}
+            >
+              <h3 className="font-semibold text-sm mb-4" style={{ color: maturityTheme.colors.text.primary }}>
+                Processing Steps:
+              </h3>
               <div className="flex items-center gap-3">
-                <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                <span className="text-sm">Documents uploaded successfully</span>
+                <CheckCircle className="h-5 w-5 flex-shrink-0" style={{ color: maturityTheme.colors.success.text }} />
+                <span className="text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                  Documents uploaded successfully
+                </span>
               </div>
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <div className="h-5 w-5 border-2 border-blue-500 rounded-full flex-shrink-0 animate-spin" />
-                <span className="text-sm">Converting to Markdown and analyzing...</span>
+              <div className="flex items-center gap-3">
+                <div 
+                  className="h-5 w-5 border-2 rounded-full flex-shrink-0 animate-spin"
+                  style={{ borderColor: maturityTheme.colors.info.text }}
+                />
+                <span className="text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                  Converting to Markdown and analyzing...
+                </span>
               </div>
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
-                <span className="text-sm">Running quality audits</span>
+              <div className="flex items-center gap-3">
+                <div 
+                  className="h-5 w-5 border-2 rounded-full flex-shrink-0"
+                  style={{ borderColor: maturityTheme.colors.text.muted }}
+                />
+                <span className="text-sm" style={{ color: maturityTheme.colors.text.muted }}>
+                  Running quality audits
+                </span>
               </div>
-              <div className="flex items-center gap-3 text-muted-foreground">
-                <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
-                <span className="text-sm">Ready for assessment regeneration</span>
+              <div className="flex items-center gap-3">
+                <div 
+                  className="h-5 w-5 border-2 rounded-full flex-shrink-0"
+                  style={{ borderColor: maturityTheme.colors.text.muted }}
+                />
+                <span className="text-sm" style={{ color: maturityTheme.colors.text.muted }}>
+                  Ready for assessment regeneration
+                </span>
               </div>
             </div>
 
@@ -300,22 +504,27 @@ export default function AssessmentResultsPage() {
                   setProcessingNewDocuments(false);
                   loadAssessment();
                 }}
+                style={{
+                  borderColor: maturityTheme.colors.border.default,
+                  color: maturityTheme.colors.text.primary,
+                }}
               >
                 <RefreshCw className="mr-2 h-4 w-4" />
                 View Current Assessment
               </Button>
             </div>
 
-            <p className="text-xs text-muted-foreground text-center mt-4">
+            <p className="text-xs text-center mt-4" style={{ color: maturityTheme.colors.text.muted }}>
               This typically takes 2-3 minutes. Once complete, click "Regenerate Assessment" to update your results.
             </p>
           </CardContent>
-        </Card>
+        </MaturityCard>
       </div>
     );
   }
 
-  if (loading) {
+  // Show loading state while checking authentication
+  if (authLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
@@ -323,20 +532,50 @@ export default function AssessmentResultsPage() {
     );
   }
 
+  // Don't render content if not authenticated
+  if (!isAuthenticated) {
+    return null;
+  }
+
+  if (loading) {
+    return (
+      <div 
+        className="flex items-center justify-center min-h-screen"
+        style={{ 
+          background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+        }}
+      >
+        <Loader2 className="h-8 w-8 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
+      </div>
+    );
+  }
+
   if (error || !assessment) {
     return (
-      <div className="container mx-auto p-6">
-        <Card>
+      <div 
+        className="container mx-auto p-6 min-h-screen"
+        style={{ 
+          background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+        }}
+      >
+        <MaturityCard variant="elevated">
           <CardHeader>
-            <CardTitle>Error</CardTitle>
+            <CardTitle style={{ color: maturityTheme.colors.error.text }}>Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>{error || 'Assessment not found'}</p>
-            <Button onClick={() => router.push('/onboarding/upload')} className="mt-4">
+            <p style={{ color: maturityTheme.colors.text.primary }}>{error || 'Assessment not found'}</p>
+            <Button 
+              onClick={() => router.push('/onboarding/upload')} 
+              className="mt-4"
+              style={{
+                background: `linear-gradient(135deg, ${maturityTheme.colors.primary[500]} 0%, ${maturityTheme.colors.primary[700]} 100%)`,
+                color: 'white',
+              }}
+            >
               Return to Upload
             </Button>
           </CardContent>
-        </Card>
+        </MaturityCard>
       </div>
     );
   }
@@ -350,41 +589,54 @@ export default function AssessmentResultsPage() {
 
   if (isProcessing) {
     return (
-      <div className="container mx-auto p-6 max-w-4xl">
-        <Card>
+      <div 
+        className="container mx-auto p-6 max-w-4xl min-h-screen"
+        style={{ 
+          background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+        }}
+      >
+        <MaturityCard variant="elevated">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            <CardTitle className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
               Assessment Processing...
             </CardTitle>
-            <CardDescription>
+            <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
               Your documents are being analyzed. This typically takes 2-3 minutes.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="text-center py-8">
               <div className="text-6xl mb-4">⏳</div>
-              <h3 className="text-xl font-semibold mb-2">Processing {assessment.totalDocuments} Documents</h3>
-              <p className="text-muted-foreground mb-6">
+              <h3 className="text-xl font-semibold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+                Processing {assessment.totalDocuments} Documents
+              </h3>
+              <p className="mb-6" style={{ color: maturityTheme.colors.text.secondary }}>
                 AI is analyzing document types, quality scores, and maturity levels
               </p>
               
               <div className="max-w-md mx-auto space-y-4 text-left">
                 <div className="flex items-center gap-3">
-                  <CheckCircle className="h-5 w-5 text-green-500 flex-shrink-0" />
-                  <span>Documents uploaded successfully</span>
+                  <CheckCircle className="h-5 w-5 flex-shrink-0" style={{ color: maturityTheme.colors.success.text }} />
+                  <span style={{ color: maturityTheme.colors.text.primary }}>Documents uploaded successfully</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Loader2 className="h-5 w-5 animate-spin text-blue-500 flex-shrink-0" />
-                  <span>Converting to Markdown and analyzing...</span>
+                  <Loader2 className="h-5 w-5 animate-spin flex-shrink-0" style={{ color: maturityTheme.colors.info.text }} />
+                  <span style={{ color: maturityTheme.colors.text.primary }}>Converting to Markdown and analyzing...</span>
                 </div>
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
-                  <span>Generating gap analysis</span>
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="h-5 w-5 border-2 rounded-full flex-shrink-0"
+                    style={{ borderColor: maturityTheme.colors.text.muted }}
+                  />
+                  <span style={{ color: maturityTheme.colors.text.muted }}>Generating gap analysis</span>
                 </div>
-                <div className="flex items-center gap-3 text-muted-foreground">
-                  <div className="h-5 w-5 border-2 border-gray-300 rounded-full flex-shrink-0" />
-                  <span>Calculating benchmarks and ROI</span>
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="h-5 w-5 border-2 rounded-full flex-shrink-0"
+                    style={{ borderColor: maturityTheme.colors.text.muted }}
+                  />
+                  <span style={{ color: maturityTheme.colors.text.muted }}>Calculating benchmarks and ROI</span>
                 </div>
               </div>
 
@@ -392,6 +644,10 @@ export default function AssessmentResultsPage() {
                 <Button
                   variant="outline"
                   onClick={() => router.push('/onboarding/assessments')}
+                  style={{
+                    borderColor: maturityTheme.colors.border.default,
+                    color: maturityTheme.colors.text.primary,
+                  }}
                 >
                   <FileText className="mr-2 h-4 w-4" />
                   Back to Assessments List
@@ -399,52 +655,81 @@ export default function AssessmentResultsPage() {
                 <Button
                   variant="outline"
                   onClick={() => loadAssessment()}
+                  style={{
+                    borderColor: maturityTheme.colors.border.default,
+                    color: maturityTheme.colors.text.primary,
+                  }}
                 >
                   Refresh Status
                 </Button>
               </div>
 
-              <p className="text-xs text-muted-foreground mt-6">
+              <p className="text-xs mt-6" style={{ color: maturityTheme.colors.text.muted }}>
                 The page will check for updates automatically.
                 <br />
                 Check the Assessments list to see processing progress.
               </p>
             </div>
           </CardContent>
-        </Card>
+        </MaturityCard>
       </div>
     );
   }
 
-  const maturityColor = {
-    1: 'text-red-600',
-    2: 'text-orange-600',
-    3: 'text-blue-600',
-    4: 'text-green-600',
-    5: 'text-purple-600'
-  }[assessment.overallMaturityLevel] || 'text-gray-600';
-
-  const priorityColors = {
-    critical: 'bg-red-500',
-    high: 'bg-orange-500',
-    medium: 'bg-yellow-500',
-    low: 'bg-green-500'
-  };
-
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <div 
+      className="container mx-auto p-6 max-w-7xl min-h-screen"
+      style={{ 
+        background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+      }}
+    >
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-6" aria-label="Breadcrumb">
+        <ol className="flex items-center space-x-2 text-sm">
+          <li>
+            <button
+              onClick={() => router.push('/onboarding')}
+              className="hover:underline"
+              style={{ color: maturityTheme.colors.text.secondary }}
+            >
+              Home
+            </button>
+          </li>
+          <li style={{ color: maturityTheme.colors.text.muted }}>/</li>
+          <li>
+            <button
+              onClick={() => router.push('/onboarding/assessments')}
+              className="hover:underline"
+              style={{ color: maturityTheme.colors.text.secondary }}
+            >
+              Assessments
+            </button>
+          </li>
+          <li style={{ color: maturityTheme.colors.text.muted }}>/</li>
+          <li style={{ color: maturityTheme.colors.text.primary }} className="font-medium">
+            Assessment Details
+          </li>
+        </ol>
+      </nav>
+
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Portfolio Maturity Assessment</h1>
-          <p className="text-muted-foreground">{assessment.projectName}</p>
+          <h1 className="text-3xl font-bold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+            Portfolio Maturity Assessment
+          </h1>
+          <p style={{ color: maturityTheme.colors.text.secondary }}>{assessment.projectName}</p>
         </div>
         <div className="space-x-2">
           <Button
             variant="outline"
             onClick={handleAddDocuments}
             disabled={addingDocuments}
-            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200"
+            style={{
+              borderColor: maturityTheme.colors.border.default,
+              color: maturityTheme.colors.text.primary,
+              backgroundColor: maturityTheme.colors.background.tertiary,
+            }}
           >
             <Plus className="mr-2 h-4 w-4" />
             Add More Documents
@@ -453,7 +738,11 @@ export default function AssessmentResultsPage() {
             variant="outline"
             onClick={handleRegenerateAssessment}
             disabled={regenerating}
-            className="bg-green-50 hover:bg-green-100 text-green-700 border-green-200"
+            style={{
+              borderColor: maturityTheme.colors.success.border,
+              color: maturityTheme.colors.success.text,
+              backgroundColor: maturityTheme.colors.success.bg,
+            }}
           >
             {regenerating ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -466,6 +755,11 @@ export default function AssessmentResultsPage() {
             variant="outline"
             onClick={() => exportReport('csv')}
             disabled={exporting}
+            style={{
+              borderColor: maturityTheme.colors.border.default,
+              color: maturityTheme.colors.text.primary,
+              backgroundColor: maturityTheme.colors.background.tertiary,
+            }}
           >
             <Download className="mr-2 h-4 w-4" />
             CSV
@@ -474,6 +768,11 @@ export default function AssessmentResultsPage() {
             variant="outline"
             onClick={() => exportReport('json')}
             disabled={exporting}
+            style={{
+              borderColor: maturityTheme.colors.border.default,
+              color: maturityTheme.colors.text.primary,
+              backgroundColor: maturityTheme.colors.background.tertiary,
+            }}
           >
             <Download className="mr-2 h-4 w-4" />
             JSON
@@ -481,6 +780,10 @@ export default function AssessmentResultsPage() {
           <Button
             onClick={() => exportReport('pdf')}
             disabled={exporting}
+            style={{
+              background: `linear-gradient(135deg, ${maturityTheme.colors.primary[500]} 0%, ${maturityTheme.colors.primary[700]} 100%)`,
+              color: 'white',
+            }}
           >
             {exporting ? (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -586,21 +889,84 @@ export default function AssessmentResultsPage() {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="journey">Your Journey</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="gaps">Gaps</TabsTrigger>
-          <TabsTrigger value="benchmarks">Benchmarks</TabsTrigger>
-          <TabsTrigger value="roi">ROI</TabsTrigger>
+        <TabsList 
+          style={{ 
+            backgroundColor: maturityTheme.colors.background.tertiary,
+            borderColor: maturityTheme.colors.border.default,
+          }}
+        >
+          <TabsTrigger 
+            value="overview"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Overview
+          </TabsTrigger>
+          <TabsTrigger 
+            value="journey"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Your Journey
+          </TabsTrigger>
+          <TabsTrigger 
+            value="documents"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Documents
+          </TabsTrigger>
+          <TabsTrigger 
+            value="gaps"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Gaps
+          </TabsTrigger>
+          <TabsTrigger 
+            value="recommendations"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Recommendations
+          </TabsTrigger>
+          <TabsTrigger 
+            value="benchmarks"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Benchmarks
+          </TabsTrigger>
+          <TabsTrigger 
+            value="roi"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            ROI
+          </TabsTrigger>
+          <TabsTrigger 
+            value="domains"
+            style={{ 
+              color: maturityTheme.colors.text.primary,
+            }}
+          >
+            Performance Domains
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-4">
-          <Card>
+          <MaturityCard variant="elevated">
             <CardHeader>
-              <CardTitle>Maturity Assessment</CardTitle>
-              <CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Maturity Assessment</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
                 Your organization has achieved Level {assessment.overallMaturityLevel} maturity
               </CardDescription>
             </CardHeader>
@@ -608,7 +974,9 @@ export default function AssessmentResultsPage() {
               <div className="space-y-6">
                 {[1, 2, 3, 4, 5].map(level => (
                   <div key={level} className="flex items-center gap-4">
-                    <div className="w-24 font-medium">Level {level}</div>
+                    <div className="w-24 font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                      Level {level}
+                    </div>
                     <div className="flex-1">
                       <Progress 
                         value={assessment.overallMaturityLevel >= level ? 100 : 0}
@@ -616,13 +984,159 @@ export default function AssessmentResultsPage() {
                       />
                     </div>
                     {assessment.overallMaturityLevel === level && (
-                      <Badge>Current</Badge>
+                      <Badge style={{ 
+                        backgroundColor: maturityTheme.colors.info.bg,
+                        color: maturityTheme.colors.info.text,
+                        borderColor: maturityTheme.colors.info.border
+                      }}>
+                        Current
+                      </Badge>
                     )}
                   </div>
                 ))}
               </div>
             </CardContent>
-          </Card>
+          </MaturityCard>
+
+          {/* Current Level Explanation */}
+          <MaturityCard variant="elevated">
+            <CardHeader>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>
+                What Level {assessment.overallMaturityLevel} Means
+              </CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                Understanding your current maturity level: {assessment.overallMaturityLabel}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Ensure we have a valid maturity level (1-5)
+                const currentLevel = Math.max(1, Math.min(5, assessment.overallMaturityLevel || 1)) as 1 | 2 | 3 | 4 | 5;
+                
+                const levelData = {
+                  1: {
+                    name: 'Initial',
+                    description: 'Ad-hoc processes, inconsistent documentation',
+                    characteristics: [
+                      'Minimal or informal documentation',
+                      'No standard templates or processes',
+                      'Success depends on individual heroics',
+                      'Reactive approach to project management',
+                    ],
+                    color: maturityTheme.colors.maturity.level1,
+                  },
+                  2: {
+                    name: 'Repeatable',
+                    description: 'Basic processes established, some standardization',
+                    characteristics: [
+                      'Basic project plans and schedules exist',
+                      'Some standard templates in use',
+                      'Prior success can be repeated',
+                      'Beginning to track costs and schedules',
+                    ],
+                    color: maturityTheme.colors.maturity.level2,
+                  },
+                  3: {
+                    name: 'Defined',
+                    description: 'Standardized processes documented and integrated',
+                    characteristics: [
+                      'Comprehensive PM methodology documented',
+                      'Consistent use of standard templates',
+                      'Integrated across knowledge areas',
+                      'Organizational process assets established',
+                    ],
+                    color: maturityTheme.colors.maturity.level3,
+                  },
+                  4: {
+                    name: 'Managed',
+                    description: 'Quantitatively controlled processes with metrics',
+                    characteristics: [
+                      'Detailed metrics and measurements',
+                      'Statistical process control',
+                      'Quality is quantitatively measured',
+                      'Performance is predictable',
+                    ],
+                    color: maturityTheme.colors.maturity.level4,
+                  },
+                  5: {
+                    name: 'Optimizing',
+                    description: 'Continuous improvement and innovation',
+                    characteristics: [
+                      'Focus on continuous improvement',
+                      'Innovative practices adopted',
+                      'Lessons learned actively applied',
+                      'Organizational learning culture',
+                    ],
+                    color: maturityTheme.colors.maturity.level5,
+                  },
+                }[currentLevel];
+
+                if (!levelData) {
+                  // Fallback if level data is missing
+                  return (
+                    <div className="p-4 rounded-lg border" style={{
+                      backgroundColor: maturityTheme.colors.background.tertiary,
+                      borderColor: maturityTheme.colors.border.default,
+                    }}>
+                      <p style={{ color: maturityTheme.colors.text.secondary }}>
+                        Maturity level information is not available for this assessment.
+                      </p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    <div 
+                      className="p-4 rounded-lg border"
+                      style={{
+                        backgroundColor: levelData.color.bg,
+                        borderColor: levelData.color.border,
+                      }}
+                    >
+                      <h3 
+                        className="text-xl font-semibold mb-2"
+                        style={{ color: levelData.color.text }}
+                      >
+                        Level {currentLevel}: {levelData.name}
+                      </h3>
+                      <p 
+                        className="text-base mb-4"
+                        style={{ color: maturityTheme.colors.text.primary }}
+                      >
+                        {levelData.description}
+                      </p>
+                    </div>
+
+                    <div>
+                      <h4 
+                        className="text-lg font-semibold mb-3"
+                        style={{ color: maturityTheme.colors.text.primary }}
+                      >
+                        Key Characteristics:
+                      </h4>
+                      <ul className="space-y-2">
+                        {levelData.characteristics.map((characteristic, idx) => (
+                          <li 
+                            key={idx} 
+                            className="flex items-start gap-2"
+                          >
+                            <CheckCircle 
+                              className="h-5 w-5 mt-0.5 flex-shrink-0" 
+                              style={{ color: levelData.color.text }}
+                            />
+                            <span style={{ color: maturityTheme.colors.text.secondary }}>
+                              {characteristic}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </MaturityCard>
         </TabsContent>
 
         {/* Your Journey Tab */}
@@ -649,199 +1163,925 @@ export default function AssessmentResultsPage() {
 
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
-          <Card>
+          <MaturityCard variant="elevated">
             <CardHeader>
-              <CardTitle>Document Breakdown</CardTitle>
-              <CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Document Breakdown</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
                 {assessment.totalDocuments} documents assessed across {assessment.documentsByType?.length || 0} types
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
                 {assessment.documentsByType?.map((doc, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div 
+                    key={idx} 
+                    onClick={() => handleDocumentTypeClick(doc.type)}
+                    className="flex items-center justify-between p-4 rounded-lg cursor-pointer transition-all"
+                    style={{ 
+                      borderColor: maturityTheme.colors.border.default,
+                      borderWidth: '1px',
+                      backgroundColor: maturityTheme.colors.background.tertiary,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = maturityTheme.colors.background.elevated;
+                      e.currentTarget.style.borderColor = maturityTheme.colors.primary[400];
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = maturityTheme.colors.background.tertiary;
+                      e.currentTarget.style.borderColor = maturityTheme.colors.border.default;
+                    }}
+                  >
                     <div className="flex items-center gap-3">
-                      <FileText className="h-5 w-5 text-blue-500" />
+                      <FileText className="h-5 w-5" style={{ color: maturityTheme.colors.primary[400] }} />
                       <div>
-                        <div className="font-medium">{doc.type}</div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                          {doc.type}
+                        </div>
+                        <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
                           {doc.count} document{doc.count > 1 ? 's' : ''}
                         </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-lg">{doc.avgScore.toFixed(1)}</div>
-                      <div className="text-xs text-muted-foreground">Avg Score</div>
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <div className="font-bold text-lg" style={{ color: maturityTheme.colors.text.primary }}>
+                          {doc.avgScore.toFixed(1)}
+                        </div>
+                        <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                          Avg Score
+                        </div>
+                      </div>
+                      <ChevronRight className="h-5 w-5" style={{ color: maturityTheme.colors.text.secondary }} />
                     </div>
                   </div>
                 ))}
               </div>
             </CardContent>
-          </Card>
+          </MaturityCard>
         </TabsContent>
 
         {/* Gaps Tab */}
         <TabsContent value="gaps" className="space-y-4">
-          <Card>
+          <MaturityCard variant="elevated">
             <CardHeader>
-              <CardTitle>Gap Analysis</CardTitle>
-              <CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Gap Analysis</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
                 {assessment.gaps?.length || 0} gaps identified requiring improvement
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {assessment.gaps?.map((gap, idx) => (
-                  <div key={idx} className="border rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <Badge className={priorityColors[gap.priority]}>
-                          {gap.priority}
-                        </Badge>
-                        <span className="font-medium">{gap.documentType}</span>
+                {assessment.gaps?.map((gap, idx) => {
+                  const priorityTheme = gap.priority === 'critical' ? maturityTheme.colors.error :
+                                       gap.priority === 'high' ? maturityTheme.colors.warning :
+                                       gap.priority === 'medium' ? maturityTheme.colors.info :
+                                       maturityTheme.colors.success;
+                  
+                  return (
+                    <div 
+                      key={idx} 
+                      className="rounded-lg p-4"
+                      style={{ 
+                        borderColor: maturityTheme.colors.border.default,
+                        borderWidth: '1px',
+                        backgroundColor: maturityTheme.colors.background.tertiary,
+                      }}
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge style={{
+                            backgroundColor: priorityTheme.bg,
+                            color: priorityTheme.text,
+                            borderColor: priorityTheme.border,
+                          }}>
+                            {gap.priority}
+                          </Badge>
+                          <span className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                            {gap.documentType}
+                          </span>
+                          {gap.documentTitle && (
+                            <span className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                              ({gap.documentTitle})
+                            </span>
+                          )}
+                          {gap.issueCategory && (
+                            <Badge style={{
+                              backgroundColor: maturityTheme.colors.background.tertiary,
+                              color: maturityTheme.colors.text.secondary,
+                            }}>
+                              {gap.issueCategory}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                          Level {gap.currentLevel} → {gap.targetLevel}
+                        </div>
                       </div>
-                      <div className="text-sm text-muted-foreground">
-                        Level {gap.currentLevel} → {gap.targetLevel}
+                      <p className="text-sm mb-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                        {gap.description}
+                      </p>
+                      <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                        Estimated effort: {gap.estimatedEffort || gap.estimated_improvement_points ? `${gap.estimated_improvement_points?.toFixed(1)} points` : 'Medium'}
                       </div>
+                      {gap.recommendations && gap.recommendations.length > 0 && (
+                        <ul className="mt-2 text-sm space-y-1">
+                          {gap.recommendations.map((rec, i) => (
+                            <li key={i} className="flex items-start gap-2">
+                              <CheckCircle className="h-4 w-4 mt-0.5" style={{ color: maturityTheme.colors.success.text }} />
+                              <span style={{ color: maturityTheme.colors.text.primary }}>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {gap.recommendation && !gap.recommendations && (
+                        <div className="mt-2 text-sm flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 mt-0.5" style={{ color: maturityTheme.colors.success.text }} />
+                          <span style={{ color: maturityTheme.colors.text.primary }}>{gap.recommendation}</span>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">
-                      {gap.description}
-                    </p>
-                    <div className="text-xs text-muted-foreground">
-                      Estimated effort: {gap.estimatedEffort || gap.estimated_improvement_points ? `${gap.estimated_improvement_points?.toFixed(1)} points` : 'Medium'}
-                    </div>
-                    {gap.recommendations && gap.recommendations.length > 0 && (
-                      <ul className="mt-2 text-sm space-y-1">
-                        {gap.recommendations.map((rec, i) => (
-                          <li key={i} className="flex items-start gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
-                            <span>{rec}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                    {gap.recommendation && !gap.recommendations && (
-                      <div className="mt-2 text-sm flex items-start gap-2">
-                        <CheckCircle className="h-4 w-4 text-green-500 mt-0.5" />
-                        <span>{gap.recommendation}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
-          </Card>
+          </MaturityCard>
+        </TabsContent>
+
+        {/* Recommendations Tab */}
+        <TabsContent value="recommendations" className="space-y-4">
+          <MaturityCard variant="elevated">
+            <CardHeader>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Recommendations</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                {assessment.recommendations?.length || 0} recommendations from quality audits
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {assessment.recommendations && assessment.recommendations.length > 0 ? (
+                <div className="space-y-3">
+                  {assessment.recommendations.map((rec, idx) => (
+                    <div 
+                      key={idx} 
+                      className="rounded-lg p-4 flex items-start gap-3"
+                      style={{ 
+                        borderColor: maturityTheme.colors.border.default,
+                        borderWidth: '1px',
+                        backgroundColor: maturityTheme.colors.background.tertiary,
+                      }}
+                    >
+                      <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: maturityTheme.colors.success.text }} />
+                      <div className="flex-1">
+                        <p className="text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                          {rec}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <CheckCircle className="h-12 w-12 mx-auto mb-4" style={{ color: maturityTheme.colors.text.muted }} />
+                  <p style={{ color: maturityTheme.colors.text.secondary }}>
+                    No recommendations available
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </MaturityCard>
         </TabsContent>
 
         {/* Benchmarks Tab */}
         <TabsContent value="benchmarks" className="space-y-4">
-          <Card>
+          <MaturityCard variant="elevated">
             <CardHeader>
-              <CardTitle>Industry Benchmarks</CardTitle>
-              <CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Industry Benchmarks</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
                 You're in the {assessment.benchmarks?.percentile || 0}th percentile
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="text-center p-6 bg-blue-50 rounded-lg">
-                  <div className="text-3xl font-bold text-blue-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ backgroundColor: maturityTheme.colors.info.bg }}
+                >
+                  <div className="text-3xl font-bold" style={{ color: maturityTheme.colors.info.text }}>
                     {assessment.benchmarks?.yourScore?.toFixed(1) || '0.0'}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">Your Score</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Your Score
+                  </div>
                 </div>
-                <div className="text-center p-6 bg-gray-50 rounded-lg">
-                  <div className="text-3xl font-bold text-gray-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ backgroundColor: maturityTheme.colors.background.tertiary }}
+                >
+                  <div className="text-3xl font-bold" style={{ color: maturityTheme.colors.text.primary }}>
                     {assessment.benchmarks?.industryAverage?.toFixed(1) || '0.0'}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">Industry Average</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Industry Average
+                  </div>
                 </div>
-                <div className="text-center p-6 bg-green-50 rounded-lg">
-                  <div className="text-3xl font-bold text-green-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ backgroundColor: maturityTheme.colors.success.bg }}
+                >
+                  <div className="text-3xl font-bold" style={{ color: maturityTheme.colors.success.text }}>
                     {assessment.benchmarks?.topPerformers?.toFixed(1) || '0.0'}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">Top Performers</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Top Performers
+                  </div>
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </MaturityCard>
         </TabsContent>
 
         {/* ROI Tab */}
         <TabsContent value="roi" className="space-y-4">
-          <Card>
+          <MaturityCard variant="elevated">
             <CardHeader>
-              <CardTitle>Return on Investment</CardTitle>
-              <CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Return on Investment</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
                 Potential value from improving documentation maturity
               </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-4">
-                <div className="text-center p-6 border rounded-lg">
-                  <div className="text-2xl font-bold text-green-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.success.bg,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.success.text }}>
                     ${assessment.roiMetrics?.savings?.toLocaleString() || '0'}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">Potential Savings</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Potential Savings
+                  </div>
                 </div>
-                <div className="text-center p-6 border rounded-lg">
-                  <div className="text-2xl font-bold text-blue-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.info.bg,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.info.text }}>
                     {assessment.roiMetrics?.roi?.toFixed(0) || '0'}%
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">ROI</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    ROI
+                  </div>
                 </div>
-                <div className="text-center p-6 border rounded-lg">
-                  <div className="text-2xl font-bold text-purple-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.background.tertiary,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.primary[400] }}>
                     {assessment.roiMetrics?.paybackPeriod || 'Calculating...'}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">Payback Period</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Payback Period
+                  </div>
                 </div>
-                <div className="text-center p-6 border rounded-lg">
-                  <div className="text-2xl font-bold text-orange-600">
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.warning.bg,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.warning.text }}>
                     ${assessment.roiMetrics?.improvedCost?.toLocaleString() || '0'}
                   </div>
-                  <div className="text-sm text-muted-foreground mt-2">Target Cost</div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Target Cost
+                  </div>
                 </div>
               </div>
             </CardContent>
-          </Card>
+          </MaturityCard>
+        </TabsContent>
+
+        {/* Performance Domains Tab */}
+        <TabsContent value="domains" className="space-y-4">
+          <MaturityCard variant="elevated">
+            <CardHeader>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Performance Domain Scores</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                Maturity Scores Across Performance Domains
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Extract domain scores from assessment_data if available
+                const assessmentData = (assessment as any).assessment_data;
+                const domainScores = assessmentData?.breakdown?.by_performance_domain || 
+                                    assessmentData?.domain_scores || 
+                                    assessmentData?.performance_domains || [];
+
+                // Default PMBOK 8 Performance Domains
+                const performanceDomains = [
+                  { key: 'stakeholders', name: 'Stakeholders Performance Domain', icon: Target },
+                  { key: 'team', name: 'Team Performance Domain', icon: BarChart3 },
+                  { key: 'development_approach', name: 'Development Approach and Life Cycle', icon: TrendingUp },
+                  { key: 'planning', name: 'Planning Performance Domain', icon: FileText },
+                  { key: 'project_work', name: 'Project Work Performance Domain', icon: CheckCircle },
+                  { key: 'delivery', name: 'Delivery Performance Domain', icon: AlertCircle },
+                  { key: 'measurement', name: 'Measurement Performance Domain', icon: BarChart3 },
+                  { key: 'uncertainty', name: 'Uncertainty Performance Domain', icon: AlertCircle },
+                ];
+
+                const getMaturityLabel = (score: number) => {
+                  if (score < 2) return 'Initial';
+                  if (score < 3) return 'Developing';
+                  if (score < 4) return 'Defined';
+                  if (score < 4.5) return 'Managed';
+                  return 'Optimizing';
+                };
+
+                const scoreToLevel = (score: number): 1 | 2 | 3 | 4 | 5 => {
+                  return Math.max(1, Math.min(5, Math.round(score))) as 1 | 2 | 3 | 4 | 5;
+                };
+
+                const getDomainColor = (level: number) => {
+                  return maturityTheme.colors.maturity[`level${level}` as keyof typeof maturityTheme.colors.maturity];
+                };
+
+                // If we have domain scores from assessment data, use them
+                if (Array.isArray(domainScores) && domainScores.length > 0) {
+                  return (
+                    <div className="space-y-4">
+                      {domainScores.map((domainScore: any, idx: number) => {
+                        const domainName = domainScore.domain || domainScore.name || performanceDomains[idx]?.name || `Domain ${idx + 1}`;
+                        const score = domainScore.score || domainScore.maturity_level || 0;
+                        const level = scoreToLevel(score);
+                        const maturityLabel = getMaturityLabel(score);
+                        const domainColor = getDomainColor(level);
+                        const Icon = performanceDomains[idx]?.icon || FileText;
+
+                        return (
+                          <div
+                            key={idx}
+                            className="p-4 rounded-lg border"
+                            style={{
+                              borderColor: maturityTheme.colors.border.default,
+                              backgroundColor: maturityTheme.colors.background.tertiary,
+                            }}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className="p-2 rounded-lg"
+                                  style={{ backgroundColor: domainColor.bg }}
+                                >
+                                  <Icon className="h-5 w-5" style={{ color: domainColor.text }} />
+                                </div>
+                                <div>
+                                  <h4 className="font-semibold" style={{ color: maturityTheme.colors.text.primary }}>
+                                    {domainName}
+                                  </h4>
+                                  <p className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                                    {maturityLabel} (Level {level})
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <MaturityScore
+                                  level={level}
+                                  label={maturityLabel}
+                                  size="sm"
+                                  animated={false}
+                                />
+                              </div>
+                            </div>
+                            <div className="mt-3">
+                              <Progress 
+                                value={(score / 5) * 100} 
+                                className="h-2"
+                              />
+                              <div className="flex justify-between mt-1 text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                                <span>Score: {score.toFixed(1)}/5.0</span>
+                                <span>{((score / 5) * 100).toFixed(0)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                }
+
+                // Fallback: Show placeholder if no domain data available
+                return (
+                  <div className="text-center py-8">
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4" style={{ color: maturityTheme.colors.text.muted }} />
+                    <p className="text-lg font-semibold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+                      Performance Domain Data Not Available
+                    </p>
+                    <p className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                      Domain scores will appear here once the assessment includes performance domain analysis.
+                    </p>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </MaturityCard>
         </TabsContent>
       </Tabs>
 
-      {/* Add Documents Dialog */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="sm:max-w-[600px]">
-          <div className="space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold">Add More Documents to Assessment</h2>
-              <p className="text-sm text-muted-foreground mt-1">
-                Upload additional documents to enhance your assessment. The system will process them and you can regenerate the assessment with all documents included.
+      {/* Document Type Dialog - Shows documents of selected type */}
+      <Dialog open={documentTypeDialogOpen} onOpenChange={setDocumentTypeDialogOpen}>
+        <DialogContent 
+          className="sm:max-w-[700px] max-h-[80vh] overflow-y-auto"
+          style={{
+            backgroundColor: maturityTheme.colors.background.elevated,
+            borderColor: maturityTheme.colors.border.default,
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle style={{ color: maturityTheme.colors.text.primary }}>
+              {selectedDocumentType} Documents
+            </DialogTitle>
+            <DialogDescription style={{ color: maturityTheme.colors.text.secondary }}>
+              Click on a document to view detailed quality audit scores
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Average Audit Results */}
+          {documentTypeAverages && (
+            <MaturityCard variant="elevated" className="mb-4">
+              <CardHeader>
+                <CardTitle style={{ color: maturityTheme.colors.text.primary }}>
+                  Average Audit Results
+                </CardTitle>
+                <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                  Average scores across all {selectedDocumentType} documents
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {[
+                    { label: 'Completeness', score: documentTypeAverages.completeness, key: 'completeness' },
+                    { label: 'Consistency', score: documentTypeAverages.consistency, key: 'consistency' },
+                    { label: 'Professional Quality', score: documentTypeAverages.professionalQuality, key: 'professional' },
+                    { label: 'Standards Compliance', score: documentTypeAverages.standardsCompliance, key: 'compliance' },
+                    { label: 'Accuracy', score: documentTypeAverages.accuracy, key: 'accuracy' },
+                    { label: 'Context Relevance', score: documentTypeAverages.contextRelevance, key: 'relevance' },
+                  ].map((dimension) => (
+                    <div
+                      key={dimension.key}
+                      className="p-4 rounded-lg"
+                      style={{
+                        backgroundColor: maturityTheme.colors.background.tertiary,
+                        borderColor: maturityTheme.colors.border.default,
+                        borderWidth: '1px',
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="font-medium text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                          {dimension.label}
+                        </span>
+                        <span className="font-bold" style={{ color: maturityTheme.colors.text.primary }}>
+                          {dimension.score?.toFixed(1) || '0.0'}
+                        </span>
+                      </div>
+                      <Progress 
+                        value={dimension.score || 0} 
+                        className="h-2"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </MaturityCard>
+          )}
+
+          {loadingDocuments ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
+            </div>
+          ) : documentsOfType.length === 0 ? (
+            <div className="text-center py-8">
+              <FileText className="h-12 w-12 mx-auto mb-4" style={{ color: maturityTheme.colors.text.muted }} />
+              <p style={{ color: maturityTheme.colors.text.secondary }}>
+                No documents found for this type
               </p>
             </div>
+          ) : (
+            <div className="space-y-2">
+              {documentsOfType.map((doc: any) => (
+                <div
+                  key={doc.id}
+                  onClick={() => handleDocumentClick(doc)}
+                  className="flex items-center justify-between p-4 rounded-lg cursor-pointer transition-all"
+                  style={{
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.background.tertiary,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = maturityTheme.colors.background.elevated;
+                    e.currentTarget.style.borderColor = maturityTheme.colors.primary[400];
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = maturityTheme.colors.background.tertiary;
+                    e.currentTarget.style.borderColor = maturityTheme.colors.border.default;
+                  }}
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <FileText className="h-5 w-5 flex-shrink-0" style={{ color: maturityTheme.colors.primary[400] }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate" style={{ color: maturityTheme.colors.text.primary }}>
+                        {doc.title || doc.originalFilename || 'Untitled Document'}
+                      </div>
+                      <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                        {doc.qualityAudit ? (
+                          <>
+                            Score: {doc.qualityAudit.overallScore?.toFixed(1) || 'N/A'} | 
+                            Grade: {doc.qualityAudit.overallGrade || 'N/A'} | 
+                            {doc.qualityAudit.qualityLevel || 'Not assessed'}
+                          </>
+                        ) : (
+                          'No quality audit available'
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {doc.qualityAudit && (
+                      <div className="text-right">
+                        <div className="font-bold text-lg" style={{ color: maturityTheme.colors.text.primary }}>
+                          {doc.qualityAudit.overallScore?.toFixed(1) || 'N/A'}
+                        </div>
+                        <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                          Quality Score
+                        </div>
+                      </div>
+                    )}
+                    <ChevronRight className="h-5 w-5" style={{ color: maturityTheme.colors.text.secondary }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDocumentTypeDialogOpen(false)}
+              style={{
+                borderColor: maturityTheme.colors.border.default,
+                color: maturityTheme.colors.text.primary,
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Document Detail Dialog - Shows quality audit scores */}
+      <Dialog open={documentDetailDialogOpen} onOpenChange={setDocumentDetailDialogOpen}>
+        <DialogContent 
+          className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto"
+          style={{
+            backgroundColor: maturityTheme.colors.background.elevated,
+            borderColor: maturityTheme.colors.border.default,
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle style={{ color: maturityTheme.colors.text.primary }}>
+              Quality Audit: {selectedDocument?.title || selectedDocument?.originalFilename || 'Document'}
+            </DialogTitle>
+            <DialogDescription style={{ color: maturityTheme.colors.text.secondary }}>
+              Detailed quality scores and entity-level assessments
+            </DialogDescription>
+          </DialogHeader>
+
+          {loadingDocumentDetails ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
+            </div>
+          ) : !documentQualityAudit ? (
+            <div className="text-center py-8">
+              <AlertCircle className="h-12 w-12 mx-auto mb-4" style={{ color: maturityTheme.colors.text.muted }} />
+              <p style={{ color: maturityTheme.colors.text.secondary }}>
+                Quality audit data not available for this document
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Overall Score */}
+              <MaturityCard variant="elevated">
+                <CardHeader>
+                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Overall Quality Score</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="text-4xl font-bold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+                        {documentQualityAudit.overallScore?.toFixed(1) || 'N/A'}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge style={{
+                          backgroundColor: documentQualityAudit.overallGrade === 'A' ? maturityTheme.colors.success.bg :
+                                          documentQualityAudit.overallGrade === 'B' ? maturityTheme.colors.info.bg :
+                                          documentQualityAudit.overallGrade === 'C' ? maturityTheme.colors.warning.bg :
+                                          maturityTheme.colors.error.bg,
+                          color: documentQualityAudit.overallGrade === 'A' ? maturityTheme.colors.success.text :
+                                 documentQualityAudit.overallGrade === 'B' ? maturityTheme.colors.info.text :
+                                 documentQualityAudit.overallGrade === 'C' ? maturityTheme.colors.warning.text :
+                                 maturityTheme.colors.error.text,
+                        }}>
+                          Grade: {documentQualityAudit.overallGrade || 'N/A'}
+                        </Badge>
+                        <Badge style={{
+                          backgroundColor: maturityTheme.colors.background.tertiary,
+                          color: maturityTheme.colors.text.secondary,
+                        }}>
+                          {documentQualityAudit.qualityLevel || 'Not assessed'}
+                        </Badge>
+                      </div>
+                    </div>
+                    <Progress 
+                      value={documentQualityAudit.overallScore || 0} 
+                      className="w-32 h-32"
+                    />
+                  </div>
+                </CardContent>
+              </MaturityCard>
+
+              {/* Quality Dimension Scores */}
+              <MaturityCard variant="elevated">
+                <CardHeader>
+                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Quality Dimension Scores</CardTitle>
+                  <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                    Individual scores for each quality dimension
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {[
+                      { label: 'Completeness', score: documentQualityAudit.completenessScore, key: 'completeness' },
+                      { label: 'Consistency', score: documentQualityAudit.consistencyScore, key: 'consistency' },
+                      { label: 'Professional Quality', score: documentQualityAudit.professionalQualityScore, key: 'professional' },
+                      { label: 'Standards Compliance', score: documentQualityAudit.standardsComplianceScore, key: 'compliance' },
+                      { label: 'Accuracy', score: documentQualityAudit.accuracyScore, key: 'accuracy' },
+                      { label: 'Context Relevance', score: documentQualityAudit.contextRelevanceScore, key: 'relevance' },
+                    ].map((dimension) => (
+                      <div
+                        key={dimension.key}
+                        className="p-4 rounded-lg"
+                        style={{
+                          backgroundColor: maturityTheme.colors.background.tertiary,
+                          borderColor: maturityTheme.colors.border.default,
+                          borderWidth: '1px',
+                        }}
+                      >
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                            {dimension.label}
+                          </span>
+                          <span className="font-bold" style={{ color: maturityTheme.colors.text.primary }}>
+                            {dimension.score?.toFixed(1) || 'N/A'}
+                          </span>
+                        </div>
+                        <Progress 
+                          value={dimension.score || 0} 
+                          className="h-2"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </MaturityCard>
+
+              {/* Findings */}
+              {documentQualityAudit.findings && Object.keys(documentQualityAudit.findings).length > 0 && (
+                <MaturityCard variant="elevated">
+                  <CardHeader>
+                    <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Quality Findings</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {Object.entries(documentQualityAudit.findings).map(([key, value]: [string, any]) => (
+                        <div key={key} className="p-3 rounded-lg" style={{ backgroundColor: maturityTheme.colors.background.tertiary }}>
+                          <div className="font-medium mb-1" style={{ color: maturityTheme.colors.text.primary }}>
+                            {key}
+                          </div>
+                          <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                            {typeof value === 'string' ? value : JSON.stringify(value)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </MaturityCard>
+              )}
+
+              {/* Issues */}
+              {documentQualityAudit.issues && documentQualityAudit.issues.length > 0 && (
+                <MaturityCard variant="elevated">
+                  <CardHeader>
+                    <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Identified Issues</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {documentQualityAudit.issues.map((issue: any, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className="flex items-start gap-2 p-3 rounded-lg"
+                          style={{ backgroundColor: maturityTheme.colors.error.bg }}
+                        >
+                          <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: maturityTheme.colors.error.text }} />
+                          <div className="flex-1">
+                            <div className="font-medium" style={{ color: maturityTheme.colors.error.text }}>
+                              {issue.category || issue.type || 'Issue'}
+                            </div>
+                            <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                              {issue.description || issue.message || JSON.stringify(issue)}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </MaturityCard>
+              )}
+
+              {/* Recommendations */}
+              {documentQualityAudit.recommendations && documentQualityAudit.recommendations.length > 0 && (
+                <MaturityCard variant="elevated">
+                  <CardHeader>
+                    <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Recommendations</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {documentQualityAudit.recommendations.map((rec: string, idx: number) => (
+                        <div 
+                          key={idx} 
+                          className="flex items-start gap-2 p-3 rounded-lg"
+                          style={{ backgroundColor: maturityTheme.colors.success.bg }}
+                        >
+                          <CheckCircle className="h-5 w-5 mt-0.5 flex-shrink-0" style={{ color: maturityTheme.colors.success.text }} />
+                          <div className="text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                            {rec}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </MaturityCard>
+              )}
+
+              {/* Audit Metadata */}
+              <MaturityCard variant="elevated">
+                <CardHeader>
+                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Audit Information</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid gap-3 md:grid-cols-2 text-sm">
+                    <div>
+                      <span style={{ color: maturityTheme.colors.text.secondary }}>AI Provider: </span>
+                      <span style={{ color: maturityTheme.colors.text.primary }}>
+                        {documentQualityAudit.aiProvider || 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: maturityTheme.colors.text.secondary }}>AI Model: </span>
+                      <span style={{ color: maturityTheme.colors.text.primary }}>
+                        {documentQualityAudit.aiModel || 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: maturityTheme.colors.text.secondary }}>Analysis Tokens: </span>
+                      <span style={{ color: maturityTheme.colors.text.primary }}>
+                        {documentQualityAudit.analysisTokens != null 
+                          ? typeof documentQualityAudit.analysisTokens === 'number' 
+                            ? documentQualityAudit.analysisTokens.toLocaleString() 
+                            : parseInt(String(documentQualityAudit.analysisTokens), 10).toLocaleString()
+                          : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: maturityTheme.colors.text.secondary }}>Analysis Cost: </span>
+                      <span style={{ color: maturityTheme.colors.text.primary }}>
+                        ${documentQualityAudit.analysisCost != null
+                          ? (typeof documentQualityAudit.analysisCost === 'number' 
+                            ? documentQualityAudit.analysisCost.toFixed(4) 
+                            : parseFloat(String(documentQualityAudit.analysisCost)).toFixed(4))
+                          : '0.0000'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: maturityTheme.colors.text.secondary }}>Analysis Time: </span>
+                      <span style={{ color: maturityTheme.colors.text.primary }}>
+                        {documentQualityAudit.analysisTime != null 
+                          ? `${typeof documentQualityAudit.analysisTime === 'number' 
+                            ? documentQualityAudit.analysisTime 
+                            : parseInt(String(documentQualityAudit.analysisTime), 10)}ms` 
+                          : 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <span style={{ color: maturityTheme.colors.text.secondary }}>Audited At: </span>
+                      <span style={{ color: maturityTheme.colors.text.primary }}>
+                        {documentQualityAudit.auditedAt ? new Date(documentQualityAudit.auditedAt).toLocaleString() : 'N/A'}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </MaturityCard>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDocumentDetailDialogOpen(false);
+                setSelectedDocument(null);
+                setDocumentQualityAudit(null);
+              }}
+              style={{
+                borderColor: maturityTheme.colors.border.default,
+                color: maturityTheme.colors.text.primary,
+              }}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Documents Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent 
+          className="sm:max-w-[600px]"
+          style={{
+            backgroundColor: maturityTheme.colors.background.elevated,
+            borderColor: maturityTheme.colors.border.default,
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle style={{ color: maturityTheme.colors.text.primary }}>
+              Add More Documents to Assessment
+            </DialogTitle>
+            <DialogDescription style={{ color: maturityTheme.colors.text.secondary }}>
+              Upload additional documents to enhance your assessment. The system will process them and you can regenerate the assessment with all documents included.
+            </DialogDescription>
+          </DialogHeader>
           
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="additional-files">Select Documents</Label>
-                <Input
-                  id="additional-files"
-                  type="file"
-                  multiple
-                  accept=".pdf,.doc,.docx,.txt,.md,.markdown"
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedFiles(e.target.files)}
-                  className="cursor-pointer"
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="additional-files" style={{ color: maturityTheme.colors.text.primary }}>
+                Select Documents
+              </Label>
+              <Input
+                id="additional-files"
+                type="file"
+                multiple
+                accept=".pdf,.doc,.docx,.txt,.md,.markdown"
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSelectedFiles(e.target.files)}
+                className="cursor-pointer"
+                style={{
+                  color: maturityTheme.colors.text.primary,
+                  backgroundColor: maturityTheme.colors.background.tertiary,
+                  borderColor: maturityTheme.colors.border.default,
+                }}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
                 Supported formats: PDF, DOC, DOCX, TXT, MD (up to 100 files, 10MB each)
               </p>
               {selectedFiles && selectedFiles.length > 0 && (
-                <div className="mt-3 p-3 bg-blue-50 rounded-md border border-blue-200">
-                  <p className="text-sm font-medium text-blue-900 mb-2">
+                <div 
+                  className="mt-3 p-3 rounded-md"
+                  style={{ 
+                    backgroundColor: maturityTheme.colors.info.bg,
+                    borderColor: maturityTheme.colors.info.border,
+                    borderWidth: '1px',
+                  }}
+                >
+                  <p className="text-sm font-medium mb-2" style={{ color: maturityTheme.colors.info.text }}>
                     {selectedFiles.length} file(s) selected:
                   </p>
-                  <ul className="text-xs text-blue-700 space-y-1">
+                  <ul className="text-xs space-y-1" style={{ color: maturityTheme.colors.text.secondary }}>
                     {Array.from(selectedFiles).map((file, idx) => (
                       <li key={idx} className="flex items-center gap-2">
-                        <FileText className="h-3 w-3" />
+                        <FileText className="h-3 w-3" style={{ color: maturityTheme.colors.primary[400] }} />
                         {file.name} ({(file.size / 1024).toFixed(1)} KB)
                       </li>
                     ))}
@@ -851,7 +2091,7 @@ export default function AssessmentResultsPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-4 border-t">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => {
@@ -859,12 +2099,20 @@ export default function AssessmentResultsPage() {
                 setSelectedFiles(null);
               }}
               disabled={uploading}
+              style={{
+                borderColor: maturityTheme.colors.border.default,
+                color: maturityTheme.colors.text.primary,
+              }}
             >
               Cancel
             </Button>
             <Button
               onClick={handleUploadAdditionalDocuments}
               disabled={uploading || !selectedFiles || selectedFiles.length === 0}
+              style={{
+                background: `linear-gradient(135deg, ${maturityTheme.colors.primary[500]} 0%, ${maturityTheme.colors.primary[700]} 100%)`,
+                color: 'white',
+              }}
             >
               {uploading ? (
                 <>
@@ -878,8 +2126,7 @@ export default function AssessmentResultsPage() {
                 </>
               )}
             </Button>
-          </div>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

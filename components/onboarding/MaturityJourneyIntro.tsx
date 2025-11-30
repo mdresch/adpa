@@ -162,12 +162,25 @@ export const MaturityJourneyIntro: React.FC<MaturityJourneyIntroProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      onClick={(e) => {
+        // Close on backdrop click
+        if (e.target === e.currentTarget) {
+          onSkip?.();
+        }
+      }}
     >
       <motion.div
-        className="relative max-w-6xl w-full max-h-[90vh] overflow-y-auto"
+        className="relative max-w-6xl w-full max-h-[90vh] overflow-y-auto overflow-x-hidden"
         initial={{ scale: 0.9, y: 20 }}
         animate={{ scale: 1, y: 0 }}
         transition={{ duration: 0.3 }}
+        style={{ 
+          scrollbarWidth: 'thin',
+          scrollbarColor: `${maturityTheme.colors.primary[500]}40 transparent`,
+          // Prevent layout shifts
+          boxSizing: 'border-box',
+        }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Close Button */}
         {onSkip && (

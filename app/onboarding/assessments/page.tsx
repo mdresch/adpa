@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
@@ -45,6 +45,13 @@ import {
   AlertCircle
 } from '@/components/ui/icons-shim';
 import { Progress } from '@/components/ui/progress';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Assessment {
   id: string;
@@ -74,6 +81,7 @@ export default function AssessmentsListPage() {
   const [filterProject, setFilterProject] = useState('all');
   const [filterStatus, setFilterStatus] = useState('all');
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [selectedProcessingAssessment, setSelectedProcessingAssessment] = useState<Assessment | null>(null);
 
   // Require authentication - redirect to login if not authenticated
   useEffect(() => {
@@ -141,7 +149,7 @@ export default function AssessmentsListPage() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Loading...</p>
+          <p style={{ color: maturityTheme.colors.text.secondary }}>Loading...</p>
         </div>
       </div>
     );
@@ -153,6 +161,11 @@ export default function AssessmentsListPage() {
   }
 
   const handleView = (assessment: Assessment) => {
+    // If processing, show dialog instead of navigating
+    if (assessment.status === 'processing') {
+      setSelectedProcessingAssessment(assessment);
+      return;
+    }
     // Use batch ID for the URL since the detail page expects batch ID
     router.push(`/onboarding/assessment/${assessment.batchId}`);
   };
@@ -220,25 +233,216 @@ export default function AssessmentsListPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 max-w-7xl">
+    <>
+      {/* Processing Dialog */}
+      <Dialog 
+        open={!!selectedProcessingAssessment} 
+        onOpenChange={(open) => {
+          if (!open) setSelectedProcessingAssessment(null);
+        }}
+      >
+        <DialogContent 
+          className="max-w-2xl"
+          style={{
+            backgroundColor: maturityTheme.colors.background.elevated,
+            borderColor: maturityTheme.colors.border.default,
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
+              <Loader2 className="h-6 w-6 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
+              Assessment Processing...
+            </DialogTitle>
+            <DialogDescription style={{ color: maturityTheme.colors.text.secondary }}>
+              Your documents are being analyzed. This typically takes 2-3 minutes per document.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedProcessingAssessment && (
+            <div className="space-y-6 py-4">
+              <div className="text-center py-4">
+                <div className="text-6xl mb-4">⏳</div>
+                <h3 className="text-xl font-semibold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+                  Processing {selectedProcessingAssessment.totalDocuments} Document{selectedProcessingAssessment.totalDocuments > 1 ? 's' : ''}
+                </h3>
+                <p style={{ color: maturityTheme.colors.text.secondary }} className="mb-6">
+                  AI is analyzing document types, quality scores, and maturity levels
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span style={{ color: maturityTheme.colors.text.secondary }}>Overall Progress</span>
+                  <span className="font-medium" style={{ color: maturityTheme.colors.info.text }}>
+                    {selectedProcessingAssessment.progress || 0}%
+                  </span>
+                </div>
+                <Progress value={selectedProcessingAssessment.progress || 0} className="h-3" />
+                <p className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                  {selectedProcessingAssessment.processedFiles || 0} of {selectedProcessingAssessment.totalDocuments || 0} documents processed
+                </p>
+              </div>
+
+              {/* Processing Steps */}
+              <div className="space-y-3 text-left">
+                <div className="flex items-center gap-3">
+                  <CheckCircle className="h-5 w-5 flex-shrink-0" style={{ color: maturityTheme.colors.success.text }} />
+                  <span style={{ color: maturityTheme.colors.text.primary }}>Documents uploaded successfully</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin flex-shrink-0" style={{ color: maturityTheme.colors.info.text }} />
+                  <span style={{ color: maturityTheme.colors.text.primary }}>
+                    Converting to Markdown and analyzing...
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="h-5 w-5 border-2 rounded-full flex-shrink-0"
+                    style={{ 
+                      borderColor: (selectedProcessingAssessment.progress || 0) > 50 
+                        ? maturityTheme.colors.success.text 
+                        : maturityTheme.colors.text.muted 
+                    }}
+                  />
+                  <span style={{ 
+                    color: (selectedProcessingAssessment.progress || 0) > 50 
+                      ? maturityTheme.colors.text.primary 
+                      : maturityTheme.colors.text.muted 
+                  }}>
+                    Generating gap analysis
+                  </span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div 
+                    className="h-5 w-5 border-2 rounded-full flex-shrink-0"
+                    style={{ 
+                      borderColor: (selectedProcessingAssessment.progress || 0) > 80 
+                        ? maturityTheme.colors.success.text 
+                        : maturityTheme.colors.text.muted 
+                    }}
+                  />
+                  <span style={{ 
+                    color: (selectedProcessingAssessment.progress || 0) > 80 
+                      ? maturityTheme.colors.text.primary 
+                      : maturityTheme.colors.text.muted 
+                  }}>
+                    Calculating benchmarks and ROI
+                  </span>
+                </div>
+              </div>
+
+              {/* Assessment Info */}
+              <div className="p-4 rounded-lg" style={{ 
+                backgroundColor: maturityTheme.colors.info.bg,
+                borderColor: maturityTheme.colors.info.border,
+                borderWidth: '1px'
+              }}>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span style={{ color: maturityTheme.colors.text.secondary }}>Client:</span>
+                    <span style={{ color: maturityTheme.colors.text.primary }} className="font-medium">
+                      {selectedProcessingAssessment.clientName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span style={{ color: maturityTheme.colors.text.secondary }}>Project:</span>
+                    <span style={{ color: maturityTheme.colors.text.primary }} className="font-medium">
+                      {selectedProcessingAssessment.projectName}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span style={{ color: maturityTheme.colors.text.secondary }}>Purpose:</span>
+                    <span style={{ color: maturityTheme.colors.text.primary }} className="font-medium">
+                      {selectedProcessingAssessment.assessmentPurpose}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 justify-end pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setSelectedProcessingAssessment(null)}
+                  style={{
+                    borderColor: maturityTheme.colors.border.default,
+                    color: maturityTheme.colors.text.primary,
+                  }}
+                >
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    setSelectedProcessingAssessment(null);
+                    router.push(`/onboarding/assessment/${selectedProcessingAssessment.batchId}`);
+                  }}
+                  style={{
+                    background: `linear-gradient(135deg, ${maturityTheme.colors.primary[500]} 0%, ${maturityTheme.colors.primary[700]} 100%)`,
+                    color: 'white',
+                  }}
+                >
+                  <Eye className="mr-2 h-4 w-4" />
+                  View Full Details
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <div 
+        className="min-h-screen"
+        style={{ 
+          background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
+        }}
+      >
+        <div className="container mx-auto p-6 max-w-7xl">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-6" aria-label="Breadcrumb">
+        <ol className="flex items-center space-x-2 text-sm">
+          <li>
+            <button
+              onClick={() => router.push('/onboarding')}
+              className="hover:underline"
+              style={{ color: maturityTheme.colors.text.secondary }}
+            >
+              Home
+            </button>
+          </li>
+          <li style={{ color: maturityTheme.colors.text.muted }}>/</li>
+          <li style={{ color: maturityTheme.colors.text.primary }} className="font-medium">
+            Assessments
+          </li>
+        </ol>
+      </nav>
+
       {/* Header */}
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold mb-2">Client Assessments</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-3xl font-bold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+            Client Assessments
+          </h1>
+          <p style={{ color: maturityTheme.colors.text.secondary }}>
             View and manage all portfolio maturity assessments
           </p>
         </div>
-        <Button onClick={() => router.push('/onboarding/upload')}>
+        <Button 
+          onClick={() => router.push('/onboarding/upload')}
+          style={{
+            background: `linear-gradient(135deg, ${maturityTheme.colors.primary[500]} 0%, ${maturityTheme.colors.primary[700]} 100%)`,
+            color: 'white',
+          }}
+        >
           <Plus className="mr-2 h-4 w-4" />
           New Assessment
         </Button>
       </div>
 
       {/* Filters */}
-      <Card className="mb-6">
+      <MaturityCard variant="elevated" className="mb-6">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
             <Filter className="h-5 w-5" />
             Filters
           </CardTitle>
@@ -246,28 +450,46 @@ export default function AssessmentsListPage() {
         <CardContent>
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
-              <Label>Search</Label>
+              <Label style={{ color: maturityTheme.colors.text.primary }}>Search</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-3 h-4 w-4" style={{ color: maturityTheme.colors.text.muted }} />
                 <Input
                   placeholder="Search client, project, organization..."
                   value={searchTerm}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearchTerm(e.target.value)}
-                  className="pl-10"
+                  className="pl-10 [&::placeholder]:!text-[#8896b8] [&::placeholder]:opacity-70"
+                  style={{
+                    color: maturityTheme.colors.text.primary,
+                    backgroundColor: maturityTheme.colors.background.tertiary,
+                    borderColor: maturityTheme.colors.border.default,
+                  }}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Project</Label>
+              <Label style={{ color: maturityTheme.colors.text.primary }}>Project</Label>
               <Select value={filterProject} onValueChange={setFilterProject}>
-                <SelectTrigger>
+                <SelectTrigger
+                  style={{
+                    color: maturityTheme.colors.text.primary,
+                    backgroundColor: maturityTheme.colors.background.tertiary,
+                    borderColor: maturityTheme.colors.border.default,
+                  }}
+                >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Projects</SelectItem>
+                <SelectContent
+                  style={{
+                    backgroundColor: maturityTheme.colors.background.elevated,
+                    borderColor: maturityTheme.colors.border.default,
+                  }}
+                >
+                  <SelectItem value="all" style={{ color: maturityTheme.colors.text.primary }}>
+                    All Projects
+                  </SelectItem>
                   {projects.map(project => (
-                    <SelectItem key={project.id} value={project.id}>
+                    <SelectItem key={project.id} value={project.id} style={{ color: maturityTheme.colors.text.primary }}>
                       {project.name}
                     </SelectItem>
                   ))}
@@ -276,22 +498,41 @@ export default function AssessmentsListPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Status</Label>
+              <Label style={{ color: maturityTheme.colors.text.primary }}>Status</Label>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger>
+                <SelectTrigger
+                  style={{
+                    color: maturityTheme.colors.text.primary,
+                    backgroundColor: maturityTheme.colors.background.tertiary,
+                    borderColor: maturityTheme.colors.border.default,
+                  }}
+                >
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="complete">Complete</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="failed">Failed</SelectItem>
+                <SelectContent
+                  style={{
+                    backgroundColor: maturityTheme.colors.background.elevated,
+                    borderColor: maturityTheme.colors.border.default,
+                  }}
+                >
+                  <SelectItem value="all" style={{ color: maturityTheme.colors.text.primary }}>
+                    All Statuses
+                  </SelectItem>
+                  <SelectItem value="complete" style={{ color: maturityTheme.colors.text.primary }}>
+                    Complete
+                  </SelectItem>
+                  <SelectItem value="processing" style={{ color: maturityTheme.colors.text.primary }}>
+                    Processing
+                  </SelectItem>
+                  <SelectItem value="failed" style={{ color: maturityTheme.colors.text.primary }}>
+                    Failed
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
         </CardContent>
-      </Card>
+      </MaturityCard>
 
       {/* Statistics - Enhanced with Dark Blue Theme */}
       <div className="grid gap-4 md:grid-cols-4 mb-6">
@@ -384,89 +625,143 @@ export default function AssessmentsListPage() {
       </div>
 
       {/* Assessments Table */}
-      <Card>
+      <MaturityCard variant="elevated">
         <CardHeader>
-          <CardTitle>Assessments ({filteredAssessments.length})</CardTitle>
-          <CardDescription>
+          <CardTitle style={{ color: maturityTheme.colors.text.primary }}>
+            Assessments ({filteredAssessments.length})
+          </CardTitle>
+          <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
             Click on an assessment to view details and export reports
           </CardDescription>
         </CardHeader>
         <CardContent>
           {filteredAssessments.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              <FileText className="mx-auto h-12 w-12 mb-4 opacity-50" />
-              <p className="text-lg font-medium mb-2">No assessments found</p>
-              <p className="text-sm mb-4">
-                {assessments.length === 0
-                  ? 'Create your first assessment to get started'
-                  : 'Try adjusting your filters'}
-              </p>
-              <Button onClick={() => router.push('/onboarding/upload')}>
-                <Plus className="mr-2 h-4 w-4" />
-                New Assessment
-              </Button>
+            <div className="text-center py-16">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.3 }}
+              >
+                <FileText className="mx-auto h-16 w-16 mb-4" style={{ color: maturityTheme.colors.text.muted, opacity: 0.5 }} />
+                <h3 className="text-xl font-semibold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+                  {assessments.length === 0 ? 'No Assessments Yet' : 'No Assessments Match Your Filters'}
+                </h3>
+                <p className="text-sm mb-6 max-w-md mx-auto" style={{ color: maturityTheme.colors.text.secondary }}>
+                  {assessments.length === 0
+                    ? 'Upload your project documents to get started with your first maturity assessment. Our AI will analyze your documentation and provide actionable insights.'
+                    : 'Try adjusting your search terms or filters to find what you\'re looking for.'}
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <Button 
+                    onClick={() => router.push('/onboarding/upload')}
+                    style={{
+                      background: `linear-gradient(135deg, ${maturityTheme.colors.primary[500]} 0%, ${maturityTheme.colors.primary[700]} 100%)`,
+                      color: 'white',
+                    }}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Create First Assessment
+                  </Button>
+                  {assessments.length > 0 && (
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setSearchTerm('')
+                        setFilterProject('all')
+                        setFilterStatus('all')
+                      }}
+                      style={{
+                        borderColor: maturityTheme.colors.border.default,
+                        color: maturityTheme.colors.text.primary,
+                      }}
+                    >
+                      Clear Filters
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
             </div>
           ) : (
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Client / Organization</TableHead>
-                  <TableHead>Project</TableHead>
-                  <TableHead>Purpose</TableHead>
-                  <TableHead>Maturity</TableHead>
-                  <TableHead>Score</TableHead>
-                  <TableHead>Documents</TableHead>
-                  <TableHead>Gaps</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
+                <TableRow style={{ backgroundColor: maturityTheme.colors.background.secondary }}>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Client / Organization</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Project</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Purpose</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Maturity</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Score</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Documents</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Gaps</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Date</TableHead>
+                  <TableHead style={{ color: maturityTheme.colors.text.primary }}>Status</TableHead>
+                  <TableHead className="text-right" style={{ color: maturityTheme.colors.text.primary }}>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredAssessments.map(assessment => (
-                  <TableRow key={assessment.id} className="cursor-pointer hover:bg-muted/50">
+                  <TableRow 
+                    key={assessment.id} 
+                    className="cursor-pointer"
+                    style={{ 
+                      backgroundColor: maturityTheme.colors.background.tertiary,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = maturityTheme.colors.background.elevated;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = maturityTheme.colors.background.tertiary;
+                    }}
+                  >
                     <TableCell>
-                      <div className="font-medium">{assessment.clientName}</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                        {assessment.clientName}
+                      </div>
+                      <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
                         {assessment.organizationName}
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Building className="h-4 w-4 text-muted-foreground" />
+                      <div className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
+                        <Building className="h-4 w-4" style={{ color: maturityTheme.colors.text.muted }} />
                         {assessment.projectName}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{assessment.assessmentPurpose}</TableCell>
+                    <TableCell className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                      {assessment.assessmentPurpose}
+                    </TableCell>
                     <TableCell>
                       <Badge className={getMaturityColor(assessment.overallMaturityLevel)}>
                         Level {assessment.overallMaturityLevel}
                       </Badge>
                     </TableCell>
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
                       {assessment.averageQualityScore.toFixed(1)}
                     </TableCell>
-                    <TableCell>{assessment.totalDocuments}</TableCell>
+                    <TableCell style={{ color: maturityTheme.colors.text.primary }}>
+                      {assessment.totalDocuments}
+                    </TableCell>
                     <TableCell>
                       {assessment.gapsCount > 0 && (
-                        <span className="text-orange-600 font-medium">
+                        <span className="font-medium" style={{ color: maturityTheme.colors.warning.text }}>
                           {assessment.gapsCount}
                         </span>
                       )}
-                      {assessment.gapsCount === 0 && '—'}
+                      {assessment.gapsCount === 0 && <span style={{ color: maturityTheme.colors.text.muted }}>—</span>}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
                       {new Date(assessment.createdAt).toLocaleDateString()}
                     </TableCell>
                   <TableCell>
                     {assessment.status === 'processing' ? (
                       <div className="space-y-2 min-w-[200px]">
                         <div className="flex items-center gap-2">
-                          <Loader2 className="h-4 w-4 animate-spin text-blue-500" />
-                          <span className="text-sm font-medium text-blue-600">Processing...</span>
+                          <Loader2 className="h-4 w-4 animate-spin" style={{ color: maturityTheme.colors.info.text }} />
+                          <span className="text-sm font-medium" style={{ color: maturityTheme.colors.info.text }}>
+                            Processing...
+                          </span>
                         </div>
                         <Progress value={assessment.progress || 30} className="h-2" />
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
                           {assessment.processedFiles || 0} of {assessment.totalDocuments || 0} documents processed
                         </p>
                       </div>
@@ -482,6 +777,7 @@ export default function AssessmentsListPage() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleView(assessment)}
+                          style={{ color: maturityTheme.colors.text.primary }}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -490,6 +786,7 @@ export default function AssessmentsListPage() {
                           size="sm"
                           onClick={() => handleExport(assessment.id, 'pdf')}
                           disabled={assessment.status !== 'complete'}
+                          style={{ color: maturityTheme.colors.text.primary }}
                         >
                           <Download className="h-4 w-4" />
                         </Button>
@@ -501,8 +798,10 @@ export default function AssessmentsListPage() {
             </Table>
           )}
         </CardContent>
-      </Card>
+      </MaturityCard>
+      </div>
     </div>
+    </>
   );
 }
 

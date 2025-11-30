@@ -29,6 +29,130 @@ import archiver from "archiver"
 
 const router = express.Router()
 
+// Get quality audit details for a document
+router.get("/:id/quality-audit", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: documentId } = req.params
+    const userId = (req as any).user?.id
+
+    // Get document and verify access
+    const docResult = await pool.query(
+      `SELECT d.*, p.owner_id, p.created_by, p.team_members
+       FROM documents d
+       JOIN projects p ON d.project_id = p.id
+       WHERE d.id = $1`,
+      [documentId]
+    )
+
+    if (docResult.rows.length === 0) {
+      return res.status(404).json({ error: "Document not found" })
+    }
+
+    const doc = docResult.rows[0]
+    const teamMembers = doc.team_members || []
+
+    // Check permissions
+    const isOwner = doc.owner_id === userId
+    const isCreator = doc.created_by === userId
+    const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId)
+
+    if (!isOwner && !isCreator && !isInTeam) {
+      return res.status(403).json({ error: "Access denied" })
+    }
+
+    // Get quality audit data
+    const auditResult = await pool.query(
+      `SELECT 
+        qa.*,
+        d.id as document_id,
+        COALESCE(d.title, d.name) as document_title,
+        COALESCE(d.framework, d.template_category, 'General') as document_type
+       FROM quality_audits qa
+       JOIN documents d ON qa.document_id = d.id
+       WHERE qa.document_id = $1
+       ORDER BY qa.audited_at DESC
+       LIMIT 1`,
+      [documentId]
+    )
+
+    if (auditResult.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Quality audit not found for this document" 
+      })
+    }
+
+    const audit = auditResult.rows[0]
+
+    // Parse JSONB fields if they're strings
+    let findings = audit.findings
+    if (typeof findings === 'string') {
+      try {
+        findings = JSON.parse(findings)
+      } catch (e) {
+        findings = {}
+      }
+    }
+
+    let issues = audit.issues
+    if (typeof issues === 'string') {
+      try {
+        issues = JSON.parse(issues)
+      } catch (e) {
+        issues = []
+      }
+    }
+
+    let recommendations = audit.recommendations
+    if (typeof recommendations === 'string') {
+      try {
+        recommendations = JSON.parse(recommendations)
+      } catch (e) {
+        recommendations = []
+      }
+    }
+
+    const qualityAudit = {
+      id: audit.id,
+      documentId: audit.document_id,
+      documentTitle: audit.document_title,
+      documentType: audit.document_type,
+      overallScore: audit.overall_score,
+      overallGrade: audit.overall_grade,
+      qualityLevel: audit.quality_level,
+      completenessScore: audit.completeness_score,
+      consistencyScore: audit.consistency_score,
+      professionalQualityScore: audit.professional_quality_score,
+      standardsComplianceScore: audit.standards_compliance_score,
+      accuracyScore: audit.accuracy_score,
+      contextRelevanceScore: audit.context_relevance_score,
+      findings: findings || {},
+      issues: issues || [],
+      recommendations: recommendations || [],
+      aiProvider: audit.ai_provider,
+      aiModel: audit.ai_model,
+      analysisTokens: audit.analysis_tokens,
+      analysisCost: audit.analysis_cost,
+      analysisTime: audit.analysis_time,
+      auditedAt: audit.audited_at,
+      auditedBy: audit.audited_by
+    }
+
+    res.json({
+      success: true,
+      data: qualityAudit
+    })
+
+  } catch (error) {
+    log.error("Error fetching quality audit:", error)
+    res.status(500).json({ 
+      success: false,
+      error: "Failed to fetch quality audit" 
+    })
+  }
+})
+
 // Test endpoint to verify server is working
 router.get("/test", (req, res) => {
   res.json({ message: "Documents route is working", timestamp: new Date().toISOString() })

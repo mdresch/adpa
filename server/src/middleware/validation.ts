@@ -123,15 +123,19 @@ export const schemas = {
     email: Joi.string().email().required(),
     password: Joi.string().min(8).pattern(new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)")).required(),
     name: Joi.string().min(2).max(100).required(),
-    role: Joi.string().valid("admin", "manager", "user", "viewer", "ccb").default("user"),
+    role: Joi.string().valid("super_admin", "admin", "manager", "user", "viewer", "ccb").default("user"),
+    companyName: Joi.string().max(255).allow('', null).optional(),
+    company_id: Joi.string().uuid().allow(null, '').optional(),
   }),
   
   updateUser: Joi.object({
     email: Joi.string().email().optional(),
     name: Joi.string().min(2).max(100).optional(),
-    role: Joi.string().valid("admin", "manager", "user", "viewer", "ccb").optional(),
+    role: Joi.string().valid("super_admin", "admin", "manager", "user", "viewer", "ccb").optional(),
     is_active: Joi.boolean().optional(),
     permissions: Joi.object().optional(),
+    companyName: Joi.string().max(255).allow('', null).optional(),
+    company_id: Joi.string().uuid().allow(null, '').optional(),
   }),
   
   // Document schemas
@@ -176,7 +180,7 @@ export const schemas = {
   createTemplate: Joi.object({
     name: Joi.string().min(2).max(255).required(),
     description: Joi.string().max(1000).optional(),
-    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom").required(),
+    framework: Joi.string().valid("TOGAF", "SABSA", "COBIT", "ITIL", "Custom", "BABOK", "BABOK v3", "PMBOK", "PMBOK 7", "DMBOK", "DMBOK 2.0").required(),
     category: Joi.string().max(100).optional(),
     content: Joi.object().required(),
     variables: Joi.array().items(Joi.object({
@@ -187,6 +191,8 @@ export const schemas = {
       options: Joi.array().when("type", { is: "select", then: Joi.required() }),
     })).default([]),
     is_public: Joi.boolean().default(false),
+    template_scope: Joi.string().valid("standard", "company", "user").default("user"),
+    company_id: Joi.string().uuid().allow(null, '').optional(),
     system_prompt: Joi.string().max(5000).optional(),
     template_paragraphs: Joi.array().items(Joi.object({
       section_name: Joi.string().required(),
