@@ -110,7 +110,10 @@ export default function AssessmentsListPage() {
     
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch(getApiUrl('/assessment/list'), {
+      const apiUrl = getApiUrl('/assessment/list');
+      console.log('[Assessments] Fetching from:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -118,26 +121,36 @@ export default function AssessmentsListPage() {
         credentials: 'include'
       });
 
+      console.log('[Assessments] Response status:', response.status, response.statusText);
+
       if (!response.ok) {
         if (response.status === 401) {
           toast.error('Authentication required. Please log in.');
           router.push('/auth/login?redirect=/onboarding/assessments');
           return;
         }
+        const errorText = await response.text();
+        console.error('[Assessments] Error response:', errorText);
         throw new Error(`Failed to load assessments: ${response.statusText}`);
       }
       
       const data = await response.json();
+      console.log('[Assessments] Response data:', data);
+      
       if (data.success) {
-        setAssessments(data.data || []);
+        const assessmentsList = data.data || [];
+        console.log('[Assessments] Loaded', assessmentsList.length, 'assessments');
+        setAssessments(assessmentsList);
         // Extract unique projects from assessments for filter
         const uniqueProjects = Array.from(
-          new Set(data.data?.map((a: Assessment) => a.projectName) || [])
+          new Set(assessmentsList.map((a: Assessment) => a.projectName) || [])
         ).map(name => ({ id: String(name), name: String(name) }));
         setProjects(uniqueProjects);
+      } else {
+        console.warn('[Assessments] API returned success=false:', data);
       }
     } catch (error) {
-      console.error('Failed to load assessments:', error);
+      console.error('[Assessments] Failed to load assessments:', error);
       toast.error('Failed to load assessments');
     } finally {
       setLoading(false);
