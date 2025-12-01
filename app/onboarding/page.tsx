@@ -126,7 +126,7 @@ const processSteps = [
 
 export default function OnboardingLandingPage() {
   const router = useRouter();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
   const [showIntro, setShowIntro] = useState(false);
   const features = getFeatures();
