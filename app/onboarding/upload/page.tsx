@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { getApiUrl } from '@/lib/api-url';
 import { RegistrationDialog } from '@/components/onboarding/RegistrationDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -208,7 +209,7 @@ export default function DocumentUploadPage() {
       }
 
       // Upload request with authentication
-      const response = await fetch('/api/onboarding/upload', {
+      const response = await fetch(getApiUrl('/onboarding/upload'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
