@@ -40,7 +40,7 @@ export default function AuthPage() {
   const [error, setError] = useState("")
   const [redirectPath, setRedirectPath] = useState<string | null>(null)
 
-  // Get redirect parameter from URL
+  // Get redirect parameter from URL for use in login/register calls
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
@@ -50,14 +50,6 @@ export default function AuthPage() {
       }
     }
   }, [])
-
-  // Redirect if already authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      const redirect = redirectPath || "/"
-      router.push(redirect)
-    }
-  }, [isAuthenticated, router, redirectPath])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
