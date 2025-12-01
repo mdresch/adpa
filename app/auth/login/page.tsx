@@ -193,6 +193,7 @@ export default function AuthPage() {
                           onChange={handleInputChange}
                           className="pl-10"
                           required
+                          autoComplete="email"
                         />
                       </div>
                     </div>
@@ -210,6 +211,7 @@ export default function AuthPage() {
                           onChange={handleInputChange}
                           className="pl-10 pr-10"
                           required
+                          autoComplete="current-password"
                         />
                         <Button
                           type="button"
@@ -301,6 +303,7 @@ export default function AuthPage() {
                           onChange={handleInputChange}
                           className="pl-10"
                           required
+                          autoComplete="name"
                         />
                       </div>
                     </div>
@@ -318,6 +321,7 @@ export default function AuthPage() {
                           onChange={handleInputChange}
                           className="pl-10"
                           required
+                          autoComplete="email"
                         />
                       </div>
                     </div>
@@ -335,6 +339,7 @@ export default function AuthPage() {
                           onChange={handleInputChange}
                           className="pl-10"
                           required
+                          autoComplete="new-password"
                         />
                       </div>
                     </div>
@@ -352,6 +357,7 @@ export default function AuthPage() {
                           onChange={handleInputChange}
                           className="pl-10"
                           required
+                          autoComplete="new-password"
                         />
                       </div>
                     </div>
