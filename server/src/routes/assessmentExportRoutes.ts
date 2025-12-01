@@ -301,18 +301,25 @@ router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, 
       // Rename roi_metrics to roiMetrics for frontend
       roiMetrics: assessment.roi_metrics || null,
       // Include all gaps (combining document type gaps with individual issues)
-      gaps: allGaps.map((gap: any) => ({
-        priority: gap.severity || 'medium',
-        documentType: gap.document_type || 'Unknown',
-        currentLevel: Math.floor((gap.avg_score || 0) / 20) + 1,
-        targetLevel: Math.floor((gap.avg_score || 0) / 20) + 2,
-        description: gap.recommendation || gap.description || 'No description available',
-        recommendation: gap.recommendation,
-        estimatedEffort: gap.estimated_improvement_points ? `${gap.estimated_improvement_points} points` : 'Medium',
-        estimated_improvement_points: gap.estimated_improvement_points,
-        documentTitle: gap.document_title,
-        issueCategory: gap.issue_category
-      })),
+      gaps: allGaps.map((gap: any) => {
+        // Calculate maturity levels (1-5 scale)
+        const calculatedCurrentLevel = Math.max(1, Math.min(5, Math.floor((gap.avg_score || 0) / 20) + 1));
+        // Target level should be one level higher, but capped at 5
+        const calculatedTargetLevel = Math.max(1, Math.min(5, calculatedCurrentLevel + 1));
+        
+        return {
+          priority: gap.severity || 'medium',
+          documentType: gap.document_type || 'Unknown',
+          currentLevel: calculatedCurrentLevel,
+          targetLevel: calculatedTargetLevel,
+          description: gap.recommendation || gap.description || 'No description available',
+          recommendation: gap.recommendation,
+          estimatedEffort: gap.estimated_improvement_points ? `${gap.estimated_improvement_points} points` : 'Medium',
+          estimated_improvement_points: gap.estimated_improvement_points,
+          documentTitle: gap.document_title,
+          issueCategory: gap.issue_category
+        };
+      }),
       // Include all recommendations
       recommendations: allRecommendations,
       // Include parsed assessment_data

@@ -499,6 +499,33 @@ function performGapAnalysis(
 
   // Analyze gaps by document type
   for (const [docType, typeMetrics] of Object.entries(breakdown.by_document_type)) {
+    // Find common quality issues for this document type
+    const docTypeAudits = auditData.filter(audit => 
+      (audit.document_type || audit.framework_used || 'General') === docType
+    );
+    
+    // Calculate average scores for quality dimensions
+    const avgCompleteness = docTypeAudits.length > 0 
+      ? docTypeAudits.reduce((sum, a) => sum + (a.completeness_score || 0), 0) / docTypeAudits.length 
+      : 0;
+    const avgCompliance = docTypeAudits.length > 0
+      ? docTypeAudits.reduce((sum, a) => sum + (a.compliance_score || 0), 0) / docTypeAudits.length
+      : 0;
+    const avgConsistency = docTypeAudits.length > 0
+      ? docTypeAudits.reduce((sum, a) => sum + (a.consistency_score || 0), 0) / docTypeAudits.length
+      : 0;
+    
+    // Identify specific improvement areas
+    const improvementAreas: string[] = [];
+    if (avgCompleteness < 70) improvementAreas.push('completeness');
+    if (avgCompliance < 70) improvementAreas.push('framework compliance');
+    if (avgConsistency < 70) improvementAreas.push('consistency');
+    if (typeMetrics.avg_score < 60) improvementAreas.push('overall structure and content quality');
+    
+    const areasText = improvementAreas.length > 0 
+      ? improvementAreas.join(', ')
+      : 'quality standards';
+    
     if (typeMetrics.avg_score < 60) {
       // Critical gap
       critical_gaps.push({
@@ -506,7 +533,7 @@ function performGapAnalysis(
         avg_score: typeMetrics.avg_score,
         severity: 'critical',
         count: typeMetrics.count,
-        recommendation: `Documents of type "${docType}" are critically below quality standards. Immediate regeneration using AI with proper templates is recommended.`,
+        recommendation: `Your current "${docType}" documents (${typeMetrics.count} document${typeMetrics.count > 1 ? 's' : ''}) scored ${typeMetrics.avg_score.toFixed(1)}% on average, indicating critical quality gaps in ${areasText}. This is an excellent opportunity to use ADPA's AI-powered document generation system with industry-standard templates. We recommend using ADPA templates to enhance these documents, followed by AI evaluation to identify and address specific improvement areas. This will help bring your documentation up to professional standards and improve your overall portfolio maturity.`,
         estimated_improvement_points: 80 - typeMetrics.avg_score
       });
     } else if (typeMetrics.avg_score < 75) {
@@ -516,7 +543,7 @@ function performGapAnalysis(
         avg_score: typeMetrics.avg_score,
         severity: 'high',
         count: typeMetrics.count,
-        recommendation: `"${docType}" documents need significant improvements. Focus on missing sections and framework compliance.`,
+        recommendation: `Your "${docType}" documents (${typeMetrics.count} document${typeMetrics.count > 1 ? 's' : ''}) currently average ${typeMetrics.avg_score.toFixed(1)}% quality, with notable gaps in ${areasText}. We recommend using ADPA's template library and AI evaluation tools to systematically improve these documents. The system can help identify missing sections, enhance framework compliance, and ensure consistency across your documentation.`,
         estimated_improvement_points: 85 - typeMetrics.avg_score
       });
     } else if (typeMetrics.avg_score < 85) {
@@ -526,7 +553,7 @@ function performGapAnalysis(
         avg_score: typeMetrics.avg_score,
         severity: 'medium',
         count: typeMetrics.count,
-        recommendation: `"${docType}" documents are good but can be enhanced. Consider enriching with more details and examples.`,
+        recommendation: `Your "${docType}" documents (${typeMetrics.count} document${typeMetrics.count > 1 ? 's' : ''}) are performing well at ${typeMetrics.avg_score.toFixed(1)}% but can be enhanced further. Consider using ADPA's advanced templates and AI evaluation to enrich content with more detail, examples, and best practices. This will help elevate your documentation to excellence and maximize your portfolio maturity score.`,
         estimated_improvement_points: 90 - typeMetrics.avg_score
       });
     }

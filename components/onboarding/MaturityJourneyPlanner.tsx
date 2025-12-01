@@ -6,7 +6,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { maturityTheme } from '@/lib/theme/maturity-portal-theme';
 import { MaturityCard } from './MaturityCard';
@@ -400,9 +400,20 @@ export const MaturityJourneyPlanner: React.FC<MaturityJourneyPlannerProps> = ({
 }) => {
   const [targetLevel, setTargetLevel] = useState<number>(Math.min(5, currentLevel + 1));
   const [showDetails, setShowDetails] = useState(false);
+  // Store the current level when target is selected to calculate progress from that point
+  // This gets reset whenever the user selects a new target level
+  const [journeyStartLevel, setJourneyStartLevel] = useState<number>(currentLevel);
+  
+  // Update journey start level when target changes - reset to current level at that moment
+  useEffect(() => {
+    // When target level changes, reset the journey start to the current level
+    setJourneyStartLevel(currentLevel);
+  }, [targetLevel]); // Only reset when target changes, not when currentLevel changes
 
   const handleSelectLevel = (level: number) => {
     setTargetLevel(level);
+    // Reset journey start to current level when selecting new target
+    setJourneyStartLevel(currentLevel);
     onSelectTargetLevel?.(level);
   };
 
@@ -431,7 +442,36 @@ export const MaturityJourneyPlanner: React.FC<MaturityJourneyPlannerProps> = ({
   };
 
   const journey = calculateJourney();
-  const progressPercentage = ((currentLevel - 1) / 4) * 100;
+  
+  // Calculate progress from journeyStartLevel (current level when target was selected) to targetLevel
+  // When user selects a target level, journeyStartLevel is set to the current level at that moment
+  // Progress shows how far along you are from that starting point to the target
+  // 
+  // Example: If currentLevel is 2.0 and user selects targetLevel 5:
+  // - journeyStartLevel = 2.0 (set when target was selected)
+  // - Total journey: from level 2.0 to level 5 = 3 levels
+  // - If currentLevel is still 2.0: completed 0.0 out of 3 levels = 0%
+  // - If currentLevel progresses to 2.5: completed 0.5 out of 3 levels = 16.67%
+  // - If currentLevel progresses to 3.0: completed 1.0 out of 3 levels = 33.33%
+  // - If currentLevel reaches 5.0: completed 3.0 out of 3 levels = 100%
+  const calculateProgressPercentage = () => {
+    if (targetLevel <= journeyStartLevel) {
+      return 100; // Already reached or exceeded target
+    }
+    
+    // Total journey from start (when target was selected) to target
+    const totalJourney = targetLevel - journeyStartLevel;
+    
+    // Calculate how much progress has been made from journeyStartLevel to currentLevel
+    const completedJourney = currentLevel - journeyStartLevel;
+    
+    // Progress = (completed / total) * 100
+    const progress = totalJourney > 0 ? (completedJourney / totalJourney) * 100 : 0;
+    
+    return Math.max(0, Math.min(100, progress));
+  };
+  
+  const progressPercentage = calculateProgressPercentage();
 
   return (
     <div className="space-y-6">
