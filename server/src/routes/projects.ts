@@ -47,6 +47,26 @@ router.get("/", authenticateToken, async (req, res) => {
   try {
     const { page = 1, limit = 10, status, framework, search } = req.query
     const offset = (Number(page) - 1) * Number(limit)
+    const userId = req.user?.id
+    const userRole = req.user?.role
+
+    // Get user's company_id (admins can see all projects, others see only their company's projects)
+    let userCompanyId: string | null = null
+    if (userRole !== "admin") {
+      try {
+        const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
+        if (userResult.rows.length > 0) {
+          userCompanyId = userResult.rows[0].company_id
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, log warning but continue
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          log.warn('company_id column not found, filtering by owner_id and team_members only')
+        } else {
+          throw err
+        }
+      }
+    }
 
     let query = `
       SELECT p.*, u.name as owner_name, u.email as owner_email,
@@ -61,6 +81,22 @@ router.get("/", authenticateToken, async (req, res) => {
 
     const params: any[] = []
     let paramCount = 0
+
+    // Filter by company_id if user is not admin and has a company_id
+    // Note: We'll try to use company_id filtering, but if the column doesn't exist, we'll fall back
+    // to owner/team member filtering when the query executes
+    if (userRole !== "admin" && userCompanyId) {
+      // Try to filter by company_id (will fail gracefully if column doesn't exist)
+      paramCount++
+      query += ` AND p.company_id = $${paramCount}`
+      params.push(userCompanyId)
+    } else if (userRole !== "admin") {
+      // If user has no company_id, only show projects they own or are team members of
+      paramCount++
+      query += ` AND (p.owner_id = $${paramCount} OR p.team_members ? $${paramCount}::text)`
+      params.push(userId)
+    }
+    // Admins see all projects (no company filter)
 
     if (status) {
       paramCount++
@@ -90,32 +126,148 @@ router.get("/", authenticateToken, async (req, res) => {
     query += ` OFFSET $${paramCount}`
     params.push(offset)
 
-    const result = await pool.query(query, params)
+    // Execute query - if company_id column doesn't exist, fall back to owner/team member filtering
+    let result
+    try {
+      result = await pool.query(query, params)
+    } catch (err: any) {
+      // If company_id column doesn't exist on projects table, rebuild query without it
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('company_id column not found on projects table, using owner_id and team_members filtering')
+        
+        // Rebuild query without company_id filter
+        query = `
+          SELECT p.*, u.name as owner_name, u.email as owner_email,
+                 COUNT(d.id) as document_count,
+                 MAX(d.updated_at) as last_document_activity,
+                 GREATEST(p.updated_at, MAX(d.updated_at)) as last_activity
+          FROM projects p
+          LEFT JOIN users u ON p.owner_id = u.id
+          LEFT JOIN documents d ON p.id = d.project_id AND d.parent_document_id IS NULL
+          WHERE 1=1
+        `
+        params.length = 0
+        paramCount = 0
+        
+        // Filter by owner_id or team_members for non-admins
+        if (userRole !== "admin") {
+          paramCount++
+          query += ` AND (p.owner_id = $${paramCount} OR p.team_members ? $${paramCount}::text)`
+          params.push(userId)
+        }
+        
+        // Re-apply other filters
+        if (status) {
+          paramCount++
+          query += ` AND p.status = $${paramCount}`
+          params.push(status)
+        }
+        
+        if (framework) {
+          paramCount++
+          query += ` AND p.framework = $${paramCount}`
+          params.push(framework)
+        }
+        
+        if (search) {
+          paramCount++
+          query += ` AND (p.name ILIKE $${paramCount} OR p.description ILIKE $${paramCount})`
+          params.push(`%${search}%`)
+        }
+        
+        query += ` GROUP BY p.id, u.name, u.email ORDER BY last_activity DESC NULLS LAST, p.name ASC, p.id ASC`
+        
+        paramCount++
+        query += ` LIMIT $${paramCount}`
+        params.push(Number(limit))
+        
+        paramCount++
+        query += ` OFFSET $${paramCount}`
+        params.push(offset)
+        
+        result = await pool.query(query, params)
+      } else {
+        throw err
+      }
+    }
 
-    // Get total count
-    let countQuery = "SELECT COUNT(*) FROM projects WHERE 1=1"
+    // Get total count with same filters
+    let countQuery = "SELECT COUNT(*) FROM projects p WHERE 1=1"
     const countParams: any[] = []
     let countParamCount = 0
 
+    // Apply same company filtering to count query
+    if (userRole !== "admin" && userCompanyId) {
+      countParamCount++
+      countQuery += ` AND p.company_id = $${countParamCount}`
+      countParams.push(userCompanyId)
+    } else if (userRole !== "admin") {
+      countParamCount++
+      countQuery += ` AND (p.owner_id = $${countParamCount} OR p.team_members ? $${countParamCount}::text)`
+      countParams.push(userId)
+    }
+
     if (status) {
       countParamCount++
-      countQuery += ` AND status = $${countParamCount}`
+      countQuery += ` AND p.status = $${countParamCount}`
       countParams.push(status)
     }
 
     if (framework) {
       countParamCount++
-      countQuery += ` AND framework = $${countParamCount}`
+      countQuery += ` AND p.framework = $${countParamCount}`
       countParams.push(framework)
     }
 
     if (search) {
       countParamCount++
-      countQuery += ` AND (name ILIKE $${countParamCount} OR description ILIKE $${countParamCount})`
+      countQuery += ` AND (p.name ILIKE $${countParamCount} OR p.description ILIKE $${countParamCount})`
       countParams.push(`%${search}%`)
     }
 
-    const countResult = await pool.query(countQuery, countParams)
+    // Execute count query - if company_id column doesn't exist, fall back
+    let countResult
+    try {
+      countResult = await pool.query(countQuery, countParams)
+    } catch (err: any) {
+      // If company_id column doesn't exist, rebuild count query without it
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        countQuery = "SELECT COUNT(*) FROM projects p WHERE 1=1"
+        countParams.length = 0
+        countParamCount = 0
+        
+        // Filter by owner_id or team_members for non-admins
+        if (userRole !== "admin") {
+          countParamCount++
+          countQuery += ` AND (p.owner_id = $${countParamCount} OR p.team_members ? $${countParamCount}::text)`
+          countParams.push(userId)
+        }
+        
+        // Re-apply other filters
+        if (status) {
+          countParamCount++
+          countQuery += ` AND p.status = $${countParamCount}`
+          countParams.push(status)
+        }
+        
+        if (framework) {
+          countParamCount++
+          countQuery += ` AND p.framework = $${countParamCount}`
+          countParams.push(framework)
+        }
+        
+        if (search) {
+          countParamCount++
+          countQuery += ` AND (p.name ILIKE $${countParamCount} OR p.description ILIKE $${countParamCount})`
+          countParams.push(`%${search}%`)
+        }
+        
+        countResult = await pool.query(countQuery, countParams)
+      } else {
+        throw err
+      }
+    }
+    
     const total = Number.parseInt(countResult.rows[0].count)
 
     res.json({
@@ -1052,16 +1204,92 @@ router.get("/:id", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
+    const userId = req.user?.id
+    const userRole = req.user?.role
 
-    const result = await pool.query(
-      `
-      SELECT p.*, u.name as owner_name, u.email as owner_email
-      FROM projects p
-      LEFT JOIN users u ON p.owner_id = u.id
-      WHERE p.id = $1
-    `,
-      [id],
-    )
+    // Get user's company_id (admins can see all projects, others see only their company's projects)
+    let userCompanyId: string | null = null
+    if (userRole !== "admin") {
+      try {
+        const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
+        if (userResult.rows.length > 0) {
+          userCompanyId = userResult.rows[0].company_id
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, log warning but continue
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          log.warn('company_id column not found, checking access by owner_id and team_members only')
+        } else {
+          throw err
+        }
+      }
+    }
+
+    // Try to query with company_id filter, fallback if column doesn't exist
+    let result
+    try {
+      if (userRole !== "admin" && userCompanyId) {
+        result = await pool.query(
+          `
+          SELECT p.*, u.name as owner_name, u.email as owner_email
+          FROM projects p
+          LEFT JOIN users u ON p.owner_id = u.id
+          WHERE p.id = $1 AND p.company_id = $2
+          `,
+          [id, userCompanyId],
+        )
+      } else if (userRole !== "admin") {
+        // If user has no company_id, check by owner_id or team_members
+        result = await pool.query(
+          `
+          SELECT p.*, u.name as owner_name, u.email as owner_email
+          FROM projects p
+          LEFT JOIN users u ON p.owner_id = u.id
+          WHERE p.id = $1 AND (p.owner_id = $2 OR p.team_members ? $2::text)
+          `,
+          [id, userId],
+        )
+      } else {
+        // Admin can see any project
+        result = await pool.query(
+          `
+          SELECT p.*, u.name as owner_name, u.email as owner_email
+          FROM projects p
+          LEFT JOIN users u ON p.owner_id = u.id
+          WHERE p.id = $1
+          `,
+          [id],
+        )
+      }
+    } catch (err: any) {
+      // If company_id column doesn't exist on projects table, fall back to owner/team member check
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('company_id column not found on projects table, checking access by owner_id and team_members')
+        if (userRole !== "admin") {
+          result = await pool.query(
+            `
+            SELECT p.*, u.name as owner_name, u.email as owner_email
+            FROM projects p
+            LEFT JOIN users u ON p.owner_id = u.id
+            WHERE p.id = $1 AND (p.owner_id = $2 OR p.team_members ? $2::text)
+            `,
+            [id, userId],
+          )
+        } else {
+          result = await pool.query(
+            `
+            SELECT p.*, u.name as owner_name, u.email as owner_email
+            FROM projects p
+            LEFT JOIN users u ON p.owner_id = u.id
+            WHERE p.id = $1
+            `,
+            [id],
+          )
+        }
+      } else {
+        throw err
+      }
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Project not found" })
@@ -1129,26 +1357,74 @@ router.post("/", authenticateToken, requirePermission("projects.create"), async 
       }
     }
 
-    const result = await pool.query(
-      `
-      INSERT INTO projects (id, name, description, framework, priority, start_date, end_date, budget, owner_id, team_members, program_id)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      RETURNING *
-    `,
-      [
-        id,
-        name,
-        description,
-        framework,
-        priority,
-        startDateValue,
-        endDateValue,
-        budgetValue,
-        req.user?.id,
-        JSON.stringify(team_members),
-        programIdValue,
-      ],
-    )
+    // Get user's company_id to assign to project
+    let userCompanyId: string | null = null
+    try {
+      const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [req.user?.id])
+      if (userResult.rows.length > 0) {
+        userCompanyId = userResult.rows[0].company_id
+      }
+    } catch (err: any) {
+      // If company_id column doesn't exist, log warning but continue
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('company_id column not found on users table, creating project without company_id')
+      } else {
+        throw err
+      }
+    }
+
+    // Try to insert with company_id, fallback if column doesn't exist
+    let result
+    try {
+      result = await pool.query(
+        `
+        INSERT INTO projects (id, name, description, framework, priority, start_date, end_date, budget, owner_id, team_members, program_id, company_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        RETURNING *
+      `,
+        [
+          id,
+          name,
+          description,
+          framework,
+          priority,
+          startDateValue,
+          endDateValue,
+          budgetValue,
+          req.user?.id,
+          JSON.stringify(team_members),
+          programIdValue,
+          userCompanyId,
+        ],
+      )
+    } catch (err: any) {
+      // If company_id column doesn't exist on projects table, insert without it
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('company_id column not found on projects table, creating project without company_id')
+        result = await pool.query(
+          `
+          INSERT INTO projects (id, name, description, framework, priority, start_date, end_date, budget, owner_id, team_members, program_id)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          RETURNING *
+        `,
+          [
+            id,
+            name,
+            description,
+            framework,
+            priority,
+            startDateValue,
+            endDateValue,
+            budgetValue,
+            req.user?.id,
+            JSON.stringify(team_members),
+            programIdValue,
+          ],
+        )
+      } else {
+        throw err
+      }
+    }
 
   log.info(`Project created: ${name} by ${req.user?.email}`)
 

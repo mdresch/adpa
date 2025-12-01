@@ -66,87 +66,106 @@ export const MaturityScore: React.FC<MaturityScoreProps> = ({
 
   return (
     <div className="flex flex-col items-center gap-4">
-      <motion.div
-        className="relative flex items-center justify-center"
-        style={{ width: config.diameter, height: config.diameter }}
-        animate={{
-          boxShadow: [
-            `0 0 0px ${colors.accent}`,
-            `0 0 40px ${colors.accent}40`,
-            `0 0 0px ${colors.accent}`,
-          ],
-        }}
-        transition={{
-          duration: 2,
-          repeat: Infinity,
-          ease: 'easeInOut',
-        }}
-      >
-        {/* Background circle */}
-        <svg
-          width={config.diameter}
-          height={config.diameter}
-          className="absolute transform -rotate-90"
+      <div className="relative" style={{ width: config.diameter, height: config.diameter }}>
+        {/* Animated circular glow */}
+        <motion.div
+          className="absolute inset-0 rounded-full"
+          style={{
+            width: config.diameter,
+            height: config.diameter,
+            borderRadius: '50%',
+            border: `2px solid ${colors.accent}`,
+          }}
+          animate={{
+            opacity: [0.3, 0.8, 0.3],
+            scale: [1, 1.15, 1],
+            boxShadow: [
+              `0 0 0px ${colors.accent}40`,
+              `0 0 40px ${colors.accent}80`,
+              `0 0 0px ${colors.accent}40`,
+            ],
+          }}
+          transition={{
+            duration: 2,
+            repeat: Infinity,
+            ease: 'easeInOut',
+          }}
+        />
+        
+        <div
+          className="relative flex items-center justify-center rounded-full"
+          style={{ 
+            width: config.diameter, 
+            height: config.diameter,
+            borderRadius: '50%',
+          }}
         >
-          <circle
-            cx={config.diameter / 2}
-            cy={config.diameter / 2}
-            r={radius}
-            stroke={maturityTheme.colors.surface.disabled}
-            strokeWidth={config.strokeWidth}
-            fill="none"
-          />
-          {showProgress && (
-            <motion.circle
+          {/* Background circle */}
+          <svg
+            width={config.diameter}
+            height={config.diameter}
+            className="absolute transform -rotate-90"
+          >
+            <circle
               cx={config.diameter / 2}
               cy={config.diameter / 2}
               r={radius}
-              stroke={colors.accent}
+              stroke={maturityTheme.colors.surface.disabled}
               strokeWidth={config.strokeWidth}
               fill="none"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={circumference - progress}
-              initial={{ strokeDashoffset: circumference }}
-              animate={{ strokeDashoffset: circumference - progress }}
-              transition={{ duration: 1.5, ease: 'easeOut' }}
-              style={{
-                filter: `drop-shadow(0 0 8px ${colors.accent})`,
-              }}
             />
-          )}
-        </svg>
+            {showProgress && (
+              <motion.circle
+                cx={config.diameter / 2}
+                cy={config.diameter / 2}
+                r={radius}
+                stroke={colors.accent}
+                strokeWidth={config.strokeWidth}
+                fill="none"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={circumference - progress}
+                initial={{ strokeDashoffset: circumference }}
+                animate={{ strokeDashoffset: circumference - progress }}
+                transition={{ duration: 1.5, ease: 'easeOut' }}
+                style={{
+                  filter: `drop-shadow(0 0 8px ${colors.accent})`,
+                }}
+              />
+            )}
+          </svg>
 
-        {/* Center content */}
-        <div className="relative z-10 flex flex-col items-center">
-          <motion.div
-            className={`font-bold ${config.fontSize}`}
-            style={{ color: colors.text }}
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
-          >
-            {Math.round(displayLevel)}
-          </motion.div>
-          {score && (
+          {/* Center content */}
+          <div className="relative z-10 flex flex-col items-center">
             <motion.div
-              className="text-xs font-medium mt-1"
-              style={{ color: maturityTheme.colors.text.secondary }}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.5 }}
+              className={`font-bold ${config.fontSize}`}
+              style={{ color: colors.text }}
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ delay: 0.3, type: 'spring', stiffness: 200 }}
             >
-              {score.toFixed(1)}
+              {Math.round(displayLevel)}
             </motion.div>
-          )}
-        </div>
+            {score && (
+              <motion.div
+                className="text-xs font-medium mt-1"
+                style={{ color: maturityTheme.colors.text.secondary }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.5 }}
+              >
+                {score.toFixed(1)}
+              </motion.div>
+            )}
+          </div>
 
-        {/* Glow effect background */}
-        <div
-          className="absolute inset-0 rounded-full blur-xl opacity-20"
-          style={{ backgroundColor: colors.accent }}
-        />
-      </motion.div>
+          {/* Glow effect background */}
+          <div
+            className="absolute inset-0 rounded-full blur-xl opacity-20"
+            style={{ backgroundColor: colors.accent }}
+          />
+        </div>
+      </div>
 
       {/* Label */}
       <div className="text-center">

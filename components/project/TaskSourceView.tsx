@@ -11,7 +11,14 @@ interface TaskSourceViewProps {
 }
 
 export function TaskSourceView({ task }: TaskSourceViewProps) {
-  if (!task.source_document_id && !task.imported_from_wbs) {
+  const sourceDocumentId = task.sourceDocumentId || task.source_document_id
+  const importedFromWbs = task.importedFromWbs || task.imported_from_wbs
+  const sourceDocumentTitle = task.sourceDocumentTitle || task.source_document_title
+  const sourceEntityId = task.sourceEntityId || task.source_entity_id
+  const wbsCode = task.wbsCode || task.wbs_code
+  const projectId = task.projectId || task.project_id
+
+  if (!sourceDocumentId && !importedFromWbs) {
     return (
       <div className="border border-dashed rounded-lg p-12 text-center">
         <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -26,7 +33,7 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
   return (
     <div className="space-y-6">
       {/* Import Information */}
-      {task.imported_from_wbs && (
+      {importedFromWbs && (
         <div className="border rounded-lg p-4">
           <div className="flex items-start gap-3">
             <Database className="h-5 w-5 text-blue-500 mt-0.5" />
@@ -39,27 +46,27 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
                 <Badge variant="secondary" className="bg-blue-50 text-blue-700">
                   WBS Import
                 </Badge>
-                {task.wbs_code && (
+                {wbsCode && (
                   <Badge variant="outline" className="font-mono">
-                    WBS {task.wbs_code}
+                    WBS {wbsCode}
                   </Badge>
                 )}
-                {task.source_entity_id && (
+                {sourceEntityId && (
                   // When we have a source document id, make the entity clickable
                   // so users can jump directly to the source document and context
-                  task.source_document_id ? (
+                  sourceDocumentId ? (
                     <Link
-                      href={`/documents/${task.source_document_id}#entity-${task.source_entity_id}`}
+                      href={`/documents/${sourceDocumentId}#entity-${sourceEntityId}`}
                       target="_blank"
                       className="inline-block"
                     >
                       <Badge variant="outline" className="font-mono text-xs underline decoration-dotted">
-                        Entity: {task.source_entity_id}
+                        Entity: {sourceEntityId}
                       </Badge>
                     </Link>
                   ) : (
                     <Badge variant="outline" className="font-mono text-xs">
-                      Entity: {task.source_entity_id}
+                      Entity: {sourceEntityId}
                     </Badge>
                   )
                 )}
@@ -70,7 +77,7 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
       )}
 
       {/* Source Document */}
-      {task.source_document_id && (
+      {sourceDocumentId && (
         <div className="border rounded-lg p-4">
           <div className="flex items-start gap-3">
             <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
@@ -79,20 +86,20 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
               <p className="text-sm text-muted-foreground mb-3">
                 This task was extracted from a project document
               </p>
-              {task.source_document_title && (
-                <div className="mb-2 text-sm font-medium">{task.source_document_title}</div>
+              {sourceDocumentTitle && (
+                <div className="mb-2 text-sm font-medium">{sourceDocumentTitle}</div>
               )}
 
               {/* Expose the raw document id so users can copy or verify provenance */}
-              {task.source_document_id && (
+              {sourceDocumentId && (
                 <div className="mb-3 text-xs text-muted-foreground flex items-center gap-2">
                   <span className="font-semibold">Document ID:</span>
-                  <code className="bg-background px-2 py-1 rounded font-mono text-sm">{task.source_document_id}</code>
+                  <code className="bg-background px-2 py-1 rounded font-mono text-sm">{sourceDocumentId}</code>
                 </div>
               )}
 
               <Link 
-                href={`/documents/${task.source_document_id}`}
+                href={`/documents/${sourceDocumentId}`}
                 target="_blank"
               >
                 <Button variant="outline" size="sm">
@@ -111,49 +118,55 @@ export function TaskSourceView({ task }: TaskSourceViewProps) {
         <dl className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <dt className="text-muted-foreground">Task Number</dt>
-            <dd className="font-mono mt-1">{task.task_number}</dd>
+            <dd className="font-mono mt-1">{task.taskNumber || task.task_number || '-'}</dd>
           </div>
-          {task.wbs_code && (
+          {wbsCode && (
             <div>
               <dt className="text-muted-foreground">WBS Code</dt>
-              <dd className="font-mono mt-1">{task.wbs_code}</dd>
+              <dd className="font-mono mt-1">{wbsCode}</dd>
             </div>
           )}
           <div>
             <dt className="text-muted-foreground">Created At</dt>
-            <dd className="mt-1">{new Date(task.created_at).toLocaleDateString()}</dd>
+            <dd className="mt-1">
+              {task.createdAt || task.created_at 
+                ? new Date(task.createdAt || task.created_at).toLocaleDateString() 
+                : '-'}
+            </dd>
           </div>
-          {task.updated_at && (
+          {(task.updatedAt || task.updated_at) && (
             <div>
               <dt className="text-muted-foreground">Last Updated</dt>
-              <dd className="mt-1">{new Date(task.updated_at).toLocaleDateString()}</dd>
+              <dd className="mt-1">
+                {new Date(task.updatedAt || task.updated_at).toLocaleDateString()}
+              </dd>
             </div>
           )}
         </dl>
       </div>
 
       {/* AI Extraction Info */}
-      {task.source_entity_id && (
+      {sourceEntityId && (
         <div className="bg-muted rounded-lg p-4">
           <h4 className="text-sm font-semibold mb-2">AI Extraction Details</h4>
           <p className="text-xs text-muted-foreground mb-2">
             This task was identified and extracted using AI-powered document analysis
           </p>
             <div className="flex flex-wrap gap-2 text-xs">
-            {task.source_entity_id && task.source_document_id ? (
-              <Link href={`/documents/${task.source_document_id}#entity-${task.source_entity_id}`} target="_blank">
+            {sourceEntityId && sourceDocumentId ? (
+              <Link href={`/documents/${sourceDocumentId}#entity-${sourceEntityId}`} target="_blank">
                 <code className="bg-background px-2 py-1 rounded underline decoration-dotted text-xs">
-                  Entity ID: {task.source_entity_id}
+                  Entity ID: {sourceEntityId}
                 </code>
               </Link>
             ) : (
               <code className="bg-background px-2 py-1 rounded">
-                Entity ID: {task.source_entity_id}
+                Entity ID: {sourceEntityId}
               </code>
             )}
-            {task.project_id && (
+            {projectId && (
               <code className="bg-background px-2 py-1 rounded">
-                Project: {task.project_id.substring(0, 8)}...
+                Project: {projectId.substring(0, 8)}...
               </code>
             )}
           </div>

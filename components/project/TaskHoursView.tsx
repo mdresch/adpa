@@ -51,8 +51,8 @@ export function TaskHoursView({ task, onUpdate }: TaskHoursViewProps) {
     }
   }
 
-  const estimatedHours = parseHours(task.estimated_hours)
-  const actualHours = parseHours(task.actual_hours)
+  const estimatedHours = parseHours(task.estimatedHours || task.estimated_hours)
+  const actualHours = parseHours(task.actualHours || task.actual_hours)
   const remainingHours = Math.max(0, estimatedHours - actualHours)
   const progressPercentage = estimatedHours > 0 
     ? Math.min(100, Math.round((actualHours / estimatedHours) * 100))

@@ -79,72 +79,15 @@ const upload = multer({
  *   }
  * }
  */
-// Optional authentication middleware - uses system guest user if no token
-const optionalAuth = async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    // Try to authenticate, but don't fail if no token
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (token) {
-      // Has token - authenticate normally
-      return authenticate(req, res, next);
-    } else {
-      // No token - use dedicated guest/onboarding system user
-      const { pool } = require('../database/connection');
-      
-      // Get or create the "onboarding-guest" system user
-      let guestUser = await pool.query(
-        `SELECT id, email FROM users WHERE email = $1`,
-        ['onboarding-guest@system.local']
-      );
-      
-      if (guestUser.rows.length === 0) {
-        // Create system guest user on first use
-        const { v4: uuidv4 } = require('uuid');
-        const bcrypt = require('bcryptjs');
-        const guestId = uuidv4();
-        
-        await pool.query(
-          `INSERT INTO users (id, email, password_hash, name, role, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-           ON CONFLICT (email) DO NOTHING
-           RETURNING id, email`,
-          [
-            guestId,
-            'onboarding-guest@system.local',
-            await bcrypt.hash('no-password-login-disabled', 10),
-            'Onboarding Guest User (System)',
-            'user'
-          ]
-        );
-        
-        guestUser = await pool.query(
-          `SELECT id, email FROM users WHERE email = $1`,
-          ['onboarding-guest@system.local']
-        );
-        
-        logger.info('Created system guest user for onboarding', { userId: guestUser.rows[0].id });
-      }
-      
-      (req as any).user = {
-        id: guestUser.rows[0].id,
-        email: guestUser.rows[0].email,
-        role: 'guest',
-        isGuest: true
-      };
-      
-      logger.info('Using guest session for onboarding', { userId: guestUser.rows[0].id });
-      next();
-    }
-  } catch (error) {
-    logger.error('Optional auth failed', { error: (error as Error).message });
-    next(error);
-  }
-};
+
+/**
+ * Authentication is now required for all document uploads.
+ * Users must register and authenticate before accessing onboarding features.
+ */
 
 router.post(
   '/upload',
-  optionalAuth, // Allow public access for potential clients
+  authenticate, // Authentication required - users must register first
   upload.array('files', 100), // Accept up to 100 files
   async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -170,13 +113,9 @@ router.post(
       } = req.body;
       
       const userId = (req as any).user.id;
-      const isGuest = (req as any).user.isGuest;
       
-      // For onboarding assessments (potential clients), auto-create project if needed
+      // For onboarding assessments, auto-create project if needed
       let actualProjectId = projectId;
-      
-      // Store guest email if provided for follow-up
-      const guestEmail = req.body.email || req.body.contactEmail;
       
       if (!actualProjectId && assessmentName) {
         // Create onboarding project automatically
@@ -222,8 +161,8 @@ router.post(
         });
       }
 
-      // Verify user has access to project (skip for guests and auto-created projects)
-      if (projectId && !isGuest) {
+      // Verify user has access to project (skip for auto-created projects)
+      if (projectId) {
         const hasAccess = await verifyProjectAccess(req.user.id, projectId);
         if (!hasAccess) {
           return res.status(403).json({
@@ -260,9 +199,7 @@ router.post(
           clientName,
           organizationName: organizationName || clientName,
           assessmentPurpose: assessmentPurpose || 'Portfolio Maturity Assessment',
-          isOnboardingAssessment: !projectId,  // Flag for potential client assessments
-          isGuestUpload: isGuest,  // Flag for public/guest uploads
-          guestEmail: guestEmail || null,  // Capture guest email for follow-up
+          isOnboardingAssessment: !projectId,  // Flag for onboarding assessments
           uploadDate: new Date().toISOString()
         }
       };
@@ -600,7 +537,7 @@ router.use((error: any, req: Request, res: Response, next: NextFunction) => {
  */
 router.post(
   '/batch/:batchId/add-documents',
-  optionalAuth,
+  authenticate,
   upload.array('files', 100),
   async (req: Request, res: Response, next: NextFunction) => {
     try {

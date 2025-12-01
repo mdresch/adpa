@@ -1,6 +1,7 @@
 import express from "express"
 import bcrypt from "bcryptjs"
 import jwt from "jsonwebtoken"
+import { v4 as uuidv4 } from "uuid"
 import { pool } from "../database/connection"
 import { logger, childLogger } from "../utils/logger"
 
@@ -66,12 +67,17 @@ const ADMIN_PERMISSIONS = {
 // Register
 router.post("/register", async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
+  const client = await pool.connect()
+  
   try {
-    const { email, password, name, role = "user" } = req.body
+    await client.query('BEGIN') // Start transaction
+    
+    const { email, password, name, role = "user", companyName } = req.body
 
     // Check if user exists
-    const existingUser = await pool.query("SELECT id FROM users WHERE email = $1", [email])
+    const existingUser = await client.query("SELECT id FROM users WHERE email = $1", [email])
     if (existingUser.rows.length > 0) {
+      await client.query('ROLLBACK')
       return res.status(400).json({ error: "User already exists" })
     }
 
@@ -82,19 +88,94 @@ router.post("/register", async (req, res) => {
     // Set permissions based on role
     const permissions = role === 'admin' ? ADMIN_PERMISSIONS : DEFAULT_USER_PERMISSIONS
 
-    // Create user
-    const result = await pool.query(
-      `INSERT INTO users (email, password_hash, name, role, permissions) 
-       VALUES ($1, $2, $3, $4, $5) 
-       RETURNING id, email, name, role, permissions, created_at`,
-      [email, passwordHash, name, role, JSON.stringify(permissions)],
-    )
+    // Handle company creation/assignment if companyName is provided
+    let companyId: string | null = null
+    if (companyName && companyName.trim()) {
+      // Check if company already exists (case-insensitive)
+      const existingCompany = await client.query(
+        "SELECT id FROM companies WHERE LOWER(TRIM(name)) = LOWER(TRIM($1)) AND is_active = true",
+        [companyName.trim()]
+      )
+
+      if (existingCompany.rows.length > 0) {
+        // Use existing company
+        companyId = existingCompany.rows[0].id
+        log.info(`Using existing company: ${companyName} (ID: ${companyId})`)
+      } else {
+        // Create new company
+        companyId = uuidv4()
+        
+        // Extract domain from email if possible
+        const emailDomain = email.split('@')[1] || null
+        
+        await client.query(
+          `INSERT INTO companies (id, name, domain, is_active, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [companyId, companyName.trim(), emailDomain, true]
+        )
+        log.info(`Created new company: ${companyName} (ID: ${companyId})`)
+      }
+    }
+
+    // Build metadata object with company name if provided
+    const metadata = companyName ? { company_name: companyName.trim() } : null
+
+    // Create user - check if metadata column exists, otherwise store in a separate field
+    // First, try with metadata column and company_id
+    let result
+    try {
+      result = await client.query(
+        `INSERT INTO users (email, password_hash, name, role, permissions, metadata, company_id) 
+         VALUES ($1, $2, $3, $4, $5, $6, $7) 
+         RETURNING id, email, name, role, permissions, created_at, company_id, metadata`,
+        [
+          email, 
+          passwordHash, 
+          name, 
+          role, 
+          JSON.stringify(permissions), 
+          metadata ? JSON.stringify(metadata) : null,
+          companyId
+        ],
+      )
+    } catch (err: any) {
+      // If metadata or company_id column doesn't exist, try without them
+      if (err.message?.includes('column "metadata"') || err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('Metadata or company_id column not found, creating user without them')
+        try {
+          // Try with company_id but without metadata
+          result = await client.query(
+            `INSERT INTO users (email, password_hash, name, role, permissions, company_id) 
+             VALUES ($1, $2, $3, $4, $5, $6) 
+             RETURNING id, email, name, role, permissions, created_at, company_id`,
+            [email, passwordHash, name, role, JSON.stringify(permissions), companyId],
+          )
+        } catch (err2: any) {
+          // If company_id also doesn't exist, create without both
+          if (err2.message?.includes('column "company_id"') || err2.code === '42703') {
+            result = await client.query(
+              `INSERT INTO users (email, password_hash, name, role, permissions) 
+               VALUES ($1, $2, $3, $4, $5) 
+               RETURNING id, email, name, role, permissions, created_at`,
+              [email, passwordHash, name, role, JSON.stringify(permissions)],
+            )
+          } else {
+            throw err2
+          }
+        }
+      } else {
+        throw err
+      }
+    }
 
     if (!result.rows || result.rows.length === 0) {
+      await client.query('ROLLBACK')
       log.error("User creation failed: No user returned from DB")
       return res.status(500).json({ error: "User creation failed" })
     }
 
+    await client.query('COMMIT') // Commit transaction
+    
     const user = result.rows[0]
 
     // Generate JWT
@@ -102,7 +183,21 @@ router.post("/register", async (req, res) => {
       expiresIn: "24h",
     })
 
-  log.info(`User registered: ${email}`)
+    log.info(`User registered: ${email}${companyId ? ` (Company: ${companyName}, ID: ${companyId})` : ''}`)
+
+    // Normalize metadata for response
+    let normalizedMetadata = {}
+    if (user.metadata) {
+      if (typeof user.metadata === 'string') {
+        try {
+          normalizedMetadata = JSON.parse(user.metadata)
+        } catch (e) {
+          normalizedMetadata = {}
+        }
+      } else if (typeof user.metadata === 'object' && user.metadata !== null) {
+        normalizedMetadata = user.metadata
+      }
+    }
 
     return res.status(201).json({
       message: "User created successfully",
@@ -112,12 +207,24 @@ router.post("/register", async (req, res) => {
         name: user.name,
         role: user.role,
         permissions: user.permissions,
+        company_id: user.company_id || null,
+        metadata: normalizedMetadata,
       },
       token,
+      company: companyId ? {
+        id: companyId,
+        name: companyName,
+      } : null,
     })
-  } catch (error) {
+  } catch (error: any) {
+    await client.query('ROLLBACK').catch(() => {}) // Rollback on error
     log.error("Registration error:", error)
-    return res.status(500).json({ error: "Internal server error" })
+    return res.status(500).json({ 
+      error: "Internal server error",
+      message: error.message || "Failed to create user account"
+    })
+  } finally {
+    client.release()
   }
 })
 
@@ -128,11 +235,58 @@ router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body
 
-    // Get user
-    const result = await pool.query(
-      "SELECT id, email, password_hash, name, role, permissions, is_active FROM users WHERE email = $1",
-      [email],
-    )
+    // Get user - try with metadata and company_id, join with companies to get company name
+    let result
+    try {
+      result = await pool.query(
+        `SELECT 
+          u.id, u.email, u.password_hash, u.name, u.role, u.permissions, u.is_active, 
+          u.metadata, u.company_id,
+          c.name as company_name
+        FROM users u
+        LEFT JOIN companies c ON u.company_id = c.id
+        WHERE u.email = $1`,
+        [email],
+      )
+    } catch (err: any) {
+      // If metadata or company_id column doesn't exist, query without them
+      if (err.message?.includes('column "metadata"') || err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('Metadata or company_id column not found, querying without them')
+        try {
+          // Try with company_id but without metadata
+          result = await pool.query(
+            `SELECT 
+              u.id, u.email, u.password_hash, u.name, u.role, u.permissions, u.is_active,
+              u.company_id,
+              c.name as company_name
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE u.email = $1`,
+            [email],
+          )
+          if (result.rows.length > 0) {
+            result.rows[0].metadata = null
+          }
+        } catch (err2: any) {
+          // If company_id also doesn't exist, query without both
+          if (err2.message?.includes('column "company_id"') || err2.code === '42703') {
+            result = await pool.query(
+              "SELECT id, email, password_hash, name, role, permissions, is_active FROM users WHERE email = $1",
+              [email],
+            )
+            if (result.rows.length > 0) {
+              result.rows[0].metadata = null
+              result.rows[0].company_id = null
+              result.rows[0].company_name = null
+            }
+          } else {
+            throw err2
+          }
+        }
+      } else {
+        throw err
+      }
+    }
 
   log.info(`🔍 User query result: ${result.rows.length} rows`)
 
@@ -175,6 +329,25 @@ router.post("/login", async (req, res) => {
       trackActivity.login(user.id, token.substring(0, 20)) // Use token prefix as session ID
     }
 
+    // Normalize metadata for response
+    let normalizedMetadata = {}
+    if (user.metadata) {
+      if (typeof user.metadata === 'string') {
+        try {
+          normalizedMetadata = JSON.parse(user.metadata)
+        } catch (e) {
+          normalizedMetadata = {}
+        }
+      } else if (typeof user.metadata === 'object' && user.metadata !== null) {
+        normalizedMetadata = user.metadata
+      }
+    }
+    
+    // If company_name is available from join but not in metadata, add it to metadata
+    if (user.company_name && !normalizedMetadata.company_name) {
+      normalizedMetadata.company_name = user.company_name
+    }
+
     return res.json({
       message: "Login successful",
       user: {
@@ -183,6 +356,8 @@ router.post("/login", async (req, res) => {
         name: user.name,
         role: user.role,
         permissions: user.permissions,
+        metadata: normalizedMetadata,
+        company_id: user.company_id || null,
       },
       token,
     })
@@ -196,16 +371,83 @@ router.post("/login", async (req, res) => {
 router.get("/me", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    const result = await pool.query(
-      "SELECT id, email, name, role, permissions, avatar_url, created_at FROM users WHERE id = $1",
-      [req.user?.id?.toString()],
-    )
+    // Try to query with metadata and company_id, join with companies to get company name
+    let result
+    try {
+      result = await pool.query(
+        `SELECT 
+          u.id, u.email, u.name, u.role, u.permissions, u.avatar_url, u.created_at, 
+          u.metadata, u.company_id,
+          c.name as company_name
+        FROM users u
+        LEFT JOIN companies c ON u.company_id = c.id
+        WHERE u.id = $1`,
+        [req.user?.id?.toString()],
+      )
+    } catch (err: any) {
+      if (err.message?.includes('column "metadata"') || err.message?.includes('column "company_id"') || err.code === '42703') {
+        log.warn('Metadata or company_id column not found, querying without them for /me')
+        try {
+          // Try with company_id but without metadata
+          result = await pool.query(
+            `SELECT 
+              u.id, u.email, u.name, u.role, u.permissions, u.avatar_url, u.created_at,
+              u.company_id,
+              c.name as company_name
+            FROM users u
+            LEFT JOIN companies c ON u.company_id = c.id
+            WHERE u.id = $1`,
+            [req.user?.id?.toString()],
+          )
+          if (result.rows.length > 0) {
+            result.rows[0].metadata = null
+          }
+        } catch (err2: any) {
+          // If company_id also doesn't exist, query without both
+          if (err2.message?.includes('column "company_id"') || err2.code === '42703') {
+            result = await pool.query(
+              "SELECT id, email, name, role, permissions, avatar_url, created_at FROM users WHERE id = $1",
+              [req.user?.id?.toString()],
+            )
+            if (result.rows.length > 0) {
+              result.rows[0].metadata = null
+              result.rows[0].company_id = null
+              result.rows[0].company_name = null
+            }
+          } else {
+            throw err2
+          }
+        }
+      } else {
+        throw err
+      }
+    }
 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "User not found" })
     }
-
-    return res.json({ user: result.rows[0] })
+    
+    const user = result.rows[0]
+    
+    // Normalize metadata - ensure it's always an object (not string) for consistent frontend handling
+    if (user.metadata) {
+      if (typeof user.metadata === 'string') {
+        try {
+          user.metadata = JSON.parse(user.metadata)
+        } catch (e) {
+          user.metadata = {}
+        }
+      }
+    } else {
+      user.metadata = {}
+    }
+    
+    // If company_name is available from join but not in metadata, add it to metadata
+    if (user.company_name && !user.metadata.company_name) {
+      user.metadata.company_name = user.company_name
+    }
+    
+    return res.json({ user })
   } catch (error) {
     log.error("Get user error:", error)
     return res.status(500).json({ error: "Internal server error" })

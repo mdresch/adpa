@@ -187,10 +187,21 @@ router.put('/:id',
     description: Joi.string().optional(),
     estimatedHours: Joi.number().min(0).optional(),
     requiredRoleId: Joi.string().uuid().optional(),
-    plannedStartDate: Joi.date().optional(),
-    plannedEndDate: Joi.date().optional(),
+    plannedStartDate: Joi.alternatives().try(
+      Joi.date(),
+      Joi.string().isoDate(),
+      Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).allow('', null)
+    ).optional().allow(null),
+    plannedEndDate: Joi.alternatives().try(
+      Joi.date(),
+      Joi.string().isoDate(),
+      Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).allow('', null)
+    ).optional().allow(null),
     priority: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
-    phase: Joi.string().optional()
+    phase: Joi.string().optional().allow('', null),
+    category: Joi.string().optional().allow('', null),
+    status: Joi.string().valid('planned', 'scheduled', 'in_progress', 'in-progress', 'completed', 'blocked', 'on-hold', 'cancelled').optional(),
+    percentComplete: Joi.number().min(0).max(100).optional()
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -268,22 +279,50 @@ router.post('/:id/assign',
   validate(Joi.object({
     resourceAssignmentId: Joi.string().uuid().required(),
     plannedHours: Joi.number().min(0.1).required(),
-    scheduledStartDate: Joi.date().optional(),
-    scheduledEndDate: Joi.date().optional(),
+    scheduledStartDate: Joi.alternatives().try(
+      Joi.date(),
+      Joi.string().isoDate(),
+      Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).allow('', null)
+    ).optional().allow(null),
+    scheduledEndDate: Joi.alternatives().try(
+      Joi.date(),
+      Joi.string().isoDate(),
+      Joi.string().regex(/^\d{4}-\d{2}-\d{2}$/).allow('', null)
+    ).optional().allow(null),
     allocationPercentage: Joi.number().min(0).max(100).optional()
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const userId = (req as any).user?.id
+      
+      // Parse date strings to Date objects (handle timezone issues)
+      const parseDate = (dateStr: string | Date | null | undefined): Date | undefined => {
+        if (!dateStr || dateStr === '') return undefined
+        if (dateStr instanceof Date) return dateStr
+        if (typeof dateStr === 'string') {
+          // Parse YYYY-MM-DD as local date to avoid timezone issues
+          const match = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+          if (match) {
+            const year = parseInt(match[1], 10)
+            const month = parseInt(match[2], 10) - 1 // JavaScript months are 0-indexed
+            const day = parseInt(match[3], 10)
+            return new Date(year, month, day)
+          }
+          // Fallback for other formats
+          return new Date(dateStr)
+        }
+        return undefined
+      }
+      
       const assignment = await taskSchedulingService.assignResourceToTask(
         req.params.id,
         req.body.resourceAssignmentId,
         req.body.plannedHours,
         userId,
         {
-          scheduledStartDate: req.body.scheduledStartDate,
-          scheduledEndDate: req.body.scheduledEndDate,
+          scheduledStartDate: parseDate(req.body.scheduledStartDate),
+          scheduledEndDate: parseDate(req.body.scheduledEndDate),
           allocationPercentage: req.body.allocationPercentage
         }
       )

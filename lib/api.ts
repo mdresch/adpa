@@ -25,6 +25,7 @@ export interface User {
   last_login?: string
   created_at: string
   updated_at: string
+  metadata?: Record<string, any> | string // JSONB column, can be object or JSON string
 }
 
 export interface Project {
@@ -634,8 +635,9 @@ class ApiClient {
     password: string
     name: string
     role?: string
-  }): Promise<{ user: User; token: string }> {
-    const response = await this.request<{ user: User; token: string; message: string }>("/auth/register", {
+    companyName?: string
+  }): Promise<{ user: User; token: string; company?: { id: string; name: string } }> {
+    const response = await this.request<{ user: User; token: string; message: string; company?: { id: string; name: string } }>("/auth/register", {
       method: "POST",
       body: JSON.stringify(userData),
     })
@@ -646,7 +648,8 @@ class ApiClient {
 
     return {
       user: response.user,
-      token: response.token
+      token: response.token,
+      company: response.company || undefined
     }
   }
 
@@ -896,6 +899,41 @@ class ApiClient {
     return this.request<any>("/security/metrics")
   }
 
+  // Companies endpoints
+  async getCompanies(params?: { page?: number; limit?: number; search?: string; is_active?: boolean }) {
+    const queryParams = new URLSearchParams()
+    if (params?.page) queryParams.append('page', params.page.toString())
+    if (params?.limit) queryParams.append('limit', params.limit.toString())
+    if (params?.search) queryParams.append('search', params.search)
+    if (params?.is_active !== undefined) queryParams.append('is_active', params.is_active.toString())
+    const query = queryParams.toString()
+    return this.request<{ companies: any[]; pagination: any }>(`/companies${query ? `?${query}` : ''}`)
+  }
+
+  async getCompany(id: string) {
+    return this.request<{ company: any }>(`/companies/${id}`)
+  }
+
+  async createCompany(companyData: { name: string; domain?: string; metadata?: any }) {
+    return this.request<{ message: string; company: any }>("/companies", {
+      method: "POST",
+      body: JSON.stringify(companyData),
+    })
+  }
+
+  async updateCompany(id: string, companyData: { name?: string; domain?: string; metadata?: any; is_active?: boolean }) {
+    return this.request<{ message: string; company: any }>(`/companies/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(companyData),
+    })
+  }
+
+  async deleteCompany(id: string) {
+    return this.request<{ message: string; company: any }>(`/companies/${id}`, {
+      method: "DELETE",
+    })
+  }
+
   // Integrations endpoints (duplicate removed - using the one at line 337)
 
   // Duplicate createIntegration method removed
@@ -920,6 +958,20 @@ class ApiClient {
       `/documents/project/${projectId}?${queryParams}`
     )
     return response
+  }
+
+  async getDocumentsByType(batchId: string, documentType: string): Promise<any[]> {
+    const response = await this.request<{ success: boolean; data: any[] }>(
+      `/assessment/batch/${batchId}/documents?type=${encodeURIComponent(documentType)}`
+    )
+    return response.data || []
+  }
+
+  async getDocumentQualityAudit(documentId: string): Promise<any> {
+    const response = await this.request<{ success: boolean; data: any }>(
+      `/documents/${documentId}/quality-audit`
+    )
+    return response.data || null
   }
 
   async getDocument(id: string): Promise<Document> {
@@ -1391,6 +1443,10 @@ class ApiClient {
 
   async deleteStakeholder(stakeholderId: string): Promise<{ message: string; deleted_stakeholder: { name: string; project_id: string } }> {
     return this.delete<{ message: string; deleted_stakeholder: { name: string; project_id: string } }>(`/stakeholders/${stakeholderId}`)
+  }
+
+  async linkStakeholderToUser(stakeholderId: string, userId: string): Promise<{ success: boolean; message: string }> {
+    return this.post<{ success: boolean; message: string }>(`/stakeholders/${stakeholderId}/link-user`, { userId })
   }
 
   async getStakeholderEngagementMatrix(projectId: string): Promise<{

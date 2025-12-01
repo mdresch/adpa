@@ -62,7 +62,6 @@ export const MaturityCard: React.FC<MaturityCardProps> = ({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3 }}
       whileHover={hover ? { 
-        scale: 1.02,
         boxShadow: glow ? maturityTheme.shadows.glowStrong : maturityTheme.shadows.lg,
       } : undefined}
     >

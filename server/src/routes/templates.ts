@@ -1,7 +1,7 @@
 import express from "express"
 import Joi from "joi"
 import { pool } from "../database/connection"
-import { authenticateToken, requirePermission } from "../middleware/auth"
+import { authenticateToken, requirePermission, requireRole } from "../middleware/auth"
 import { validate, validateParams, validateQuery, schemas } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
@@ -21,19 +21,35 @@ router.get("/",
     category: Joi.string().max(100).optional(),
     search: Joi.string().max(100).optional(),
     is_public: Joi.boolean().optional(),
+    template_scope: Joi.string().valid("standard", "company", "user", "all").optional(),
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { page = 1, limit = 100, framework, category, search, is_public } = req.query
+      const { page = 1, limit = 100, framework, category, search, is_public, template_scope } = req.query
       const offset = (Number(page) - 1) * Number(limit)
       
-      log.info(`Fetching templates: page=${page}, limit=${limit}, framework=${framework || 'all'}`)
+      log.info(`Fetching templates: page=${page}, limit=${limit}, framework=${framework || 'all'}, scope=${template_scope || 'all'}`)
+
+      // Get user's company_id for filtering company templates
+      let userCompanyId: string | null = null
+      if (req.user?.id) {
+        try {
+          const userResult = await pool.query(
+            "SELECT company_id FROM users WHERE id = $1",
+            [req.user.id]
+          )
+          userCompanyId = userResult.rows[0]?.company_id || null
+        } catch (err) {
+          log.warn("Failed to fetch user company_id:", err)
+        }
+      }
 
       let query = `
         SELECT 
           t.*, 
           u.name as created_by_name,
+          c.name as company_name,
           CASE 
             WHEN t.validation_count = 0 THEN 0
             ELSE ROUND((t.success_count::NUMERIC / t.validation_count::NUMERIC * 100), 2)
@@ -47,13 +63,23 @@ router.get("/",
           END as health_rating
         FROM templates t
         LEFT JOIN users u ON t.created_by = u.id
-        WHERE (t.is_public = true OR t.created_by = $1)
-          AND t.deleted_at IS NULL
+        LEFT JOIN companies c ON t.company_id = c.id
+        WHERE t.deleted_at IS NULL
           AND (t.development_status IS NULL OR t.development_status != 'archived')
+          AND (
+            -- Standard templates: available to everyone
+            t.template_scope = 'standard'
+            OR
+            -- Company templates: available to users in the same company
+            (t.template_scope = 'company' AND t.company_id = $1)
+            OR
+            -- User templates: available to the creator or if public
+            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $2))
+          )
       `
 
-      const params: any[] = [req.user?.id]
-      let paramCount = 1
+      const params: any[] = [userCompanyId, req.user?.id]
+      let paramCount = 2
 
       if (framework) {
         paramCount++
@@ -79,15 +105,42 @@ router.get("/",
         params.push(is_public)
       }
 
-      query += ` ORDER BY t.usage_count DESC, t.created_at DESC LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
+      // Filter by template_scope if specified
+      if (template_scope && template_scope !== 'all') {
+        paramCount++
+        query += ` AND t.template_scope = $${paramCount}`
+        params.push(template_scope)
+      }
+
+      query += ` ORDER BY 
+        CASE t.template_scope 
+          WHEN 'standard' THEN 1 
+          WHEN 'company' THEN 2 
+          WHEN 'user' THEN 3 
+        END,
+        t.usage_count DESC, 
+        t.created_at DESC 
+        LIMIT $${paramCount + 1} OFFSET $${paramCount + 2}`
       params.push(limit, offset)
 
       const result = await pool.query(query, params)
 
       // Get total count (exclude archived templates)
-  let countQuery = "SELECT COUNT(*) FROM templates t WHERE (t.is_public = true OR t.created_by = $1) AND t.deleted_at IS NULL AND (t.development_status IS NULL OR t.development_status != 'archived')"
-      const countParams = [req.user?.id]
-      let countParamCount = 1
+      let countQuery = `
+        SELECT COUNT(*) 
+        FROM templates t
+        WHERE t.deleted_at IS NULL
+          AND (t.development_status IS NULL OR t.development_status != 'archived')
+          AND (
+            t.template_scope = 'standard'
+            OR
+            (t.template_scope = 'company' AND t.company_id = $1)
+            OR
+            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $2))
+          )
+      `
+      const countParams: any[] = [userCompanyId, req.user?.id]
+      let countParamCount = 2
 
       if (framework) {
         countParamCount++
@@ -111,6 +164,12 @@ router.get("/",
         countParamCount++
         countQuery += ` AND t.is_public = $${countParamCount}`
         countParams.push(is_public ? "true" : "false")
+      }
+
+      if (template_scope && template_scope !== 'all') {
+        countParamCount++
+        countQuery += ` AND t.template_scope = $${countParamCount}`
+        countParams.push(template_scope)
       }
 
       const countResult = await pool.query(countQuery, countParams)
@@ -314,11 +373,26 @@ router.get("/:id",
         return res.json({ template: cached, recentUsage })
       }
 
+      // Get user's company_id for permission checking
+      let userCompanyId: string | null = null
+      if (req.user?.id) {
+        try {
+          const userResult = await pool.query(
+            "SELECT company_id FROM users WHERE id = $1",
+            [req.user.id]
+          )
+          userCompanyId = userResult.rows[0]?.company_id || null
+        } catch (err) {
+          log.warn("Failed to fetch user company_id:", err)
+        }
+      }
+
       const result = await pool.query(
         `
         SELECT 
           t.*, 
           u.name as created_by_name,
+          c.name as company_name,
           CASE 
             WHEN t.validation_count = 0 THEN 0
             ELSE ROUND((t.success_count::NUMERIC / t.validation_count::NUMERIC * 100), 2)
@@ -332,9 +406,21 @@ router.get("/:id",
           END as health_rating
         FROM templates t
         LEFT JOIN users u ON t.created_by = u.id
-        WHERE t.id = $1 AND (t.is_public = true OR t.created_by = $2) AND t.deleted_at IS NULL
+        LEFT JOIN companies c ON t.company_id = c.id
+        WHERE t.id = $1 
+          AND t.deleted_at IS NULL
+          AND (
+            -- Standard templates: available to everyone
+            t.template_scope = 'standard'
+            OR
+            -- Company templates: available to users in the same company
+            (t.template_scope = 'company' AND t.company_id = $2)
+            OR
+            -- User templates: available to the creator or if public
+            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $3))
+          )
       `,
-        [id, req.user?.id]
+        [id, userCompanyId, req.user?.id]
       )
 
       if (result.rows.length === 0) {
@@ -367,14 +453,44 @@ router.post("/",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const { name, description, framework, category, content, variables, is_public, system_prompt, template_paragraphs } = req.body
+      const { name, description, framework, category, content, variables, is_public, template_scope = 'user', company_id, system_prompt, template_paragraphs } = req.body
+
+      // Only super admins can create standard templates
+      if (template_scope === 'standard' && req.user?.role !== 'super_admin') {
+        return res.status(403).json({ error: "Only super administrators can create standard templates" })
+      }
+
+      // Get user's company_id if not provided and scope is 'company'
+      let finalCompanyId: string | null = company_id || null
+      if (template_scope === 'company') {
+        if (!finalCompanyId && req.user?.id) {
+          try {
+            const userResult = await pool.query(
+              "SELECT company_id FROM users WHERE id = $1",
+              [req.user.id]
+            )
+            finalCompanyId = userResult.rows[0]?.company_id || null
+          } catch (err) {
+            log.warn("Failed to fetch user company_id:", err)
+          }
+        }
+        if (!finalCompanyId) {
+          return res.status(400).json({ error: "company_id is required for company-scoped templates" })
+        }
+      } else {
+        // Ensure company_id is NULL for standard and user templates
+        finalCompanyId = null
+      }
+
+      // Set is_read_only for standard templates
+      const is_read_only = template_scope === 'standard'
 
       const id = uuidv4()
 
       const result = await pool.query(
         `
-        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, created_by, system_prompt, template_paragraphs)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO templates (id, name, description, framework, category, content, variables, is_public, template_scope, company_id, is_read_only, created_by, system_prompt, template_paragraphs)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
         RETURNING *
       `,
         [
@@ -386,6 +502,9 @@ router.post("/",
           JSON.stringify(content),
           JSON.stringify(variables),
           is_public,
+          template_scope,
+          finalCompanyId,
+          is_read_only,
           req.user?.id,
           system_prompt || null,
           template_paragraphs ? JSON.stringify(template_paragraphs) : null,
@@ -466,7 +585,7 @@ router.put("/:id",
 
       // Check if template exists and user has permission
       const templateCheck = await pool.query(
-        "SELECT created_by FROM templates WHERE id = $1 AND deleted_at IS NULL",
+        "SELECT created_by, template_scope, company_id, is_read_only FROM templates WHERE id = $1 AND deleted_at IS NULL",
         [id]
       )
 
@@ -476,8 +595,35 @@ router.put("/:id",
 
       const template = templateCheck.rows[0]
 
-      if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
-        return res.status(403).json({ error: "Access denied" })
+      // Prevent editing standard templates (read-only)
+      if (template.is_read_only || template.template_scope === 'standard') {
+        return res.status(403).json({ error: "Standard templates cannot be edited" })
+      }
+
+      // Check permissions based on scope
+      if (template.template_scope === 'company') {
+        // Get user's company_id
+        let userCompanyId: string | null = null
+        if (req.user?.id) {
+          try {
+            const userResult = await pool.query(
+              "SELECT company_id FROM users WHERE id = $1",
+              [req.user.id]
+            )
+            userCompanyId = userResult.rows[0]?.company_id || null
+          } catch (err) {
+            log.warn("Failed to fetch user company_id:", err)
+          }
+        }
+        // Only users in the same company or admins can edit company templates
+        if (template.company_id !== userCompanyId && req.user?.role !== "admin") {
+          return res.status(403).json({ error: "Access denied: You can only edit templates from your company" })
+        }
+      } else if (template.template_scope === 'user') {
+        // Only the creator or admins can edit user templates
+        if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+          return res.status(403).json({ error: "Access denied" })
+        }
       }
 
       const result = await pool.query(
@@ -584,7 +730,7 @@ router.delete("/:id",
 
       // Check if template exists and user has permission
       const templateCheck = await pool.query(
-        "SELECT created_by, name FROM templates WHERE id = $1",
+        "SELECT created_by, name, template_scope, company_id, is_read_only FROM templates WHERE id = $1",
         [id]
       )
 
@@ -594,8 +740,35 @@ router.delete("/:id",
 
       const template = templateCheck.rows[0]
 
-      if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
-        return res.status(403).json({ error: "Access denied" })
+      // Prevent deleting standard templates (read-only)
+      if (template.is_read_only || template.template_scope === 'standard') {
+        return res.status(403).json({ error: "Standard templates cannot be deleted" })
+      }
+
+      // Check permissions based on scope
+      if (template.template_scope === 'company') {
+        // Get user's company_id
+        let userCompanyId: string | null = null
+        if (req.user?.id) {
+          try {
+            const userResult = await pool.query(
+              "SELECT company_id FROM users WHERE id = $1",
+              [req.user.id]
+            )
+            userCompanyId = userResult.rows[0]?.company_id || null
+          } catch (err) {
+            log.warn("Failed to fetch user company_id:", err)
+          }
+        }
+        // Only users in the same company or admins can delete company templates
+        if (template.company_id !== userCompanyId && req.user?.role !== "admin") {
+          return res.status(403).json({ error: "Access denied: You can only delete templates from your company" })
+        }
+      } else if (template.template_scope === 'user') {
+        // Only the creator or admins can delete user templates
+        if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+          return res.status(403).json({ error: "Access denied" })
+        }
       }
 
       // Check if template is being used
@@ -628,6 +801,256 @@ router.delete("/:id",
   res.json({ message: "Template deleted (soft) successfully" })
     } catch (error) {
       log.error("Delete template error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Promote template to company (company admin/admin only)
+// This allows company admins/admins to promote user templates to company-wide templates
+router.post("/:id/promote-to-company",
+  authenticateToken,
+  requireRole(["admin", "super_admin"]), // Company admins and admins can promote to company
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Get template details
+      const templateCheck = await pool.query(
+        `
+        SELECT 
+          id, name, template_scope, company_id, is_read_only, 
+          created_by, framework, category
+        FROM templates 
+        WHERE id = $1 AND deleted_at IS NULL
+      `,
+        [id]
+      )
+
+      if (templateCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      const template = templateCheck.rows[0]
+
+      // Can only promote user templates to company (not already company or standard)
+      if (template.template_scope !== 'user') {
+        return res.status(400).json({ error: `Can only promote user templates to company. Current scope: ${template.template_scope}` })
+      }
+
+      // Get user's company_id
+      let userCompanyId: string | null = null
+      if (req.user?.id) {
+        try {
+          const userResult = await pool.query(
+            "SELECT company_id FROM users WHERE id = $1",
+            [req.user.id]
+          )
+          userCompanyId = userResult.rows[0]?.company_id || null
+        } catch (err) {
+          log.warn("Failed to fetch user company_id:", err)
+        }
+      }
+
+      if (!userCompanyId) {
+        return res.status(400).json({ error: "You must be assigned to a company to promote templates to company scope" })
+      }
+
+      // Promote the template to company scope
+      const result = await pool.query(
+        `
+        UPDATE templates 
+        SET 
+          template_scope = 'company',
+          company_id = $1,
+          is_read_only = false, -- Company templates can still be edited
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+        RETURNING *
+      `,
+        [userCompanyId, id]
+      )
+
+      // Clear cache
+      await cache.del(`template:${id}`)
+
+      log.info(`Template promoted to company: ${id} (${template.name}) by ${req.user?.email} (company: ${userCompanyId})`)
+
+      // Track template promotion
+      if (req.user?.id) {
+        trackActivity.updateTemplate(
+          req.user.id,
+          id,
+          {
+            name: template.name,
+            framework: template.framework,
+            category: template.category,
+            promotion: {
+              from_scope: 'user',
+              to_scope: 'company',
+              company_id: userCompanyId
+            }
+          }
+        )
+
+        // Create version entry for the promotion
+        try {
+          const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
+          const currentVersion = versions[0]?.version_number || '1.0.0'
+          const [major, minor] = currentVersion.split('.').map(Number)
+          
+          // Increment minor version for promotion (e.g., 1.0.0 -> 1.1.0)
+          const newVersion = `${major}.${minor + 1}.0`
+
+          await TemplateAnalyticsService.createVersion({
+            template_id: id,
+            version_number: newVersion,
+            change_type: 'republished',
+            change_summary: `Promoted to company template (was user-scoped)`,
+            change_details: {
+              promotion: true,
+              from_scope: 'user',
+              to_scope: 'company',
+              company_id: userCompanyId,
+              promoted_by: req.user.id,
+              promoted_at: new Date().toISOString()
+            },
+            created_by: req.user.id
+          })
+        } catch (error) {
+          log.warn('Failed to create version entry for promotion:', error)
+        }
+      }
+
+      res.json({
+        message: "Template promoted to company successfully",
+        template: result.rows[0],
+        promotion: {
+          from_scope: 'user',
+          to_scope: 'company',
+          company_id: userCompanyId
+        }
+      })
+    } catch (error) {
+      log.error("Promote template to company error:", error)
+      res.status(500).json({ error: "Internal server error" })
+    }
+  }
+)
+
+// Promote template to standard (super admin only)
+// This allows super admins to promote company templates to standard (out-of-the-box) templates
+router.post("/:id/promote-to-standard",
+  authenticateToken,
+  requireRole(["super_admin"]), // Only super admins can promote to standard
+  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // Get template details
+      const templateCheck = await pool.query(
+        `
+        SELECT 
+          id, name, template_scope, company_id, is_read_only, 
+          created_by, framework, category
+        FROM templates 
+        WHERE id = $1 AND deleted_at IS NULL
+      `,
+        [id]
+      )
+
+      if (templateCheck.rows.length === 0) {
+        return res.status(404).json({ error: "Template not found" })
+      }
+
+      const template = templateCheck.rows[0]
+
+      // Can only promote company templates to standard (not user or already standard)
+      if (template.template_scope !== 'company') {
+        return res.status(400).json({ error: `Can only promote company templates to standard. Current scope: ${template.template_scope}` })
+      }
+
+      // Promote the template
+      const result = await pool.query(
+        `
+        UPDATE templates 
+        SET 
+          template_scope = 'standard',
+          is_read_only = true,
+          company_id = NULL, -- Clear company_id for standard templates
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING *
+      `,
+        [id]
+      )
+
+      // Clear cache
+      await cache.del(`template:${id}`)
+
+      log.info(`Template promoted to standard: ${id} (${template.name}) by ${req.user?.email}`)
+
+      // Track template promotion
+      if (req.user?.id) {
+        trackActivity.updateTemplate(
+          req.user.id,
+          id,
+          {
+            name: template.name,
+            framework: template.framework,
+            category: template.category,
+            promotion: {
+              from_scope: template.template_scope,
+              to_scope: 'standard',
+              previous_company_id: template.company_id
+            }
+          }
+        )
+
+        // Create version entry for the promotion
+        try {
+          const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
+          const currentVersion = versions[0]?.version_number || '1.0.0'
+          const [major, minor] = currentVersion.split('.').map(Number)
+          
+          // Increment minor version for promotion (e.g., 1.0.0 -> 1.1.0)
+          const newVersion = `${major}.${minor + 1}.0`
+
+          await TemplateAnalyticsService.createVersion({
+            template_id: id,
+            version_number: newVersion,
+            change_type: 'republished',
+            change_summary: `Promoted to standard template (was ${template.template_scope}-scoped)`,
+            change_details: {
+              promotion: true,
+              from_scope: template.template_scope,
+              to_scope: 'standard',
+              previous_company_id: template.company_id,
+              promoted_by: req.user.id,
+              promoted_at: new Date().toISOString()
+            },
+            created_by: req.user.id
+          })
+        } catch (error) {
+          log.warn('Failed to create version entry for promotion:', error)
+        }
+      }
+
+      res.json({
+        message: "Template promoted to standard successfully",
+        template: result.rows[0],
+        promotion: {
+          from_scope: template.template_scope,
+          to_scope: 'standard',
+          previous_company_id: template.company_id
+        }
+      })
+    } catch (error) {
+      log.error("Promote template error:", error)
       res.status(500).json({ error: "Internal server error" })
     }
   }

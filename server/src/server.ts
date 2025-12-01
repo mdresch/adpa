@@ -24,6 +24,7 @@ import programRoutes from "./routes/programRoutes"
 import documentRoutes from "./routes/documents"
 import projectDataExtractionRoutes from "./routes/projectDataExtraction"
 import userRoutes from "./routes/users"
+import companiesRoutes from "./routes/companies"
 import aiRoutes from "./routes/ai"
 import aiProvidersRoutes from "./routes/ai-providers"
 import aiFailoverRoutes from "./routes/ai-failover"
@@ -220,6 +221,7 @@ app.use("/api/documents", documentRoutes)
 app.use("/api/project-data-extraction", projectDataExtractionRoutes)
 app.use("/api/document-generation", documentGenerationRoutes)
 app.use("/api/users", userRoutes)
+app.use("/api/companies", companiesRoutes)
 app.use("/api/ai", aiRoutes)
 app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/ai-failover", aiFailoverRoutes)

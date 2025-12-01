@@ -54,15 +54,19 @@ export interface GapAnalysis {
   high_priority_gaps: Gap[];
   medium_priority_gaps: Gap[];
   improvement_opportunities: ImprovementOpportunity[];
+  all_gaps?: Gap[];
+  all_recommendations?: string[];
 }
 
 export interface Gap {
   document_type: string;
   avg_score: number;
-  severity: 'critical' | 'high' | 'medium';
+  severity: 'critical' | 'high' | 'medium' | 'low';
   count: number;
   recommendation: string;
   estimated_improvement_points: number;
+  document_title?: string;
+  issue_category?: string;
 }
 
 export interface ImprovementOpportunity {
@@ -251,6 +255,7 @@ async function gatherAuditData(client: any, projectId: string): Promise<any[]> {
       qa.accuracy_score,
       qa.context_relevance_score,
       qa.findings,
+      qa.issues,
       qa.issues as gaps_identified,
       qa.recommendations,
       COALESCE(qa.ai_provider, d.framework) as framework_used,
@@ -534,11 +539,90 @@ function performGapAnalysis(
   critical_gaps.sort((a, b) => b.estimated_improvement_points - a.estimated_improvement_points);
   high_priority_gaps.sort((a, b) => b.estimated_improvement_points - a.estimated_improvement_points);
 
+  // Extract all issues from quality audits as gaps
+  const documentIssues: Gap[] = [];
+  const allRecommendations: string[] = [];
+  const seenIssues = new Set<string>();
+  const seenRecommendations = new Set<string>();
+
+  for (const audit of auditData) {
+    // Parse issues if it's a string (JSONB)
+    let issues = audit.gaps_identified || audit.issues;
+    if (typeof issues === 'string') {
+      try {
+        issues = JSON.parse(issues);
+      } catch (e) {
+        issues = [];
+      }
+    }
+    
+    // Extract issues
+    if (issues && Array.isArray(issues)) {
+      for (const issue of issues) {
+        const issueDesc = issue.description || issue.message || (typeof issue === 'string' ? issue : JSON.stringify(issue));
+        const issueKey = `${issue.category || issue.type || 'Unknown'}:${issueDesc}`;
+        if (!seenIssues.has(issueKey)) {
+          seenIssues.add(issueKey);
+          documentIssues.push({
+            document_type: audit.document_type || 'Unknown',
+            avg_score: audit.overall_score || 0,
+            severity: issue.severity || issue.priority || (audit.overall_score < 60 ? 'critical' : audit.overall_score < 75 ? 'high' : 'medium'),
+            count: 1,
+            recommendation: issueDesc,
+            estimated_improvement_points: issue.impact || 5,
+            document_title: audit.document_title,
+            issue_category: issue.category || issue.type || 'General'
+          });
+        }
+      }
+    }
+
+    // Parse recommendations if it's a string (JSONB)
+    let recommendations = audit.recommendations;
+    if (typeof recommendations === 'string') {
+      try {
+        recommendations = JSON.parse(recommendations);
+      } catch (e) {
+        recommendations = [];
+      }
+    }
+
+    // Extract recommendations
+    if (recommendations && Array.isArray(recommendations)) {
+      for (const rec of recommendations) {
+        const recKey = typeof rec === 'string' ? rec : JSON.stringify(rec);
+        if (!seenRecommendations.has(recKey)) {
+          seenRecommendations.add(recKey);
+          allRecommendations.push(recKey);
+        }
+      }
+    }
+  }
+
+  // Combine document type gaps with individual document issues
+  const allGaps = [
+    ...critical_gaps,
+    ...high_priority_gaps,
+    ...medium_priority_gaps,
+    ...documentIssues
+  ];
+
+  // Sort all gaps by severity and score
+  allGaps.sort((a, b) => {
+    const severityOrder = { critical: 0, high: 1, medium: 2, low: 3 };
+    const aOrder = severityOrder[a.severity as keyof typeof severityOrder] ?? 4;
+    const bOrder = severityOrder[b.severity as keyof typeof severityOrder] ?? 4;
+    if (aOrder !== bOrder) return aOrder - bOrder;
+    return b.avg_score - a.avg_score;
+  });
+
   return {
     critical_gaps: critical_gaps.slice(0, 10),
     high_priority_gaps: high_priority_gaps.slice(0, 10),
     medium_priority_gaps: medium_priority_gaps.slice(0, 10),
-    improvement_opportunities: improvement_opportunities.slice(0, 15)
+    improvement_opportunities: improvement_opportunities.slice(0, 15),
+    all_gaps: allGaps,
+    all_recommendations: allRecommendations
   };
 }
 

@@ -68,6 +68,12 @@
   }
 }
 
+/* Custom tab styles for dark theme assessment page */
+.assessment-dark-theme button[data-state="active"] {
+  background-color: #1a2452 !important;
+  color: #e8edf7 !important;
+}
+
 /* Enhanced animations with page transitions */
 @keyframes fadeInUp {
   from {

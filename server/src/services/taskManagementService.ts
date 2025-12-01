@@ -207,6 +207,25 @@ export async function getProjectTasks(
 }
 
 /**
+ * Parse date string as local date to avoid timezone issues
+ * When database returns "2025-12-01", we want December 1st, not November 30th
+ */
+function parseLocalDate(dateStr: string | null | undefined): Date | undefined {
+  if (!dateStr) return undefined
+  const str = String(dateStr)
+  const match = str.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (match) {
+    const year = parseInt(match[1], 10)
+    const month = parseInt(match[2], 10) - 1 // JavaScript months are 0-indexed
+    const day = parseInt(match[3], 10)
+    return new Date(year, month, day)
+  }
+  // Fallback for other formats
+  const date = new Date(str)
+  return isNaN(date.getTime()) ? undefined : date
+}
+
+/**
  * Get task by ID with full details
  */
 export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
@@ -309,26 +328,41 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
     const mapped: ProjectTask & { id: string; project_id?: string } = {
       id: task.id,
       projectId: task.project_id,
+      parentTaskId: task.parent_task_id || undefined,
       taskNumber: task.task_number,
       wbsCode: task.wbs_code,
       taskName: task.task_name,
       description: task.description,
-      estimatedHours: task.estimated_hours,
-      actualHours: task.actual_hours,
-      plannedStartDate: task.planned_start_date,
-      plannedEndDate: task.planned_end_date,
-      requiredRoleId: task.required_role_id,
-      requiredRoleName: task.required_role_name,
+      estimatedHours: task.estimated_hours ? Number(task.estimated_hours) : undefined,
+      estimatedDurationDays: task.estimated_duration_days || undefined,
+      estimatedCost: task.estimated_cost ? Number(task.estimated_cost) : undefined,
+      actualHours: task.actual_hours ? Number(task.actual_hours) : undefined,
+      actualCost: task.actual_cost ? Number(task.actual_cost) : undefined,
+      // Parse dates from database - PostgreSQL DATE columns return as YYYY-MM-DD strings
+      // Parse as local dates to avoid timezone conversion issues
+      plannedStartDate: parseLocalDate(task.planned_start_date),
+      plannedEndDate: parseLocalDate(task.planned_end_date),
+      actualStartDate: parseLocalDate(task.actual_start_date),
+      actualEndDate: parseLocalDate(task.actual_end_date),
+      requiredRoleId: task.required_role_id || undefined,
+      requiredRoleName: task.required_role_name || undefined,
+      requiredSkills: task.required_skills || undefined,
+      requiredResourceCount: task.required_resource_count || undefined,
       assignedUserId: primaryAssignment?.userId ?? null,
       assignedUserName: primaryAssignment?.userName ?? null,
       status: task.status,
-      percentComplete: task.percent_complete ?? 0,
+      percentComplete: task.percent_complete ? Number(task.percent_complete) : 0,
+      priority: task.priority || undefined,
+      phase: task.phase || undefined,
+      category: task.category || undefined,
+      deliverables: task.deliverables || undefined,
+      acceptanceCriteria: task.acceptance_criteria || undefined,
       sourceDocumentId: task.source_document_id ?? null,
       sourceDocumentTitle: task.source_document_title ?? null,
       sourceEntityId: task.source_entity_id ?? null,
       importedFromWbs: task.imported_from_wbs ?? false,
-      createdAt: task.created_at,
-      updatedAt: task.updated_at
+      createdAt: task.created_at ? new Date(task.created_at) : undefined,
+      updatedAt: task.updated_at ? new Date(task.updated_at) : undefined
     }
 
     // attach dependency / assignment payloads on the returned object
@@ -347,30 +381,67 @@ export async function getTaskById(taskId: string): Promise<ProjectTask | null> {
  */
 export async function updateTask(
   taskId: string,
-  updates: Partial<CreateTaskInput>
+  updates: Partial<CreateTaskInput & { status?: string; percentComplete?: number; category?: string }>
 ): Promise<ProjectTask | null> {
   try {
     const setClauses: string[] = []
     const values: any[] = []
     let paramIndex = 1
     
-    const fieldMap: { [key: string]: string } = {
-      taskName: 'task_name',
-      description: 'description',
-      estimatedHours: 'estimated_hours',
-      requiredRoleId: 'required_role_id',
-      plannedStartDate: 'planned_start_date',
-      plannedEndDate: 'planned_end_date',
-      priority: 'priority',
-      phase: 'phase',
-      parentTaskId: 'parent_task_id'
+    // Helper to convert date strings to Date objects or null
+    // IMPORTANT: Parse YYYY-MM-DD as local date to avoid timezone issues
+    // When user enters "2025-12-01", we want December 1st, not November 30th
+    const parseDate = (value: any): Date | null => {
+      if (!value || value === '') return null
+      if (value instanceof Date) return value
+      if (typeof value === 'string') {
+        // Handle YYYY-MM-DD format from HTML date inputs
+        // Parse as local date to avoid timezone conversion issues
+        const dateMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+        if (dateMatch) {
+          // Extract year, month (0-indexed), day
+          const year = parseInt(dateMatch[1], 10)
+          const month = parseInt(dateMatch[2], 10) - 1 // JavaScript months are 0-indexed
+          const day = parseInt(dateMatch[3], 10)
+          // Create date in local timezone (not UTC)
+          const date = new Date(year, month, day)
+          return isNaN(date.getTime()) ? null : date
+        }
+        // Fallback for other date formats (ISO strings, etc.)
+        const date = new Date(value)
+        return isNaN(date.getTime()) ? null : date
+      }
+      return null
+    }
+    
+    const fieldMap: { [key: string]: { dbField: string; transform?: (val: any) => any } } = {
+      taskName: { dbField: 'task_name' },
+      description: { dbField: 'description' },
+      estimatedHours: { dbField: 'estimated_hours' },
+      requiredRoleId: { dbField: 'required_role_id' },
+      plannedStartDate: { dbField: 'planned_start_date', transform: parseDate },
+      plannedEndDate: { dbField: 'planned_end_date', transform: parseDate },
+      priority: { dbField: 'priority' },
+      phase: { dbField: 'phase' },
+      category: { dbField: 'category' },
+      status: { dbField: 'status' },
+      percentComplete: { dbField: 'percent_complete' },
+      parentTaskId: { dbField: 'parent_task_id' }
     }
     
     // Security: Validate key exists in fieldMap to prevent prototype pollution
     Object.entries(updates).forEach(([key, value]) => {
       if (value !== undefined && fieldMap.hasOwnProperty(key) && fieldMap[key]) {
-        setClauses.push(`${fieldMap[key]} = $${paramIndex++}`)
-        values.push(value)
+        const fieldConfig = fieldMap[key]
+        const transformedValue = fieldConfig.transform ? fieldConfig.transform(value) : value
+        
+        // Skip null values for optional fields (except dates which can be null)
+        if (transformedValue === null && !['plannedStartDate', 'plannedEndDate'].includes(key)) {
+          return
+        }
+        
+        setClauses.push(`${fieldConfig.dbField} = $${paramIndex++}`)
+        values.push(transformedValue)
       }
     })
     
@@ -390,9 +461,14 @@ export async function updateTask(
     
     const result = await pool.query(query, values)
     
+    if (!result.rows.length) {
+      return null
+    }
+    
     logger.info('Task updated', { taskId, updates })
     
-    return result.rows[0] || null
+    // Return the updated task using getTaskById to ensure consistent format
+    return getTaskById(taskId)
   } catch (error) {
     logger.error('updateTask error', { error, taskId, updates })
     throw error

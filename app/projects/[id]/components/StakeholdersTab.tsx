@@ -58,6 +58,7 @@ interface Stakeholder {
   expectations?: string
   potential_impact?: string
   is_team_member?: boolean
+  user_id?: string
   created_at: string
   updated_at: string
 }
@@ -157,6 +158,7 @@ export function StakeholdersTab({
   const [departmentFilter, setDepartmentFilter] = useState<string>("all")
   const [typeFilter, setTypeFilter] = useState<string>("all")
   const [teamMemberFilter, setTeamMemberFilter] = useState<string>("all")
+  const [userAccountFilter, setUserAccountFilter] = useState<string>("all")
   const [interestLevelFilter, setInterestLevelFilter] = useState<string>("all")
   const [influenceLevelFilter, setInfluenceLevelFilter] = useState<string>("all")
   const [communicationFilter, setCommunicationFilter] = useState<string>("all")
@@ -185,13 +187,18 @@ export function StakeholdersTab({
         if (teamMemberFilter === "yes" && !isTeamMember) return false
         if (teamMemberFilter === "no" && isTeamMember) return false
       }
+      if (userAccountFilter !== "all") {
+        const hasUserAccount = !!(stakeholder as any).user_id
+        if (userAccountFilter === "yes" && !hasUserAccount) return false
+        if (userAccountFilter === "no" && hasUserAccount) return false
+      }
       if (interestLevelFilter !== "all" && stakeholder.interest_level !== interestLevelFilter) return false
       if (influenceLevelFilter !== "all" && stakeholder.influence_level !== influenceLevelFilter) return false
       if (communicationFilter !== "all" && stakeholder.communication_frequency !== communicationFilter) return false
       if (engagementFilter !== "all" && stakeholder.engagement_approach !== engagementFilter) return false
       return true
     })
-  }, [stakeholders, departmentFilter, typeFilter, teamMemberFilter, interestLevelFilter, influenceLevelFilter, communicationFilter, engagementFilter])
+  }, [stakeholders, departmentFilter, typeFilter, teamMemberFilter, userAccountFilter, interestLevelFilter, influenceLevelFilter, communicationFilter, engagementFilter])
 
   // Count active filters
   const activeFilterCount = useMemo(() => {
@@ -199,18 +206,20 @@ export function StakeholdersTab({
     if (departmentFilter !== "all") count++
     if (typeFilter !== "all") count++
     if (teamMemberFilter !== "all") count++
+    if (userAccountFilter !== "all") count++
     if (interestLevelFilter !== "all") count++
     if (influenceLevelFilter !== "all") count++
     if (communicationFilter !== "all") count++
     if (engagementFilter !== "all") count++
     return count
-  }, [departmentFilter, typeFilter, teamMemberFilter, interestLevelFilter, influenceLevelFilter, communicationFilter, engagementFilter])
+  }, [departmentFilter, typeFilter, teamMemberFilter, userAccountFilter, interestLevelFilter, influenceLevelFilter, communicationFilter, engagementFilter])
 
   // Clear all filters
   const clearFilters = () => {
     setDepartmentFilter("all")
     setTypeFilter("all")
     setTeamMemberFilter("all")
+    setUserAccountFilter("all")
     setInterestLevelFilter("all")
     setInfluenceLevelFilter("all")
     setCommunicationFilter("all")
@@ -294,6 +303,21 @@ export function StakeholdersTab({
                   <SelectItem value="all">All</SelectItem>
                   <SelectItem value="yes">Team Members Only</SelectItem>
                   <SelectItem value="no">Non-Team Members</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* User Account Filter */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">User Account</label>
+              <Select value={userAccountFilter} onValueChange={setUserAccountFilter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="All" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="yes">Has User Account</SelectItem>
+                  <SelectItem value="no">No User Account</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -568,6 +592,12 @@ export function StakeholdersTab({
                               <Badge variant="default" className="bg-blue-600 hover:bg-blue-700 text-white flex items-center gap-1">
                                 <UserCheck className="h-3 w-3" />
                                 Team Member
+                              </Badge>
+                            )}
+                            {(stakeholder as any).user_id && (
+                              <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white flex items-center gap-1">
+                                <UserCheck className="h-3 w-3" />
+                                User
                               </Badge>
                             )}
                             {!stakeholder.name && (

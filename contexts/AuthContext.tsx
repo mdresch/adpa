@@ -8,8 +8,8 @@ import { toast } from "sonner"
 interface AuthContextType {
   user: User | null
   loading: boolean
-  login: (email: string, password: string) => Promise<void>
-  register: (userData: { email: string; password: string; name: string; role?: string }) => Promise<void>
+  login: (email: string, password: string, redirect?: string) => Promise<void>
+  register: (userData: { email: string; password: string; name: string; role?: string; companyName?: string }, options?: { redirect?: string | false }) => Promise<void>
   demoLogin: () => Promise<void>
   logout: () => Promise<void>
   refreshUser: () => Promise<void>
@@ -88,7 +88,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   // Login function
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, redirect?: string) => {
     try {
       setLoading(true)
       const { user: loggedInUser, token } = await apiClient.login(email, password)
@@ -99,7 +99,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
       apiClient.connectWebSocket()
       
       toast.success("Login successful!")
-      router.push("/")
+      
+      // Use provided redirect, or default to home
+      const redirectPath = redirect || "/"
+      router.push(redirectPath)
     } catch (error) {
       console.error("Login failed:", error)
       toast.error(error instanceof Error ? error.message : "Login failed")
@@ -110,18 +113,27 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   // Register function
-  const register = async (userData: { email: string; password: string; name: string; role?: string }) => {
+  const register = async (userData: { email: string; password: string; name: string; role?: string; companyName?: string }, options?: { redirect?: string | false }) => {
     try {
       setLoading(true)
-      const { user: newUser, token } = await apiClient.register(userData)
+      const { user: newUser, token, company } = await apiClient.register(userData)
       setUser(newUser)
   setToken(token)
       
       // Connect WebSocket after successful registration
       apiClient.connectWebSocket()
       
-      toast.success("Registration successful!")
-      router.push("/")
+      // Show success message with company info if company was created
+      if (company) {
+        toast.success(`Account and company "${company.name}" created successfully!`)
+      } else {
+        toast.success("Registration successful!")
+      }
+      
+      // Only redirect if not explicitly disabled
+      if (options?.redirect !== false) {
+        router.push(options?.redirect || "/")
+      }
     } catch (error) {
       console.error("Registration failed:", error)
       toast.error(error instanceof Error ? error.message : "Registration failed")

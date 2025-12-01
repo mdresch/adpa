@@ -38,13 +38,18 @@ export default function AuthPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState("")
+  const [redirectPath, setRedirectPath] = useState<string | null>(null)
 
-  // Redirect if already authenticated
+  // Get redirect parameter from URL for use in login/register calls
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/")
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const redirect = params.get('redirect')
+      if (redirect) {
+        setRedirectPath(redirect)
+      }
     }
-  }, [isAuthenticated, router])
+  }, [])
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -86,13 +91,15 @@ export default function AuthPage() {
 
     try {
       if (activeTab === "login") {
-        await login(formData.email, formData.password)
+        // Pass redirect path to login function
+        await login(formData.email, formData.password, redirectPath || undefined)
       } else {
+        // For registration, use redirect option
         await register({
           email: formData.email,
           password: formData.password,
           name: formData.name,
-        })
+        }, { redirect: redirectPath || false })
       }
     } catch (error) {
       setError(error instanceof Error ? error.message : "Authentication failed")
