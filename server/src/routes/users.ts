@@ -176,7 +176,6 @@ router.get("/",
 
       // Normalize metadata - ensure it's always an object (not string) for consistent frontend handling
       const normalizedUsers = result.rows.map((row: any) => {
-        const originalMetadata = row.metadata
         if (row.metadata) {
           // If metadata is a string, parse it; if it's already an object, use it as-is
           if (typeof row.metadata === 'string') {

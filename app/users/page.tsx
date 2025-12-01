@@ -1469,7 +1469,7 @@ export default function UsersAndRoles() {
               <Label htmlFor="edit-role" className="text-sm font-semibold">
                 Role
               </Label>
-              <Select
+                <Select
                 value={ROLE_DISPLAY_NAMES[editFormData.role] || editFormData.role}
                 onValueChange={(value) => {
                   const backendRole = DISPLAY_TO_ROLE[value] || value
@@ -1477,7 +1477,7 @@ export default function UsersAndRoles() {
                   // Warn if admin/super_admin is trying to change their own role
                   const userRole = user?.role?.toLowerCase()
                   const isAdminOrSuperAdmin = userRole === "admin" || userRole === "super_admin"
-                  if (user && editingUser && editingUser.id === user.id && isAdminOrSuperAdmin && backendRole !== user.role) {
+                  if (editingUser && editingUser.id === user?.id && isAdminOrSuperAdmin && backendRole !== user.role) {
                     if (!confirm("⚠️ WARNING: Changing your own role from Admin will remove your admin access!\n\nYou will lose access to:\n- User management\n- System configuration\n- Admin-only features\n\nConsider creating a separate CCB user account instead.\n\nDo you want to continue?")) {
                       return
                     }
@@ -1485,7 +1485,7 @@ export default function UsersAndRoles() {
                   
                   setEditFormData({ ...editFormData, role: backendRole })
                 }}
-                disabled={user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin")}
+                disabled={editingUser && editingUser.id === user?.id && (user.role === "admin" || user.role === "super_admin")}
               >
                 <SelectTrigger className="mt-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 transition-colors">
                   <SelectValue placeholder="Select role" />
@@ -1498,7 +1498,7 @@ export default function UsersAndRoles() {
                   ))}
                 </SelectContent>
               </Select>
-              {user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin") && (
+              {editingUser && editingUser.id === user?.id && (user.role === "admin" || user.role === "super_admin") && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
                   ⚠️ You cannot change your own role from Admin. Create a separate CCB user account instead.
                 </p>
@@ -1510,18 +1510,18 @@ export default function UsersAndRoles() {
                 checked={editFormData.is_active}
                 onCheckedChange={(checked) => {
                   // Prevent admins from deactivating themselves
-                  if (user && editingUser && editingUser.id === user.id && user.role === "admin" && !checked) {
+                  if (editingUser && editingUser.id === user?.id && user.role === "admin" && !checked) {
                     toast.error("Cannot deactivate your own account. Please have another admin make this change.")
                     return
                   }
                   setEditFormData({ ...editFormData, is_active: checked })
                 }}
-                disabled={user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin")}
+                disabled={editingUser && editingUser.id === user?.id && (user.role === "admin" || user.role === "super_admin")}
               />
               <Label htmlFor="edit-active" className="text-sm font-semibold">
                 Active User
               </Label>
-              {user && editingUser && editingUser.id === user.id && (user.role === "admin" || user.role === "super_admin") && (
+              {editingUser && editingUser.id === user?.id && (user.role === "admin" || user.role === "super_admin") && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 ml-2">
                   ⚠️ Cannot deactivate your own account
                 </p>

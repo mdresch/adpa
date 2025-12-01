@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/contexts/AuthContext';
@@ -24,7 +24,6 @@ import {
   Shield,
   Zap,
   Users,
-  Building2,
   Rocket,
   ArrowDown,
 } from 'lucide-react';

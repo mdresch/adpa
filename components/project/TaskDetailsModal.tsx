@@ -150,7 +150,7 @@ export function TaskDetailsModal({
                   </>
                 )}
                 <TaskStatusBadge status={task.status} />
-                {(task.priority || task.priority) && (
+                {(task.priority) && (
                   <>
                     <span className="text-muted-foreground">•</span>
                     <Badge 
@@ -166,7 +166,7 @@ export function TaskDetailsModal({
                     </Badge>
                   </>
                 )}
-                {(task.phase || task.phase) && (
+                {(task.phase) && (
                   <>
                     <span className="text-muted-foreground">•</span>
                     <Badge variant="secondary">{task.phase}</Badge>
