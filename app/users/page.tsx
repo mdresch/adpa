@@ -443,21 +443,38 @@ export default function UsersAndRoles() {
       
       // Helper to safely extract string from nested object
       const extractString = (obj: any, ...paths: string[]): string | null => {
+        // Defensive helper to walk known-safe paths on error objects
+        const isDangerousKey = (key: string) =>
+          key === "__proto__" || key === "prototype" || key === "constructor"
+
         for (const path of paths) {
-          const keys = path.split('.')
-          let value = obj
+          const keys = path.split(".")
+          let value: unknown = obj
+
           for (const key of keys) {
-            if (value && typeof value === 'object' && key in value) {
-              value = value[key]
+            if (isDangerousKey(key)) {
+              value = null
+              break
+            }
+
+            if (
+              value &&
+              typeof value === "object" &&
+              Object.prototype.hasOwnProperty.call(value, key)
+            ) {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              value = (value as any)[key]
             } else {
               value = null
               break
             }
           }
-          if (typeof value === 'string' && value) {
+
+          if (typeof value === "string" && value) {
             return value
           }
         }
+
         return null
       }
       
