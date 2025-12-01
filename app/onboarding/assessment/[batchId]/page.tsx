@@ -141,8 +141,11 @@ export default function AssessmentResultsPage() {
   const [loadingDocumentDetails, setLoadingDocumentDetails] = useState(false);
 
   useEffect(() => {
-    loadAssessment();
-  }, [batchId]);
+    if (!isAuthenticated || !batchId) {
+      return;
+    }
+    void loadAssessment();
+  }, [batchId, isAuthenticated]);
 
   // Handler for clicking on a document type
   const handleDocumentTypeClick = async (documentType: string) => {
@@ -678,7 +681,7 @@ export default function AssessmentResultsPage() {
 
   return (
     <div 
-      className="container mx-auto p-6 max-w-7xl min-h-screen"
+      className="container mx-auto p-6 max-w-7xl min-h-screen assessment-dark-theme"
       style={{ 
         background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
       }}

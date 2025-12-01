@@ -34,7 +34,8 @@
       "@/middleware/*": ["middleware/*"],
       "@/routes/*": ["routes/*"],
       "@/services/*": ["services/*"],
-      "@/utils/*": ["utils/*"]
+      "@/utils/*": ["utils/*"],
+      "@/types/*": ["types/*"]
     },
     "typeRoots": ["./node_modules/@types"],
     "types": ["node", "jest"]

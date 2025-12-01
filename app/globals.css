@@ -69,7 +69,7 @@
 }
 
 /* Custom tab styles for dark theme assessment page */
-button[data-state="active"] {
+.assessment-dark-theme button[data-state="active"] {
   background-color: #1a2452 !important;
   color: #e8edf7 !important;
 }

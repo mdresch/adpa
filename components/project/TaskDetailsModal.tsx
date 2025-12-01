@@ -20,6 +20,7 @@ import { TaskDependenciesView } from "./TaskDependenciesView"
 import { TaskHoursView } from "./TaskHoursView"
 import { TaskSourceView } from "./TaskSourceView"
 import { TaskChecklistPanel } from "@/components/capacity"
+import { getApiUrl } from "@/lib/api-url"
 import { AlertCircle, FileText, Briefcase, ClipboardList } from "lucide-react"
 
 interface TaskDetailsModalProps {
@@ -37,6 +38,7 @@ export function TaskDetailsModal({
 }: TaskDetailsModalProps) {
   const { task, loading, error, refetch } = useTask(taskId)
   const [activeTab, setActiveTab] = useState<string>('details')
+  const [checklistUsers, setChecklistUsers] = useState<{ id: string; name: string }[]>([])
 
   // Refetch when modal opens
   useEffect(() => {
@@ -44,6 +46,46 @@ export function TaskDetailsModal({
       refetch()
     }
   }, [open, taskId, refetch])
+
+  // Load users for checklist assignment when modal opens
+  useEffect(() => {
+    if (!open) return
+
+    const fetchUsers = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+        if (!token) return
+
+        const response = await fetch(getApiUrl("/users"), {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+
+        if (!response.ok) return
+
+        const data = await response.json()
+        const usersArray = Array.isArray(data?.users)
+          ? data.users
+          : Array.isArray(data?.data)
+          ? data.data
+          : Array.isArray(data)
+          ? data
+          : []
+
+        const mapped = usersArray
+          .map((u: any) => ({
+            id: u.id,
+            name: u.name || u.display_name || u.email || "Unnamed user",
+          }))
+          .filter((u: { id?: string; name: string }) => !!u.id)
+
+        setChecklistUsers(mapped)
+      } catch (err) {
+        console.error("[TASK DETAILS] Failed to load checklist users", err)
+      }
+    }
+
+    void fetchUsers()
+  }, [open])
 
   // Reset to details tab when task changes
   useEffect(() => {
@@ -210,7 +252,8 @@ export function TaskDetailsModal({
               {task.id && (
                 <TaskChecklistPanel 
                   taskId={task.id} 
-                  taskName={task.task_name}
+                  taskName={task.task_name || task.taskName}
+                  users={checklistUsers}
                   onUpdate={handleTaskUpdate}
                 />
               )}
