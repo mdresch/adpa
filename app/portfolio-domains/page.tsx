@@ -1,6 +1,9 @@
 import React from 'react';
 import { DomainList } from '@/components/portfolioDomains/DomainList';
 
+// This page always fetches fresh data from the API (no static optimization)
+export const dynamic = 'force-dynamic';
+
 interface PortfolioDomain {
   id: string;
   name: string;
@@ -9,7 +12,8 @@ interface PortfolioDomain {
 
 async function fetchDomains(): Promise<PortfolioDomain[]> {
   try {
-    const url = `${process.env.NEXT_PUBLIC_API_URL || ''}/portfolio-domains`;
+    const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/\/+$/, '');
+    const url = `${baseUrl}/portfolio-domains`;
     console.log('Fetching from:', url);
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
