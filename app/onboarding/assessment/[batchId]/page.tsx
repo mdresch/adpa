@@ -975,28 +975,31 @@ export default function AssessmentResultsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-6">
-                {[1, 2, 3, 4, 5].map(level => (
-                  <div key={level} className="flex items-center gap-4">
-                    <div className="w-24 font-medium" style={{ color: maturityTheme.colors.text.primary }}>
-                      Level {level}
+                {(() => {
+                  const roundedLevel = Math.round(assessment.overallMaturityLevel || 0);
+                  return [1, 2, 3, 4, 5].map(level => (
+                    <div key={level} className="flex items-center gap-4">
+                      <div className="w-24 font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                        Level {level}
+                      </div>
+                      <div className="flex-1">
+                        <Progress 
+                          value={assessment.overallMaturityLevel >= level ? 100 : 0}
+                          className="h-8"
+                        />
+                      </div>
+                      {roundedLevel === level && (
+                        <Badge style={{ 
+                          backgroundColor: maturityTheme.colors.info.bg,
+                          color: maturityTheme.colors.info.text,
+                          borderColor: maturityTheme.colors.info.border
+                        }}>
+                          Current
+                        </Badge>
+                      )}
                     </div>
-                    <div className="flex-1">
-                      <Progress 
-                        value={assessment.overallMaturityLevel >= level ? 100 : 0}
-                        className="h-8"
-                      />
-                    </div>
-                    {assessment.overallMaturityLevel === level && (
-                      <Badge style={{ 
-                        backgroundColor: maturityTheme.colors.info.bg,
-                        color: maturityTheme.colors.info.text,
-                        borderColor: maturityTheme.colors.info.border
-                      }}>
-                        Current
-                      </Badge>
-                    )}
-                  </div>
-                ))}
+                  ));
+                })()}
               </div>
             </CardContent>
           </MaturityCard>

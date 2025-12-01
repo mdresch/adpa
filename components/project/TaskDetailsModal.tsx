@@ -21,7 +21,7 @@ import { TaskHoursView } from "./TaskHoursView"
 import { TaskSourceView } from "./TaskSourceView"
 import { TaskChecklistPanel } from "@/components/capacity"
 import { getApiUrl } from "@/lib/api-url"
-import { AlertCircle, FileText, Briefcase, ClipboardList } from "lucide-react"
+import { AlertCircle, FileText, ClipboardList } from "lucide-react"
 
 interface TaskDetailsModalProps {
   taskId: string | null

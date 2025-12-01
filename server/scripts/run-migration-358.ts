@@ -1,6 +1,5 @@
 import dotenv from "dotenv"
 import { getDatabasePool, connectDatabase } from "../src/database/connection"
-import { logger } from "../src/utils/logger"
 import * as fs from "fs"
 import * as path from "path"
 

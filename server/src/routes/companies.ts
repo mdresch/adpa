@@ -3,7 +3,7 @@ import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requireRole } from "../middleware/auth"
 import { validate, validateParams, validateQuery, schemas } from "../middleware/validation"
-import { logger, childLogger } from "../utils/logger"
+import { childLogger } from "../utils/logger"
 import { cache } from "../utils/redis"
 import { v4 as uuidv4 } from "uuid"
 

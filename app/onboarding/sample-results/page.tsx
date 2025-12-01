@@ -1,9 +1,8 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { maturityTheme, getMaturityColor } from '@/lib/theme/maturity-portal-theme';
+import { maturityTheme } from '@/lib/theme/maturity-portal-theme';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +10,11 @@ import { Progress } from '@/components/ui/progress';
 import { MaturityScore } from '@/components/onboarding/MaturityScore';
 import {
   FileText,
-  Download,
   ArrowLeft,
   TrendingUp,
   Building,
   Sparkles,
   CheckCircle,
-  AlertCircle,
   Target,
   BarChart3,
   Lightbulb,
