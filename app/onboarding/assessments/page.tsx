@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { getApiUrl } from '@/lib/api-url';
 import { MaturityCard } from '@/components/onboarding/MaturityCard';
 import { MaturityScore } from '@/components/onboarding/MaturityScore';
 import { maturityTheme, getMaturityColor } from '@/lib/theme/maturity-portal-theme';
@@ -109,7 +110,7 @@ export default function AssessmentsListPage() {
     
     try {
       const token = localStorage.getItem('auth_token');
-      const response = await fetch('/api/assessment/list', {
+      const response = await fetch(getApiUrl('/assessment/list'), {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'

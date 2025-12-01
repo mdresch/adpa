@@ -175,6 +175,7 @@ export function RegistrationDialog({ open, onOpenChange, onSuccess }: Registrati
               onChange={handleInputChange}
               required
               disabled={loading}
+              autoComplete="name"
             />
           </div>
 
@@ -192,6 +193,7 @@ export function RegistrationDialog({ open, onOpenChange, onSuccess }: Registrati
               onChange={handleInputChange}
               required
               disabled={loading}
+              autoComplete="email"
             />
           </div>
 
@@ -209,6 +211,7 @@ export function RegistrationDialog({ open, onOpenChange, onSuccess }: Registrati
               onChange={handleInputChange}
               required
               disabled={loading}
+              autoComplete="organization"
             />
           </div>
 
@@ -228,6 +231,7 @@ export function RegistrationDialog({ open, onOpenChange, onSuccess }: Registrati
                 required
                 disabled={loading}
                 className="pr-10"
+                autoComplete="new-password"
               />
               <Button
                 type="button"
@@ -287,6 +291,7 @@ export function RegistrationDialog({ open, onOpenChange, onSuccess }: Registrati
                 required
                 disabled={loading}
                 className="pr-10"
+                autoComplete="new-password"
               />
               <Button
                 type="button"

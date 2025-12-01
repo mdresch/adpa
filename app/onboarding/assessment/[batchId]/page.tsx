@@ -33,6 +33,7 @@ import {
   X
 } from '@/components/ui/icons-shim';
 import apiClient from '@/lib/api';
+import { getApiBaseUrl } from '@/lib/api-url';
 
 interface AssessmentData {
   batchId: string;
@@ -100,6 +101,8 @@ interface AssessmentData {
   };
 }
 
+type Gap = AssessmentData['gaps'][number];
+
 export default function AssessmentResultsPage() {
   const router = useRouter();
   const params = useParams();
@@ -139,6 +142,12 @@ export default function AssessmentResultsPage() {
   const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
   const [documentQualityAudit, setDocumentQualityAudit] = useState<any | null>(null);
   const [loadingDocumentDetails, setLoadingDocumentDetails] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [pendingGapDocument, setPendingGapDocument] = useState<{
+    documentType: string;
+    documentTitle?: string;
+  } | null>(null);
+  const [selectedBenchmarkIndustry, setSelectedBenchmarkIndustry] = useState<string>('industry');
 
   useEffect(() => {
     if (!isAuthenticated || !batchId) {
@@ -160,7 +169,8 @@ export default function AssessmentResultsPage() {
         return;
       }
 
-      const response = await fetch(`/api/assessment/batch/${batchId}/documents?type=${encodeURIComponent(documentType)}`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/assessment/batch/${batchId}/documents?type=${encodeURIComponent(documentType)}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -175,6 +185,21 @@ export default function AssessmentResultsPage() {
       const result = await response.json();
       setDocumentsOfType(result.data || []);
       setDocumentTypeAverages(result.averages || null);
+
+      // If this request was triggered from a gap click, attempt to auto-open the matching document
+      if (pendingGapDocument && pendingGapDocument.documentType === documentType) {
+        const matchingDoc = (result.data || []).find(
+          (doc: any) =>
+            doc.title === pendingGapDocument.documentTitle ||
+            doc.originalFilename === pendingGapDocument.documentTitle
+        );
+
+        if (matchingDoc) {
+          void handleDocumentClick(matchingDoc);
+        }
+
+        setPendingGapDocument(null);
+      }
     } catch (error: any) {
       console.error('Error fetching documents:', error);
       toast.error('Failed to load documents');
@@ -182,6 +207,20 @@ export default function AssessmentResultsPage() {
     } finally {
       setLoadingDocuments(false);
     }
+  };
+
+  const handleGapClick = (gap: Gap) => {
+    if (!gap.documentType) {
+      return;
+    }
+
+    // Switch to Documents tab and open the related document type
+    setActiveTab('documents');
+    setPendingGapDocument({
+      documentType: gap.documentType,
+      documentTitle: gap.documentTitle,
+    });
+    void handleDocumentTypeClick(gap.documentType);
   };
 
   // Handler for clicking on a specific document
@@ -197,7 +236,8 @@ export default function AssessmentResultsPage() {
         return;
       }
 
-      const response = await fetch(`/api/documents/${document.id}/quality-audit`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/documents/${document.id}/quality-audit`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -233,7 +273,8 @@ export default function AssessmentResultsPage() {
         return;
       }
       
-      const response = await fetch(`/api/assessment/batch/${batchId}`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/assessment/batch/${batchId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -287,7 +328,8 @@ export default function AssessmentResultsPage() {
         formData.append('files', file);
       });
 
-      const response = await fetch(`/api/onboarding/batch/${batchId}/add-documents`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/onboarding/batch/${batchId}/add-documents`, {
         method: 'POST',
         body: formData,
         credentials: 'include'
@@ -345,7 +387,8 @@ export default function AssessmentResultsPage() {
         return;
       }
 
-      const response = await fetch(`/api/assessment/batch/${batchId}/regenerate`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/assessment/batch/${batchId}/regenerate`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -389,7 +432,8 @@ export default function AssessmentResultsPage() {
         return;
       }
       
-      const response = await fetch(`/api/assessment/${batchId}/export?format=${format}`, {
+      const apiBaseUrl = getApiBaseUrl();
+      const response = await fetch(`${apiBaseUrl}/assessment/${batchId}/export?format=${format}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -680,14 +724,15 @@ export default function AssessmentResultsPage() {
   }
 
   return (
-    <div 
-      className="container mx-auto p-6 max-w-7xl min-h-screen assessment-dark-theme"
-      style={{ 
+    <div
+      className="min-h-screen"
+      style={{
         background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
       }}
     >
-      {/* Breadcrumb Navigation */}
-      <nav className="mb-6" aria-label="Breadcrumb">
+      <div className="container mx-auto p-6 max-w-7xl assessment-dark-theme">
+        {/* Breadcrumb Navigation */}
+        <nav className="mb-6" aria-label="Breadcrumb">
         <ol className="flex items-center space-x-2 text-sm">
           <li>
             <button
@@ -713,10 +758,10 @@ export default function AssessmentResultsPage() {
             Assessment Details
           </li>
         </ol>
-      </nav>
+        </nav>
 
-      {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
             Portfolio Maturity Assessment
@@ -796,10 +841,10 @@ export default function AssessmentResultsPage() {
             Export PDF
           </Button>
         </div>
-      </div>
+        </div>
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-4 mb-8">
+        {/* Summary Cards */}
+        <div className="grid gap-4 md:grid-cols-4 mb-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -888,10 +933,14 @@ export default function AssessmentResultsPage() {
             </CardContent>
           </MaturityCard>
         </motion.div>
-      </div>
+        </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-4">
+        {/* Tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => setActiveTab(value)}
+          className="space-y-4"
+        >
         <TabsList 
           style={{ 
             backgroundColor: maturityTheme.colors.background.tertiary,
@@ -1246,12 +1295,13 @@ export default function AssessmentResultsPage() {
                   return (
                     <div 
                       key={idx} 
-                      className="rounded-lg p-4"
+                      className="rounded-lg p-4 cursor-pointer"
                       style={{ 
                         borderColor: maturityTheme.colors.border.default,
                         borderWidth: '1px',
                         backgroundColor: maturityTheme.colors.background.tertiary,
                       }}
+                      onClick={() => handleGapClick(gap)}
                     >
                       <div className="flex items-start justify-between mb-2">
                         <div className="flex items-center gap-2">
@@ -1360,10 +1410,31 @@ export default function AssessmentResultsPage() {
         <TabsContent value="benchmarks" className="space-y-4">
           <MaturityCard variant="elevated">
             <CardHeader>
-              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Industry Benchmarks</CardTitle>
-              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
-                You're in the {assessment.benchmarks?.percentile || 0}th percentile
-              </CardDescription>
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Benchmarks</CardTitle>
+                  <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                    You're in the {assessment.benchmarks?.percentile || 0}th percentile compared to your selected benchmark.
+                  </CardDescription>
+                </div>
+                <div className="flex flex-col items-start gap-1">
+                  <span className="text-xs uppercase tracking-wide" style={{ color: maturityTheme.colors.text.muted }}>
+                    Compare against
+                  </span>
+                  <select
+                    value={selectedBenchmarkIndustry}
+                    onChange={(e) => setSelectedBenchmarkIndustry(e.target.value)}
+                    className="text-sm rounded-md px-3 py-2 border bg-transparent"
+                    style={{
+                      borderColor: maturityTheme.colors.border.default,
+                      color: maturityTheme.colors.text.primary,
+                    }}
+                  >
+                    <option value="industry">Your Industry Average</option>
+                    <option value="top">Top Performers</option>
+                  </select>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
@@ -1383,10 +1454,13 @@ export default function AssessmentResultsPage() {
                   style={{ backgroundColor: maturityTheme.colors.background.tertiary }}
                 >
                   <div className="text-3xl font-bold" style={{ color: maturityTheme.colors.text.primary }}>
-                    {assessment.benchmarks?.industryAverage?.toFixed(1) || '0.0'}
+                    {(selectedBenchmarkIndustry === 'industry'
+                      ? assessment.benchmarks?.industryAverage
+                      : assessment.benchmarks?.topPerformers
+                    )?.toFixed(1) || '0.0'}
                   </div>
                   <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
-                    Industry Average
+                    {selectedBenchmarkIndustry === 'industry' ? 'Industry Average' : 'Top Performers'}
                   </div>
                 </div>
                 <div 
@@ -1411,7 +1485,7 @@ export default function AssessmentResultsPage() {
             <CardHeader>
               <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Return on Investment</CardTitle>
               <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
-                Potential value from improving documentation maturity
+                Expected benefits and ROI from improving documentation maturity with ADPA
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1428,7 +1502,7 @@ export default function AssessmentResultsPage() {
                     ${assessment.roiMetrics?.savings?.toLocaleString() || '0'}
                   </div>
                   <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
-                    Potential Savings
+                    Annual Savings
                   </div>
                 </div>
                 <div 
@@ -1473,10 +1547,81 @@ export default function AssessmentResultsPage() {
                     ${assessment.roiMetrics?.improvedCost?.toLocaleString() || '0'}
                   </div>
                   <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
-                    Target Cost
+                    Target Annual Cost
                   </div>
                 </div>
               </div>
+
+              {assessment.assessment_data && (assessment as any).assessment_data?.roi_calculation && (
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  {(() => {
+                    const roi = (assessment as any).assessment_data.roi_calculation as {
+                      estimated_hours_saved?: number;
+                      estimated_cost_savings?: number;
+                      potential_improvement_value?: number;
+                      payback_period_months?: number;
+                    };
+                    return (
+                      <>
+                        <div
+                          className="p-4 rounded-lg"
+                          style={{
+                            borderColor: maturityTheme.colors.border.default,
+                            borderWidth: '1px',
+                            backgroundColor: maturityTheme.colors.background.tertiary,
+                          }}
+                        >
+                          <div className="text-sm font-medium mb-1" style={{ color: maturityTheme.colors.text.primary }}>
+                            Estimated Hours Saved
+                          </div>
+                          <div className="text-xl font-bold" style={{ color: maturityTheme.colors.text.primary }}>
+                            {roi.estimated_hours_saved?.toLocaleString() || '0'} hrs
+                          </div>
+                          <div className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                            Per year across all assessed documents
+                          </div>
+                        </div>
+                        <div
+                          className="p-4 rounded-lg"
+                          style={{
+                            borderColor: maturityTheme.colors.border.default,
+                            borderWidth: '1px',
+                            backgroundColor: maturityTheme.colors.background.tertiary,
+                          }}
+                        >
+                          <div className="text-sm font-medium mb-1" style={{ color: maturityTheme.colors.text.primary }}>
+                            Estimated Cost Savings
+                          </div>
+                          <div className="text-xl font-bold" style={{ color: maturityTheme.colors.success.text }}>
+                            ${roi.estimated_cost_savings?.toLocaleString() || '0'}
+                          </div>
+                          <div className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                            Based on time saved at typical consulting rates
+                          </div>
+                        </div>
+                        <div
+                          className="p-4 rounded-lg"
+                          style={{
+                            borderColor: maturityTheme.colors.border.default,
+                            borderWidth: '1px',
+                            backgroundColor: maturityTheme.colors.background.tertiary,
+                          }}
+                        >
+                          <div className="text-sm font-medium mb-1" style={{ color: maturityTheme.colors.text.primary }}>
+                            Additional Improvement Value
+                          </div>
+                          <div className="text-xl font-bold" style={{ color: maturityTheme.colors.info.text }}>
+                            ${roi.potential_improvement_value?.toLocaleString() || '0'}
+                          </div>
+                          <div className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                            Upside from closing remaining quality gaps
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
             </CardContent>
           </MaturityCard>
         </TabsContent>
@@ -1606,7 +1751,8 @@ export default function AssessmentResultsPage() {
             </CardContent>
           </MaturityCard>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
 
       {/* Document Type Dialog - Shows documents of selected type */}
       <Dialog open={documentTypeDialogOpen} onOpenChange={setDocumentTypeDialogOpen}>
