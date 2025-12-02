@@ -15,7 +15,8 @@ import { Database, Sparkles, CheckCircle, XCircle, Loader2, Info, AlertCircle, U
 import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield, Activity } from "lucide-react"
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
-import { DOMAIN_KPI_KEYS, type DomainKpiDefinition, type PmbokDomain } from "@/types/pmbok"
+import { DOMAIN_KPI_KEYS, type DomainKpiDefinition, type PmbokDomain, PMBOK_DOMAINS } from "@/types/pmbok"
+import { ENTITY_DOMAIN_WEIGHTS, getEntityWeights, calculateWeightedCount, type EntityDomainWeight } from "@/types/entity-domain-weights"
 
 interface ProjectDataExtractionProps {
   projectId: string
@@ -172,6 +173,97 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     } finally {
       setLoadingAllDocuments(false)
     }
+  }
+
+  // ========================================================================
+  // Weighted Entity Allocation Functions
+  // ========================================================================
+  
+  /**
+   * Calculate weighted entity count for a specific domain
+   * Distributes entity counts across domains based on weight allocations
+   */
+  const calculateWeightedDomainCount = (domain: PmbokDomain, counts: EntityCounts | null): number => {
+    if (!counts) return 0
+    
+    let weightedTotal = 0
+    
+    // Iterate through all entity types in entityCounts
+    Object.entries(counts).forEach(([entityKey, count]) => {
+      if (count === 0) return
+      
+      // Get weight allocations for this entity type
+      const weights = getEntityWeights(entityKey)
+      
+      // Find the weight for this specific domain
+      const domainWeight = weights.find(w => w.domain === domain)
+      
+      if (domainWeight) {
+        // Add weighted count to domain total
+        weightedTotal += calculateWeightedCount(count, domainWeight.weight)
+      }
+    })
+    
+    return weightedTotal
+  }
+  
+  /**
+   * Get entity weight info for display (Primary/Secondary badge)
+   */
+  const getEntityWeightInfo = (entityKey: string, domain: PmbokDomain): {
+    weight: number
+    isPrimary: boolean
+    percentage: number
+  } | null => {
+    const weights = getEntityWeights(entityKey)
+    const domainWeight = weights.find(w => w.domain === domain)
+    
+    if (!domainWeight) return null
+    
+    return {
+      weight: domainWeight.weight,
+      isPrimary: domainWeight.isPrimary,
+      percentage: Math.round(domainWeight.weight * 100)
+    }
+  }
+  
+  /**
+   * Calculate total extracted entities (for validation)
+   */
+  const calculateTotalExtractedEntities = (counts: EntityCounts | null): number => {
+    if (!counts) return 0
+    return Object.values(counts).reduce((sum, count) => sum + count, 0)
+  }
+  
+  /**
+   * Validate weighted allocations match extracted total
+   */
+  const validateWeightedAllocations = (counts: EntityCounts | null): {
+    isValid: boolean
+    totalExtracted: number
+    totalWeighted: number
+    difference: number
+  } => {
+    if (!counts) {
+      return { isValid: true, totalExtracted: 0, totalWeighted: 0, difference: 0 }
+    }
+    
+    const totalExtracted = calculateTotalExtractedEntities(counts)
+    
+    // Calculate total weighted across all domains
+    const allDomains: PmbokDomain[] = [
+      ...PMBOK_DOMAINS
+    ]
+    
+    let totalWeighted = 0
+    allDomains.forEach(domain => {
+      totalWeighted += calculateWeightedDomainCount(domain, counts)
+    })
+    
+    const difference = totalExtracted - totalWeighted
+    const isValid = Math.abs(difference) < 0.01 // Allow tiny rounding error
+    
+    return { isValid, totalExtracted, totalWeighted, difference }
   }
 
   const fetchEntityCounts = async () => {
@@ -1860,8 +1952,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     </span>
                   </div>
                   {knowledgeDomains.map((domain) => {
-                    const domainEntityCounts = domain.entities.map(e => entityCounts?.[e as keyof EntityCounts] || 0)
-                    const totalCount = domainEntityCounts.reduce((sum, count) => sum + count, 0)
+                    // Calculate weighted count for this domain
+                    const weightedCount = calculateWeightedDomainCount(domain.pmbokDomain, entityCounts)
+                    const totalExtracted = calculateTotalExtractedEntities(entityCounts)
+                    const percentage = totalExtracted > 0 ? (weightedCount / totalExtracted) * 100 : 0
                     const DomainIcon = domain.icon
                     
                     return (
@@ -1877,20 +1971,34 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge variant={totalCount > 0 ? "default" : "outline"}>
-                              {totalCount} entities
+                            <Badge variant={weightedCount > 0 ? "default" : "outline"} className="font-mono">
+                              {weightedCount.toFixed(1)} entities
+                              {weightedCount > 0 && (
+                                <span className="ml-1 text-xs opacity-75">
+                                  ({percentage.toFixed(1)}%)
+                                </span>
+                              )}
                             </Badge>
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="px-3 pb-3">
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t mt-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t mt-2">
                             {domain.entities.map((entityKey) => {
                               const config = entityTypeConfig[entityKey]
                               if (!config) return null
                               const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
+                              const weightInfo = getEntityWeightInfo(entityKey, domain.pmbokDomain)
+                              
+                              // Skip if entity has no weight allocation for this domain
+                              if (!weightInfo || count === 0) return null
+                              
+                              const weightedCount = calculateWeightedCount(count, weightInfo.weight)
                               const isClickable = count > 0
                               const EntityIcon = config.icon
+                              const badgeVariant = weightInfo.isPrimary ? "default" : "secondary"
+                              const badgeIcon = weightInfo.isPrimary ? "⭐" : "◆"
+                              const badgeLabel = weightInfo.isPrimary ? "Primary" : "Secondary"
                               
                               return (
                                 <div
@@ -1902,13 +2010,19 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                                   }`}
                                   onClick={() => isClickable && fetchEntityDetails(entityKey)}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color}`} />
-                                    <span className="text-xs">{config.label}</span>
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className="text-base">{badgeIcon}</span>
+                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color} flex-shrink-0`} />
+                                    <span className="text-xs truncate">{config.label}</span>
                                   </div>
-                                  <Badge variant={isClickable ? "secondary" : "outline"} className="text-xs">
-                                    {count}
-                                  </Badge>
+                                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                    <Badge variant={badgeVariant} className="text-xs font-mono whitespace-nowrap">
+                                      {weightedCount.toFixed(1)}
+                                    </Badge>
+                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                      {badgeLabel} {weightInfo.percentage}%
+                                    </span>
+                                  </div>
                                 </div>
                               )
                             })}
@@ -1919,6 +2033,55 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       </Collapsible>
                     )
                   })}
+                  
+                  {/* Weighted Allocation Validation */}
+                  {entityCounts && (() => {
+                    const validation = validateWeightedAllocations(entityCounts)
+                    return (
+                      <Card className="mt-4 bg-muted/30">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {validation.isValid ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4 text-orange-600" />
+                              )}
+                              <span className="text-sm font-medium">
+                                {validation.isValid ? 'Allocation Validated' : 'Allocation Warning'}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-muted-foreground">Total Extracted</div>
+                              <div className="text-sm font-mono font-medium">
+                                {validation.totalExtracted} entities
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            {validation.isValid ? (
+                              <span className="text-green-600">
+                                ✓ Weighted distribution equals total extracted entities ({validation.totalWeighted.toFixed(1)} = {validation.totalExtracted})
+                              </span>
+                            ) : (
+                              <span className="text-orange-600">
+                                ⚠️ Allocation mismatch: {Math.abs(validation.difference).toFixed(2)} entity difference
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
+                            <p className="flex items-start gap-2">
+                              <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                              <span>
+                                Entities are distributed across domains based on relevance weights. 
+                                Primary allocations (⭐) show highest relevance; Secondary allocations (◆) show cross-domain relationships.
+                              </span>
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })()}
                 </TabsContent>
                 
                 {/* Project Phases / Focus Areas */}
