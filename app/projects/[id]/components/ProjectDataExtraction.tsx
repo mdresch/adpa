@@ -841,7 +841,7 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
       description: 'Decision-making, approvals, steering committees, and compliance',
       icon: Building2,
       color: 'bg-amber-600',
-      entities: ['governanceDecisions', 'approvalWorkflows', 'steeringCommittees', 'changeControlBoards', 'policyCompliance', 'complianceSecurity']
+      entities: ['governanceDecisions', 'approvalWorkflows', 'steeringCommittees', 'changeControlBoards', 'policyCompliance', 'complianceSecurity', 'developmentApproaches', 'phases', 'milestones', 'teamAgreements']
     },
     {
       key: 'scope_domain',

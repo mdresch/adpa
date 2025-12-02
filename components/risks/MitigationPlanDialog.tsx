@@ -175,9 +175,8 @@ export function MitigationPlanDialog({
     try {
       setIsSubmitting(true)
       
-      const payload = {
+      const basePayload = {
         ...data,
-        risk_id: plan?.risk_id || riskId,
         // Convert dates to ISO strings
         planned_start_date: data.planned_start_date || undefined,
         planned_completion_date: data.planned_completion_date || undefined,
@@ -196,11 +195,21 @@ export function MitigationPlanDialog({
       
       if (plan && plan.id && plan.id.trim() !== '') {
         // Update existing plan (has valid UUID)
-        await apiClient.put(`/mitigation-plans/${plan.id}`, payload)
+        // Backend requires 'id' in payload for updates, NOT 'risk_id'
+        const updatePayload = {
+          ...basePayload,
+          id: plan.id
+        }
+        await apiClient.put(`/mitigation-plans/${plan.id}`, updatePayload)
         toast.success('Mitigation plan updated successfully')
       } else {
         // Create new plan (no plan or empty ID)
-        await apiClient.post('/mitigation-plans', payload)
+        // Backend requires 'risk_id' for creates, NOT 'id'
+        const createPayload = {
+          ...basePayload,
+          risk_id: plan?.risk_id || riskId
+        }
+        await apiClient.post('/mitigation-plans', createPayload)
         toast.success('Mitigation plan created successfully')
       }
       
