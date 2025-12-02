@@ -16,7 +16,7 @@ import { Code, Users2, GitBranch, Briefcase, TrendingUp, BarChart3, Zap, Shield,
 import { apiClient } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { DOMAIN_KPI_KEYS, type DomainKpiDefinition, type PmbokDomain, PMBOK_DOMAINS } from "@/types/pmbok"
-import { ENTITY_DOMAIN_WEIGHTS, getEntityWeights, calculateWeightedCount, type EntityDomainWeight } from "@/types/entity-domain-weights"
+import { ENTITY_DOMAIN_WEIGHTS, getEntityWeights, calculateWeightedCount, type EntityDomainWeight, getEntityPhaseWeights, type ProjectPhase, type EntityPhaseWeight } from "@/types/entity-domain-weights"
 
 interface ProjectDataExtractionProps {
   projectId: string
@@ -262,6 +262,88 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
     
     const difference = totalExtracted - totalWeighted
     const isValid = Math.abs(difference) < 0.01 // Allow tiny rounding error
+    
+    return { isValid, totalExtracted, totalWeighted, difference }
+  }
+  
+  /**
+   * Calculate weighted entity count for a specific project phase
+   */
+  const calculateWeightedPhaseCount = (phase: ProjectPhase, counts: EntityCounts | null): number => {
+    if (!counts) return 0
+    
+    let weightedTotal = 0
+    
+    // Iterate through all entity types
+    Object.entries(counts).forEach(([entityKey, count]) => {
+      if (count === 0) return
+      
+      // Get phase weight allocations for this entity type
+      const weights = getEntityPhaseWeights(entityKey)
+      
+      // Find the weight for this specific phase
+      const phaseWeight = weights.find(w => w.phase === phase)
+      
+      if (phaseWeight) {
+        // Add weighted count to phase total
+        weightedTotal += calculateWeightedCount(count, phaseWeight.weight)
+      }
+    })
+    
+    return weightedTotal
+  }
+  
+  /**
+   * Get entity phase weight info for display
+   */
+  const getEntityPhaseWeightInfo = (entityKey: string, phase: ProjectPhase): {
+    weight: number
+    isPrimary: boolean
+    percentage: number
+  } | null => {
+    const weights = getEntityPhaseWeights(entityKey)
+    const phaseWeight = weights.find(w => w.phase === phase)
+    
+    if (!phaseWeight) return null
+    
+    return {
+      weight: phaseWeight.weight,
+      isPrimary: phaseWeight.isPrimary,
+      percentage: Math.round(phaseWeight.weight * 100)
+    }
+  }
+  
+  /**
+   * Validate phase weighted allocations match extracted total
+   */
+  const validatePhaseWeightedAllocations = (counts: EntityCounts | null): {
+    isValid: boolean
+    totalExtracted: number
+    totalWeighted: number
+    difference: number
+  } => {
+    if (!counts) {
+      return { isValid: true, totalExtracted: 0, totalWeighted: 0, difference: 0 }
+    }
+    
+    const totalExtracted = calculateTotalExtractedEntities(counts)
+    
+    // Calculate total weighted across all project phases
+    const allPhases: ProjectPhase[] = [
+      'initiating',
+      'planning',
+      'executing',
+      'monitoring_controlling',
+      'closing'
+    ]
+    
+    let totalWeighted = 0
+    allPhases.forEach(phase => {
+      totalWeighted += calculateWeightedPhaseCount(phase, counts)
+    })
+    
+    const difference = totalExtracted - totalWeighted
+    const isValid = Math.abs(difference) < 0.01
     
     return { isValid, totalExtracted, totalWeighted, difference }
   }
@@ -2095,8 +2177,10 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                     </span>
                   </div>
                   {projectPhases.map((phase) => {
-                    const phaseEntityCounts = phase.entities.map(e => entityCounts?.[e as keyof EntityCounts] || 0)
-                    const totalCount = phaseEntityCounts.reduce((sum, count) => sum + count, 0)
+                    // Calculate weighted count for this phase
+                    const weightedCount = calculateWeightedPhaseCount(phase.key as ProjectPhase, entityCounts)
+                    const totalExtracted = calculateTotalExtractedEntities(entityCounts)
+                    const percentage = totalExtracted > 0 ? (weightedCount / totalExtracted) * 100 : 0
                     const PhaseIcon = phase.icon
                     
                     return (
@@ -2112,20 +2196,35 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Badge variant={totalCount > 0 ? "default" : "outline"}>
-                              {totalCount} entities
+                            <Badge variant={weightedCount > 0 ? "default" : "outline"} className="font-mono">
+                              {weightedCount.toFixed(1)} entities
+                              {weightedCount > 0 && (
+                                <span className="ml-1 text-xs opacity-75">
+                                  ({percentage.toFixed(1)}%)
+                                </span>
+                              )}
                             </Badge>
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
                           </div>
                         </CollapsibleTrigger>
                         <CollapsibleContent className="px-3 pb-3">
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-2 pt-2 border-t mt-2">
-                            {phase.entities.map((entityKey) => {
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-2 border-t mt-2">
+                            {/* Show ALL entity types with their phase weights, not just phase.entities */}
+                            {Object.keys(entityTypeConfig).map((entityKey) => {
                               const config = entityTypeConfig[entityKey]
                               if (!config) return null
                               const count = entityCounts?.[entityKey as keyof EntityCounts] || 0
+                              const weightInfo = getEntityPhaseWeightInfo(entityKey, phase.key as ProjectPhase)
+                              
+                              // Skip if entity has no weight allocation for this phase or count is 0
+                              if (!weightInfo || count === 0 || weightInfo.weight === 0) return null
+                              
+                              const weightedCount = calculateWeightedCount(count, weightInfo.weight)
                               const isClickable = count > 0
                               const EntityIcon = config.icon
+                              const badgeVariant = weightInfo.isPrimary ? "default" : "secondary"
+                              const badgeIcon = weightInfo.isPrimary ? "⭐" : "◆"
+                              const badgeLabel = weightInfo.isPrimary ? "Primary" : "Secondary"
                               
                               return (
                                 <div
@@ -2137,13 +2236,19 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                                   }`}
                                   onClick={() => isClickable && fetchEntityDetails(entityKey)}
                                 >
-                                  <div className="flex items-center gap-2">
-                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color}`} />
-                                    <span className="text-xs">{config.label}</span>
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className="text-base">{badgeIcon}</span>
+                                    <EntityIcon className={`h-3.5 w-3.5 ${config.color} flex-shrink-0`} />
+                                    <span className="text-xs truncate">{config.label}</span>
                                   </div>
-                                  <Badge variant={isClickable ? "secondary" : "outline"} className="text-xs">
-                                    {count}
-                                  </Badge>
+                                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                                    <Badge variant={badgeVariant} className="text-xs font-mono whitespace-nowrap">
+                                      {weightedCount.toFixed(1)}
+                                    </Badge>
+                                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                      {badgeLabel} {weightInfo.percentage}%
+                                    </span>
+                                  </div>
                                 </div>
                               )
                             })}
@@ -2152,6 +2257,55 @@ export function ProjectDataExtraction({ projectId, documents }: ProjectDataExtra
                       </Collapsible>
                     )
                   })}
+                  
+                  {/* Phase Weighted Allocation Validation */}
+                  {entityCounts && (() => {
+                    const validation = validatePhaseWeightedAllocations(entityCounts)
+                    return (
+                      <Card className="mt-4 bg-muted/30">
+                        <CardContent className="pt-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {validation.isValid ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4 text-orange-600" />
+                              )}
+                              <span className="text-sm font-medium">
+                                {validation.isValid ? 'Phase Allocation Validated' : 'Phase Allocation Warning'}
+                              </span>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-muted-foreground">Total Extracted</div>
+                              <div className="text-sm font-mono font-medium">
+                                {validation.totalExtracted} entities
+                              </div>
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs text-muted-foreground">
+                            {validation.isValid ? (
+                              <span className="text-green-600">
+                                ✓ Phase distribution equals total extracted entities ({validation.totalWeighted.toFixed(1)} = {validation.totalExtracted})
+                              </span>
+                            ) : (
+                              <span className="text-orange-600">
+                                ⚠️ Phase allocation mismatch: {Math.abs(validation.difference).toFixed(2)} entity difference
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-3 pt-3 border-t text-xs text-muted-foreground">
+                            <p className="flex items-start gap-2">
+                              <Info className="h-3.5 w-3.5 flex-shrink-0 mt-0.5" />
+                              <span>
+                                Entities are distributed across project phases based on temporal weights showing WHEN they are active in the project lifecycle. 
+                                Primary allocations (⭐) show the phase where the entity is most active.
+                              </span>
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })()}
                 </TabsContent>
                 
                 {/* All Entities (Flat View) */}
