@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+// @ts-expect-error - useParams is available in Next.js 14
+import { useParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -72,11 +74,11 @@ interface AssessmentData {
     percentile: number;
   };
   roiMetrics: {
-    currentCost: number;
-    improvedCost: number;
-    savings: number;
-    roi: number;
-    paybackPeriod: string;
+    currentCost: number | string;
+    improvedCost: number | string;
+    savings: number | string;
+    roi: number | string;
+    paybackPeriod: string | number;
   };
   assessment_data?: {
     breakdown?: {
@@ -277,11 +279,11 @@ type Gap = AssessmentData['gaps'][number];
 
 export default function AssessmentResultsPage() {
   const router = useRouter();
-  const params = useParams();
   const { isAuthenticated, loading: authLoading } = useAuth();
+  const params = useParams<{ batchId: string }>();
   
   // Get batchId from route params
-  const batchId = params?.batchId as string || '';
+  const batchId = params?.batchId || '';
   
   // Require authentication - redirect to login if not authenticated
   useEffect(() => {
@@ -905,15 +907,15 @@ export default function AssessmentResultsPage() {
   }
 
   return (
-    <div
+    <div 
       className="min-h-screen"
-      style={{
+      style={{ 
         background: `linear-gradient(135deg, ${maturityTheme.colors.background.primary} 0%, ${maturityTheme.colors.background.secondary} 50%, ${maturityTheme.colors.background.tertiary} 100%)`,
       }}
     >
       <div className="container mx-auto p-6 max-w-7xl assessment-dark-theme">
-        {/* Breadcrumb Navigation */}
-        <nav className="mb-6" aria-label="Breadcrumb">
+      {/* Breadcrumb Navigation */}
+      <nav className="mb-6" aria-label="Breadcrumb">
         <ol className="flex items-center space-x-2 text-sm">
           <li>
             <button
@@ -939,10 +941,10 @@ export default function AssessmentResultsPage() {
             Assessment Details
           </li>
         </ol>
-        </nav>
+      </nav>
 
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
+      {/* Header */}
+      <div className="mb-8 flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
             Portfolio Maturity Assessment
@@ -1022,10 +1024,10 @@ export default function AssessmentResultsPage() {
             Export PDF
           </Button>
         </div>
-        </div>
+      </div>
 
-        {/* Summary Cards */}
-        <div className="grid gap-4 md:grid-cols-4 mb-8">
+      {/* Summary Cards */}
+      <div className="grid gap-4 md:grid-cols-4 mb-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1114,12 +1116,12 @@ export default function AssessmentResultsPage() {
             </CardContent>
           </MaturityCard>
         </motion.div>
-        </div>
+      </div>
 
-        {/* Tabs */}
+      {/* Tabs */}
         <Tabs
           value={activeTab}
-          onValueChange={(value) => setActiveTab(value)}
+          onValueChange={(value: string) => setActiveTab(value)}
           className="space-y-4"
         >
         <TabsList 
@@ -1696,10 +1698,10 @@ export default function AssessmentResultsPage() {
             <CardHeader>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Document Breakdown</CardTitle>
-                  <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
-                    {assessment.totalDocuments} documents assessed across {assessment.documentsByType?.length || 0} types
-                  </CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Document Breakdown</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                {assessment.totalDocuments} documents assessed across {assessment.documentsByType?.length || 0} types
+              </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <select
@@ -1780,7 +1782,7 @@ export default function AssessmentResultsPage() {
                         </Button>
                       </div>
                     ) : (
-                      <div className="space-y-2">
+              <div className="space-y-2">
                         {filteredDocs.map((doc, idx) => (
                   <div 
                     key={idx} 
@@ -1823,8 +1825,8 @@ export default function AssessmentResultsPage() {
                       <ChevronRight className="h-5 w-5" style={{ color: maturityTheme.colors.text.secondary }} />
                     </div>
                   </div>
-                        ))}
-                      </div>
+                ))}
+              </div>
                     )}
                   </>
                 );
@@ -1839,10 +1841,10 @@ export default function AssessmentResultsPage() {
             <CardHeader>
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Gap Analysis</CardTitle>
-                  <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
-                    {assessment.gaps?.length || 0} gaps identified requiring improvement
-                  </CardDescription>
+              <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Gap Analysis</CardTitle>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                {assessment.gaps?.length || 0} gaps identified requiring improvement
+              </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <select
@@ -1928,80 +1930,80 @@ export default function AssessmentResultsPage() {
                     </Button>
                   </div>
                 ) : (
-                  <div className="space-y-3">
+              <div className="space-y-3">
                     {filteredGaps.map((gap, idx) => {
-                      const priorityTheme = gap.priority === 'critical' ? maturityTheme.colors.error :
-                                           gap.priority === 'high' ? maturityTheme.colors.warning :
-                                           gap.priority === 'medium' ? maturityTheme.colors.info :
-                                           maturityTheme.colors.success;
-                      
-                      return (
-                        <div 
-                          key={idx} 
+                  const priorityTheme = gap.priority === 'critical' ? maturityTheme.colors.error :
+                                       gap.priority === 'high' ? maturityTheme.colors.warning :
+                                       gap.priority === 'medium' ? maturityTheme.colors.info :
+                                       maturityTheme.colors.success;
+                  
+                  return (
+                    <div 
+                      key={idx} 
                           className="rounded-lg p-4 cursor-pointer"
-                          style={{ 
-                            borderColor: maturityTheme.colors.border.default,
-                            borderWidth: '1px',
-                            backgroundColor: maturityTheme.colors.background.tertiary,
-                          }}
+                      style={{ 
+                        borderColor: maturityTheme.colors.border.default,
+                        borderWidth: '1px',
+                        backgroundColor: maturityTheme.colors.background.tertiary,
+                      }}
                           onClick={() => handleGapClick(gap)}
-                        >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <Badge style={{
-                                backgroundColor: priorityTheme.bg,
-                                color: priorityTheme.text,
-                                borderColor: priorityTheme.border,
-                              }}>
-                                {gap.priority}
-                              </Badge>
-                              <span className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
-                                {gap.documentType}
-                              </span>
-                              {gap.documentTitle && (
-                                <span className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
-                                  ({gap.documentTitle})
-                                </span>
-                              )}
-                              {gap.issueCategory && (
-                                <Badge style={{
-                                  backgroundColor: maturityTheme.colors.background.tertiary,
-                                  color: maturityTheme.colors.text.secondary,
-                                }}>
-                                  {gap.issueCategory}
-                                </Badge>
-                              )}
-                            </div>
+                    >
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Badge style={{
+                            backgroundColor: priorityTheme.bg,
+                            color: priorityTheme.text,
+                            borderColor: priorityTheme.border,
+                          }}>
+                            {gap.priority}
+                          </Badge>
+                          <span className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                            {gap.documentType}
+                          </span>
+                          {gap.documentTitle && (
+                            <span className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                              ({gap.documentTitle})
+                            </span>
+                          )}
+                          {gap.issueCategory && (
+                            <Badge style={{
+                              backgroundColor: maturityTheme.colors.background.tertiary,
+                              color: maturityTheme.colors.text.secondary,
+                            }}>
+                              {gap.issueCategory}
+                            </Badge>
+                          )}
+                        </div>
                         <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
                           Level {Math.min(5, gap.currentLevel)} → {Math.min(5, gap.targetLevel)}
                         </div>
-                          </div>
-                          <p className="text-sm mb-2" style={{ color: maturityTheme.colors.text.secondary }}>
-                            {gap.description}
-                          </p>
-                          <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
-                            Estimated effort: {gap.estimatedEffort || gap.estimated_improvement_points ? `${gap.estimated_improvement_points?.toFixed(1)} points` : 'Medium'}
-                          </div>
-                          {gap.recommendations && gap.recommendations.length > 0 && (
-                            <ul className="mt-2 text-sm space-y-1">
-                              {gap.recommendations.map((rec, i) => (
-                                <li key={i} className="flex items-start gap-2">
-                                  <CheckCircle className="h-4 w-4 mt-0.5" style={{ color: maturityTheme.colors.success.text }} />
-                                  <span style={{ color: maturityTheme.colors.text.primary }}>{rec}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          {gap.recommendation && !gap.recommendations && (
-                            <div className="mt-2 text-sm flex items-start gap-2">
+                      </div>
+                      <p className="text-sm mb-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                        {gap.description}
+                      </p>
+                      <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                        Estimated effort: {gap.estimatedEffort || gap.estimated_improvement_points ? `${gap.estimated_improvement_points?.toFixed(1)} points` : 'Medium'}
+                      </div>
+                      {gap.recommendations && gap.recommendations.length > 0 && (
+                        <ul className="mt-2 text-sm space-y-1">
+                          {gap.recommendations.map((rec, i) => (
+                            <li key={i} className="flex items-start gap-2">
                               <CheckCircle className="h-4 w-4 mt-0.5" style={{ color: maturityTheme.colors.success.text }} />
-                              <span style={{ color: maturityTheme.colors.text.primary }}>{gap.recommendation}</span>
-                            </div>
-                          )}
+                              <span style={{ color: maturityTheme.colors.text.primary }}>{rec}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {gap.recommendation && !gap.recommendations && (
+                        <div className="mt-2 text-sm flex items-start gap-2">
+                          <CheckCircle className="h-4 w-4 mt-0.5" style={{ color: maturityTheme.colors.success.text }} />
+                          <span style={{ color: maturityTheme.colors.text.primary }}>{gap.recommendation}</span>
                         </div>
-                      );
-                    })}
-                  </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
                 );
               })()}
             </CardContent>
@@ -2073,9 +2075,9 @@ export default function AssessmentResultsPage() {
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                   <CardTitle style={{ color: maturityTheme.colors.text.primary }}>Benchmarks</CardTitle>
-                  <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+              <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
                     You're in the {assessment.benchmarks?.percentile || 0}th percentile compared to the selected industry benchmark.
-                  </CardDescription>
+              </CardDescription>
                 </div>
                 <div className="flex flex-col items-start gap-1">
                   <span className="text-xs uppercase tracking-wide" style={{ color: maturityTheme.colors.text.muted }}>
@@ -2261,14 +2263,14 @@ export default function AssessmentResultsPage() {
                 const targetCost = assessment.roiMetrics?.improvedCost;
                 
                 // Check if values are meaningful (not null, undefined, 0, "0", "Calculating...", or empty string)
-                const hasSavings = savings != null && savings !== 0 && savings !== '0' && savings !== '';
-                const hasROI = roi != null && roi !== 0 && roi !== '0' && roi !== '';
+                const hasSavings = savings != null && Number(savings) !== 0 && savings !== '';
+                const hasROI = roi != null && Number(roi) !== 0 && roi !== '';
                 const hasPaybackPeriod = paybackPeriod != null && 
                   paybackPeriod !== 'Calculating...' && 
                   paybackPeriod !== '' && 
-                  paybackPeriod !== '0' &&
-                  paybackPeriod !== 0;
-                const hasTargetCost = targetCost != null && targetCost !== 0 && targetCost !== '0' && targetCost !== '';
+                  String(paybackPeriod) !== '0' &&
+                  Number(paybackPeriod) !== 0;
+                const hasTargetCost = targetCost != null && Number(targetCost) !== 0 && targetCost !== '';
                 
                 // If no meaningful values, hide the entire section
                 if (!hasSavings && !hasROI && !hasPaybackPeriod && !hasTargetCost) {
@@ -2276,71 +2278,71 @@ export default function AssessmentResultsPage() {
                 }
 
                 return (
-                  <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-4">
                     {hasSavings && (
-                      <div 
-                        className="text-center p-6 rounded-lg"
-                        style={{ 
-                          borderColor: maturityTheme.colors.border.default,
-                          borderWidth: '1px',
-                          backgroundColor: maturityTheme.colors.success.bg,
-                        }}
-                      >
-                        <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.success.text }}>
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.success.bg,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.success.text }}>
                           ${typeof savings === 'number' ? savings.toLocaleString() : savings}
-                        </div>
-                        <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                  </div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
                           Annual Savings
-                        </div>
-                      </div>
+                  </div>
+                </div>
                     )}
                     {hasROI && (
-                      <div 
-                        className="text-center p-6 rounded-lg"
-                        style={{ 
-                          borderColor: maturityTheme.colors.border.default,
-                          borderWidth: '1px',
-                          backgroundColor: maturityTheme.colors.info.bg,
-                        }}
-                      >
-                        <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.info.text }}>
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.info.bg,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.info.text }}>
                           {typeof roi === 'number' ? roi.toFixed(0) : roi}%
-                        </div>
-                        <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
-                          ROI
-                        </div>
-                      </div>
+                  </div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    ROI
+                  </div>
+                </div>
                     )}
                     {hasPaybackPeriod && (
-                      <div 
-                        className="text-center p-6 rounded-lg"
-                        style={{ 
-                          borderColor: maturityTheme.colors.border.default,
-                          borderWidth: '1px',
-                          backgroundColor: maturityTheme.colors.background.tertiary,
-                        }}
-                      >
-                        <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.primary[400] }}>
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.background.tertiary,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.primary[400] }}>
                           {paybackPeriod}
-                        </div>
-                        <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
-                          Payback Period
-                        </div>
-                      </div>
+                  </div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                    Payback Period
+                  </div>
+                </div>
                     )}
                     {hasTargetCost && (
-                      <div 
-                        className="text-center p-6 rounded-lg"
-                        style={{ 
-                          borderColor: maturityTheme.colors.border.default,
-                          borderWidth: '1px',
-                          backgroundColor: maturityTheme.colors.warning.bg,
-                        }}
-                      >
-                        <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.warning.text }}>
+                <div 
+                  className="text-center p-6 rounded-lg"
+                  style={{ 
+                    borderColor: maturityTheme.colors.border.default,
+                    borderWidth: '1px',
+                    backgroundColor: maturityTheme.colors.warning.bg,
+                  }}
+                >
+                  <div className="text-2xl font-bold" style={{ color: maturityTheme.colors.warning.text }}>
                           ${typeof targetCost === 'number' ? targetCost.toLocaleString() : targetCost}
-                        </div>
-                        <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
+                  </div>
+                  <div className="text-sm mt-2" style={{ color: maturityTheme.colors.text.secondary }}>
                           Target Annual Cost
                         </div>
                       </div>
@@ -2437,14 +2439,14 @@ export default function AssessmentResultsPage() {
                     const targetCost = assessment.roiMetrics?.improvedCost;
                     
                     // Check if values are meaningful (not null, undefined, 0, "0", "Calculating...", or empty string)
-                    const hasSavings = savings != null && savings !== 0 && savings !== '0' && savings !== '';
-                    const hasROI = roi != null && roi !== 0 && roi !== '0' && roi !== '';
+                    const hasSavings = savings != null && Number(savings) !== 0 && savings !== '';
+                    const hasROI = roi != null && Number(roi) !== 0 && roi !== '';
                     const hasPaybackPeriod = paybackPeriod != null && 
                       paybackPeriod !== 'Calculating...' && 
                       paybackPeriod !== '' && 
-                      paybackPeriod !== '0' &&
-                      paybackPeriod !== 0;
-                    const hasTargetCost = targetCost != null && targetCost !== 0 && targetCost !== '0' && targetCost !== '';
+                      String(paybackPeriod) !== '0' &&
+                      Number(paybackPeriod) !== 0;
+                    const hasTargetCost = targetCost != null && Number(targetCost) !== 0 && targetCost !== '';
                     
                     if (hasSavings || hasROI || hasPaybackPeriod || hasTargetCost) {
                       return (
@@ -2617,9 +2619,9 @@ export default function AssessmentResultsPage() {
                         <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
                           Resource allocation
                         </div>
-                      </div>
-                    </div>
                   </div>
+                </div>
+              </div>
                 </CardContent>
               </MaturityCard>
             </CardContent>
@@ -2917,9 +2919,9 @@ export default function AssessmentResultsPage() {
                                 </div>
                                 <div className="flex-1">
                                   <div className="flex items-center gap-2 mb-1">
-                                    <h4 className="font-semibold" style={{ color: maturityTheme.colors.text.primary }}>
-                                      {domainName}
-                                    </h4>
+                                  <h4 className="font-semibold" style={{ color: maturityTheme.colors.text.primary }}>
+                                    {domainName}
+                                  </h4>
                                     {documentCount > 0 && (
                                       <Badge 
                                         variant="secondary"
@@ -3105,7 +3107,7 @@ export default function AssessmentResultsPage() {
                                   const maturityLabel = scoreLevel < 2 ? 'Initial' : scoreLevel < 3 ? 'Developing' : scoreLevel < 4 ? 'Defined' : scoreLevel < 5 ? 'Managed' : 'Optimizing';
                                   return (
                                     <>
-                                      <p className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                    <p className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
                                         {maturityLabel} (Level {scoreLevel})
                                       </p>
                                       <div className="flex items-center gap-2 mt-1">
@@ -3121,9 +3123,9 @@ export default function AssessmentResultsPage() {
                                         >
                                           {avgScore.toFixed(1)}%
                                         </Badge>
-                                      </div>
+                  </div>
                                     </>
-                                  );
+                );
                                 })()}
                                 {documentTypes.length > 0 ? (
                                   <p className="text-xs mt-1" style={{ color: maturityTheme.colors.text.muted }}>
@@ -3682,7 +3684,7 @@ export default function AssessmentResultsPage() {
             );
           })()}
         </TabsContent>
-        </Tabs>
+      </Tabs>
       </div>
 
       {/* Document Type Dialog - Shows documents of selected type */}
@@ -3941,7 +3943,7 @@ export default function AssessmentResultsPage() {
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex-1">
                             <div className="font-medium text-sm" style={{ color: maturityTheme.colors.text.primary }}>
-                              {dimension.label}
+                            {dimension.label}
                             </div>
                             <div className="text-xs mt-0.5" style={{ color: maturityTheme.colors.text.muted }}>
                               {dimension.description}

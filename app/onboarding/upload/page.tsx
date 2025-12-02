@@ -27,8 +27,11 @@ import {
   Loader2,
   AlertCircle,
   Building,
-  Sparkles
+  Sparkles,
+  Eye
 } from '@/components/ui/icons-shim';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { File, FileText as FileTextIcon, FileCode } from 'lucide-react';
 
 interface UploadedFile {
   file: File;
@@ -49,6 +52,54 @@ export default function DocumentUploadPage() {
   const [showIntro, setShowIntro] = useState(false);
   const [showRegistrationDialog, setShowRegistrationDialog] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({});
+  const [isPolling, setIsPolling] = useState(false);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState(false);
+
+  // Handle file preview
+  const handlePreviewFile = async (file: File) => {
+    setIsLoadingPreview(true);
+    setPreviewFile(file);
+    
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    
+    try {
+      if (ext === 'pdf') {
+        // For PDFs, create object URL
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
+        setPreviewText(null);
+      } else if (ext === 'txt' || ext === 'md' || ext === 'markdown') {
+        // For text files, read content
+        const text = await file.text();
+        setPreviewText(text);
+        setPreviewUrl(null);
+      } else {
+        // For DOCX and others, show file info
+        setPreviewText(null);
+        setPreviewUrl(null);
+      }
+    } catch (error) {
+      console.error('Failed to preview file:', error);
+      toast.error('Failed to preview file');
+      setPreviewFile(null);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  };
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
   
   // Assessment metadata (simplified - no project database link)
   const [assessmentName, setAssessmentName] = useState('');
@@ -56,6 +107,63 @@ export default function DocumentUploadPage() {
   const [organizationName, setOrganizationName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [assessmentPurpose, setAssessmentPurpose] = useState('Initial Onboarding');
+
+  // Load draft from localStorage on mount
+  useEffect(() => {
+    const draftKey = 'assessment_draft';
+    try {
+      const draft = localStorage.getItem(draftKey);
+      if (draft) {
+        const parsed = JSON.parse(draft);
+        setAssessmentName(parsed.assessmentName || '');
+        setClientName(parsed.clientName || '');
+        setOrganizationName(parsed.organizationName || '');
+        setContactEmail(parsed.contactEmail || '');
+        setAssessmentPurpose(parsed.assessmentPurpose || 'Initial Onboarding');
+        
+        // Show notification that draft was loaded
+        if (parsed.assessmentName || parsed.clientName) {
+          toast.info('Draft loaded', {
+            description: 'Your previous assessment details have been restored.',
+            duration: 3000,
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to load draft:', e);
+    }
+  }, []);
+
+  // Auto-save draft to localStorage
+  useEffect(() => {
+    const draftKey = 'assessment_draft';
+    const draft = {
+      assessmentName,
+      clientName,
+      organizationName,
+      contactEmail,
+      assessmentPurpose,
+      lastSaved: new Date().toISOString(),
+    };
+    
+    // Only save if there's meaningful data
+    if (assessmentName || clientName || organizationName) {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify(draft));
+      } catch (e) {
+        console.warn('Failed to save draft:', e);
+      }
+    }
+  }, [assessmentName, clientName, organizationName, contactEmail, assessmentPurpose]);
+
+  // Clear draft after successful upload
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem('assessment_draft');
+    } catch (e) {
+      console.warn('Failed to clear draft:', e);
+    }
+  };
 
   // Populate fields from logged-in user when authenticated
   useEffect(() => {
@@ -105,16 +213,102 @@ export default function DocumentUploadPage() {
     }
   }, [isAuthenticated]);
 
+  // Helper functions - must be defined before useCallback hooks
+  const getFileIcon = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return FileTextIcon;
+      case 'docx':
+      case 'doc':
+        return FileText;
+      case 'txt':
+        return FileCode;
+      case 'md':
+      case 'markdown':
+        return FileCode;
+      default:
+        return File;
+    }
+  };
+
+  const getFileTypeColor = (fileName: string) => {
+    const ext = fileName.split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'pdf':
+        return '#ef4444'; // red
+      case 'docx':
+      case 'doc':
+        return '#2563eb'; // blue
+      case 'txt':
+        return '#10b981'; // green
+      case 'md':
+      case 'markdown':
+        return '#8b5cf6'; // purple
+      default:
+        return maturityTheme.colors.text.muted;
+    }
+  };
+
+  const checkFileSize = (file: File): { isValid: boolean; warning?: string } => {
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    const fileSizeMB = file.size / 1024 / 1024;
+    
+    if (file.size > maxSize) {
+      return {
+        isValid: false,
+        warning: `File "${file.name}" exceeds 10MB limit (${fileSizeMB.toFixed(2)}MB)`
+      };
+    }
+    
+    if (fileSizeMB > 8) {
+      return {
+        isValid: true,
+        warning: `Large file: ${fileSizeMB.toFixed(2)}MB (limit: 10MB)`
+      };
+    }
+    
+    return { isValid: true };
+  };
+
   // Handle file selection - must be defined before useCallback hooks that use it
   const handleFilesSelected = useCallback((selectedFiles: File[]) => {
-    const newFiles: UploadedFile[] = selectedFiles.map(file => ({
-      file,
-      id: Math.random().toString(36).substring(7),
-      status: 'pending',
-      progress: 0
-    }));
+    const newFiles: UploadedFile[] = [];
+    const warnings: string[] = [];
 
-    setFiles(prev => [...prev, ...newFiles]);
+    selectedFiles.forEach(file => {
+      const sizeCheck = checkFileSize(file);
+      if (!sizeCheck.isValid) {
+        warnings.push(sizeCheck.warning || '');
+        return; // Skip invalid files
+      }
+      if (sizeCheck.warning) {
+        warnings.push(sizeCheck.warning);
+      }
+      
+      newFiles.push({
+        file,
+        id: Math.random().toString(36).substring(7),
+        status: 'pending',
+        progress: 0
+      });
+    });
+
+    if (warnings.length > 0) {
+      warnings.forEach(warning => {
+        if (warning) {
+          toast.warning(warning, { duration: 5000 });
+        }
+      });
+    }
+
+    if (newFiles.length > 0) {
+      setFiles(prev => [...prev, ...newFiles]);
+    }
+
+    if (selectedFiles.length > newFiles.length) {
+      toast.error(`${selectedFiles.length - newFiles.length} file(s) were rejected due to size limits`);
+    }
   }, []);
 
   // Handle drag events - ALL HOOKS MUST BE CALLED BEFORE ANY CONDITIONAL RETURNS
@@ -150,7 +344,94 @@ export default function DocumentUploadPage() {
     }
   }, [handleFilesSelected]);
 
-  // Upload files
+  // Poll batch status for real-time progress
+  const pollBatchStatus = async (batchId: string) => {
+    if (isPolling) return;
+    setIsPolling(true);
+
+    const poll = async () => {
+      try {
+        const token = localStorage.getItem('auth_token');
+        const response = await fetch(getApiUrl(`/onboarding/upload/${batchId}`), {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            const batch = data.data;
+            const totalFiles = batch.total_files || files.length;
+            const processedFiles = batch.processed_files || 0;
+            const overallProgress = totalFiles > 0 ? Math.round((processedFiles / totalFiles) * 100) : 0;
+
+            // Update file progress
+            if (batch.files && Array.isArray(batch.files)) {
+              const newProgress: Record<string, number> = {};
+              batch.files.forEach((file: any) => {
+                if (file.status === 'complete' || file.status === 'processed') {
+                  newProgress[file.name || file.filename] = 100;
+                } else if (file.status === 'processing') {
+                  newProgress[file.name || file.filename] = 50; // Estimate
+                } else {
+                  newProgress[file.name || file.filename] = 0;
+                }
+              });
+              setUploadProgress(newProgress);
+
+              // Update file statuses
+              setFiles(prev => prev.map(f => {
+                const fileStatus = batch.files?.find((bf: any) => 
+                  bf.name === f.file.name || bf.filename === f.file.name
+                );
+                if (fileStatus) {
+                  return {
+                    ...f,
+                    status: fileStatus.status === 'complete' ? 'complete' : 
+                            fileStatus.status === 'processing' ? 'processing' : 
+                            fileStatus.status === 'failed' ? 'error' : f.status,
+                    progress: newProgress[f.file.name] || f.progress,
+                    error: fileStatus.error || f.error
+                  };
+                }
+                return f;
+              }));
+            }
+
+            // Stop polling if batch is complete
+            if (batch.status === 'completed' || batch.status === 'complete') {
+              if (pollingIntervalRef.current) {
+                clearInterval(pollingIntervalRef.current);
+                pollingIntervalRef.current = null;
+              }
+              setIsPolling(false);
+              clearDraft(); // Clear draft after successful upload
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Failed to poll batch status:', error);
+      }
+    };
+
+    // Poll immediately, then every 2 seconds
+    poll();
+    pollingIntervalRef.current = setInterval(poll, 2000);
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Upload files with progress tracking
   const uploadFiles = async () => {
     // Verify authentication first
     if (!isAuthenticated) {
@@ -183,12 +464,15 @@ export default function DocumentUploadPage() {
     }
     
     setIsUploading(true);
+    setUploadProgress({});
 
     try {
       const formData = new FormData();
       
       files.forEach((fileObj, index) => {
         formData.append('files', fileObj.file);
+        // Initialize progress tracking
+        setUploadProgress(prev => ({ ...prev, [fileObj.file.name]: 0 }));
       });
 
       // Add assessment metadata (no project_id needed for potential clients)
@@ -200,70 +484,100 @@ export default function DocumentUploadPage() {
         formData.append('email', contactEmail);
       }
 
-      // Get authentication token
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        toast.error('Authentication required. Please log in.');
-        router.push('/auth/login?redirect=/onboarding/upload');
-        return;
-      }
+      // Use XMLHttpRequest for upload progress
+      return new Promise<void>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        
+        // Track upload progress
+        xhr.upload.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percentComplete = Math.round((e.loaded / e.total) * 100);
+            // Update overall progress (distribute across files)
+            const progressPerFile = percentComplete / files.length;
+            const newProgress: Record<string, number> = {};
+            files.forEach(fileObj => {
+              newProgress[fileObj.file.name] = Math.min(progressPerFile, 90); // Cap at 90% until server confirms
+            });
+            setUploadProgress(newProgress);
+          }
+        });
 
-      // Upload request with authentication
-      const response = await fetch(getApiUrl('/onboarding/upload'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData,
-        credentials: 'include'
+        xhr.addEventListener('load', async () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try {
+              const result = JSON.parse(xhr.responseText);
+              
+              if (!result.success || !result.data) {
+                throw new Error('Invalid response from server');
+              }
+              
+              const newBatchId = result.data.batch_id || result.data.batchId;
+              setBatchId(newBatchId);
+
+              // Start polling for batch processing progress
+              if (newBatchId) {
+                pollBatchStatus(newBatchId);
+              }
+
+              // Monitor progress via WebSocket
+              monitorUploadProgress(newBatchId);
+              resolve();
+            } catch (error: any) {
+              reject(error);
+            }
+          } else {
+            try {
+              const errorData = JSON.parse(xhr.responseText);
+              const errorMessage = errorData.error?.message || errorData.error || `Server error (${xhr.status})`;
+              const errorCode = errorData.error?.code || 'UPLOAD_FAILED';
+              
+              let userMessage = 'Upload failed. ';
+              switch (errorCode) {
+                case 'NO_FILES':
+                  userMessage += 'No files were selected. Please add files before uploading.';
+                  break;
+                case 'FILE_TOO_LARGE':
+                  userMessage += 'One or more files exceed the 10MB size limit. Please use smaller files.';
+                  break;
+                case 'UNSUPPORTED_FILE_TYPE':
+                  userMessage += 'Unsupported file type detected. Please use PDF, DOCX, TXT, or MD files only.';
+                  break;
+                case 'MISSING_PROJECT_ID':
+                  userMessage += 'Assessment name is required. Please fill in the assessment details.';
+                  break;
+                case 'FORBIDDEN':
+                  userMessage += 'Permission denied. Please contact support.';
+                  break;
+                case 'AUTHENTICATION_REQUIRED':
+                  userMessage += 'Your session has expired. Please log in again.';
+                  break;
+                default:
+                  userMessage += errorMessage;
+              }
+              
+              toast.error(userMessage);
+              reject(new Error(errorMessage));
+            } catch (e) {
+              reject(new Error(`Upload failed: ${xhr.statusText}`));
+            }
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Network error during upload'));
+        });
+
+        xhr.addEventListener('abort', () => {
+          reject(new Error('Upload cancelled'));
+        });
+
+        xhr.open('POST', getApiUrl('/onboarding/upload'));
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        xhr.send(formData);
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error?.message || errorData.error || `Server error (${response.status})`;
-        const errorCode = errorData.error?.code || 'UPLOAD_FAILED';
-        
-        // Specific error messages based on error code
-        let userMessage = 'Upload failed. ';
-        
-        switch (errorCode) {
-          case 'NO_FILES':
-            userMessage += 'No files were selected. Please add files before uploading.';
-            break;
-          case 'FILE_TOO_LARGE':
-            userMessage += 'One or more files exceed the 10MB size limit. Please use smaller files.';
-            break;
-          case 'UNSUPPORTED_FILE_TYPE':
-            userMessage += 'Unsupported file type detected. Please use PDF, DOCX, TXT, or MD files only.';
-            break;
-          case 'MISSING_PROJECT_ID':
-            userMessage += 'Assessment name is required. Please fill in the assessment details.';
-            break;
-          case 'FORBIDDEN':
-            userMessage += 'Permission denied. Please contact support.';
-            break;
-          case 'AUTHENTICATION_REQUIRED':
-            userMessage += 'Your session has expired. Please log in again.';
-            break;
-          default:
-            userMessage += errorMessage;
-        }
-        
-        alert(userMessage);
-        throw new Error(errorMessage);
-      }
-
-      const result = await response.json();
+      await uploadPromise;
       
-      if (!result.success || !result.data) {
-        throw new Error('Invalid response from server');
-      }
-      
-      setBatchId(result.data.batch_id || result.data.batchId);
-
-      // Monitor progress via WebSocket
-      monitorUploadProgress(result.data.batch_id || result.data.batchId);
-
     } catch (error: any) {
       console.error('Upload error:', error);
       
@@ -276,7 +590,10 @@ export default function DocumentUploadPage() {
       
       // Show user-friendly error message if not already shown
       if (!error.message?.includes('Permission') && !error.message?.includes('session')) {
-        alert(`Unable to start assessment.\n\nError: ${error.message}\n\nPlease check:\n• All required fields are filled\n• Files are valid (PDF, DOCX, TXT, MD)\n• File sizes are under 10MB\n• You're logged in\n\nIf the problem persists, please contact support.`);
+        toast.error('Unable to start assessment', {
+          description: `Error: ${error.message}\n\nPlease check:\n• All required fields are filled\n• Files are valid (PDF, DOCX, TXT, MD)\n• File sizes are under 10MB\n• You're logged in\n\nIf the problem persists, please contact support.`,
+          duration: 8000,
+        });
       }
     } finally {
       setIsUploading(false);
@@ -742,8 +1059,13 @@ export default function DocumentUploadPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={clearAll}
+                  onClick={() => {
+                    clearAll();
+                    clearDraft();
+                    toast.info('Draft cleared');
+                  }}
                   disabled={isUploading}
+                  title="Clear all files and draft"
                 >
                   Clear All
                 </Button>
@@ -780,14 +1102,42 @@ export default function DocumentUploadPage() {
                   className="flex items-center justify-between p-4 border rounded-lg"
                 >
                   <div className="flex items-center space-x-3 flex-1">
-                    <FileText className="h-8 w-8 text-blue-500" />
+                    {(() => {
+                      const FileIcon = getFileIcon(fileObj.file.name);
+                      const iconColor = getFileTypeColor(fileObj.file.name);
+                      return <FileIcon className="h-8 w-8" style={{ color: iconColor }} />;
+                    })()}
                     <div className="flex-1">
                       <div className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>{fileObj.file.name}</div>
-                      <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
-                        {(fileObj.file.size / 1024 / 1024).toFixed(2)} MB
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                          {(fileObj.file.size / 1024 / 1024).toFixed(2)} MB
+                        </div>
+                        {(() => {
+                          const sizeCheck = checkFileSize(fileObj.file);
+                          if (sizeCheck.warning && !sizeCheck.warning.includes('exceeds')) {
+                            return (
+                              <span className="text-xs px-2 py-0.5 rounded" style={{ 
+                                backgroundColor: maturityTheme.colors.warning.bg,
+                                color: maturityTheme.colors.warning.text 
+                              }}>
+                                Large
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
-                      {fileObj.status === 'processing' && (
-                        <Progress value={fileObj.progress} className="mt-2" />
+                      {(fileObj.status === 'processing' || fileObj.status === 'uploading') && (
+                        <div className="mt-2">
+                          <Progress 
+                            value={uploadProgress[fileObj.file.name] || fileObj.progress} 
+                            className="h-2"
+                          />
+                          <p className="text-xs mt-1" style={{ color: maturityTheme.colors.text.muted }}>
+                            {uploadProgress[fileObj.file.name] || fileObj.progress}% uploaded
+                          </p>
+                        </div>
                       )}
                       {fileObj.error && (
                         <div className="text-sm mt-1" style={{ color: maturityTheme.colors.error.text }}>{fileObj.error}</div>
@@ -796,13 +1146,24 @@ export default function DocumentUploadPage() {
                   </div>
                   <div className="flex items-center space-x-2">
                     {fileObj.status === 'pending' && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(fileObj.id)}
-                      >
-                        <XCircle className="h-4 w-4" />
-                      </Button>
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePreviewFile(fileObj.file)}
+                          title="Preview file"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeFile(fileObj.id)}
+                          title="Remove file"
+                        >
+                          <XCircle className="h-4 w-4" />
+                        </Button>
+                      </>
                     )}
                     {fileObj.status === 'processing' && (
                       <Loader2 className="h-5 w-5 animate-spin text-blue-500" />
@@ -857,6 +1218,80 @@ export default function DocumentUploadPage() {
           </AlertDescription>
         </Alert>
       )}
+
+      {/* File Preview Dialog */}
+      <Dialog open={!!previewFile} onOpenChange={(open) => {
+        if (!open) {
+          setPreviewFile(null);
+          if (previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            setPreviewUrl(null);
+          }
+          setPreviewText(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle style={{ color: maturityTheme.colors.text.primary }}>
+              {previewFile?.name}
+            </DialogTitle>
+            <DialogDescription style={{ color: maturityTheme.colors.text.secondary }}>
+              File Preview • {(previewFile?.size || 0) / 1024 / 1024} MB
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto mt-4">
+            {isLoadingPreview ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin" style={{ color: maturityTheme.colors.primary[400] }} />
+              </div>
+            ) : previewUrl ? (
+              // PDF Preview
+              <iframe
+                src={previewUrl}
+                className="w-full h-[600px] border rounded"
+                style={{ borderColor: maturityTheme.colors.border.default }}
+                title="PDF Preview"
+              />
+            ) : previewText ? (
+              // Text Preview
+              <div 
+                className="p-4 rounded border font-mono text-sm whitespace-pre-wrap overflow-auto max-h-[600px]"
+                style={{ 
+                  backgroundColor: maturityTheme.colors.background.tertiary,
+                  borderColor: maturityTheme.colors.border.default,
+                  color: maturityTheme.colors.text.primary
+                }}
+              >
+                {previewText}
+              </div>
+            ) : previewFile ? (
+              // File Info (for DOCX and other non-previewable files)
+              <div className="space-y-4">
+                <div className="p-4 rounded-lg" style={{ backgroundColor: maturityTheme.colors.background.tertiary }}>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" style={{ color: maturityTheme.colors.text.secondary }} />
+                      <span className="font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                        {previewFile.name}
+                      </span>
+                    </div>
+                    <div className="text-sm space-y-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                      <div>Size: {(previewFile.size / 1024 / 1024).toFixed(2)} MB</div>
+                      <div>Type: {previewFile.type || 'Unknown'}</div>
+                      <div>Last Modified: {new Date(previewFile.lastModified).toLocaleString()}</div>
+                    </div>
+                    <div className="mt-4 p-3 rounded" style={{ backgroundColor: maturityTheme.colors.info.bg, borderColor: maturityTheme.colors.info.border }}>
+                      <p className="text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                        Preview is not available for this file type. The file will be processed after upload.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
         </div>
       </div>
     </>

@@ -518,6 +518,69 @@ router.get('/batch/:batchId/documents', authenticate, async (req: Request, res: 
  * Users must register and authenticate before accessing assessment data.
  */
 
+/**
+ * DELETE /api/assessment/:assessmentId
+ * Delete an assessment
+ * NOTE: Must be defined BEFORE GET /:assessmentId to avoid route conflicts
+ */
+router.delete('/:assessmentId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { assessmentId } = req.params;
+    const userId = (req as any).user?.id;
+
+    logger.info('Deleting assessment', { assessmentId, userId });
+
+    // Verify assessment exists and user has permission
+    const assessmentResult = await pool.query(
+      `SELECT a.*, p.owner_id, p.created_by, ub.uploaded_by
+       FROM assessments a
+       JOIN projects p ON a.project_id = p.id
+       LEFT JOIN upload_batches ub ON a.batch_id = ub.id
+       WHERE a.id = $1`,
+      [assessmentId]
+    );
+
+    if (assessmentResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Assessment not found'
+      });
+    }
+
+    const assessment = assessmentResult.rows[0];
+
+    // Check permissions: user must be owner, creator, or uploader
+    const isOwner = assessment.owner_id === userId;
+    const isCreator = assessment.created_by === userId;
+    const isUploader = assessment.uploaded_by === userId;
+
+    if (!isOwner && !isCreator && !isUploader) {
+      return res.status(403).json({
+        success: false,
+        error: 'You do not have permission to delete this assessment'
+      });
+    }
+
+    // Delete the assessment
+    await pool.query('DELETE FROM assessments WHERE id = $1', [assessmentId]);
+
+    logger.info('Assessment deleted successfully', { assessmentId, userId });
+
+    res.json({
+      success: true,
+      message: 'Assessment deleted successfully'
+    });
+
+  } catch (error: any) {
+    logger.error('Failed to delete assessment', {
+      error: error.message,
+      stack: error.stack,
+      assessmentId: req.params.assessmentId
+    });
+    next(error);
+  }
+});
+
 router.get('/:assessmentId', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { assessmentId } = req.params;

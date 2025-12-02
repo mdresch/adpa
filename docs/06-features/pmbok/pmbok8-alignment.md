@@ -761,13 +761,13 @@ New columns:
 
 | Domain | Entity Types |
 | --- | --- |
-| Governance | `governance_decisions`, `approval_workflows`, `steering_committees`, `change_control_boards`, `policy_compliance` |
-| Scope | `scope_baseline`, `wbs_nodes`, `scope_change_requests`, `requirements_traceability`, `scope_verification` |
-| Schedule | `schedule_baseline`, `schedule_activities`, `critical_path`, `schedule_variances`, `schedule_forecasts` |
+| Governance | `governance_decisions`, `approval_workflows`, `steering_committees`, `change_control_boards`, `policy_compliance`, `development_approaches`, `phases`, `milestones`, `team_agreements` |
+| Scope | `scope_baseline`, `wbs_nodes`, `scope_change_requests`, `requirements_traceability`, `scope_verification`, `scope_items`, `requirements`, `deliverables`, `phases` |
+| Schedule | `schedule_baseline`, `schedule_activities`, `critical_path`, `schedule_variances`, `schedule_forecasts`, `milestones`, `activities`, `phases`, `project_iterations` |
 | Finance | `budget_baseline`, `cost_actuals`, `cost_estimates`, `funding_tranches`, `financial_variances`, `procurement_costs` |
-| Resources | `resource_assignments`, `resource_pool`, `capacity_forecasts`, `utilization_records`, `resource_conflicts`, `onboarding_offboarding` |
-| Risk | `risk_register`, `risk_assessments`, `risk_response_plans`, `risk_triggers`, `risk_reviews`, `contingency_reserves`, `risk_metrics` |
-| Stakeholders (Ops) | `engagement_actions`, `communication_logs`, `satisfaction_surveys`, `stakeholder_issues`, `relationship_health` |
+| Resources | `resource_assignments`, `resource_pool`, `capacity_forecasts`, `utilization_records`, `resource_conflicts`, `onboarding_offboarding`, `resources`, `team_agreements`, `capacity_plans` |
+| Risk | `risk_register`, `risk_assessments`, `risk_response_plans`, `risk_triggers`, `risk_reviews`, `contingency_reserves`, `risk_metrics`, `risks`, `opportunities`, `risk_responses`, `constraints` |
+| Stakeholders (Ops) | `engagement_actions`, `communication_logs`, `satisfaction_surveys`, `stakeholder_issues`, `relationship_health`, `stakeholders` |
 
 ---
 

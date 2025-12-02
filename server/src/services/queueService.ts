@@ -1218,13 +1218,99 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
   // =========================================================================
   // TIER 2: Knowledge Area Domains (PMBOK 8 Supplementary)
   // =========================================================================
-  governance: ['governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance'],
-  scope: ['scope_baselines', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification'],
-  schedule: ['schedule_baselines', 'schedule_activities', 'critical_path_activities', 'schedule_variances', 'schedule_forecasts'],
-  finance: ['budget_baselines', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs'],
-  resources: ['resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding'],
-  risk: ['risk_assessments', 'risk_response_plans', 'risk_triggers', 'risk_reviews', 'contingency_reserves', 'risk_metrics'],
-  stakeholders_ops: ['engagement_actions', 'communication_logs', 'satisfaction_surveys', 'stakeholder_issues', 'relationship_health']
+  
+  // Governance Domain - Decision-making, approvals, oversight, and governance structures
+  governance: [
+    'governance_decisions', 
+    'approval_workflows', 
+    'steering_committees', 
+    'change_control_boards', 
+    'policy_compliance',
+    // ADDED: Entities containing governance data
+    'development_approaches',   // Contains governance_approach, review_gates
+    'phases',                   // Phase gates are governance checkpoints
+    'milestones',               // Key decision/approval points
+    'team_agreements'           // Governance of team behavior
+  ],
+  
+  // Scope Domain - Scope definition, WBS, requirements, and deliverables
+  scope: [
+    'scope_baselines', 
+    'wbs_nodes', 
+    'scope_change_requests', 
+    'requirements_traceability', 
+    'scope_verification',
+    // ADDED: Core scope entities
+    'scope_items',      // Direct scope definition
+    'requirements',     // Scope requirements
+    'deliverables',     // Scope deliverables
+    'phases'            // Deliverables per phase
+  ],
+  
+  // Schedule Domain - Timeline, milestones, activities, and schedule control
+  schedule: [
+    'schedule_baselines', 
+    'schedule_activities', 
+    'critical_path_activities', 
+    'schedule_variances', 
+    'schedule_forecasts',
+    // ADDED: Timing entities
+    'milestones',           // Schedule milestones
+    'activities',           // Schedule activities
+    'phases',               // Schedule phases
+    'project_iterations'    // Iteration schedule
+  ],
+  
+  // Finance Domain - Budget, costs, funding, and financial control
+  finance: [
+    'budget_baselines', 
+    'cost_actuals', 
+    'cost_estimates', 
+    'funding_tranches', 
+    'financial_variances', 
+    'procurement_costs'
+    // NOTE: Consider adding 'resources' (cost field) in future
+  ],
+  
+  // Resources Domain - Resource allocation, capacity, and utilization
+  resources: [
+    'resource_assignments', 
+    'resource_pool', 
+    'capacity_forecasts', 
+    'utilization_records', 
+    'resource_conflicts', 
+    'onboarding_offboarding',
+    // ADDED: Core resource entities
+    'resources',        // Core resource data (skills, allocation, availability)
+    'team_agreements',  // Team resource agreements
+    'capacity_plans'    // Capacity planning
+  ],
+  
+  // Risk Domain - Risk identification, assessment, response, and monitoring
+  risk: [
+    'risk_assessments', 
+    'risk_response_plans', 
+    'risk_triggers', 
+    'risk_reviews', 
+    'contingency_reserves', 
+    'risk_metrics',
+    // ADDED: Core risk entities
+    'risks',            // Core risk entity (probability, impact, mitigation)
+    'opportunities',    // Positive risks
+    'risk_responses',   // Response actions
+    'constraints'       // Risk-related constraints
+  ],
+  
+  // Stakeholders Operations Domain - Engagement, communication, and relationship management
+  stakeholders_ops: [
+    'engagement_actions', 
+    'communication_logs', 
+    'satisfaction_surveys', 
+    'stakeholder_issues', 
+    'relationship_health',
+    // ADDED: Core stakeholder entity
+    'stakeholders'      // Core stakeholder data (interest, influence, expectations)
+  ]
 }
 
 type DomainCountSummary = {

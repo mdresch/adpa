@@ -28,11 +28,12 @@ export interface BadgeProps
     VariantProps<typeof badgeVariants> {
   children?: React.ReactNode
   className?: string
+  style?: React.CSSProperties
 }
 
-function Badge({ className, variant, ...props }: BadgeProps) {
+function Badge({ className, variant, style, ...props }: BadgeProps) {
   return (
-    <div className={cn(badgeVariants({ variant }), className)} {...props} />
+    <div className={cn(badgeVariants({ variant }), className)} style={style} {...props} />
   )
 }
 

@@ -59,8 +59,12 @@ interface MaturityLevelDetails {
 
 interface MaturityJourneyPlannerProps {
   currentLevel: number;
-  currentLevelName: string;
-  achievementsAtCurrentLevel: string[];
+  currentLevelName?: string;
+  achievementsAtCurrentLevel?: string[];
+  currentScore?: number;
+  averageQualityScore?: number;
+  totalDocuments?: number;
+  gapsCount?: number;
   onSelectTargetLevel?: (level: number) => void;
 }
 
@@ -396,8 +400,28 @@ export const MaturityJourneyPlanner: React.FC<MaturityJourneyPlannerProps> = ({
   currentLevel,
   currentLevelName,
   achievementsAtCurrentLevel,
+  currentScore,
+  averageQualityScore,
+  totalDocuments,
+  gapsCount,
   onSelectTargetLevel,
 }) => {
+  const getLevelData = (level: number) => maturityLevelData[level - 1];
+  
+  // Derive currentLevelName if not provided
+  const levelName = currentLevelName || getLevelData(currentLevel).name;
+  
+  // Generate achievements if not provided
+  const achievements = achievementsAtCurrentLevel || [
+    totalDocuments ? `Processed and analyzed ${totalDocuments} PM documents` : 'Completed PM maturity assessment',
+    averageQualityScore ? `Achieved ${averageQualityScore.toFixed(1)}% average quality score` : 'Established baseline maturity metrics',
+    gapsCount ? `Identified ${gapsCount} improvement opportunities` : 'Identified improvement opportunities',
+    'Established baseline maturity metrics',
+    ...(currentLevel >= 2 ? ['Repeatable processes documented'] : []),
+    ...(currentLevel >= 3 ? ['Standardized PM methodology in place'] : []),
+    ...(currentLevel >= 4 ? ['Quantitative process management'] : []),
+    ...(currentLevel >= 5 ? ['Continuous improvement culture'] : []),
+  ];
   const [targetLevel, setTargetLevel] = useState<number>(Math.min(5, currentLevel + 1));
   const [showDetails, setShowDetails] = useState(false);
   // Store the current level when target is selected to calculate progress from that point
@@ -417,7 +441,6 @@ export const MaturityJourneyPlanner: React.FC<MaturityJourneyPlannerProps> = ({
     onSelectTargetLevel?.(level);
   };
 
-  const getLevelData = (level: number) => maturityLevelData[level - 1];
   const currentData = getLevelData(currentLevel);
   const targetData = getLevelData(targetLevel);
 
@@ -481,13 +504,13 @@ export const MaturityJourneyPlanner: React.FC<MaturityJourneyPlannerProps> = ({
           <Award className="h-12 w-12 flex-shrink-0" style={{ color: getMaturityColors(currentLevel).text }} />
           <div className="flex-1">
             <h3 className="text-2xl font-bold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
-              Congratulations! You're at Level {currentLevel}: {currentLevelName}
+              Congratulations! You're at Level {currentLevel}: {levelName}
             </h3>
             <p className="mb-4" style={{ color: maturityTheme.colors.text.secondary }}>
               Your organization has achieved significant PM maturity. Here's what you've accomplished:
             </p>
             <div className="grid md:grid-cols-2 gap-3">
-              {achievementsAtCurrentLevel.map((achievement, idx) => (
+              {achievements.map((achievement, idx) => (
                 <div key={idx} className="flex items-start gap-2">
                   <CheckCircle
                     className="h-5 w-5 mt-0.5 flex-shrink-0"

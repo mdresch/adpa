@@ -668,7 +668,17 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Governance Domain',
     description: 'Governance structures, decision-making frameworks, approvals, and oversight.',
     focusAreas: ['initiating', 'planning', 'executing', 'monitoring_controlling', 'closing'],
-    entityTypes: ['governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance']
+    entityTypes: [
+      'governance_decisions', 
+      'approval_workflows', 
+      'steering_committees', 
+      'change_control_boards', 
+      'policy_compliance',
+      'development_approaches',  // Contains governance_approach, review_gates
+      'phases',                  // Phase gates are governance checkpoints
+      'milestones',              // Key decision/approval points
+      'team_agreements'          // Governance of team behavior
+    ]
   },
   scope: {
     domain: 'scope',
@@ -676,7 +686,17 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Scope Domain',
     description: 'Scope definition, WBS, scope changes, and scope control artifacts.',
     focusAreas: ['planning', 'executing', 'monitoring_controlling'],
-    entityTypes: ['scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification']
+    entityTypes: [
+      'scope_baseline', 
+      'wbs_nodes', 
+      'scope_change_requests', 
+      'requirements_traceability', 
+      'scope_verification',
+      'scope_items',      // Direct scope definition
+      'requirements',     // Scope requirements
+      'deliverables',     // Scope deliverables
+      'phases'            // Deliverables per phase
+    ]
   },
   schedule: {
     domain: 'schedule',
@@ -684,7 +704,17 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Schedule Domain',
     description: 'Schedule baselines, critical path, variances, and schedule control data.',
     focusAreas: ['planning', 'monitoring_controlling'],
-    entityTypes: ['schedule_baseline', 'schedule_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts']
+    entityTypes: [
+      'schedule_baseline', 
+      'schedule_activities', 
+      'critical_path', 
+      'schedule_variances', 
+      'schedule_forecasts',
+      'milestones',           // Schedule milestones
+      'activities',           // Schedule activities
+      'phases',               // Schedule phases
+      'project_iterations'    // Iteration schedule
+    ]
   },
   finance: {
     domain: 'finance',
@@ -692,7 +722,14 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Finance Domain',
     description: 'Budget baselines, cost tracking, EVM financials, and funding records.',
     focusAreas: ['planning', 'monitoring_controlling', 'closing'],
-    entityTypes: ['budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs']
+    entityTypes: [
+      'budget_baseline', 
+      'cost_actuals', 
+      'cost_estimates', 
+      'funding_tranches', 
+      'financial_variances', 
+      'procurement_costs'
+    ]
   },
   resources: {
     domain: 'resources',
@@ -700,7 +737,17 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Resources Domain',
     description: 'Resource allocation, capacity planning, and resource utilization data.',
     focusAreas: ['planning', 'executing', 'monitoring_controlling', 'closing'],
-    entityTypes: ['resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding']
+    entityTypes: [
+      'resource_assignments', 
+      'resource_pool', 
+      'capacity_forecasts', 
+      'utilization_records', 
+      'resource_conflicts', 
+      'onboarding_offboarding',
+      'resources',        // Core resource data (skills, allocation, availability)
+      'team_agreements',  // Team resource agreements
+      'capacity_plans'    // Capacity planning
+    ]
   },
   risk: {
     domain: 'risk',
@@ -708,7 +755,19 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Risk Domain',
     description: 'Comprehensive risk management data with operational focus.',
     focusAreas: ['initiating', 'planning', 'executing', 'monitoring_controlling', 'closing'],
-    entityTypes: ['risk_register', 'risk_assessments', 'risk_response_plans', 'risk_triggers', 'risk_reviews', 'contingency_reserves', 'risk_metrics']
+    entityTypes: [
+      'risk_register', 
+      'risk_assessments', 
+      'risk_response_plans', 
+      'risk_triggers', 
+      'risk_reviews', 
+      'contingency_reserves', 
+      'risk_metrics',
+      'risks',            // Core risk entity (probability, impact, mitigation)
+      'opportunities',    // Positive risks
+      'risk_responses',   // Response actions
+      'constraints'       // Risk-related constraints
+    ]
   },
   stakeholders_ops: {
     domain: 'stakeholders_ops',
@@ -716,7 +775,14 @@ export const DOMAIN_METADATA: Record<PmbokDomain, DomainMetadata> = {
     title: 'Stakeholders Operations Domain',
     description: 'Operational engagement tracking extending Tier 1 Stakeholders domain.',
     focusAreas: ['initiating', 'executing', 'monitoring_controlling', 'closing'],
-    entityTypes: ['engagement_actions', 'communication_logs', 'satisfaction_surveys', 'stakeholder_issues', 'relationship_health']
+    entityTypes: [
+      'engagement_actions', 
+      'communication_logs', 
+      'satisfaction_surveys', 
+      'stakeholder_issues', 
+      'relationship_health',
+      'stakeholders'      // Core stakeholder data (interest, influence, expectations)
+    ]
   }
 }
 
