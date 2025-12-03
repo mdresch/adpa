@@ -72,8 +72,6 @@ restart-*.bat
 *.tmp
 *.temp
 
-# Database migration files (keep structure but ignore content)
-server/src/database/migrations/*.sql
 
 # Quantum and simulation modules (experimental)
 server/src/modules/quantum/
@@ -130,6 +128,7 @@ server/src/utils/error.ts
 # Backups and large files
 /backups/
 *.sql
+!server/src/database/migrations/add_template_purpose_analytics.sql
 *.bak
 *.backup
 acli.exe
