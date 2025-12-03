@@ -5,6 +5,8 @@
  */
 
 import { pool } from '../database/connection';
+import { PMBOK_KNOWLEDGE_DOMAINS, getDomainTier, type PmbokDomain } from '@/types/pmbok';
+import { ENTITY_DOMAIN_WEIGHTS, type EntityDomainWeight } from '@/types/entity-domain-weights';
 
 const query = async (text: string, params?: any[]) => {
   return pool.query(text, params);
@@ -67,6 +69,131 @@ export class TemplateAnalyticsService {
     } catch (error) {
       console.error('Failed to create template version:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Rebuild template_entity_profile rows based on aggregated_template_entity_view.
+   * If templateId is provided, only that template is recomputed.
+   * This uses the shared ENTITY_DOMAIN_WEIGHTS matrix and PMBOK domain tiers
+   * to infer primary knowledge/performance domains for each template.
+   */
+  static async updateTemplateEntityProfile(templateId?: string): Promise<void> {
+    const params: any[] = [];
+    let whereClause = '';
+
+    if (templateId) {
+      whereClause = 'WHERE template_id = $1';
+      params.push(templateId);
+    }
+
+    const result = await query(
+      `
+      SELECT template_id, total_documents, total_entities, avg_entity_counts
+      FROM aggregated_template_entity_view
+      ${whereClause}
+      `,
+      params
+    );
+
+    const normalize = (coverage: Record<string, number>): Record<string, number> => {
+      const total = Object.values(coverage).reduce((sum, v) => sum + v, 0) || 1;
+      const normalized: Record<string, number> = {};
+      for (const [domain, value] of Object.entries(coverage)) {
+        normalized[domain] = value / total;
+      }
+      return normalized;
+    };
+
+    const findPrimary = (coverage: Record<string, number>): string | null => {
+      let best: string | null = null;
+      let bestVal = 0;
+      for (const [domain, value] of Object.entries(coverage)) {
+        if (value > bestVal) {
+          bestVal = value;
+          best = domain;
+        }
+      }
+      return best;
+    };
+
+    for (const row of result.rows) {
+      const avgEntityCounts = (row.avg_entity_counts || {}) as Record<string, number>;
+
+      const knowledgeCoverage: Record<string, number> = {};
+      const performanceCoverage: Record<string, number> = {};
+
+      for (const [entityType, avgCountRaw] of Object.entries(avgEntityCounts)) {
+        const avgCount = Number(avgCountRaw);
+        if (!avgCount || avgCount <= 0) continue;
+
+        const weights: EntityDomainWeight[] =
+          ENTITY_DOMAIN_WEIGHTS[entityType] || ENTITY_DOMAIN_WEIGHTS[
+            entityType.replace(/([A-Z])/g, '_$1').toLowerCase().replace(/^_/, '')
+          ] ||
+          [];
+
+        if (!weights.length) continue;
+
+        for (const w of weights) {
+          const tier = getDomainTier(w.domain as PmbokDomain);
+          const increment = avgCount * w.weight;
+
+          if (tier === 'knowledge') {
+            knowledgeCoverage[w.domain] = (knowledgeCoverage[w.domain] || 0) + increment;
+          } else {
+            performanceCoverage[w.domain] = (performanceCoverage[w.domain] || 0) + increment;
+          }
+        }
+      }
+
+      const normalizedKnowledge = normalize(knowledgeCoverage);
+      const normalizedPerformance = normalize(performanceCoverage);
+
+      const primaryKnowledge = findPrimary(normalizedKnowledge);
+      const primaryPerformance = findPrimary(normalizedPerformance);
+
+      const secondaryKnowledgeDomains = Object.entries(normalizedKnowledge)
+        .filter(([domain, value]) => domain !== primaryKnowledge && value >= 0.2)
+        .map(([domain]) => domain);
+
+      await query(
+        `
+        INSERT INTO template_entity_profile (
+          template_id,
+          total_documents,
+          total_entities,
+          avg_entity_counts,
+          knowledge_domain_coverage,
+          performance_domain_coverage,
+          primary_knowledge_domain,
+          secondary_knowledge_domains,
+          primary_performance_domain,
+          updated_at
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+        ON CONFLICT (template_id) DO UPDATE SET
+          total_documents = EXCLUDED.total_documents,
+          total_entities = EXCLUDED.total_entities,
+          avg_entity_counts = EXCLUDED.avg_entity_counts,
+          knowledge_domain_coverage = EXCLUDED.knowledge_domain_coverage,
+          performance_domain_coverage = EXCLUDED.performance_domain_coverage,
+          primary_knowledge_domain = EXCLUDED.primary_knowledge_domain,
+          secondary_knowledge_domains = EXCLUDED.secondary_knowledge_domains,
+          primary_performance_domain = EXCLUDED.primary_performance_domain,
+          updated_at = NOW()
+        `,
+        [
+          row.template_id,
+          row.total_documents,
+          row.total_entities,
+          row.avg_entity_counts || {},
+          normalizedKnowledge,
+          normalizedPerformance,
+          primaryKnowledge,
+          secondaryKnowledgeDomains,
+          primaryPerformance
+        ]
+      );
     }
   }
 

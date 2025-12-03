@@ -60,10 +60,17 @@ router.get("/",
             WHEN (t.success_count::NUMERIC / NULLIF(t.validation_count, 0)) >= 0.75 THEN 'Good'
             WHEN (t.success_count::NUMERIC / NULLIF(t.validation_count, 0)) >= 0.50 THEN 'Fair'
             ELSE 'Needs Improvement'
-          END as health_rating
+          END as health_rating,
+          tep.avg_entity_counts,
+          tep.knowledge_domain_coverage,
+          tep.performance_domain_coverage,
+          tep.primary_knowledge_domain,
+          tep.secondary_knowledge_domains,
+          tep.primary_performance_domain
         FROM templates t
         LEFT JOIN users u ON t.created_by = u.id
         LEFT JOIN companies c ON t.company_id = c.id
+        LEFT JOIN template_entity_profile tep ON tep.template_id = t.id
         WHERE t.deleted_at IS NULL
           AND (t.development_status IS NULL OR t.development_status != 'archived')
           AND (
@@ -403,10 +410,17 @@ router.get("/:id",
             WHEN (t.success_count::NUMERIC / NULLIF(t.validation_count, 0)) >= 0.75 THEN 'Good'
             WHEN (t.success_count::NUMERIC / NULLIF(t.validation_count, 0)) >= 0.50 THEN 'Fair'
             ELSE 'Needs Improvement'
-          END as health_rating
+          END as health_rating,
+          tep.avg_entity_counts,
+          tep.knowledge_domain_coverage,
+          tep.performance_domain_coverage,
+          tep.primary_knowledge_domain,
+          tep.secondary_knowledge_domains,
+          tep.primary_performance_domain
         FROM templates t
         LEFT JOIN users u ON t.created_by = u.id
         LEFT JOIN companies c ON t.company_id = c.id
+        LEFT JOIN template_entity_profile tep ON tep.template_id = t.id
         WHERE t.id = $1 
           AND t.deleted_at IS NULL
           AND (

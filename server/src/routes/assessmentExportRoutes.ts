@@ -926,18 +926,29 @@ router.post('/project/quick-create', authenticate, async (req: Request, res: Res
 
     logger.info('Quick creating project for onboarding', { name, userId });
 
+    // Look up the user's company so the onboarding project is visible
+    // in standard project lists that filter by company_id.
+    let userCompanyId: string | null = null;
+    try {
+      const userResult = await pool.query(
+        'SELECT company_id FROM users WHERE id = $1',
+        [userId]
+      );
+      if (userResult.rows.length > 0) {
+        userCompanyId = userResult.rows[0].company_id;
+      }
+    } catch (err: any) {
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        logger.warn('company_id column not found on users table during assessment quick-create, creating project without company_id');
+      } else {
+        throw err;
+      }
+    }
+
     const projectId = require('uuid').v4();
     
     // Create project with minimal fields for onboarding
-    const query = `
-      INSERT INTO projects (
-        id, name, description, framework, priority, 
-        owner_id, created_by, start_date, end_date, created_at, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-      RETURNING *
-    `;
-
-    const result = await pool.query(query, [
+    const baseParams = [
       projectId,
       name.trim(),
       description || '',
@@ -947,7 +958,49 @@ router.post('/project/quick-create', authenticate, async (req: Request, res: Res
       userId,
       new Date().toISOString().split('T')[0], // Today
       new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] // 90 days from now
-    ]);
+    ];
+
+    let result;
+
+    if (userCompanyId) {
+      try {
+        const queryWithCompany = `
+          INSERT INTO projects (
+            id, name, description, framework, priority, 
+            owner_id, created_by, start_date, end_date, company_id, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+          RETURNING *
+        `;
+
+        result = await pool.query(queryWithCompany, [
+          ...baseParams,
+          userCompanyId
+        ]);
+      } catch (err: any) {
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          logger.warn('company_id column not found on projects table during assessment quick-create, falling back without company_id');
+          const fallbackQuery = `
+            INSERT INTO projects (
+              id, name, description, framework, priority, 
+              owner_id, created_by, start_date, end_date, created_at, updated_at
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+            RETURNING *
+          `;
+          result = await pool.query(fallbackQuery, baseParams);
+        } else {
+          throw err;
+        }
+      }
+    } else {
+      const fallbackQuery = `
+        INSERT INTO projects (
+          id, name, description, framework, priority, 
+          owner_id, created_by, start_date, end_date, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+        RETURNING *
+      `;
+      result = await pool.query(fallbackQuery, baseParams);
+    }
 
     res.status(201).json({
       success: true,

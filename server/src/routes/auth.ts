@@ -72,7 +72,7 @@ router.post("/register", async (req, res) => {
   try {
     await client.query('BEGIN') // Start transaction
     
-    const { email, password, name, role = "user", companyName } = req.body
+    const { email, password, name, role: _requestedRole, companyName } = req.body
 
     // Check if user exists
     const existingUser = await client.query("SELECT id FROM users WHERE email = $1", [email])
@@ -85,8 +85,12 @@ router.post("/register", async (req, res) => {
     const saltRounds = 12
     const passwordHash = await bcrypt.hash(password, saltRounds)
 
-    // Set permissions based on role
-    const permissions = role === 'admin' ? ADMIN_PERMISSIONS : DEFAULT_USER_PERMISSIONS
+    // We ignore any client-provided role for public registration.
+    // Actual role is derived from company context:
+    // - First active user in a company becomes 'admin'
+    // - Subsequent users for that company are regular 'user' accounts.
+    let actualRole: 'admin' | 'user' = 'user'
+    let permissions = DEFAULT_USER_PERMISSIONS
 
     // Handle company creation/assignment if companyName is provided
     let companyId: string | null = null
@@ -117,11 +121,47 @@ router.post("/register", async (req, res) => {
       }
     }
 
+    // Determine role based on company user count (first user per company is admin)
+    if (companyId) {
+      try {
+        const companyUserCountResult = await client.query(
+          `SELECT COUNT(*) AS count 
+           FROM users 
+           WHERE company_id = $1 AND is_active = true`,
+          [companyId]
+        )
+        const existingCount = parseInt(companyUserCountResult.rows[0]?.count || '0', 10)
+
+        if (existingCount === 0) {
+          actualRole = 'admin'
+          permissions = ADMIN_PERMISSIONS
+          log.info(`Assigning first user for company ${companyId} as admin`)
+        } else {
+          actualRole = 'user'
+          permissions = DEFAULT_USER_PERMISSIONS
+          log.info(`Assigning new user for existing company ${companyId} as regular user`, {
+            existingCompanyUsers: existingCount
+          })
+        }
+      } catch (err: any) {
+        // If company_id column or query fails, fall back to safe default (user)
+        log.warn('Failed to determine company user count during registration, defaulting to user role', {
+          error: err?.message,
+        })
+        actualRole = 'user'
+        permissions = DEFAULT_USER_PERMISSIONS
+      }
+    } else {
+      // No company context (should be rare) – default to regular user
+      actualRole = 'user'
+      permissions = DEFAULT_USER_PERMISSIONS
+    }
+
     // Build metadata object with company name if provided
     const metadata = companyName ? { company_name: companyName.trim() } : null
 
-    // Create user - check if metadata column exists, otherwise store in a separate field
-    // First, try with metadata column and company_id
+    // Create user - check if metadata/company_id columns exist, otherwise fall back gracefully.
+    // First, try with metadata column and company_id.
     let result
     try {
       result = await client.query(
@@ -129,11 +169,11 @@ router.post("/register", async (req, res) => {
          VALUES ($1, $2, $3, $4, $5, $6, $7) 
          RETURNING id, email, name, role, permissions, created_at, company_id, metadata`,
         [
-          email, 
-          passwordHash, 
-          name, 
-          role, 
-          JSON.stringify(permissions), 
+          email,
+          passwordHash,
+          name,
+          actualRole,
+          JSON.stringify(permissions),
           metadata ? JSON.stringify(metadata) : null,
           companyId
         ],
@@ -145,10 +185,10 @@ router.post("/register", async (req, res) => {
         try {
           // Try with company_id but without metadata
           result = await client.query(
-            `INSERT INTO users (email, password_hash, name, role, permissions, company_id) 
+          `INSERT INTO users (email, password_hash, name, role, permissions, company_id) 
              VALUES ($1, $2, $3, $4, $5, $6) 
              RETURNING id, email, name, role, permissions, created_at, company_id`,
-            [email, passwordHash, name, role, JSON.stringify(permissions), companyId],
+            [email, passwordHash, name, actualRole, JSON.stringify(permissions), companyId],
           )
         } catch (err2: any) {
           // If company_id also doesn't exist, create without both
@@ -157,7 +197,7 @@ router.post("/register", async (req, res) => {
               `INSERT INTO users (email, password_hash, name, role, permissions) 
                VALUES ($1, $2, $3, $4, $5) 
                RETURNING id, email, name, role, permissions, created_at`,
-              [email, passwordHash, name, role, JSON.stringify(permissions)],
+              [email, passwordHash, name, actualRole, JSON.stringify(permissions)],
             )
           } else {
             throw err2

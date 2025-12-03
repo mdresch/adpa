@@ -28,8 +28,7 @@
     "test:ai-env": "tsx scripts/test-env-update.ts",
     "import-issues": "tsx scripts/import-github-issues.ts",
     "import-issues:stats": "tsx scripts/import-github-issues.ts --stats",
-    "import-issues:dry-run": "tsx scripts/import-github-issues.ts --dry-run"
-    ,
+    "import-issues:dry-run": "tsx scripts/import-github-issues.ts --dry-run",
     "migrate:051": "node server/scripts/migrate-051.js",
     "migrate:401": "node server/scripts/migrate-401.js",
     "migrate:350": "tsx server/scripts/migrate-350-pmbok8-domain-alignment.ts"
@@ -72,6 +71,7 @@
     "@vercel/analytics": "^1.5.0",
     "@vercel/kv": "^3.0.0",
     "@vercel/postgres": "^0.10.0",
+    "@vercel/speed-insights": "^1.3.1",
     "bcryptjs": "latest",
     "bull": "latest",
     "chalk": "^4.1.2",

@@ -121,17 +121,40 @@ router.post(
         // Create onboarding project automatically
         const { v4: uuidv4 } = require('uuid');
         const { pool } = require('../database/connection');
+
+        // Try to fetch the user's company_id so the onboarding project
+        // is visible under standard company-based project filters
+        let userCompanyId: string | null = null;
+        try {
+          const userResult = await pool.query(
+            'SELECT company_id FROM users WHERE id = $1',
+            [userId]
+          );
+          if (userResult.rows.length > 0) {
+            userCompanyId = userResult.rows[0].company_id;
+          }
+        } catch (err: any) {
+          // If company_id column doesn't exist yet, log and continue without it
+          if (err.message?.includes('column "company_id"') || err.code === '42703') {
+            logger.warn('company_id column not found on users table when auto-creating onboarding project, creating project without company_id');
+          } else {
+            throw err;
+          }
+        }
         
         const onboardingProjectId = uuidv4();
-        const projectQuery = `
+
+        // Prefer inserting with company_id when the column exists; fall back
+        // to the legacy shape if the projects table doesn't yet have company_id
+        let projectQuery = `
           INSERT INTO projects (
             id, name, description, framework, priority, owner_id, created_by, 
             start_date, end_date, created_at, updated_at
           ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
           RETURNING id
         `;
-        
-        await pool.query(projectQuery, [
+
+        const baseParams = [
           onboardingProjectId,
           assessmentName,
           `Client onboarding: ${clientName || 'Prospective client'} - ${organizationName || ''}`.trim(),
@@ -141,13 +164,42 @@ router.post(
           userId,
           new Date().toISOString().split('T')[0],
           new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-        ]);
+        ];
+
+        if (userCompanyId) {
+          try {
+            projectQuery = `
+              INSERT INTO projects (
+                id, name, description, framework, priority, owner_id, created_by, 
+                start_date, end_date, company_id, created_at, updated_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+              RETURNING id
+            `;
+
+            await pool.query(projectQuery, [
+              ...baseParams,
+              userCompanyId
+            ]);
+          } catch (err: any) {
+            // If company_id doesn't exist on projects table yet, fall back to legacy insert
+            if (err.message?.includes('column "company_id"') || err.code === '42703') {
+              logger.warn('company_id column not found on projects table when auto-creating onboarding project, falling back without company_id');
+              await pool.query(projectQuery, baseParams);
+            } else {
+              throw err;
+            }
+          }
+        } else {
+          // No company context available, use legacy insert
+          await pool.query(projectQuery, baseParams);
+        }
         
         actualProjectId = onboardingProjectId;
         logger.info('Auto-created onboarding project', { 
           projectId: onboardingProjectId, 
           assessmentName,
-          clientName 
+          clientName,
+          userCompanyId
         });
       }
 

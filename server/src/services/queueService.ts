@@ -8,6 +8,8 @@ import { io } from "../server"
 import { v4 as uuidv4 } from "uuid"
 import { PMBOK_DOMAINS } from "@/types/pmbok"
 import type { PmbokDomain } from "@/types/pmbok"
+import DocumentPurposeService from "./documentPurposeService"
+import TemplateAnalyticsService from "./templateAnalyticsService"
 
 // Helper function to parse Redis URL for Bull
 function parseBullRedisConfig() {
@@ -1949,6 +1951,33 @@ async function finalizeExtractionJob(jobId: string, projectId: string, failedJob
       })
     }
     
+    // After counts are refreshed, rebuild per-document purpose and template profiles.
+    // This runs best-effort; failures here should not break the main extraction job.
+    try {
+      await DocumentPurposeService.rebuildForProject(projectId)
+
+      // Recompute template_entity_profile rows only for templates used in this project
+      const templatesRes = await pool.query(
+        `SELECT DISTINCT template_id
+         FROM documents
+         WHERE project_id = $1 AND template_id IS NOT NULL`,
+        [projectId]
+      )
+
+      const templateIds = templatesRes.rows.map((row) => row.template_id as string)
+      if (templateIds.length > 0) {
+        for (const templateId of templateIds) {
+          await TemplateAnalyticsService.updateTemplateEntityProfile(templateId)
+        }
+      }
+    } catch (analyticsError: any) {
+      logger.error('[EXTRACTION-PARENT] Failed to rebuild document/template purpose analytics', {
+        jobId,
+        projectId,
+        error: analyticsError.message
+      })
+    }
+
     // Update job to completed (status is VARCHAR(20), so we use 'completed' and store warnings in result)
     // Note: Status column is VARCHAR(20), so we can't use 'completed_with_warnings' (25 chars)
     // Instead, we store the partial success info in the result JSON

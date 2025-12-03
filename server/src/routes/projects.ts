@@ -49,10 +49,11 @@ router.get("/", authenticateToken, async (req, res) => {
     const offset = (Number(page) - 1) * Number(limit)
     const userId = req.user?.id
     const userRole = req.user?.role
+    const isSuperAdmin = userRole === "super_admin"
 
-    // Get user's company_id (admins can see all projects, others see only their company's projects)
+    // Get user's company_id (super_admin can see all projects, others see only their company's projects or ownership)
     let userCompanyId: string | null = null
-    if (userRole !== "admin") {
+    if (!isSuperAdmin) {
       try {
         const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
         if (userResult.rows.length > 0) {
@@ -82,15 +83,15 @@ router.get("/", authenticateToken, async (req, res) => {
     const params: any[] = []
     let paramCount = 0
 
-    // Filter by company_id if user is not admin and has a company_id
+    // Filter by company_id if user is not super_admin and has a company_id
     // Note: We'll try to use company_id filtering, but if the column doesn't exist, we'll fall back
     // to owner/team member filtering when the query executes
-    if (userRole !== "admin" && userCompanyId) {
+    if (!isSuperAdmin && userCompanyId) {
       // Try to filter by company_id (will fail gracefully if column doesn't exist)
       paramCount++
       query += ` AND p.company_id = $${paramCount}`
       params.push(userCompanyId)
-    } else if (userRole !== "admin") {
+    } else if (!isSuperAdmin) {
       // If user has no company_id, only show projects they own or are team members of
       paramCount++
       query += ` AND (p.owner_id = $${paramCount} OR p.team_members ? $${paramCount}::text)`
@@ -197,11 +198,11 @@ router.get("/", authenticateToken, async (req, res) => {
     let countParamCount = 0
 
     // Apply same company filtering to count query
-    if (userRole !== "admin" && userCompanyId) {
+    if (!isSuperAdmin && userCompanyId) {
       countParamCount++
       countQuery += ` AND p.company_id = $${countParamCount}`
       countParams.push(userCompanyId)
-    } else if (userRole !== "admin") {
+    } else if (!isSuperAdmin) {
       countParamCount++
       countQuery += ` AND (p.owner_id = $${countParamCount} OR p.team_members ? $${countParamCount}::text)`
       countParams.push(userId)
@@ -1206,10 +1207,11 @@ router.get("/:id", authenticateToken, async (req, res) => {
     const { id } = req.params
     const userId = req.user?.id
     const userRole = req.user?.role
+    const isSuperAdmin = userRole === "super_admin"
 
-    // Get user's company_id (admins can see all projects, others see only their company's projects)
+    // Get user's company_id (super_admin can see all projects, others see only their company's projects or ownership)
     let userCompanyId: string | null = null
-    if (userRole !== "admin") {
+    if (!isSuperAdmin) {
       try {
         const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
         if (userResult.rows.length > 0) {
@@ -1225,10 +1227,22 @@ router.get("/:id", authenticateToken, async (req, res) => {
       }
     }
 
-    // Try to query with company_id filter, fallback if column doesn't exist
+    // Try to query with company_id/ownership filters for non-super_admin users.
+    // super_admin can see any project without filters.
     let result
     try {
-      if (userRole !== "admin" && userCompanyId) {
+      if (isSuperAdmin) {
+        // Super admin has unrestricted access
+        result = await pool.query(
+          `
+          SELECT p.*, u.name as owner_name, u.email as owner_email
+          FROM projects p
+          LEFT JOIN users u ON p.owner_id = u.id
+          WHERE p.id = $1
+          `,
+          [id],
+        )
+      } else if (userCompanyId) {
         result = await pool.query(
           `
           SELECT p.*, u.name as owner_name, u.email as owner_email
@@ -1238,7 +1252,7 @@ router.get("/:id", authenticateToken, async (req, res) => {
           `,
           [id, userCompanyId],
         )
-      } else if (userRole !== "admin") {
+      } else {
         // If user has no company_id, check by owner_id or team_members
         result = await pool.query(
           `
@@ -1249,23 +1263,12 @@ router.get("/:id", authenticateToken, async (req, res) => {
           `,
           [id, userId],
         )
-      } else {
-        // Admin can see any project
-        result = await pool.query(
-          `
-          SELECT p.*, u.name as owner_name, u.email as owner_email
-          FROM projects p
-          LEFT JOIN users u ON p.owner_id = u.id
-          WHERE p.id = $1
-          `,
-          [id],
-        )
       }
     } catch (err: any) {
       // If company_id column doesn't exist on projects table, fall back to owner/team member check
       if (err.message?.includes('column "company_id"') || err.code === '42703') {
         log.warn('company_id column not found on projects table, checking access by owner_id and team_members')
-        if (userRole !== "admin") {
+        if (!isSuperAdmin) {
           result = await pool.query(
             `
             SELECT p.*, u.name as owner_name, u.email as owner_email

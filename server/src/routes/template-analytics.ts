@@ -299,5 +299,17 @@ router.post('/analytics/refresh', authenticateToken, requirePermission('admin'),
   }
 });
 
+// Rebuild template entity profiles (template_entity_profile) from document_entity_counts
+router.post('/analytics/rebuild-entity-profiles', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    await TemplateAnalyticsService.updateTemplateEntityProfile();
+    res.json({ message: 'Template entity profiles rebuilt successfully' });
+  } catch (error) {
+    log.error('Rebuild template entity profiles error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
 

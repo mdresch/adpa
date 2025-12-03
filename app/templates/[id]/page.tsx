@@ -59,6 +59,13 @@ interface Template {
   created_by_name: string
   created_at: string
   updated_at: string
+  // Template entity profile fields (from template_entity_profile)
+  avg_entity_counts?: Record<string, number> | null
+  primary_knowledge_domain?: string | null
+  secondary_knowledge_domains?: string[] | null
+  primary_performance_domain?: string | null
+  knowledge_domain_coverage?: Record<string, number> | null
+  performance_domain_coverage?: Record<string, number> | null
 }
 
 interface TemplateUsage {
@@ -822,26 +829,120 @@ export default function TemplateDetailPage() {
                           </TabsContent>
                           
                           <TabsContent value="variables" className="mt-4">
-                            <div className="bg-muted rounded-lg p-4">
-                              <p className="text-sm text-muted-foreground mb-2">Template Variables</p>
-                              {template.variables && Array.isArray(template.variables) && template.variables.length > 0 ? (
-                                <div className="space-y-2">
-                                  {template.variables.map((variable: any, index: number) => (
-                                    <div key={index} className="bg-background rounded p-3 flex items-start justify-between">
-                                      <div>
-                                        <p className="font-medium">{variable.name}</p>
-                                        <p className="text-sm text-muted-foreground">{variable.description}</p>
-                                      </div>
-                                      <div className="flex gap-2">
-                                        <Badge variant="outline">{variable.type}</Badge>
-                                        {variable.required && <Badge variant="destructive">Required</Badge>}
-                                      </div>
-                                    </div>
-                                  ))}
+                            <div className="bg-muted rounded-lg p-4 space-y-6">
+                              {/* Purpose summary */}
+                              <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                  <p className="text-sm font-medium">Template Purpose & Entity Profile</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    Inferred from entities produced by documents that use this template.
+                                  </p>
                                 </div>
-                              ) : (
-                                <p className="text-sm text-muted-foreground">No variables defined</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {template.primary_knowledge_domain && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Primary Knowledge Domain: {template.primary_knowledge_domain}
+                                    </Badge>
+                                  )}
+                                  {template.primary_performance_domain && (
+                                    <Badge variant="outline" className="text-xs">
+                                      Primary Performance Domain: {template.primary_performance_domain}
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Domain coverage */}
+                              {(template.knowledge_domain_coverage || template.performance_domain_coverage) && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div className="bg-background rounded p-3 space-y-2">
+                                    <p className="text-xs font-semibold text-muted-foreground mb-1">
+                                      Knowledge Domains (what this template manages)
+                                    </p>
+                                    {template.knowledge_domain_coverage &&
+                                    Object.keys(template.knowledge_domain_coverage).length > 0 ? (
+                                      Object.entries(template.knowledge_domain_coverage)
+                                        .sort(([, a], [, b]) => (Number(b) || 0) - (Number(a) || 0))
+                                        .map(([domain, weight]) => {
+                                          const pct = (Number(weight) || 0) * 100
+                                          return (
+                                            <div key={domain} className="flex items-center justify-between text-xs">
+                                              <span className="truncate mr-2">{domain}</span>
+                                              <span className="font-medium">{pct.toFixed(1)}%</span>
+                                            </div>
+                                          )
+                                        })
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">
+                                        No knowledge-domain coverage data yet.
+                                      </p>
+                                    )}
+                                  </div>
+
+                                  <div className="bg-background rounded p-3 space-y-2">
+                                    <p className="text-xs font-semibold text-muted-foreground mb-1">
+                                      Performance Domains (outcomes this template supports)
+                                    </p>
+                                    {template.performance_domain_coverage &&
+                                    Object.keys(template.performance_domain_coverage).length > 0 ? (
+                                      Object.entries(template.performance_domain_coverage)
+                                        .sort(([, a], [, b]) => (Number(b) || 0) - (Number(a) || 0))
+                                        .map(([domain, weight]) => {
+                                          const pct = (Number(weight) || 0) * 100
+                                          return (
+                                            <div key={domain} className="flex items-center justify-between text-xs">
+                                              <span className="truncate mr-2">{domain}</span>
+                                              <span className="font-medium">{pct.toFixed(1)}%</span>
+                                            </div>
+                                          )
+                                        })
+                                    ) : (
+                                      <p className="text-xs text-muted-foreground">
+                                        No performance-domain coverage data yet.
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
                               )}
+
+                              {/* Entity production profile */}
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-muted-foreground">
+                                  Entity Production (average per generated document)
+                                </p>
+                                {template.avg_entity_counts && Object.keys(template.avg_entity_counts).length > 0 ? (
+                                  <div className="space-y-2">
+                                    {Object.entries(template.avg_entity_counts)
+                                      .sort(([, a], [, b]) => (Number(b) || 0) - (Number(a) || 0))
+                                      .map(([entityType, avgCount]) => (
+                                        <div
+                                          key={entityType}
+                                          className="bg-background rounded p-3 flex items-center justify-between"
+                                        >
+                                          <div>
+                                            <p className="font-medium text-sm">{entityType}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              Typical entities this template produces.
+                                            </p>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-sm font-semibold">
+                                              {(Number(avgCount) || 0).toFixed(1)}
+                                            </span>
+                                            <Badge variant="outline" className="text-xs">
+                                              avg / doc
+                                            </Badge>
+                                          </div>
+                                        </div>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <p className="text-sm text-muted-foreground">
+                                    No entity production data available yet. Run extraction on documents generated from
+                                    this template to build its profile.
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </TabsContent>
                           
