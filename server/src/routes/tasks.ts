@@ -15,6 +15,7 @@ import Joi from 'joi'
 import { authenticateToken, requirePermission } from '../middleware/auth'
 import { validate } from '../middleware/validation'
 import { childLogger } from '../utils/logger'
+import { pool } from '../database/connection'
 import * as wbsImportService from '../services/wbsImportService'
 import * as taskManagementService from '../services/taskManagementService'
 import * as taskSchedulingService from '../services/taskSchedulingService'
@@ -265,6 +266,57 @@ router.put('/:id/progress',
   }
 )
 
+/**
+ * POST /api/tasks/:id/log-hours
+ * Log hours worked on a task
+ */
+router.post('/:id/log-hours',
+  authenticateToken,
+  validate(Joi.object({
+    actual_hours: Joi.number().min(0).required(),
+    date: Joi.string().isoDate().optional(),
+    notes: Joi.string().optional().allow('', null)
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const taskId = req.params.id
+      const { actual_hours, date, notes } = req.body
+      
+      // Get current task to check existing actual_hours
+      const task = await taskManagementService.getTaskById(taskId)
+      if (!task) {
+        return res.status(404).json({ error: 'Task not found' })
+      }
+      
+      // Add the new hours to existing actual_hours (or set if null)
+      const currentHours = task.actualHours || task.actual_hours || 0
+      const newHours = currentHours + actual_hours
+      
+      // Since updateTask doesn't support actualHours yet, let's update it directly
+      await pool.query(
+        'UPDATE project_tasks SET actual_hours = $1, updated_at = NOW() WHERE id = $2',
+        [newHours, taskId]
+      )
+      
+      log.info('Hours logged to task', { taskId, hours: actual_hours, totalHours: newHours })
+      
+      res.json({ 
+        success: true, 
+        data: { 
+          taskId,
+          hoursLogged: actual_hours,
+          totalHours: newHours
+        },
+        message: `Logged ${actual_hours} hours to task`
+      })
+    } catch (error: any) {
+      log.error('Failed to log hours', error)
+      res.status(500).json({ error: error.message || 'Failed to log hours' })
+    }
+  }
+)
+
 // ================================================================
 // RESOURCE SCHEDULING & ASSIGNMENT
 // ================================================================
@@ -277,7 +329,10 @@ router.post('/:id/assign',
   authenticateToken,
   requirePermission('projects.manage'),
   validate(Joi.object({
-    resourceAssignmentId: Joi.string().uuid().required(),
+    resourceAssignmentId: Joi.alternatives().try(
+      Joi.string().uuid(),
+      Joi.string().pattern(/^stakeholder-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    ).required(),
     plannedHours: Joi.number().min(0.1).required(),
     scheduledStartDate: Joi.alternatives().try(
       Joi.date(),
@@ -546,17 +601,46 @@ router.post('/:id/dependencies',
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     try {
-      const dependency = await taskManagementService.createTaskDependency(
+      // Use addTaskDependency which has validation (prevents circular deps, self-deps, etc.)
+      const dependency = await taskManagementService.addTaskDependency(
         req.params.id,
         req.body.dependsOnTaskId,
-        req.body.dependencyType,
-        req.body.lagDays
+        req.body.dependencyType || 'finish-to-start',
+        req.body.lagDays || 0
       )
       
       res.status(201).json({ success: true, data: dependency })
-    } catch (error) {
+    } catch (error: any) {
       log.error('Failed to create dependency', error)
-      res.status(500).json({ error: 'Failed to create dependency' })
+      res.status(500).json({ 
+        error: error.message || 'Failed to create dependency' 
+      })
+    }
+  }
+)
+
+/**
+ * DELETE /api/tasks/:id/dependencies/:dependencyId
+ * Remove task dependency
+ */
+router.delete('/:id/dependencies/:dependencyId',
+  authenticateToken,
+  requirePermission('projects.manage'),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const removed = await taskManagementService.removeTaskDependency(req.params.dependencyId)
+      
+      if (!removed) {
+        return res.status(404).json({ error: 'Dependency not found' })
+      }
+      
+      res.json({ success: true, message: 'Dependency removed successfully' })
+    } catch (error: any) {
+      log.error('Failed to remove dependency', error)
+      res.status(500).json({ 
+        error: error.message || 'Failed to remove dependency' 
+      })
     }
   }
 )

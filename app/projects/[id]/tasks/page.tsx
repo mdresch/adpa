@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useParams } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,11 +9,16 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { TaskMetrics } from "@/components/project/TaskMetrics"
 import { TaskFilters } from "@/components/project/TaskFilters"
 import { TaskTable } from "@/components/project/TaskTable"
+import { TaskCardView } from "@/components/project/TaskCardView"
+import { KanbanBoardView } from "@/components/project/KanbanBoardView"
+import { TaskGanttViewNew as TaskGanttView } from "@/components/project/TaskGanttViewNew"
 import { TaskDetailsModal } from "@/components/project/TaskDetailsModal"
-import { useTasks } from "@/hooks/use-tasks"
+import { ResourceAssignmentDialog } from "@/components/project/ResourceAssignmentDialog"
+import { useTasks, useTaskMutations } from "@/hooks/use-tasks"
 import { useTaskFilters } from "@/hooks/use-task-filters"
-import { Download, Plus, RefreshCw, AlertCircle } from "lucide-react"
+import { Download, Plus, RefreshCw, AlertCircle, LayoutGrid, Table2, Columns, Calendar } from "lucide-react"
 import { toast } from "sonner"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function TasksPage() {
   const params = useParams()
@@ -21,9 +26,42 @@ export default function TasksPage() {
 
   const { tasks, loading, error, refetch } = useTasks(projectId)
   const { filters, setFilters, filteredTasks, filterOptions } = useTaskFilters(tasks)
+  const { updateTask } = useTaskMutations(projectId, refetch)
 
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const [assignmentDialogOpen, setAssignmentDialogOpen] = useState(false)
+  const [selectedTaskForAssignment, setSelectedTaskForAssignment] = useState<string | null>(null)
+  
+  // Load view preference from localStorage, default to 'table'
+  const [viewMode, setViewMode] = useState<'table' | 'card' | 'kanban' | 'gantt'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('tasks-view-mode')
+      if (saved === 'table' || saved === 'card' || saved === 'kanban' || saved === 'gantt') {
+        return saved
+      }
+    }
+    return 'table'
+  })
+  
+  const [sortBy, setSortBy] = useState<'assignedTo' | 'role' | 'none'>('none')
+
+  // Persist view mode to localStorage when it changes
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tasks-view-mode', viewMode)
+    }
+  }, [viewMode])
+
+  const handleStatusChange = async (taskId: string, newStatus: string) => {
+    try {
+      await updateTask(taskId, { status: newStatus })
+      await refetch()
+    } catch (error) {
+      console.error('Failed to update task status:', error)
+      throw error
+    }
+  }
 
   const handleViewTask = (taskId: string) => {
     setSelectedTaskId(taskId)
@@ -36,8 +74,8 @@ export default function TasksPage() {
   }
 
   const handleAssignTask = (taskId: string) => {
-    // TODO: Open assignment modal
-    toast.info('Resource assignment - Coming in Phase 2')
+    setSelectedTaskForAssignment(taskId)
+    setAssignmentDialogOpen(true)
   }
 
   const handleLogHours = (taskId: string) => {
@@ -127,7 +165,28 @@ export default function TasksPage() {
               Project Tasks ({filteredTasks.length}
               {filteredTasks.length !== tasks.length && ` of ${tasks.length}`})
             </CardTitle>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {/* View Mode Switcher */}
+              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'table' | 'card' | 'kanban' | 'gantt')}>
+                <TabsList className="h-9">
+                  <TabsTrigger value="table" className="flex items-center gap-2">
+                    <Table2 className="h-4 w-4" />
+                    Table
+                  </TabsTrigger>
+                  <TabsTrigger value="card" className="flex items-center gap-2">
+                    <LayoutGrid className="h-4 w-4" />
+                    Cards
+                  </TabsTrigger>
+                  <TabsTrigger value="kanban" className="flex items-center gap-2">
+                    <Columns className="h-4 w-4" />
+                    Kanban
+                  </TabsTrigger>
+                  <TabsTrigger value="gantt" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Gantt
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
               <Button 
                 variant="outline" 
                 onClick={refetch}
@@ -153,14 +212,30 @@ export default function TasksPage() {
         </CardHeader>
         <CardContent>
           {/* Filters */}
-          <TaskFilters
-            filters={filters}
-            onFiltersChange={setFilters}
-            roleOptions={filterOptions.roles}
-            assigneeOptions={filterOptions.assignees}
-          />
+          <div className="space-y-4 mb-6">
+            <TaskFilters
+              filters={filters}
+              onFiltersChange={setFilters}
+              roleOptions={filterOptions.roles}
+              assigneeOptions={filterOptions.assignees}
+            />
+            
+            {/* Sort Options (for Card View) */}
+            {viewMode === 'card' && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Sort by:</span>
+                <Tabs value={sortBy} onValueChange={(v) => setSortBy(v as 'assignedTo' | 'role' | 'none')}>
+                  <TabsList className="h-8">
+                    <TabsTrigger value="none" className="text-xs">Default</TabsTrigger>
+                    <TabsTrigger value="assignedTo" className="text-xs">Assigned To</TabsTrigger>
+                    <TabsTrigger value="role" className="text-xs">Role</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            )}
+          </div>
 
-          {/* Task Table */}
+          {/* Task View */}
           {tasks.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground text-lg mb-4">
@@ -174,7 +249,7 @@ export default function TasksPage() {
                 Create First Task
               </Button>
             </div>
-          ) : (
+          ) : viewMode === 'table' ? (
             <TaskTable
               tasks={filteredTasks}
               onViewTask={handleViewTask}
@@ -182,6 +257,32 @@ export default function TasksPage() {
               onAssignTask={handleAssignTask}
               onLogHours={handleLogHours}
               onDeleteTask={handleDeleteTask}
+            />
+          ) : viewMode === 'kanban' ? (
+            <KanbanBoardView
+              tasks={filteredTasks}
+              onViewTask={handleViewTask}
+              onEditTask={handleEditTask}
+              onAssignTask={handleAssignTask}
+              onLogHours={handleLogHours}
+              onDeleteTask={handleDeleteTask}
+              onStatusChange={handleStatusChange}
+            />
+          ) : viewMode === 'gantt' ? (
+            <TaskGanttView
+              tasks={filteredTasks}
+              onViewTask={handleViewTask}
+              projectId={projectId}
+            />
+          ) : (
+            <TaskCardView
+              tasks={filteredTasks}
+              onViewTask={handleViewTask}
+              onEditTask={handleEditTask}
+              onAssignTask={handleAssignTask}
+              onLogHours={handleLogHours}
+              onDeleteTask={handleDeleteTask}
+              sortBy={sortBy}
             />
           )}
         </CardContent>
@@ -208,6 +309,27 @@ export default function TasksPage() {
         }}
         onTaskUpdated={refetch}
       />
+
+      {/* Resource Assignment Dialog */}
+      {selectedTaskForAssignment && (
+        <ResourceAssignmentDialog
+          open={assignmentDialogOpen}
+          onOpenChange={(open) => {
+            setAssignmentDialogOpen(open)
+            if (!open) {
+              setSelectedTaskForAssignment(null)
+            }
+          }}
+          taskId={selectedTaskForAssignment}
+          projectId={projectId}
+          onSuccess={() => {
+            refetch() // Refresh tasks list
+            setAssignmentDialogOpen(false)
+            setSelectedTaskForAssignment(null)
+            toast.success("Resource assigned successfully")
+          }}
+        />
+      )}
     </div>
   )
 }

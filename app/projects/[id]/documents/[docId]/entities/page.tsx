@@ -144,6 +144,35 @@ interface EntityData {
   [key: string]: any[]
 }
 
+type KnowledgeDomainKey =
+  | 'governance'
+  | 'scope'
+  | 'schedule'
+  | 'finance'
+  | 'resources'
+  | 'risk'
+  | 'stakeholders_ops'
+
+const KNOWLEDGE_DOMAIN_LABELS: Record<KnowledgeDomainKey, string> = {
+  governance: 'Governance',
+  scope: 'Scope',
+  schedule: 'Schedule',
+  finance: 'Finance',
+  resources: 'Resources',
+  risk: 'Risk',
+  stakeholders_ops: 'Stakeholders Operations',
+}
+
+const KNOWLEDGE_DOMAIN_DESCRIPTIONS: Partial<Record<KnowledgeDomainKey, string>> = {
+  governance: 'Decision-making, oversight, approvals, and compliance structures.',
+  scope: 'What is in/out of scope, requirements, and deliverables.',
+  schedule: 'Timeline, milestones, activities, and schedule control.',
+  finance: 'Budget, costs, funding, and financial control.',
+  resources: 'People, capacity, and other resources needed to deliver.',
+  risk: 'Risks, responses, contingencies, and risk metrics.',
+  stakeholders_ops: 'Stakeholder engagement, communication, and relationship health.',
+}
+
 const entityTypes = [
   // Core entities (Legacy/PMBOK 7)
   { key: 'stakeholders', label: 'Stakeholders', icon: Users, color: 'text-blue-500' },
@@ -233,6 +262,8 @@ export default function DocumentEntitiesPage() {
   const [entityData, setEntityData] = useState<EntityData>({})
   const [selectedEntityType, setSelectedEntityType] = useState<string | null>(null)
   const [totalEntities, setTotalEntities] = useState(0)
+  const [primaryKnowledgeDomain, setPrimaryKnowledgeDomain] = useState<KnowledgeDomainKey | null>(null)
+  const [secondaryKnowledgeDomains, setSecondaryKnowledgeDomains] = useState<KnowledgeDomainKey[]>([])
   const [isExtracting, setIsExtracting] = useState(false)
   const [extractionProgress, setExtractionProgress] = useState(0)
   const [extractionStatus, setExtractionStatus] = useState<string>("")
@@ -295,6 +326,23 @@ export default function DocumentEntitiesPage() {
       setEntityCounts(data.entityCounts || {})
       setEntityData(data.entities || {})
       setTotalEntities(data.totalEntities || 0)
+
+      if (data.inferredPrimaryDomain) {
+        const key = data.inferredPrimaryDomain as KnowledgeDomainKey
+        setPrimaryKnowledgeDomain(key)
+      } else {
+        setPrimaryKnowledgeDomain(null)
+      }
+
+      if (Array.isArray(data.inferredSecondaryDomains)) {
+        setSecondaryKnowledgeDomains(
+          data.inferredSecondaryDomains.filter((d: string) =>
+            Object.prototype.hasOwnProperty.call(KNOWLEDGE_DOMAIN_LABELS, d)
+          ) as KnowledgeDomainKey[]
+        )
+      } else {
+        setSecondaryKnowledgeDomains([])
+      }
     } catch (error: any) {
       console.error('[DocumentEntities] Failed to fetch document entities:', error)
       toast.error(error.message || 'Failed to load document entities')
@@ -636,6 +684,53 @@ export default function DocumentEntitiesPage() {
                         {totalEntities}
                       </Badge>
                     </div>
+
+                    {primaryKnowledgeDomain && (
+                      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] items-start">
+                        <div className="flex items-center gap-2">
+                          <Shield className="h-5 w-5 text-blue-600" />
+                          <div className="flex flex-col">
+                            <span className="font-medium">Primary Knowledge Domain</span>
+                            <span className="text-xs text-muted-foreground">
+                              Where this document is most heavily focused based on its extracted entities.
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-2 justify-end">
+                          <Badge variant="default" className="bg-blue-600 text-white">
+                            {KNOWLEDGE_DOMAIN_LABELS[primaryKnowledgeDomain]}
+                          </Badge>
+                          {secondaryKnowledgeDomains.map((domain) => (
+                            <Badge key={domain} variant="outline">
+                              {KNOWLEDGE_DOMAIN_LABELS[domain]}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {primaryKnowledgeDomain && (
+                      <p className="mt-3 text-sm text-muted-foreground">
+                        This document primarily supports the{' '}
+                        <span className="font-semibold">
+                          {KNOWLEDGE_DOMAIN_LABELS[primaryKnowledgeDomain]}
+                        </span>{' '}
+                        domain
+                        {secondaryKnowledgeDomains.length > 0 && (
+                          <>
+                            {' '}with important secondary contributions to{' '}
+                            <span className="font-semibold">
+                              {secondaryKnowledgeDomains.map((d) => KNOWLEDGE_DOMAIN_LABELS[d]).join(', ')}
+                            </span>
+                          </>
+                        )}
+                        .{' '}
+                        {primaryKnowledgeDomain &&
+                          KNOWLEDGE_DOMAIN_DESCRIPTIONS[primaryKnowledgeDomain] && (
+                            <span>{KNOWLEDGE_DOMAIN_DESCRIPTIONS[primaryKnowledgeDomain]}</span>
+                          )}
+                      </p>
+                    )}
                     {extractionStatus && (
                       <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                         <p className="text-sm text-blue-900 dark:text-blue-100">{extractionStatus}</p>

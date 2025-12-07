@@ -110,6 +110,9 @@ export function TaskDetailsModal({
               <DialogTitle>
                 <Skeleton className="h-6 w-48" />
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Loading task details
+              </DialogDescription>
               <div className="text-sm text-muted-foreground">
                 <Skeleton className="h-4 w-32 mt-2" />
               </div>
@@ -117,6 +120,9 @@ export function TaskDetailsModal({
           ) : error ? (
             <>
               <DialogTitle>Error Loading Task</DialogTitle>
+              <DialogDescription className="sr-only">
+                An error occurred while loading task details
+              </DialogDescription>
               <div className="mt-2">
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
@@ -134,6 +140,9 @@ export function TaskDetailsModal({
                 <span className="text-muted-foreground">•</span>
                 <span>{task.taskName || task.task_name || 'Untitled Task'}</span>
               </DialogTitle>
+              <DialogDescription className="sr-only">
+                Task details and resource assignments
+              </DialogDescription>
               <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
                 {(task.wbs_code || task.wbsCode) && (
                   <>

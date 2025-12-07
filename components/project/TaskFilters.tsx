@@ -65,8 +65,8 @@ export function TaskFilters({ filters, onFiltersChange, roleOptions, assigneeOpt
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            {roleOptions.map((role) => (
-              <SelectItem key={role} value={role}>
+            {roleOptions.map((role, index) => (
+              <SelectItem key={`role-${role}-${index}`} value={role}>
                 {role}
               </SelectItem>
             ))}

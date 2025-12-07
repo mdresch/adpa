@@ -315,9 +315,11 @@ export default function JobMonitorPage() {
         const mappedJobs = response.jobs.map((job: any) => ({
           ...job, // Spread all job fields first
           name: job.name ?? "", // Then set defaults only if missing
-            priority: job.priority ?? "medium",
-            queue: job.queue ?? "",
-            logs: job.logs ?? [],
+          priority: job.priority ?? "medium",
+          queue: job.queue ?? "",
+          logs: job.logs ?? [],
+          // Map error_message to error for consistency
+          error: job.error || job.error_message || job.metadata?.error_message || null,
           // Extract project and document names from metadata to top level
           projectName: job.metadata?.project_name || job.projectName,
           documentName: job.metadata?.document_name || job.documentName,
@@ -480,6 +482,23 @@ export default function JobMonitorPage() {
           )
         )
       })
+
+      // Listen for job cancellation so cancelled jobs disappear from the
+      // "Active Jobs in Progress" strip immediately without waiting for
+      // the next polling refresh.
+      socket.on('job:cancelled', (data: any) => {
+        setJobs(prevJobs =>
+          prevJobs.map(job =>
+            job.id === data.jobId
+              ? {
+                  ...job,
+                  status: 'cancelled',
+                  completedTime: new Date().toISOString()
+                }
+              : job
+          )
+        )
+      })
       
       // Listen for step-by-step updates (process-flow compression progress)
       socket.on('job:step-update', (data: any) => {
@@ -510,6 +529,7 @@ export default function JobMonitorPage() {
         socket.off('job:status')
         socket.off('job:completed')
         socket.off('job:failed')
+        socket.off('job:cancelled')
         socket.off('job:step-update')
       }
     }
@@ -524,7 +544,15 @@ export default function JobMonitorPage() {
   // Calculate stats from real data or metrics
   const stats = {
     totalJobs: metrics.totalJobs || jobs.length,
-    runningJobs: metrics.totalActive || jobs.filter((j) => j.status === "processing").length,
+    runningJobs: metrics.totalActive || jobs.filter((j) => {
+      // Only count as running if:
+      // 1. Status is processing/running
+      // 2. No error message (error means it's actually failed)
+      // 3. Started recently (not stuck)
+      const hasError = j.error || j.error_message
+      const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000 // 30 minutes
+      return (j.status === "processing" || j.status === "running") && !hasError && !isOld
+    }).length,
     completedJobs: metrics.totalCompleted || jobs.filter((j) => j.status === "completed").length,
     failedJobs: metrics.totalFailed || jobs.filter((j) => j.status === "failed").length,
     queuedJobs: metrics.totalWaiting || jobs.filter((j) => j.status === "pending").length,
@@ -558,7 +586,9 @@ export default function JobMonitorPage() {
                       size="sm"
                       onClick={async () => {
                         try {
-                          const result = await apiClient.request('POST', '/jobs/cleanup') as any
+                          // Use correct endpoint and HTTP method; previous implementation
+                          // accidentally treated 'POST' as the path, causing a 404 on /api/POST.
+                          const result = await apiClient.request('/jobs/cleanup', { method: 'POST' }) as any
                           toast.success(`Cleaned up ${result.cleanedCount || 0} stuck cancelled jobs`)
                           window.location.reload()
                         } catch (error) {
@@ -698,13 +728,22 @@ export default function JobMonitorPage() {
                       <CardTitle className="flex items-center space-x-2 text-lg">
                         <Activity className="h-5 w-5 text-blue-500 animate-pulse" />
                         <span>Active Jobs in Progress</span>
-                        <Badge className="bg-blue-500">{jobs.filter(j => j.status === 'processing' || j.status === 'running').length}</Badge>
+                        <Badge className="bg-blue-500">{jobs.filter(j => {
+                          const hasError = j.error || j.error_message
+                          const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000
+                          return (j.status === 'processing' || j.status === 'running') && !hasError && !isOld
+                        }).length}</Badge>
                       </CardTitle>
                       <CardDescription>Real-time progress tracking with live updates</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {jobs
-                        .filter(j => (j.status === 'processing' || j.status === 'running') && j.progress >= 0)
+                        .filter(j => {
+                          // Only show as active if no error and not stuck
+                          const hasError = j.error || j.error_message
+                          const isOld = j.startTime && new Date(j.startTime).getTime() < Date.now() - 30 * 60 * 1000 // 30 minutes
+                          return (j.status === 'processing' || j.status === 'running') && j.progress >= 0 && !hasError && !isOld
+                        })
                         .map(job => (
                           <div key={job.id} className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 transition-all duration-300">
                             <div className="flex items-center justify-between mb-2">

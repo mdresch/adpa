@@ -1,10 +1,12 @@
 "use client"
 
+import { useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Task } from "@/hooks/use-tasks"
-import { ArrowRight, Plus } from "lucide-react"
+import { ArrowRight, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { TaskDependencyDialog } from "./TaskDependencyDialog"
 
 interface TaskDependenciesViewProps {
   task: Task
@@ -12,32 +14,68 @@ interface TaskDependenciesViewProps {
 }
 
 export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewProps) {
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [removingId, setRemovingId] = useState<string | null>(null)
+
   const handleAddDependency = () => {
-    // TODO: Open dependency creation dialog
-    toast.info('Add dependency - Coming in Phase 3!')
+    setDialogOpen(true)
   }
 
+  const handleRemoveDependency = async (dependencyId: string) => {
+    if (!confirm("Are you sure you want to remove this dependency?")) {
+      return
+    }
+
+    setRemovingId(dependencyId)
+    try {
+      const { apiClient } = await import("@/lib/api")
+      await apiClient.delete(`/tasks/${task.id}/dependencies/${dependencyId}`)
+
+      toast.success("Dependency removed successfully")
+      onUpdate()
+    } catch (error: any) {
+      console.error("Error removing dependency:", error)
+      const errorMessage = error.response?.data?.error || error.message || "Failed to remove dependency"
+      toast.error(errorMessage)
+    } finally {
+      setRemovingId(null)
+    }
+  }
+
+  // Predecessors: tasks this task depends on (where this task is the successor)
+  // In the DB: task_id = this task, depends_on_task_id = predecessor
   const predecessors = task.dependencies?.filter(
     (dep) => (dep.successorTaskId || dep.successor_task_id) === task.id
   ) || []
 
+  // Successors: tasks that depend on this task (where this task is the predecessor)
+  // In the DB: task_id = successor, depends_on_task_id = this task
   const successors = task.dependencies?.filter(
     (dep) => (dep.predecessorTaskId || dep.predecessor_task_id) === task.id
   ) || []
 
   const getDependencyTypeLabel = (type: string | undefined) => {
     if (!type) return 'Unknown'
-    switch (type) {
+    const normalized = type.toLowerCase().replace(/_/g, '-')
+    switch (normalized) {
+      case 'finish-to-start':
       case 'finish_to_start':
-      case 'finishToStart':
+      case 'finishtostart':
+      case 'finishtostart':
         return 'Finish-to-Start (FS)'
+      case 'start-to-start':
       case 'start_to_start':
+      case 'starttostart':
       case 'startToStart':
         return 'Start-to-Start (SS)'
+      case 'finish-to-finish':
       case 'finish_to_finish':
+      case 'finishtofinish':
       case 'finishToFinish':
         return 'Finish-to-Finish (FF)'
+      case 'start-to-finish':
       case 'start_to_finish':
+      case 'starttofinish':
       case 'startToFinish':
         return 'Start-to-Finish (SF)'
       default:
@@ -86,6 +124,15 @@ export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewPro
                         {((dep.lagDays || dep.lag_days || 0) > 0 ? '+' : '')}{(dep.lagDays || dep.lag_days || 0)}d lag
                       </Badge>
                     ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveDependency(dep.id)}
+                      disabled={removingId === dep.id}
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -133,6 +180,15 @@ export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewPro
                         {((dep.lagDays || dep.lag_days || 0) > 0 ? '+' : '')}{(dep.lagDays || dep.lag_days || 0)}d lag
                       </Badge>
                     ) : null}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleRemoveDependency(dep.id)}
+                      disabled={removingId === dep.id}
+                      className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -161,6 +217,14 @@ export function TaskDependenciesView({ task, onUpdate }: TaskDependenciesViewPro
           </div>
         </div>
       </div>
+
+      {/* Add Dependency Dialog */}
+      <TaskDependencyDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        task={task}
+        onSuccess={onUpdate}
+      />
     </div>
   )
 }

@@ -68,6 +68,7 @@ export class DocumentPurposeService {
     }
 
     const queries: Array<{ entityType: string; sql: string }> = [
+      // Core entities (legacy / Tier 1)
       { entityType: 'stakeholders', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM stakeholders WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'requirements', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM requirements WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'risks', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risks WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
@@ -82,6 +83,7 @@ export class DocumentPurposeService {
       { entityType: 'deliverables', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM deliverables WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'scope_items', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM scope_items WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'activities', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM activities WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // PMBOK 8 Performance Domain entities
       { entityType: 'team_agreements', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM team_agreements WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'development_approaches', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM development_approaches WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'project_iterations', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM project_iterations WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
@@ -91,16 +93,71 @@ export class DocumentPurposeService {
       { entityType: 'earned_value_metrics', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM earned_value_metrics WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'opportunities', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM opportunities WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
       { entityType: 'risk_responses', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risk_responses WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
-      { entityType: 'performance_actuals', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM performance_actuals WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' }
+      { entityType: 'performance_actuals', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM performance_actuals WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // PMBOK 8 Knowledge Domain entities (Tier 2) – match schema if tables exist
+      // Governance
+      { entityType: 'governance_decisions', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM governance_decisions WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'approval_workflows', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM approval_workflows WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'steering_committees', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM steering_committees WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'change_control_boards', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM change_control_boards WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'policy_compliance', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM policy_compliance WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // Scope
+      { entityType: 'scope_baselines', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM scope_baselines WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'wbs_nodes', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM wbs_nodes WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'scope_change_requests', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM scope_change_requests WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'requirements_traceability', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM requirements_traceability WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'scope_verification', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM scope_verification WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // Schedule
+      { entityType: 'schedule_baselines', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM schedule_baselines WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'schedule_activities', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM schedule_activities WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'critical_path_activities', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM critical_path_activities WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'schedule_variances', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM schedule_variances WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'schedule_forecasts', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM schedule_forecasts WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // Finance
+      { entityType: 'budget_baselines', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM budget_baselines WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'cost_actuals', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM cost_actuals WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'cost_estimates', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM cost_estimates WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'funding_tranches', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM funding_tranches WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'financial_variances', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM financial_variances WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'procurement_costs', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM procurement_costs WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // Resources
+      { entityType: 'resource_assignments', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM resource_assignments WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'resource_pool', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM resource_pool WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'capacity_forecasts', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM capacity_forecasts WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'utilization_records', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM utilization_records WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'resource_conflicts', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM resource_conflicts WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'onboarding_offboarding', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM onboarding_offboarding WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // Risk
+      { entityType: 'risk_assessments', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risk_assessments WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'risk_response_plans', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risk_response_plans WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'risk_triggers', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risk_triggers WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'risk_reviews', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risk_reviews WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'contingency_reserves', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM contingency_reserves WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'risk_metrics', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM risk_metrics WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      // Stakeholders Ops
+      { entityType: 'engagement_actions', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM engagement_actions WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'communication_logs', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM communication_logs WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'satisfaction_surveys', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM satisfaction_surveys WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'stakeholder_issues', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM stakeholder_issues WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
+      { entityType: 'relationship_health', sql: 'SELECT source_document_id AS document_id, COUNT(*)::int AS count FROM relationship_health WHERE project_id = $1 AND source_document_id IS NOT NULL GROUP BY source_document_id' },
     ]
 
     for (const { entityType, sql } of queries) {
-      const res = await client.query(sql, [projectId])
-      for (const row of res.rows) {
-        const docId: string | null = row.document_id
-        const count: number = Number(row.count) || 0
-        if (!docId || !count) continue
-        addCounts(docId, entityType, count)
+      try {
+        const res = await client.query(sql, [projectId])
+        for (const row of res.rows) {
+          const docId: string | null = row.document_id
+          const count: number = Number(row.count) || 0
+          if (!docId || !count) continue
+          addCounts(docId, entityType, count)
+        }
+      } catch (error: any) {
+        // Table might not exist yet or may have different schema; log at debug level and continue
+        // We deliberately do not fail the whole rebuild if one entity type is unavailable.
+        // eslint-disable-next-line no-console
+        console.warn(
+          `[DocumentPurposeService] Skipping entity type "${entityType}" during count rebuild: ${error?.message || String(error)}`
+        )
       }
     }
 

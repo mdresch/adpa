@@ -19,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Loader2, AlertCircle } from "@/components/ui/icons-shim"
+import { Loader2, AlertCircle, ExternalLink } from "@/components/ui/icons-shim"
 import { toast } from "sonner"
 import { apiClient } from "@/lib/api"
+import { useRouter } from "next/navigation"
 
 interface ResourceAssignment {
   id: string
@@ -55,6 +56,7 @@ export function ResourceAssignmentDialog({
   projectId,
   onSuccess,
 }: ResourceAssignmentDialogProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [assignments, setAssignments] = useState<ResourceAssignment[]>([])
   const [loadingAssignments, setLoadingAssignments] = useState(false)
@@ -129,7 +131,22 @@ export function ResourceAssignmentDialog({
       setScheduledEndDate("")
     } catch (error: any) {
       console.error("Failed to assign resource:", error)
-      toast.error(error.response?.data?.error || "Failed to assign resource")
+      // Extract error message properly - handle both API error format and plain errors
+      let errorMessage = "Failed to assign resource"
+      if (error?.response?.data?.error) {
+        const errorData = error.response.data.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details && Array.isArray(errorData.details)) {
+          // Format validation errors
+          errorMessage = errorData.details.map((d: any) => d.message || d).join(', ')
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -140,7 +157,7 @@ export function ResourceAssignmentDialog({
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>Assign Resource to Task</DialogTitle>
-          <DialogDescription>
+          <DialogDescription aria-describedby="resource-assignment-description">
             Select a resource from the project and specify the planned hours and allocation.
           </DialogDescription>
         </DialogHeader>
@@ -154,19 +171,32 @@ export function ResourceAssignmentDialog({
                 Loading available resources...
               </div>
             ) : assignments.length === 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <AlertCircle className="h-4 w-4" />
                   No resources available for task assignment.
                 </div>
-                <div className="text-xs text-muted-foreground pl-6">
-                  To assign resources to tasks, you need to:
-                  <ul className="list-disc list-inside mt-1 space-y-1">
+                <div className="text-xs text-muted-foreground pl-6 space-y-2">
+                  <p className="font-medium">To assign resources to tasks, you need to:</p>
+                  <ul className="list-disc list-inside space-y-1">
                     <li>Add stakeholders in the Stakeholders tab</li>
                     <li>Mark internal stakeholders as "Team Member"</li>
                     <li>Ensure stakeholders are linked to user accounts</li>
                   </ul>
                 </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onOpenChange(false)
+                    router.push(`/projects/${projectId}?tab=stakeholders`)
+                  }}
+                  className="w-full mt-2"
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  Go to Stakeholders Tab
+                </Button>
               </div>
             ) : (
               <Select
@@ -191,8 +221,8 @@ export function ResourceAssignmentDialog({
                         </div>
                         <span className="text-xs text-muted-foreground">
                           {assignment.role_name || 'No role'}
-                          {assignment.hourly_rate && assignment.hourly_rate > 0 && ` • $${assignment.hourly_rate}/hr`}
-                          {(!assignment.hourly_rate || assignment.hourly_rate === 0) && ' • Rate not set'}
+                          {assignment.hourly_rate && Number(assignment.hourly_rate) > 0 && ` • $${Number(assignment.hourly_rate).toFixed(2)}/hr`}
+                          {(!assignment.hourly_rate || Number(assignment.hourly_rate) === 0) && ' • Rate not set'}
                         </span>
                       </div>
                     </SelectItem>
@@ -208,8 +238,8 @@ export function ResourceAssignmentDialog({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Hourly Rate:</span>
                   <span className="font-medium">
-                    {selectedAssignment.hourly_rate && selectedAssignment.hourly_rate > 0
-                      ? `$${selectedAssignment.hourly_rate.toFixed(2)}`
+                    {selectedAssignment.hourly_rate && Number(selectedAssignment.hourly_rate) > 0
+                      ? `$${Number(selectedAssignment.hourly_rate).toFixed(2)}`
                       : "Not set"}
                   </span>
                 </div>
@@ -287,7 +317,7 @@ export function ResourceAssignmentDialog({
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Estimated Cost:</span>
                   <span className="font-medium">
-                    ${(isNaN(parseFloat(plannedHours)) ? 0 : parseFloat(plannedHours) * (selectedAssignment.hourly_rate || 0)).toFixed(2)}
+                    ${(isNaN(parseFloat(plannedHours)) ? 0 : parseFloat(plannedHours) * (Number(selectedAssignment.hourly_rate) || 0)).toFixed(2)}
                   </span>
                 </div>
               </div>

@@ -909,10 +909,13 @@ router.get(
       res.json({
         success: true,
         documentId,
+        projectId,
         documentName: document.name || document.title,
         entities: allEntities,
         entityCounts,
-        totalEntities
+        totalEntities,
+        inferredPrimaryDomain: document.inferred_primary_domain || null,
+        inferredSecondaryDomains: document.inferred_secondary_domains || [],
       })
     } catch (error: unknown) {
       logger.error('[DOCUMENT-ENTITIES-API] Entity fetch failed', {
