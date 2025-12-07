@@ -174,18 +174,12 @@ export async function getProjectResourceAssignments(projectId: string): Promise<
         pr.id as role_id,
         pr.role_type,
         pr.seniority_level,
-        -- Use a default hourly rate if not set (could be from role or stakeholder metadata)
-        -- Handle case where metadata might not exist or be null
-        COALESCE(
-          CASE WHEN s.metadata IS NOT NULL THEN (s.metadata->>'hourly_rate')::numeric ELSE NULL END,
-          pr.default_hourly_rate,
-          0
-        ) as hourly_rate,
+        -- Use a default hourly rate from project_role, or 0 if not set
+        COALESCE(pr.default_hourly_rate, 0) as hourly_rate,
         -- Mark as stakeholder-based assignment
         'stakeholder' as assignment_source
       FROM stakeholders s
-      LEFT JOIN project_roles pr ON pr.project_id = s.project_id 
-        AND LOWER(TRIM(pr.role_name)) = LOWER(TRIM(s.role))
+      LEFT JOIN project_roles pr ON LOWER(TRIM(pr.role_name)) = LOWER(TRIM(s.role))
       WHERE s.project_id = $1
         AND s.is_team_member = true
         AND s.stakeholder_type = 'internal'

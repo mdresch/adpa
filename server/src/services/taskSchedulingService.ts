@@ -87,16 +87,10 @@ export async function assignResourceToTask(
           -- Try to find matching project_role
           pr.id as role_id,
           pr.default_hourly_rate,
-          -- Get hourly rate from stakeholder metadata or role default
-          -- Handle case where metadata might not exist or be null
-          COALESCE(
-            CASE WHEN s.metadata IS NOT NULL THEN (s.metadata->>'hourly_rate')::numeric ELSE NULL END,
-            pr.default_hourly_rate,
-            0
-          ) as hourly_rate
+          -- Get hourly rate from project_role, or 0 if not set
+          COALESCE(pr.default_hourly_rate, 0) as hourly_rate
         FROM stakeholders s
-        LEFT JOIN project_roles pr ON pr.project_id = s.project_id 
-          AND LOWER(TRIM(pr.role_name)) = LOWER(TRIM(s.role))
+        LEFT JOIN project_roles pr ON LOWER(TRIM(pr.role_name)) = LOWER(TRIM(s.role))
         WHERE s.id = $1
           AND s.is_team_member = true
           AND s.stakeholder_type = 'internal'

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Task, useTaskMutations } from "@/hooks/use-tasks"
 import { toast } from "sonner"
 import { Loader2, Save } from "lucide-react"
+import { apiClient } from "@/lib/api"
 
 interface TaskEditFormProps {
   task: Task
@@ -50,7 +51,31 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
     priority: task.priority || 'medium',
     phase: task.phase || '',
     category: task.category || '',
+    requiredRoleId: task.requiredRoleId || task.required_role_id || '__none__',
   })
+
+  const [roles, setRoles] = useState<Array<{ id: string; roleName: string; roleType?: string }>>([])
+  const [loadingRoles, setLoadingRoles] = useState(false)
+
+  // Fetch available roles
+  useEffect(() => {
+    const fetchRoles = async () => {
+      try {
+        setLoadingRoles(true)
+        const response = await apiClient.get<{ success: boolean; data: Array<{ id: string; roleName: string; roleType?: string }> }>(
+          '/cost-management/roles'
+        )
+        setRoles(response.data || [])
+      } catch (error) {
+        console.error('Failed to fetch roles:', error)
+        toast.error('Failed to load available roles')
+      } finally {
+        setLoadingRoles(false)
+      }
+    }
+
+    void fetchRoles()
+  }, [])
 
   const { updateTask, updating } = useTaskMutations(task.project_id || task.projectId || '', onSave)
 
@@ -69,6 +94,7 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         priority: formData.priority as Task['priority'],
         phase: formData.phase || undefined,
         category: formData.category || undefined,
+        requiredRoleId: formData.requiredRoleId && formData.requiredRoleId !== '__none__' ? formData.requiredRoleId : undefined,
       })
       toast.success('Task updated successfully')
     } catch (error) {
@@ -208,6 +234,38 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
         </div>
       </div>
 
+      {/* Required Role */}
+      <div className="space-y-2">
+        <Label htmlFor="requiredRoleId">Required Role</Label>
+        <Select 
+          value={formData.requiredRoleId || '__none__'} 
+          onValueChange={(value) => handleChange('requiredRoleId', value)}
+          disabled={loadingRoles}
+        >
+          <SelectTrigger id="requiredRoleId">
+            <SelectValue placeholder={loadingRoles ? "Loading roles..." : "Select a role (optional)"} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__none__">None (No specific role required)</SelectItem>
+            {roles.map((role) => (
+              <SelectItem key={role.id} value={role.id}>
+                {role.roleName}
+                {role.roleType && (
+                  <span className="text-xs text-muted-foreground ml-2">
+                    ({role.roleType})
+                  </span>
+                )}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {formData.requiredRoleId && formData.requiredRoleId !== '__none__' && (
+          <p className="text-xs text-muted-foreground">
+            Selected role will be used to suggest appropriate resources for this task
+          </p>
+        )}
+      </div>
+
       {/* Readonly Fields */}
       <div className="grid grid-cols-2 gap-4 pt-4 border-t">
         <div className="space-y-1">
@@ -230,12 +288,6 @@ export function TaskEditForm({ task, onSave }: TaskEditFormProps) {
           <div className="space-y-1">
             <Label className="text-sm text-muted-foreground">Actual Cost</Label>
             <p className="text-sm">${(task.actualCost || task.actual_cost || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-          </div>
-        )}
-        {(task.requiredRoleName || task.required_role_name) && (
-          <div className="space-y-1">
-            <Label className="text-sm text-muted-foreground">Required Role</Label>
-            <p className="text-sm">{task.requiredRoleName || task.required_role_name}</p>
           </div>
         )}
         {(task.requiredSkills || task.required_skills) && (task.requiredSkills?.length || task.required_skills?.length) && (

@@ -252,7 +252,7 @@ export async function importWBSFromProjectEntities(
     `, [projectId])
 
     const workItemsResult = await pool.query(`
-      SELECT id, name, description, parent_task_id, status, estimated_hours, assignee_id, sequence, source_document_id
+      SELECT id, name, description, activity_id, activity_name, status, estimated_hours, assigned_to as assignee_id, source_document_id
       FROM work_items
       WHERE project_id = $1
       ORDER BY name
@@ -546,14 +546,30 @@ export async function importWBSFromProjectEntities(
       }
     }
 
-    // 5. Import work_items as checklist_items (use parent_task_id as task_id)
+    // 5. Import work_items as checklist_items (use activity_id to find parent task)
     for (let i = 0; i < workItems.length; i++) {
       const item = workItems[i]
       try {
+        // Find the task that was created from the parent activity
+        // work_items are linked to activities via activity_id, and activities were imported as tasks
+        const parentTaskId = item.activity_id && sourceToTaskId[item.activity_id] 
+          ? sourceToTaskId[item.activity_id] 
+          : null
+        
+        if (!parentTaskId) {
+          logger.warn('Skipping work item - no parent task found', { 
+            workItemId: item.id, 
+            workItemName: item.name, 
+            activityId: item.activity_id,
+            activityName: item.activity_name 
+          })
+          continue
+        }
+        
         await pool.query(`
           INSERT INTO checklist_items (
-            id, task_id, name, description, cost, status, assignee_id, estimated_hours, sequence, source_document_id
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            id, task_id, name, description, cost, status, assignee_id, estimated_hours, source_document_id
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           ON CONFLICT (id) DO UPDATE SET
             name = EXCLUDED.name,
             description = EXCLUDED.description,
@@ -561,20 +577,17 @@ export async function importWBSFromProjectEntities(
             status = EXCLUDED.status,
             assignee_id = EXCLUDED.assignee_id,
             estimated_hours = EXCLUDED.estimated_hours,
-            sequence = EXCLUDED.sequence,
             updated_at = NOW()
         `, [
           item.id,
-          // If we created a task for the parent entity, link to that id. Otherwise fall back to the raw parent_task_id
-          (item.parent_task_id && sourceToTaskId[item.parent_task_id]) ? sourceToTaskId[item.parent_task_id] : item.parent_task_id,
+          parentTaskId,
           item.name,
           item.description,
           null,
           item.status,
           item.assignee_id,
           item.estimated_hours,
-          item.sequence,
-          item.source_document_id || item.extracted_from_document_id || null,
+          item.source_document_id || null,
         ])
       } catch (error: any) {
         result.errors.push(`Failed to import work_item ${item.name}: ${error.message}`)

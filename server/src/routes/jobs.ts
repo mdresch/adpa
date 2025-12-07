@@ -129,11 +129,17 @@ router.get("/",
           jobName = genericName
         }
         
+        // If job has an error message but status is still "processing", treat it as "failed"
+        // This handles cases where cleanup scripts marked jobs but workers reset status
+        const effectiveStatus = (job.error_message && job.status === 'processing') 
+          ? 'failed' 
+          : job.status
+        
         return {
           id: job.id,
           name: jobName,
           type: job.type,
-          status: job.status,
+          status: effectiveStatus,
           progress: job.progress || 0,
           error: job.error_message,
           startTime: job.started_at,
@@ -386,9 +392,9 @@ router.get("/stats/overview",
         SELECT 
           COUNT(*) as total_jobs,
           COUNT(*) FILTER (WHERE status = 'pending') as pending_jobs,
-          COUNT(*) FILTER (WHERE status = 'processing') as processing_jobs,
+          COUNT(*) FILTER (WHERE status = 'processing' AND error_message IS NULL) as processing_jobs,
           COUNT(*) FILTER (WHERE status = 'completed') as completed_jobs,
-          COUNT(*) FILTER (WHERE status = 'failed') as failed_jobs,
+          COUNT(*) FILTER (WHERE status = 'failed' OR (status = 'processing' AND error_message IS NOT NULL)) as failed_jobs,
           COUNT(*) FILTER (WHERE status = 'cancelled') as cancelled_jobs,
           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') as jobs_last_24h,
           COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') as jobs_last_7d,
@@ -680,8 +686,11 @@ router.post(
         `SELECT * FROM jobs 
          WHERE status = 'processing' 
          AND created_by = $1
-         AND started_at < NOW() - INTERVAL '10 minutes'
-         ORDER BY started_at DESC`,
+         -- Some older jobs (especially extraction jobs) were started before we
+         -- consistently set started_at; fall back to processing_started_at or
+         -- created_at so they can still be detected as stalled.
+         AND COALESCE(started_at, processing_started_at, created_at) < NOW() - INTERVAL '10 minutes'
+         ORDER BY COALESCE(started_at, processing_started_at, created_at) DESC`,
         [req.user?.id]
       )
       

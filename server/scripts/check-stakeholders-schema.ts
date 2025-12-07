@@ -4,26 +4,26 @@ async function checkSchema() {
   try {
     await connectDatabase()
     
-    const result = await pool!.query(`
-      SELECT column_name, data_type 
-      FROM information_schema.columns 
-      WHERE table_name = 'stakeholders' 
+    if (!pool) {
+      throw new Error('Database pool not initialized')
+    }
+
+    const columnsResult = await pool.query(`
+      SELECT column_name, data_type, is_nullable
+      FROM information_schema.columns
+      WHERE table_name = 'stakeholders'
       ORDER BY ordinal_position
     `)
-    
-    console.log('\n📋 Stakeholders table columns:')
-    if (result.rows.length === 0) {
-      console.log('   Table does not exist or has no columns')
-    } else {
-      result.rows.forEach(r => console.log(`   - ${r.column_name}: ${r.data_type}`))
-    }
-    
-    process.exit(0)
+
+    console.log('\n📋 stakeholders table columns:')
+    console.log(JSON.stringify(columnsResult.rows, null, 2))
+
+    await pool.end()
   } catch (error) {
     console.error('Error:', error)
+    if (pool) await pool.end()
     process.exit(1)
   }
 }
 
-checkSchema()
-
+void checkSchema()

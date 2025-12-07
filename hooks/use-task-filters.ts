@@ -21,14 +21,15 @@ export function useTaskFilters(tasks: Task[]) {
   // Get unique values for filter options
   const filterOptions = useMemo(() => {
     const roles = new Set<string>()
-    const assignees = new Set<{ id: string; name: string }>()
+    const assigneesMap = new Map<string, { id: string; name: string }>()
 
     tasks.forEach(task => {
       if (task.required_role_name) {
         roles.add(task.required_role_name)
       }
       if (task.assigned_user_id && task.assigned_user_name) {
-        assignees.add({
+        // Use Map to ensure unique assignees by ID
+        assigneesMap.set(task.assigned_user_id, {
           id: task.assigned_user_id,
           name: task.assigned_user_name,
         })
@@ -37,7 +38,7 @@ export function useTaskFilters(tasks: Task[]) {
 
     return {
       roles: Array.from(roles).sort(),
-      assignees: Array.from(assignees).sort((a, b) => a.name.localeCompare(b.name)),
+      assignees: Array.from(assigneesMap.values()).sort((a, b) => a.name.localeCompare(b.name)),
     }
   }, [tasks])
 
