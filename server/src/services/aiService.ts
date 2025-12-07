@@ -300,6 +300,9 @@ class AIService {
           errorMessageLower.includes('no credits') ||
           errorMessageLower.includes('out of credits') ||
           errorMessageLower.includes('credit limit') ||
+          errorMessageLower.includes('credit balance is too low') ||
+          errorMessageLower.includes('balance is too low') ||
+          errorMessageLower.includes('plans & billing') ||
           errorMessageLower.includes('service tier capacity exceeded') ||
           errorMessageLower.includes('capacity exceeded') ||
           errorMessageLower.includes('rate limit exceeded') ||

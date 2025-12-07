@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import Link from "next/link"
 // @ts-expect-error - useParams is available in Next.js 14
-import { useParams } from "next/navigation"
+import { useParams, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -162,10 +162,15 @@ interface ExtendedProject extends Project {
 
 export default function ProjectDetail() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const projectId = params?.id as string
   const router = useRouter()
   const { isAuthenticated } = useAuth()
   const { joinRoom, leaveRoom } = useWebSocket()
+
+  // Get initial tab from query parameter, default to "overview"
+  const initialTab = searchParams?.get('tab') || 'overview'
+  const [activeTab, setActiveTab] = useState<string>(initialTab)
 
   const [project, setProject] = useState<ExtendedProject | null>(null)
   const [documents, setDocuments] = useState<Document[]>([])
@@ -174,6 +179,14 @@ export default function ProjectDetail() {
   const [documentsLoading, setDocumentsLoading] = useState(true)
   const [stakeholdersLoading, setStakeholdersLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+
+  // Update active tab when query parameter changes
+  useEffect(() => {
+    const tabFromQuery = searchParams?.get('tab')
+    if (tabFromQuery) {
+      setActiveTab(tabFromQuery)
+    }
+  }, [searchParams])
   
   // Smart Document Versioning state
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
@@ -3158,7 +3171,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               </div>
             </div>
 
-            <Tabs defaultValue="overview" className="space-y-4">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
               <TabsList aria-label="Project management sections">
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="documents">Documents</TabsTrigger>

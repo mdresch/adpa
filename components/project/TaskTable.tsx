@@ -93,11 +93,23 @@ export function TaskTable({
   const sortedTasks = [...tasks].sort((a, b) => {
     if (sortConfig.direction === 'none') return 0
 
-    const aValue = a[sortConfig.key as keyof Task]
-    const bValue = b[sortConfig.key as keyof Task]
+    let aValue: any
+    let bValue: any
 
-    if (aValue === null || aValue === undefined) return 1
-    if (bValue === null || bValue === undefined) return -1
+    // Handle special sorting cases
+    if (sortConfig.key === 'assigned_role_name') {
+      aValue = (a.assigned_role_name || a.required_role_name || '').toLowerCase()
+      bValue = (b.assigned_role_name || b.required_role_name || '').toLowerCase()
+    } else if (sortConfig.key === 'assigned_user_name') {
+      aValue = (a.assigned_user_name || a.assignedUserName || '').toLowerCase()
+      bValue = (b.assigned_user_name || b.assignedUserName || '').toLowerCase()
+    } else {
+      aValue = a[sortConfig.key as keyof Task]
+      bValue = b[sortConfig.key as keyof Task]
+    }
+
+    if (aValue === null || aValue === undefined || aValue === '') return 1
+    if (bValue === null || bValue === undefined || bValue === '') return -1
 
     if (aValue < bValue) {
       return sortConfig.direction === 'asc' ? -1 : 1
@@ -150,8 +162,24 @@ export function TaskTable({
               </div>
             </TableHead>
             <TableHead className="text-right">Actual Hours</TableHead>
-            <TableHead>Role</TableHead>
-            <TableHead>Assigned To</TableHead>
+            <TableHead 
+              className="cursor-pointer hover:bg-accent"
+              onClick={() => handleSort('assigned_role_name' as SortKey)}
+            >
+              <div className="flex items-center">
+                Role
+                {getSortIcon('assigned_role_name' as SortKey)}
+              </div>
+            </TableHead>
+            <TableHead 
+              className="cursor-pointer hover:bg-accent"
+              onClick={() => handleSort('assigned_user_name' as SortKey)}
+            >
+              <div className="flex items-center">
+                Assigned To
+                {getSortIcon('assigned_user_name' as SortKey)}
+              </div>
+            </TableHead>
             <TableHead 
               className="cursor-pointer hover:bg-accent"
               onClick={() => handleSort('status')}
@@ -195,23 +223,50 @@ export function TaskTable({
                   : '0h'}
               </TableCell>
               <TableCell>
-                {task.required_role_name ? (
+                {task.assigned_role_name ? (
+                  <Badge variant="outline">{task.assigned_role_name}</Badge>
+                ) : task.required_role_name ? (
                   <Badge variant="outline">{task.required_role_name}</Badge>
                 ) : (
                   <span className="text-muted-foreground text-sm">Not specified</span>
                 )}
               </TableCell>
               <TableCell>
-                {task.assigned_user_id ? (
+                {task.assigned_user_id || task.assigned_user_name ? (
                   <div className="flex items-center gap-2">
                     <Avatar className="h-6 w-6">
                       <AvatarFallback className="text-xs">
-                        {getInitials(task.assigned_user_name)}
+                        {getInitials(task.assigned_user_name || task.assignedUserName || '')}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="text-sm truncate max-w-[120px]">
-                      {task.assigned_user_name}
-                    </span>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm truncate max-w-[120px] font-medium">
+                        {task.assigned_user_name || task.assignedUserName || 'Assigned'}
+                      </span>
+                      {task.assigned_resources && Number(task.assigned_resources) > 1 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{Number(task.assigned_resources) - 1} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ) : task.assigned_to ? (
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs">
+                        {getInitials(task.assigned_to.split(',')[0] || '')}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm truncate max-w-[120px] font-medium">
+                        {task.assigned_to.split(',')[0].trim()}
+                      </span>
+                      {task.assigned_to.split(',').length > 1 && (
+                        <span className="text-xs text-muted-foreground">
+                          +{task.assigned_to.split(',').length - 1} more
+                        </span>
+                      )}
+                    </div>
                   </div>
                 ) : (
                   <Badge variant="outline" className="text-muted-foreground">
@@ -224,9 +279,12 @@ export function TaskTable({
               </TableCell>
               <TableCell>
                 <div className="flex items-center gap-2 min-w-[120px]">
-                  <Progress value={task.progress_percentage} className="w-16" />
+                  <Progress 
+                    value={task.progress_percentage ?? task.percentComplete ?? 0} 
+                    className="w-16" 
+                  />
                   <span className="text-sm text-muted-foreground whitespace-nowrap">
-                    {task.progress_percentage}%
+                    {task.progress_percentage ?? task.percentComplete ?? 0}%
                   </span>
                 </div>
               </TableCell>

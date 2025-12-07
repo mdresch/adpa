@@ -169,33 +169,62 @@ export async function getProjectTasks(
   }
 ): Promise<any[]> {
   try {
+    // Get primary assignment (first one or the one with 100% allocation)
     let query = `
-      SELECT * FROM task_summary
-      WHERE project_id = $1
+      SELECT 
+        t.*,
+        ts.assigned_resources,
+        ts.assigned_to,
+        -- Primary assignment (first assignment or the one with 100% allocation)
+        ta_primary.user_id as assigned_user_id,
+        ta_primary.user_name as assigned_user_name,
+        ta_primary.role_name as assigned_role_name,
+        ta_primary.planned_hours as assigned_planned_hours,
+        ta_primary.allocation_percentage as assigned_allocation_percentage,
+        ta_primary.scheduled_start_date as assigned_scheduled_start_date,
+        ta_primary.scheduled_end_date as assigned_scheduled_end_date
+      FROM project_tasks t
+      LEFT JOIN task_summary ts ON t.id = ts.task_id
+      LEFT JOIN LATERAL (
+        SELECT user_id, user_name, role_name, planned_hours, allocation_percentage, scheduled_start_date, scheduled_end_date
+        FROM task_assignments
+        WHERE task_id = t.id
+        ORDER BY allocation_percentage DESC NULLS LAST, assigned_at ASC
+        LIMIT 1
+      ) ta_primary ON true
+      WHERE t.project_id = $1
     `
     const params: any[] = [projectId]
     let paramIndex = 2
     
     if (filters?.status) {
-      query += ` AND status = $${paramIndex++}`
+      query += ` AND t.status = $${paramIndex++}`
       params.push(filters.status)
     }
     
     if (filters?.phase) {
-      query += ` AND phase = $${paramIndex++}`
+      query += ` AND t.phase = $${paramIndex++}`
       params.push(filters.phase)
+    }
+    
+    if (filters?.assignedToUserId) {
+      query += ` AND EXISTS (
+        SELECT 1 FROM task_assignments ta
+        WHERE ta.task_id = t.id AND ta.user_id = $${paramIndex++}
+      )`
+      params.push(filters.assignedToUserId)
     }
     
     if (filters?.parentTaskId !== undefined) {
       if (filters.parentTaskId === null) {
-        query += ` AND parent_task_id IS NULL`
+        query += ` AND t.parent_task_id IS NULL`
       } else {
-        query += ` AND parent_task_id = $${paramIndex++}`
+        query += ` AND t.parent_task_id = $${paramIndex++}`
         params.push(filters.parentTaskId)
       }
     }
     
-    query += ` ORDER BY wbs_code NULLS LAST, task_number`
+    query += ` ORDER BY t.wbs_code NULLS LAST, t.task_number`
     
     const result = await pool.query(query, params)
     
@@ -414,11 +443,17 @@ export async function updateTask(
       return null
     }
     
+    // Transform empty strings to null for UUID fields
+    const normalizeUuid = (val: any): string | null => {
+      if (!val || val === '') return null
+      return val
+    }
+    
     const fieldMap: { [key: string]: { dbField: string; transform?: (val: any) => any } } = {
       taskName: { dbField: 'task_name' },
       description: { dbField: 'description' },
       estimatedHours: { dbField: 'estimated_hours' },
-      requiredRoleId: { dbField: 'required_role_id' },
+      requiredRoleId: { dbField: 'required_role_id', transform: normalizeUuid },
       plannedStartDate: { dbField: 'planned_start_date', transform: parseDate },
       plannedEndDate: { dbField: 'planned_end_date', transform: parseDate },
       priority: { dbField: 'priority' },
@@ -426,8 +461,11 @@ export async function updateTask(
       category: { dbField: 'category' },
       status: { dbField: 'status' },
       percentComplete: { dbField: 'percent_complete' },
-      parentTaskId: { dbField: 'parent_task_id' }
+      parentTaskId: { dbField: 'parent_task_id', transform: normalizeUuid }
     }
+    
+    // Track if requiredRoleId is being updated and its transformed value
+    let requiredRoleIdValue: string | null | undefined = undefined
     
     // Security: Validate key exists in fieldMap to prevent prototype pollution
     Object.entries(updates).forEach(([key, value]) => {
@@ -435,8 +473,13 @@ export async function updateTask(
         const fieldConfig = fieldMap[key]
         const transformedValue = fieldConfig.transform ? fieldConfig.transform(value) : value
         
-        // Skip null values for optional fields (except dates which can be null)
-        if (transformedValue === null && !['plannedStartDate', 'plannedEndDate'].includes(key)) {
+        // Track requiredRoleId for role name update
+        if (key === 'requiredRoleId') {
+          requiredRoleIdValue = transformedValue
+        }
+        
+        // Skip null values for optional fields (except dates and requiredRoleId which can be null)
+        if (transformedValue === null && !['plannedStartDate', 'plannedEndDate', 'requiredRoleId'].includes(key)) {
           return
         }
         
@@ -444,6 +487,29 @@ export async function updateTask(
         values.push(transformedValue)
       }
     })
+    
+    // If required_role_id is being updated, also update required_role_name from project_roles
+    if (requiredRoleIdValue !== undefined) {
+      if (requiredRoleIdValue) {
+        // Fetch role name from project_roles
+        const roleResult = await pool.query(
+          'SELECT role_name FROM project_roles WHERE id = $1',
+          [requiredRoleIdValue]
+        )
+        if (roleResult.rows.length > 0) {
+          setClauses.push(`required_role_name = $${paramIndex++}`)
+          values.push(roleResult.rows[0].role_name)
+        } else {
+          // Role not found, clear the role name
+          setClauses.push(`required_role_name = $${paramIndex++}`)
+          values.push(null)
+        }
+      } else {
+        // Clearing the role (null), also clear the role name
+        setClauses.push(`required_role_name = $${paramIndex++}`)
+        values.push(null)
+      }
+    }
     
     if (setClauses.length === 0) {
       return getTaskById(taskId)
@@ -556,6 +622,116 @@ export async function getTaskDependencies(taskId: string): Promise<any[]> {
     return result.rows
   } catch (error) {
     logger.error('getTaskDependencies error', { error, taskId })
+    throw error
+  }
+}
+
+/**
+ * Add a dependency between two tasks
+ * @param taskId - The task that depends (successor)
+ * @param dependsOnTaskId - The task it depends on (predecessor)
+ * @param dependencyType - Type of dependency (finish-to-start, start-to-start, etc.)
+ * @param lagDays - Lag days (positive = delay, negative = overlap)
+ */
+export async function addTaskDependency(
+  taskId: string,
+  dependsOnTaskId: string,
+  dependencyType: string = 'finish-to-start',
+  lagDays: number = 0
+): Promise<TaskDependency> {
+  try {
+    // Prevent self-dependency
+    if (taskId === dependsOnTaskId) {
+      throw new Error('A task cannot depend on itself')
+    }
+
+    // Check for circular dependencies (basic check - prevent direct reverse dependency)
+    const reverseCheck = await pool.query(
+      'SELECT id FROM task_dependencies WHERE task_id = $1 AND depends_on_task_id = $2',
+      [dependsOnTaskId, taskId]
+    )
+    if (reverseCheck.rows.length > 0) {
+      throw new Error('Circular dependency detected: This would create a dependency loop')
+    }
+
+    // Check if dependency already exists
+    const existing = await pool.query(
+      'SELECT id FROM task_dependencies WHERE task_id = $1 AND depends_on_task_id = $2',
+      [taskId, dependsOnTaskId]
+    )
+    if (existing.rows.length > 0) {
+      throw new Error('This dependency already exists')
+    }
+
+    // Verify both tasks exist
+    const tasksCheck = await pool.query(
+      'SELECT id FROM project_tasks WHERE id IN ($1, $2)',
+      [taskId, dependsOnTaskId]
+    )
+    if (tasksCheck.rows.length !== 2) {
+      throw new Error('One or both tasks not found')
+    }
+
+    // Insert the dependency
+    const result = await pool.query(`
+      INSERT INTO task_dependencies (task_id, depends_on_task_id, dependency_type, lag_days)
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `, [taskId, dependsOnTaskId, dependencyType, lagDays])
+
+    const dep = result.rows[0]
+
+    // Get task details for the response
+    const tasksResult = await pool.query(`
+      SELECT id, task_number, task_name 
+      FROM project_tasks 
+      WHERE id IN ($1, $2)
+    `, [taskId, dependsOnTaskId])
+
+    const predecessorTask = tasksResult.rows.find(t => t.id === dependsOnTaskId)
+    const successorTask = tasksResult.rows.find(t => t.id === taskId)
+
+    logger.info('Task dependency added', { taskId, dependsOnTaskId, dependencyType, lagDays })
+
+    return {
+      id: dep.id,
+      predecessorTaskId: dep.depends_on_task_id,
+      successorTaskId: dep.task_id,
+      dependencyType: dep.dependency_type,
+      lagDays: dep.lag_days,
+      predecessorTask: {
+        taskNumber: predecessorTask?.task_number,
+        taskName: predecessorTask?.task_name
+      },
+      successorTask: {
+        taskNumber: successorTask?.task_number,
+        taskName: successorTask?.task_name
+      }
+    }
+  } catch (error) {
+    logger.error('addTaskDependency error', { error, taskId, dependsOnTaskId })
+    throw error
+  }
+}
+
+/**
+ * Remove a task dependency
+ */
+export async function removeTaskDependency(dependencyId: string): Promise<boolean> {
+  try {
+    const result = await pool.query(
+      'DELETE FROM task_dependencies WHERE id = $1 RETURNING id',
+      [dependencyId]
+    )
+
+    if (result.rows.length === 0) {
+      return false
+    }
+
+    logger.info('Task dependency removed', { dependencyId })
+    return true
+  } catch (error) {
+    logger.error('removeTaskDependency error', { error, dependencyId })
     throw error
   }
 }

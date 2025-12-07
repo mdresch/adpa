@@ -17,12 +17,13 @@ const databaseUrl = process.env.DATABASE_URL || process.env.POSTGRES_URL
 console.log(`🔍 DATABASE_URL check: ${databaseUrl ? `Found (${databaseUrl.substring(0, 30)}...)` : 'Not found'}`)
 console.log(`🔍 NODE_ENV: ${process.env.NODE_ENV}`)
 
-// Hybrid connection approach: try hostnames first, then IP addresses
+// Connection methods for **non-DATABASE_URL** environments.
+// IMPORTANT: Docker-specific hosts are intentionally **not** included because
+// the ADPA project now uses Supabase/PostgreSQL directly (no Docker in dev).
+// We only ever try the explicit DB_HOST (if set) and plain localhost.
 const connectionMethods = [
   { host: process.env.DB_HOST || "localhost", description: `Environment hostname (${process.env.DB_HOST || 'localhost'})` },
-  { host: "localhost", description: "Localhost fallback" },
-  { host: "postgres", description: "PostgreSQL hostname (Docker)" },
-  { host: "172.19.0.3", description: "PostgreSQL IP address (Docker)" }
+  { host: "localhost", description: "Localhost fallback" }
 ]
 
 const isTrustedPoolingProvider = (target?: string) =>

@@ -50,10 +50,14 @@ router.get("/overview", authenticateToken, async (req, res) => {
           ])
 
           // Get active workers for this queue from database
+          // Exclude jobs with error_message (they're actually failed, not processing)
           const workersResult = await pool.query(
             `SELECT DISTINCT worker_id, worker_process_id, COUNT(*) as job_count
              FROM jobs
-             WHERE queue_name = $1 AND status = 'processing' AND worker_id IS NOT NULL
+             WHERE queue_name = $1 
+               AND status = 'processing' 
+               AND worker_id IS NOT NULL
+               AND error_message IS NULL
              GROUP BY worker_id, worker_process_id`,
             [name]
           )
@@ -123,6 +127,7 @@ router.get("/workers", authenticateToken, async (req, res) => {
   
   try {
     // Get active workers from database using new columns
+    // Exclude jobs with error_message (they're actually failed, not processing)
     const activeWorkersResult = await pool.query(
       `SELECT 
         worker_id,
@@ -133,7 +138,9 @@ router.get("/workers", authenticateToken, async (req, res) => {
         MAX(progress) as max_progress,
         STRING_AGG(id::text, ',') as job_ids
        FROM jobs
-       WHERE status = 'processing' AND worker_id IS NOT NULL
+       WHERE status = 'processing' 
+         AND worker_id IS NOT NULL
+         AND error_message IS NULL
        GROUP BY worker_id, worker_process_id, queue_name`
     )
 
@@ -210,7 +217,9 @@ router.get("/workers", authenticateToken, async (req, res) => {
          AND worker_id NOT IN (
            SELECT DISTINCT worker_id 
            FROM jobs 
-           WHERE status = 'processing' AND worker_id IS NOT NULL
+           WHERE status = 'processing' 
+             AND worker_id IS NOT NULL
+             AND error_message IS NULL
          )
        GROUP BY worker_id, worker_process_id, queue_name
        LIMIT 10`
@@ -267,10 +276,10 @@ router.get("/metrics", authenticateToken, async (req, res) => {
       SELECT 
         COUNT(*) as total_jobs,
         COUNT(*) FILTER (WHERE status = 'pending') as total_waiting,
-        COUNT(*) FILTER (WHERE status = 'processing') as total_active,
+        COUNT(*) FILTER (WHERE status = 'processing' AND error_message IS NULL) as total_active,
         COUNT(*) FILTER (WHERE status = 'completed') as total_completed,
-        COUNT(*) FILTER (WHERE status = 'failed') as total_failed,
-        COUNT(DISTINCT worker_id) FILTER (WHERE status = 'processing' AND worker_id IS NOT NULL) as active_workers,
+        COUNT(*) FILTER (WHERE status = 'failed' OR (status = 'processing' AND error_message IS NOT NULL)) as total_failed,
+        COUNT(DISTINCT worker_id) FILTER (WHERE status = 'processing' AND worker_id IS NOT NULL AND error_message IS NULL) as active_workers,
         COUNT(*) FILTER (WHERE status = 'completed' AND completed_at > NOW() - INTERVAL '1 hour') as completed_last_hour,
         AVG(EXTRACT(EPOCH FROM (completed_at - processing_started_at))) FILTER (WHERE status = 'completed' AND processing_started_at IS NOT NULL AND completed_at > NOW() - INTERVAL '24 hours') as avg_processing_time
       FROM jobs

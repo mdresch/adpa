@@ -46,6 +46,7 @@
 ### **🏗️ Architecture**
 → [`docs/07-architecture/`](./07-architecture/)
 - System architecture (45 docs)
+- **Bull Queues**: [Complete Guide](./07-architecture/BULL_QUEUES_COMPLETE_GUIDE.md) | [Quick Reference](./07-architecture/BULL_QUEUES_QUICK_REFERENCE.md)
 - Authentication strategies
 - Database design
 
