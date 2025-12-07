@@ -66,6 +66,7 @@ interface DocumentsTabProps {
   createDialogOpen: boolean
   setCreateDialogOpen: (open: boolean) => void
   handleUploadDocumentClick: () => void
+  handleDocumentUpload?: (event: React.ChangeEvent<HTMLInputElement>) => void
   documentsLoading: boolean
   displayDocuments: Document[]
   handleEditDocument: (id: string) => void
@@ -110,6 +111,7 @@ export function DocumentsTab({
   createDialogOpen,
   setCreateDialogOpen,
   handleUploadDocumentClick,
+  handleDocumentUpload,
   documentsLoading,
   displayDocuments,
   handleEditDocument,
@@ -193,9 +195,28 @@ export function DocumentsTab({
             </Button>
           </DialogTrigger>
         </Dialog>
+        {/* Legacy Upload - Direct file selection */}
+        {handleDocumentUpload && (
+          <label htmlFor="legacy-file-upload">
+            <Button variant="outline" asChild>
+              <span>
+                <Download className="h-4 w-4 mr-2" />
+                Upload File
+              </span>
+            </Button>
+            <input
+              id="legacy-file-upload"
+              type="file"
+              accept=".pdf,.doc,.docx,.txt,.md"
+              onChange={handleDocumentUpload}
+              className="hidden"
+            />
+          </label>
+        )}
+        {/* Dialog-based Upload */}
         <Button variant="outline" onClick={handleUploadDocumentClick}>
           <Download className="h-4 w-4 mr-2" />
-          Upload
+          Upload (Dialog)
         </Button>
       </div>
 

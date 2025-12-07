@@ -11,6 +11,20 @@ import type { PmbokDomain } from "@/types/pmbok"
 import DocumentPurposeService from "./documentPurposeService"
 import TemplateAnalyticsService from "./templateAnalyticsService"
 import { EventEmitter } from "events"
+// Phase 3: Type Safety and Validation
+import type { JobType, JobData, JobOptions, QueueName } from "./jobs/types"
+import { validateJobData, validateJobType } from "./jobs/validation"
+// Phase 5: Queue Service Dependencies
+import type { QueueServiceDependencies } from "./jobs/queue/QueueDependencies"
+import {
+  JobValidationError,
+  JobTypeError,
+  JobQueueError,
+  JobDatabaseError,
+  StuckJobsError,
+} from "./jobs/errors"
+// Phase 4: Query result caching
+import { cache } from "../utils/redis"
 
 // Set global max listeners for all EventEmitters to prevent MaxListenersExceededWarning
 // Bull queues create multiple Redis connections (Commander instances) with many event listeners
@@ -345,31 +359,40 @@ allQueues.forEach((queue) => {
 })
 
 // Job processors
+// Phase 5: Updated to pass dependencies to job services
 aiQueue.process("ai-generate", async (job) => {
   // Delegate to AIGenerationJobService (extracted in Phase 2 refactoring)
   const { AIGenerationJobService } = await import('./jobs/AIGenerationJobService')
+  const deps = await getQueueServiceDependencies()
   return await AIGenerationJobService.processJob(job, {
     workerId: WORKER_ID,
-    updateJobStatus
-  })
+    updateJobStatus,
+    dependencies: deps
+  }, deps)
 })
 
 documentQueue.process("document-convert", async (job) => {
   // Delegate to DocumentConversionJobService (extracted in Phase 2 refactoring)
+  // Phase 5: Pass dependencies to job service
   const { DocumentConversionJobService } = await import('./jobs/DocumentConversionJobService')
+  const deps = await getQueueServiceDependencies()
   return await DocumentConversionJobService.processJob(job, {
     workerId: WORKER_ID,
-    updateJobStatus
-  })
+    updateJobStatus,
+    dependencies: deps
+  }, deps)
 })
 
 baselineQueue.process("baseline-extract", async (job) => {
   // Delegate to BaselineExtractionJobService (extracted in Phase 2 refactoring)
+  // Phase 5: Pass dependencies to job service
   const { BaselineExtractionJobService } = await import('./jobs/BaselineExtractionJobService')
+  const deps = await getQueueServiceDependencies()
   return await BaselineExtractionJobService.processJob(job, {
     workerId: WORKER_ID,
-    updateJobStatus
-  })
+    updateJobStatus,
+    dependencies: deps
+  }, deps)
 })
 
 // Process Flow job processor
@@ -744,11 +767,14 @@ type EntityType = typeof ENTITY_TYPES[number]
 logger.info('[EXTRACTION-QUEUE] Registering extraction queue processor for "extract-project-data"')
 extractionQueue.process("extract-project-data", 1, async (job) => {
   // Delegate to ExtractionOrchestrationService (extracted in Phase 2 refactoring)
+  // Phase 5: Pass dependencies to job service
   const { ExtractionOrchestrationService } = await import('./jobs/ExtractionOrchestrationService')
+  const deps = await getQueueServiceDependencies()
   return await ExtractionOrchestrationService.processJob(job, {
     workerId: WORKER_ID,
-    updateJobStatus
-  })
+    updateJobStatus,
+    dependencies: deps
+  }, deps)
 })
 
 /**
@@ -814,247 +840,58 @@ extractionQueue.on("failed", (job, err) => {
 })
 
 // Job management functions
-export async function addJob(type: string, data: any, options?: any): Promise<string> {
-  // Validate required fields
-  if (!data.jobId) {
-    throw new Error('jobId is required in job data')
-  }
-  if (!type) {
-    throw new Error('Job type is required')
-  }
-  
-  // Check for stuck jobs before allowing new jobs (optional safety check)
-  // This can be disabled by setting SKIP_STUCK_JOB_CHECK=true in environment
-  if (process.env.SKIP_STUCK_JOB_CHECK !== 'true') {
-    const stuckJobsCheck = await pool.query(
-      `SELECT COUNT(*) as count
-       FROM jobs
-       WHERE status = 'processing'
-       AND (
-         error_message IS NOT NULL
-         OR started_at < NOW() - INTERVAL '1 hour'
-         OR processing_started_at < NOW() - INTERVAL '1 hour'
-       )
-       LIMIT 1`
-    )
-    
-    const stuckCount = parseInt(stuckJobsCheck.rows[0]?.count || '0')
-    if (stuckCount > 0) {
-      logger.warn(`⚠️  Blocking new job creation: ${stuckCount} stuck jobs detected. Run cleanup script first.`)
-      
-      // Auto-cleanup: Mark stuck jobs as failed before blocking
-      try {
-        const autoCleanupResult = await pool.query(
-          `UPDATE jobs
-           SET status = 'failed',
-               completed_at = CURRENT_TIMESTAMP,
-               error_message = COALESCE(
-                 error_message,
-                 'Job stuck in processing - auto-cleaned before blocking new jobs'
-               )
-           WHERE status = 'processing'
-           AND (
-             error_message IS NOT NULL
-             OR started_at < NOW() - INTERVAL '1 hour'
-             OR processing_started_at < NOW() - INTERVAL '1 hour'
-           )`
-        )
-        if (autoCleanupResult.rowCount > 0) {
-          logger.info(`🧹 Auto-cleaned ${autoCleanupResult.rowCount} stuck jobs before blocking new job creation`)
-        }
-      } catch (cleanupError) {
-        logger.error('Failed to auto-clean stuck jobs:', cleanupError)
-      }
-      
-      // Re-check after cleanup
-      const recheckResult = await pool.query(
-        `SELECT COUNT(*) as count
-         FROM jobs
-         WHERE status = 'processing'
-         AND (
-           error_message IS NOT NULL
-           OR started_at < NOW() - INTERVAL '1 hour'
-           OR processing_started_at < NOW() - INTERVAL '1 hour'
-         )
-         LIMIT 1`
-      )
-      const remainingStuck = parseInt(recheckResult.rows[0]?.count || '0')
-      
-      if (remainingStuck > 0) {
-        throw new Error(
-          `Cannot add new jobs: ${remainingStuck} stuck job(s) still detected after auto-cleanup. ` +
-          `Please run 'npm run cleanup:all-stuck' to clean up stuck jobs first. ` +
-          `To bypass this check, set SKIP_STUCK_JOB_CHECK=true in environment.`
-        )
-      } else {
-        logger.info(`✅ Auto-cleanup successful. Proceeding with new job creation.`)
-      }
-    }
-  }
-  
-  const jobId = data.jobId
-  let queueName: string
-  let queue: Bull.Queue
-  let projectId: string | null = null
-  let projectName: string | null = null
-  let templateName: string | null = null
-  let documentName: string | null = null
-  
+// Phase 5: Migrated to use QueueService.addJob() with full stuck job checking and caching
+export async function addJob(
+  type: string,
+  data: unknown,
+  options?: JobOptions
+): Promise<string> {
   try {
-    // Extract project info for ALL job types
-    // Extract projectId from different possible locations based on job type
-    if (type === 'process-flow' && data.config?.projectId) {
-      projectId = data.config.projectId
-    } else if (data.projectId) {
-      // ai-generate, baseline-extract, etc.
-      projectId = data.projectId
-    } else if (data.variables?.project_id) {
-      // From variables
-      projectId = data.variables.project_id
-    } else if (data.project_id) {
-      // Alternative naming
-      projectId = data.project_id
+    // Phase 5: Use QueueService for all job creation logic
+    const queueService = await getQueueServiceInstance()
+    return await queueService.addJob(type as JobType, data, options)
+  } catch (error) {
+    // Re-throw JobError instances as-is
+    if (error instanceof JobValidationError || error instanceof JobTypeError || error instanceof StuckJobsError || error instanceof JobQueueError || error instanceof JobDatabaseError) {
+      throw error
     }
-    
-    // Look up project and template names if we have IDs
-    if (projectId) {
-      try {
-        const projectResult = await pool.query(
-          'SELECT name FROM projects WHERE id = $1',
-          [projectId]
-        )
-        if (projectResult.rows.length > 0) {
-          projectName = projectResult.rows[0].name
-        }
-      } catch (err) {
-        logger.warn('Failed to lookup project name for job:', err)
-      }
-    }
-    
-    // Extract template ID and look up name
-    const templateId = data.template_id || data.config?.templateId || data.variables?.template_id || null
-    if (templateId) {
-      try {
-        const templateResult = await pool.query(
-          'SELECT name FROM templates WHERE id = $1',
-          [templateId]
-        )
-        if (templateResult.rows.length > 0) {
-          templateName = templateResult.rows[0].name
-        }
-      } catch (err) {
-        logger.warn('Failed to lookup template name for job:', err)
-      }
-    }
-    
-    // If this is a single-document extraction job, look up the document name
-    if (type === 'extract-project-data' && Array.isArray(data.documentIds) && data.documentIds.length === 1) {
-      const docId = data.documentIds[0]
-      if (docId) {
-        try {
-          const docResult = await pool.query(
-            'SELECT name FROM documents WHERE id = $1',
-            [docId]
-          )
-          if (docResult.rows.length > 0) {
-            documentName = docResult.rows[0].name
-          }
-        } catch (err) {
-          logger.warn('Failed to lookup document name for extraction job:', err)
-        }
-      }
-    }
-    
-    // Determine queue name based on type
-    switch (type) {
-      case "ai-generate":
-        queueName = "ai-processing"
-        queue = aiQueue
-        break
-      case "document-convert":
-        queueName = "document-processing"
-        queue = documentQueue
-        break
-      case "pipeline-processing":
-        queueName = "pipeline-processing"
-        queue = pipelineQueue
-        break
-      case "baseline-extract":
-        queueName = "baseline-processing"
-        queue = baselineQueue
-        break
-      case "process-flow":
-        queueName = "process-flow-processing"
-        queue = processFlowQueue
-        break
-      case "document-regeneration":
-        queueName = "document-regeneration"
-        queue = regenerationQueue
-        break
-      case "quality-audit":
-        queueName = "quality-audit"
-        queue = qualityAuditQueue
-        break
-      case "extract-project-data":
-        queueName = "project-data-extraction"
-        queue = extractionQueue
-        break
-      default:
-        throw new Error(`Unknown job type: ${type}`)
-    }
-    
-    // ATOMIC OPERATION: Save to database first, then add to queue
-    // If queue add fails, rollback database entry
-    try {
-      // Step 1: Insert into database
-      await pool.query(
-        `
-        INSERT INTO jobs (id, type, status, data, created_by, project_id, project_name, template_name, document_name, queue_name, queued_at)
-        VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
-      `,
-        [jobId, type, JSON.stringify(data), data.userId, projectId, projectName, templateName, documentName, queueName]
-      )
-      
-      // Step 2: Add to Bull queue
-      try {
-        await queue.add(type, data, {
-          jobId,
-          priority: data.priority || 0,
-          delay: data.delay || 0,
-          ...options,
-        })
-        
-        logger.info(`Job added to queue: ${jobId} (${type})`)
-        return jobId
-      } catch (queueError: any) {
-        // Queue add failed - rollback database entry
-        logger.error(`Failed to add job to queue, rolling back database entry: ${jobId}`, queueError)
-        try {
-          await pool.query('DELETE FROM jobs WHERE id = $1', [jobId])
-          logger.info(`Rolled back database entry for job: ${jobId}`)
-        } catch (rollbackError) {
-          logger.error(`Failed to rollback database entry for job ${jobId}:`, rollbackError)
-          // Mark as failed in database since we can't delete it
-          await pool.query(
-            `UPDATE jobs SET status = 'failed', error_message = $1 WHERE id = $2`,
-            [`Failed to add to queue: ${queueError.message}`, jobId]
-          )
-        }
-        throw new Error(`Failed to add job to queue: ${queueError.message}`)
-      }
-    } catch (dbError: any) {
-      // Database insert failed - don't add to queue
-      logger.error(`Failed to insert job into database: ${jobId}`, dbError)
-      throw new Error(`Failed to create job record: ${dbError.message}`)
-    }
-  } catch (error: any) {
+    // Wrap unexpected errors
     logger.error("Failed to add job:", error)
     throw error
   }
 }
 
-export async function getJobStatus(jobId: string): Promise<any> {
+export interface JobStatusResult {
+  id: string
+  type: JobType
+  status: JobStatus
+  progress: number | null
+  data: JobData
+  created_by: string | null
+  project_id: string | null
+  project_name: string | null
+  template_name: string | null
+  document_name: string | null
+  queue_name: QueueName | null
+  error_message: string | null
+  result: unknown
+  created_at: Date
+  started_at: Date | null
+  completed_at: Date | null
+  processing_started_at: Date | null
+  queued_at: Date | null
+}
+
+export async function getJobStatus(jobId: string): Promise<JobStatusResult | null> {
   try {
+    // Phase 5: Use QueueService if available, fallback to direct query
+    const queueService = await getQueueServiceInstance()
+    if (queueService) {
+      const status = await queueService.getJobStatus(jobId)
+      return status as JobStatusResult | null
+    }
+    
+    // Fallback to direct query
     const result = await pool.query(
       "SELECT * FROM jobs WHERE id = $1",
       [jobId]
@@ -1064,7 +901,7 @@ export async function getJobStatus(jobId: string): Promise<any> {
       return null
     }
 
-    return result.rows[0]
+    return result.rows[0] as JobStatusResult
   } catch (error) {
     logger.error(`Failed to get job status: ${jobId}`, error)
     return null
@@ -1076,12 +913,27 @@ const WORKER_ID = `worker-${process.pid}-${Date.now()}`
 
 export async function updateJobStatus(
   jobId: string, 
-  status: string, 
+  status: JobStatus, 
   progress?: number, 
   workerId?: string,
-  queueName?: string
+  queueName?: QueueName | string,
+  errorMessage?: string
 ): Promise<void> {
   try {
+    // Phase 5: Use QueueService for basic update, then add additional features
+    const queueService = await getQueueServiceInstance()
+    if (queueService) {
+      // Use QueueService for the basic database update
+      await queueService.updateJobStatus(jobId, status, progress, workerId, queueName)
+    } else {
+      // Fallback to direct query (shouldn't happen, but safety first)
+      await pool.query(
+        `UPDATE jobs SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        [status, jobId]
+      )
+    }
+
+    // Additional features beyond QueueService (worker process ID, data JSONB update, etc.)
     const updateFields = ["status = $2"]
     const params: any[] = [jobId, status]
     let paramCount = 2
@@ -1109,6 +961,13 @@ export async function updateJobStatus(
       params.push(workerId)
     }
 
+    // Add error message if provided
+    if (errorMessage) {
+      paramCount++
+      updateFields.push(`error_message = $${paramCount}`)
+      params.push(errorMessage)
+    }
+
     // Add queue name
     if (queueName) {
       paramCount++
@@ -1131,10 +990,13 @@ export async function updateJobStatus(
       whereClauses.push(`error_message IS NULL`) // Don't reset jobs with errors back to processing
     }
 
-    await pool.query(
-      `UPDATE jobs SET ${updateFields.join(", ")} WHERE ${whereClauses.join(" AND ")}`,
-      params
-    )
+    // Apply additional updates
+    if (updateFields.length > 1 || whereClauses.length > 1) {
+      await pool.query(
+        `UPDATE jobs SET ${updateFields.join(", ")} WHERE ${whereClauses.join(" AND ")}`,
+        params
+      )
+    }
 
     // Emit real-time update with enriched data
     const jobResult = await pool.query(`
@@ -1171,7 +1033,19 @@ export async function updateJobStatus(
 
 export async function cancelJob(jobId: string): Promise<boolean> {
   try {
-    // Try to remove from ALL queues
+    // Phase 5: Use QueueService for basic cancellation, then add special handling
+    const queueService = await getQueueServiceInstance()
+    if (queueService) {
+      try {
+        await queueService.cancelJob(jobId)
+      } catch (error) {
+        // QueueService might not find the job, continue with special handling
+        logger.debug(`QueueService cancelJob didn't find job ${jobId}, trying special handling`)
+      }
+    }
+
+    // Special handling for extraction jobs and active jobs
+    // Try to remove from ALL queues with special logic
     const queues = [
       { queue: aiQueue, name: 'aiQueue' },
       { queue: documentQueue, name: 'documentQueue' },
@@ -1329,3 +1203,84 @@ export const queueService = {
   qualityAuditQueue,
   extractionQueue, // Add extraction queue to exports
 }
+
+// Phase 5: Helper function to get QueueServiceDependencies for job processors
+// This allows processors to pass dependencies to job services
+async function getQueueServiceDependencies() {
+  const endTiming = PerformanceMonitor.start('getQueueServiceDependencies')
+  try {
+    const {
+      PoolDatabaseAdapter,
+      SocketIOWebSocketAdapter,
+      RedisCacheAdapter,
+      WinstonLoggerAdapter,
+    } = await import('./jobs/queue/QueueDependencies')
+    const { logger: winstonLogger } = await import('../utils/logger')
+    const DocumentPurposeService = (await import('./documentPurposeService')).default
+    const TemplateAnalyticsService = (await import('./templateAnalyticsService')).default
+
+    // Note: AI services are passed directly (they don't need adapters as they're already interfaces)
+    const dependencies: QueueServiceDependencies = {
+      database: new PoolDatabaseAdapter(pool),
+      websocket: new SocketIOWebSocketAdapter(io),
+      cache: new RedisCacheAdapter(cache),
+      aiService: aiService as any, // AI service is already compatible
+      contextAwareAIService: ContextAwareAIService as any, // Context-aware AI service is already compatible
+      logger: new WinstonLoggerAdapter(winstonLogger),
+      documentPurposeService: DocumentPurposeService,
+      templateAnalyticsService: TemplateAnalyticsService,
+    }
+
+    return dependencies
+  } finally {
+    endTiming()
+  }
+}
+
+// Phase 5: Create QueueService instance with dependency injection
+// This provides the new abstraction layer while maintaining backward compatibility
+let queueServiceInstance: any = null
+
+export async function getQueueServiceInstance() {
+  if (queueServiceInstance) {
+    return queueServiceInstance
+  }
+
+  // Lazy initialization to avoid circular dependencies
+  const { createQueueService } = await import('./jobs/queue/QueueServiceFactory')
+  const { logger: winstonLogger } = await import('../utils/logger')
+  const DocumentPurposeService = (await import('./documentPurposeService')).default
+  const TemplateAnalyticsService = (await import('./templateAnalyticsService')).default
+
+  // Create map of queues
+  const queuesMap = new Map([
+    ['ai-processing', aiQueue],
+    ['document-processing', documentQueue],
+    ['pipeline-processing', pipelineQueue],
+    ['baseline-processing', baselineQueue],
+    ['process-flow-processing', processFlowQueue],
+    ['document-regeneration', regenerationQueue],
+    ['quality-audit', qualityAuditQueue],
+    ['project-data-extraction', extractionQueue],
+  ])
+
+  queueServiceInstance = createQueueService(
+    queuesMap,
+    pool,
+    io,
+    cache,
+    aiService,
+    ContextAwareAIService,
+    winstonLogger,
+    DocumentPurposeService,
+    TemplateAnalyticsService
+  )
+
+  return queueServiceInstance
+}
+
+// Export the new QueueService class and factory for advanced use cases
+export { QueueService } from './jobs/queue/QueueService'
+export { createQueueService, createMockQueueService } from './jobs/queue/QueueServiceFactory'
+export type { IQueue, IQueueJob, IQueueOptions } from './jobs/queue/IQueue'
+export type { QueueServiceDependencies } from './jobs/queue/QueueDependencies'

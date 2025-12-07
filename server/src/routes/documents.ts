@@ -420,22 +420,58 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
   try {
     const { projectId } = req.params
 
-    // Check if user has access to project (including onboarding/guest-created projects)
-    // Allow access if: owner, creator, team member, OR project created by guest
-    const projectCheck = await pool.query(
-      `SELECT p.id, p.created_by, u.email as creator_email
-       FROM projects p
-       LEFT JOIN users u ON p.created_by = u.id
-       WHERE p.id = $1 
-       AND (
-         p.owner_id = $2 
-         OR p.created_by = $2 
-         OR p.team_members ? $2::text
-       )`,
-      [projectId, req.user?.id]
-    )
+    // Check if user has access to project
+    // Super admin can access all projects
+    // Admin can access projects from their company
+    const userRole = (req as any).user?.role?.toLowerCase()
+    const isSuperAdmin = userRole === 'super_admin'
+    const isAdmin = userRole === 'admin'
+    
+    let hasAccess = false
+    
+    if (isSuperAdmin) {
+      // Super admin can access any project - just verify project exists
+      const projectExists = await pool.query(
+        'SELECT id FROM projects WHERE id = $1',
+        [projectId]
+      )
+      hasAccess = projectExists.rows.length > 0
+    } else if (isAdmin) {
+      // Admin can access projects from their company
+      const userCompanyId = (req as any).user?.company_id
+      if (userCompanyId) {
+        const projectCheck = await pool.query(
+          'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
+          [projectId, userCompanyId]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      } else {
+        // Admin with no company_id - fall back to ownership check
+        const projectCheck = await pool.query(
+          `SELECT p.id FROM projects p
+           WHERE p.id = $1 AND (p.owner_id = $2 OR p.team_members ? $2::text)`,
+          [projectId, req.user?.id]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      }
+    } else {
+      // Regular users: check ownership, creation, or team membership
+      const projectCheck = await pool.query(
+        `SELECT p.id, p.created_by, u.email as creator_email
+         FROM projects p
+         LEFT JOIN users u ON p.created_by = u.id
+         WHERE p.id = $1 
+         AND (
+           p.owner_id = $2 
+           OR p.created_by = $2 
+           OR p.team_members ? $2::text
+         )`,
+        [projectId, req.user?.id]
+      )
+      hasAccess = projectCheck.rows.length > 0
+    }
 
-    if (projectCheck.rows.length === 0) {
+    if (!hasAccess) {
       return res.status(403).json({ error: "Access denied to project" })
     }
 
@@ -547,22 +583,58 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const { projectId } = req.params
     const { page = 1, limit = 10, status, search, template, framework, grade } = req.query
 
-    // Check if user has access to project (including onboarding/guest-created projects)
-    // Allow access if: owner, creator, team member, OR project created by guest (for admins/users to view onboarding assessments)
-    const projectCheck = await pool.query(
-      `SELECT p.id, p.created_by, u.email as creator_email, u.role as creator_role
-       FROM projects p
-       LEFT JOIN users u ON p.created_by = u.id
-       WHERE p.id = $1 
-       AND (
-         p.owner_id = $2 
-         OR p.created_by = $2 
-         OR p.team_members ? $2::text
-       )`,
-      [projectId, req.user?.id]
-    )
+    // Check if user has access to project
+    // Super admin can access all projects
+    // Admin can access projects from their company
+    const userRole = (req as any).user?.role?.toLowerCase()
+    const isSuperAdmin = userRole === 'super_admin'
+    const isAdmin = userRole === 'admin'
+    
+    let hasAccess = false
+    
+    if (isSuperAdmin) {
+      // Super admin can access any project - just verify project exists
+      const projectExists = await pool.query(
+        'SELECT id FROM projects WHERE id = $1',
+        [projectId]
+      )
+      hasAccess = projectExists.rows.length > 0
+    } else if (isAdmin) {
+      // Admin can access projects from their company
+      const userCompanyId = (req as any).user?.company_id
+      if (userCompanyId) {
+        const projectCheck = await pool.query(
+          'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
+          [projectId, userCompanyId]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      } else {
+        // Admin with no company_id - fall back to ownership check
+        const projectCheck = await pool.query(
+          `SELECT p.id FROM projects p
+           WHERE p.id = $1 AND (p.owner_id = $2 OR p.team_members ? $2::text)`,
+          [projectId, req.user?.id]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      }
+    } else {
+      // Regular users: check ownership, creation, or team membership
+      const projectCheck = await pool.query(
+        `SELECT p.id, p.created_by, u.email as creator_email, u.role as creator_role
+         FROM projects p
+         LEFT JOIN users u ON p.created_by = u.id
+         WHERE p.id = $1 
+         AND (
+           p.owner_id = $2 
+           OR p.created_by = $2 
+           OR p.team_members ? $2::text
+         )`,
+        [projectId, req.user?.id]
+      )
+      hasAccess = projectCheck.rows.length > 0
+    }
 
-    if (projectCheck.rows.length === 0) {
+    if (!hasAccess) {
       return res.status(403).json({ error: "Access denied to project" })
     }
 
@@ -876,12 +948,48 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     })
 
     // Check if user has access to the project
-    const projectCheck = await pool.query(
-      "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
-      [document.project_id, req.user?.id]
-    )
+    // Super admin can access all projects
+    // Admin can access projects from their company
+    const userRole = (req as any).user?.role?.toLowerCase()
+    const isSuperAdmin = userRole === 'super_admin'
+    const isAdmin = userRole === 'admin'
+    
+    let hasAccess = false
+    
+    if (isSuperAdmin) {
+      // Super admin can access any project - just verify project exists
+      const projectExists = await pool.query(
+        'SELECT id FROM projects WHERE id = $1',
+        [document.project_id]
+      )
+      hasAccess = projectExists.rows.length > 0
+    } else if (isAdmin) {
+      // Admin can access projects from their company
+      const userCompanyId = (req as any).user?.company_id
+      if (userCompanyId) {
+        const projectCheck = await pool.query(
+          'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
+          [document.project_id, userCompanyId]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      } else {
+        // Admin with no company_id - fall back to ownership check
+        const projectCheck = await pool.query(
+          "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+          [document.project_id, req.user?.id]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      }
+    } else {
+      // Regular users: check ownership or team membership
+      const projectCheck = await pool.query(
+        "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+        [document.project_id, req.user?.id]
+      )
+      hasAccess = projectCheck.rows.length > 0
+    }
 
-    if (projectCheck.rows.length === 0) {
+    if (!hasAccess) {
       return res.status(403).json({ error: "Access denied" })
     }
 
@@ -995,20 +1103,51 @@ router.post("/project/:projectId",
       const { name, content, template_id, status = "draft" } = req.body
 
       // Check if user has access to project
-      const projectCheck = await pool.query(
-        "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
-        [projectId, req.user?.id]
-      )
+      // Super admin and admin can access all projects
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      
+      let hasAccess = false
+      
+      if (isSuperAdmin || isAdmin) {
+        // Super admin and admin can access any project - just verify project exists
+        const projectExists = await pool.query(
+          'SELECT id FROM projects WHERE id = $1',
+          [projectId]
+        )
+        hasAccess = projectExists.rows.length > 0
+      } else {
+        // Regular users: check ownership or team membership
+        const projectCheck = await pool.query(
+          "SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR team_members ? $2::text)",
+          [projectId, req.user?.id]
+        )
+        hasAccess = projectCheck.rows.length > 0
+      }
 
-      if (projectCheck.rows.length === 0) {
+      if (!hasAccess) {
         return res.status(403).json({ error: "Access denied to project" })
       }
 
       const id = uuidv4()
 
-      // Convert content to Markdown string if it's an object
+      // CRITICAL: Convert content to Markdown string if it's an object
+      // Reject file metadata objects - these should go through the upload endpoint
       let contentString = content
       if (typeof content === 'object' && content !== null) {
+        // Check if this is a file metadata object (should be rejected)
+        if (content.fileName && content.fileSize && content.fileType && content.note === "Binary file uploaded - content stored separately") {
+          log.error('Rejected file metadata object - PDF/DOCX files must be uploaded via file upload endpoint', {
+            fileName: content.fileName,
+            fileType: content.fileType,
+            projectId
+          })
+          return res.status(400).json({ 
+            error: "PDF and DOCX files must be uploaded using the file upload feature, not created directly. The upload will automatically convert them to Markdown." 
+          })
+        }
+        
         // Handle different content object formats
         if (content.text) {
           contentString = content.text
@@ -1017,9 +1156,25 @@ router.post("/project/:projectId",
         } else if (content.content) {
           contentString = content.content
         } else {
-          // If it's a complex object, stringify it as JSON
-          contentString = JSON.stringify(content, null, 2)
+          // If it's a complex object without recognized fields, reject it
+          log.error('Rejected document creation with unrecognized content object format', {
+            contentKeys: Object.keys(content),
+            projectId
+          })
+          return res.status(400).json({ 
+            error: "Invalid content format. Content must be a Markdown string or an object with 'text', 'markdown', or 'content' property. For PDF/DOCX files, use the upload endpoint." 
+          })
         }
+      }
+      
+      // Ensure content is a string
+      if (typeof contentString !== 'string') {
+        contentString = String(contentString || '')
+      }
+      
+      // Validate content is not empty
+      if (!contentString || contentString.trim() === '') {
+        return res.status(400).json({ error: "Document content cannot be empty" })
       }
 
       // Calculate word count and character count
@@ -1697,9 +1852,10 @@ router.delete("/:id",
       const { id } = req.params
 
       // Check if document exists and user has access (exclude already deleted)
+      // Include company_id for admin access control
       const docCheck = await pool.query(
         `
-        SELECT d.*, p.owner_id, p.team_members
+        SELECT d.*, p.owner_id, p.created_by, p.team_members, p.company_id
         FROM documents d
         JOIN projects p ON d.project_id = p.id
         WHERE d.id = $1 AND d.deleted_at IS NULL
@@ -1713,25 +1869,65 @@ router.delete("/:id",
 
       const doc = docCheck.rows[0]
       
-      // Check if user is owner or has project access
-      const isOwner = doc.owner_id === req.user?.id
-      const teamMembers = doc.team_members || []
-      let isInTeam = false
+      // SECURITY: Verify user has access to this document
+      // Super admin can delete any document
+      // Admin can delete documents from their company
+      // Regular users can delete documents from projects they own or are team members of
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      const userId = (req as any).user?.id
       
-      if (Array.isArray(teamMembers)) {
-        isInTeam = teamMembers.includes(req.user?.id)
-      } else if (typeof teamMembers === 'object' && teamMembers !== null) {
-        // Handle JSONB case
-        isInTeam = Object.values(teamMembers).includes(req.user?.id)
+      let hasAccess = false
+      
+      if (isSuperAdmin) {
+        // Super admin can delete any document
+        hasAccess = true
+      } else if (isAdmin) {
+        // Admin can delete documents from their company
+        const userCompanyId = (req as any).user?.company_id
+        if (userCompanyId && doc.company_id) {
+          hasAccess = doc.company_id === userCompanyId
+        } else if (!userCompanyId) {
+          // Admin with no company_id - fall back to ownership check
+          const isOwner = doc.owner_id === userId || doc.created_by === userId
+          const teamMembers = doc.team_members || []
+          let isInTeam = false
+          
+          if (Array.isArray(teamMembers)) {
+            isInTeam = teamMembers.includes(userId)
+          } else if (typeof teamMembers === 'object' && teamMembers !== null) {
+            isInTeam = Object.values(teamMembers).includes(userId)
+          }
+          
+          hasAccess = isOwner || isInTeam
+        }
+      } else {
+        // Regular users: Check if user is the project owner or a team member
+        const isOwner = doc.owner_id === userId || doc.created_by === userId
+        const teamMembers = doc.team_members || []
+        let isInTeam = false
+        
+        if (Array.isArray(teamMembers)) {
+          isInTeam = teamMembers.includes(userId)
+        } else if (typeof teamMembers === 'object' && teamMembers !== null) {
+          // Handle JSONB case
+          isInTeam = Object.values(teamMembers).includes(userId)
+        }
+        
+        hasAccess = isOwner || isInTeam
       }
 
-      if (!isOwner && !isInTeam) {
+      if (!hasAccess) {
         log.warn('Access denied to delete document', {
           documentId: id,
-          userId: req.user?.id,
-          ownerId: doc.owner_id
+          userId: userId,
+          ownerId: doc.owner_id,
+          userRole: userRole,
+          projectCompanyId: doc.company_id,
+          userCompanyId: (req as any).user?.company_id
         })
-        return res.status(403).json({ error: "Access denied - you must be the project owner or a team member" })
+        return res.status(403).json({ error: "Access denied - you do not have permission to delete this document" })
       }
 
       // Soft delete using the function
@@ -1777,6 +1973,11 @@ router.get("/project/:projectId/deleted",
       const { projectId } = req.params
 
       // Check if user has access to project
+      // Super admin and admin can access all projects
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      
       const projectCheck = await pool.query(
         `
         SELECT p.owner_id, p.team_members
@@ -1793,12 +1994,14 @@ router.get("/project/:projectId/deleted",
       const project = projectCheck.rows[0]
       const teamMembers = project.team_members || []
 
-      // Check if user is owner or in team_members array
-      const isOwner = project.owner_id === req.user?.id
-      const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
+      // Check if user is owner or in team_members array (unless super admin or admin)
+      if (!isSuperAdmin && !isAdmin) {
+        const isOwner = project.owner_id === req.user?.id
+        const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
 
-      if (!isOwner && !isInTeam) {
-        return res.status(403).json({ error: "Access denied" })
+        if (!isOwner && !isInTeam) {
+          return res.status(403).json({ error: "Access denied" })
+        }
       }
 
       // Get deleted documents using the view
@@ -1835,9 +2038,10 @@ router.post("/:id/restore",
       const { id } = req.params
 
       // Check if document exists and is deleted
+      // Include company_id for admin access control
       const docCheck = await pool.query(
         `
-        SELECT d.*, p.owner_id, p.team_members
+        SELECT d.*, p.owner_id, p.created_by, p.team_members, p.company_id
         FROM documents d
         JOIN projects p ON d.project_id = p.id
         WHERE d.id = $1 AND d.deleted_at IS NOT NULL
@@ -1850,14 +2054,43 @@ router.post("/:id/restore",
       }
 
       const doc = docCheck.rows[0]
-      const teamMembers = doc.team_members || []
+      
+      // SECURITY: Verify user has access to restore this document
+      // Super admin can restore any document
+      // Admin can restore documents from their company
+      // Regular users can restore documents from projects they own or are team members of
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      const userId = (req as any).user?.id
+      
+      let hasAccess = false
+      
+      if (isSuperAdmin) {
+        // Super admin can restore any document
+        hasAccess = true
+      } else if (isAdmin) {
+        // Admin can restore documents from their company
+        const userCompanyId = (req as any).user?.company_id
+        if (userCompanyId && doc.company_id) {
+          hasAccess = doc.company_id === userCompanyId
+        } else if (!userCompanyId) {
+          // Admin with no company_id - fall back to ownership check
+          const isOwner = doc.owner_id === userId || doc.created_by === userId
+          const teamMembers = doc.team_members || []
+          const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId)
+          hasAccess = isOwner || isInTeam
+        }
+      } else {
+        // Regular users: Check if user is the project owner or a team member
+        const isOwner = doc.owner_id === userId || doc.created_by === userId
+        const teamMembers = doc.team_members || []
+        const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId)
+        hasAccess = isOwner || isInTeam
+      }
 
-      // Check if user is owner or in team_members array
-      const isOwner = doc.owner_id === req.user?.id
-      const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
-
-      if (!isOwner && !isInTeam) {
-        return res.status(403).json({ error: "Access denied" })
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied - you do not have permission to restore this document" })
       }
 
       // Restore using the function
@@ -1905,9 +2138,10 @@ router.delete("/:id/permanent",
       const { id } = req.params
 
       // Check if document exists and is deleted
+      // Include company_id for admin access control
       const docCheck = await pool.query(
         `
-        SELECT d.*, p.owner_id, p.team_members
+        SELECT d.*, p.owner_id, p.created_by, p.team_members, p.company_id
         FROM documents d
         JOIN projects p ON d.project_id = p.id
         WHERE d.id = $1 AND d.deleted_at IS NOT NULL
@@ -1920,14 +2154,43 @@ router.delete("/:id/permanent",
       }
 
       const doc = docCheck.rows[0]
-      const teamMembers = doc.team_members || []
+      
+      // SECURITY: Verify user has access to permanently delete this document
+      // Super admin can permanently delete any document
+      // Admin can permanently delete documents from their company
+      // Regular users can permanently delete documents from projects they own or are team members of
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      const userId = (req as any).user?.id
+      
+      let hasAccess = false
+      
+      if (isSuperAdmin) {
+        // Super admin can permanently delete any document
+        hasAccess = true
+      } else if (isAdmin) {
+        // Admin can permanently delete documents from their company
+        const userCompanyId = (req as any).user?.company_id
+        if (userCompanyId && doc.company_id) {
+          hasAccess = doc.company_id === userCompanyId
+        } else if (!userCompanyId) {
+          // Admin with no company_id - fall back to ownership check
+          const isOwner = doc.owner_id === userId || doc.created_by === userId
+          const teamMembers = doc.team_members || []
+          const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId)
+          hasAccess = isOwner || isInTeam
+        }
+      } else {
+        // Regular users: Check if user is the project owner or a team member
+        const isOwner = doc.owner_id === userId || doc.created_by === userId
+        const teamMembers = doc.team_members || []
+        const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId)
+        hasAccess = isOwner || isInTeam
+      }
 
-      // Check if user is owner or in team_members array
-      const isOwner = doc.owner_id === req.user?.id
-      const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(req.user?.id)
-
-      if (!isOwner && !isInTeam) {
-        return res.status(403).json({ error: "Access denied" })
+      if (!hasAccess) {
+        return res.status(403).json({ error: "Access denied - you do not have permission to permanently delete this document" })
       }
 
       // Hard delete

@@ -55,12 +55,31 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return roleArray.includes(user.role)
   }
 
+  // Helper function to validate JWT token format
+  const isValidTokenFormat = (token: string): boolean => {
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      return false
+    }
+    const parts = token.trim().split(".")
+    return parts.length === 3 && parts.every(part => part.length > 0)
+  }
+
   // Initialize auth state
   useEffect(() => {
     const initAuth = async () => {
       try {
         const token = localStorage.getItem("auth_token")
         if (token) {
+          // Validate token format before using it
+          if (!isValidTokenFormat(token)) {
+            console.warn("Invalid token format in localStorage, clearing it")
+            localStorage.removeItem("auth_token")
+            apiClient.clearToken()
+            setToken(null)
+            setLoading(false)
+            return
+          }
+          
           apiClient.setToken(token)
           setToken(token)
           try {
@@ -71,6 +90,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             // Clear invalid token
             localStorage.removeItem("auth_token")
             apiClient.clearToken()
+            setToken(null)
           }
         }
       } catch (error) {
@@ -78,7 +98,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Clear invalid token
         localStorage.removeItem("auth_token")
         apiClient.clearToken()
-  setToken(null)
+        setToken(null)
       } finally {
         setLoading(false)
       }

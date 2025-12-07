@@ -25,17 +25,90 @@ router.get(
     try {
       const { documentId } = req.params
       const userId = (req as any).user?.id
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+
+      // Get user's company_id for access checking
+      let userCompanyId: string | null = null
+      if (!isSuperAdmin) {
+        try {
+          const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
+          if (userResult.rows.length > 0) {
+            userCompanyId = userResult.rows[0].company_id
+          }
+        } catch (err: any) {
+          // If company_id column doesn't exist, log warning but continue
+          if (err.message?.includes('column "company_id"') || err.code === '42703') {
+            logger.warn('company_id column not found, checking access by owner_id only')
+          } else {
+            throw err
+          }
+        }
+      }
 
       // Verify user has access to this document's project
-      const accessCheck = await pool.query(
-        `SELECT d.id, d.project_id
-         FROM documents d
-         JOIN projects p ON d.project_id = p.id
-         WHERE d.id = $1
-         AND (p.created_by = $2 OR p.owner_id = $2)
-         LIMIT 1`,
-        [documentId, userId]
-      )
+      let accessCheck
+      try {
+        if (isSuperAdmin) {
+          // Super admin can access any document - just verify document exists
+          accessCheck = await pool.query(
+            `SELECT d.id, d.project_id, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1
+             LIMIT 1`,
+            [documentId]
+          )
+        } else if (isAdmin && userCompanyId) {
+          // Admin can access documents from their company
+          accessCheck = await pool.query(
+            `SELECT d.id, d.project_id, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1 AND p.company_id = $2
+             LIMIT 1`,
+            [documentId, userCompanyId]
+          )
+        } else {
+          // Regular users: check ownership
+          accessCheck = await pool.query(
+            `SELECT d.id, d.project_id, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1
+             AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)
+             LIMIT 1`,
+            [documentId, userId]
+          )
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, fall back to owner check
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          if (isSuperAdmin) {
+            accessCheck = await pool.query(
+              `SELECT d.id, d.project_id
+               FROM documents d
+               JOIN projects p ON d.project_id = p.id
+               WHERE d.id = $1
+               LIMIT 1`,
+              [documentId]
+            )
+          } else {
+            accessCheck = await pool.query(
+              `SELECT d.id, d.project_id
+               FROM documents d
+               JOIN projects p ON d.project_id = p.id
+               WHERE d.id = $1
+               AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)
+               LIMIT 1`,
+              [documentId, userId]
+            )
+          }
+        } else {
+          throw err
+        }
+      }
 
       if (accessCheck.rows.length === 0) {
         return res.status(403).json({
@@ -82,17 +155,90 @@ router.post(
     try {
       const { documentId } = req.body
       const userId = (req as any).user?.id
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+
+      // Get user's company_id for access checking
+      let userCompanyId: string | null = null
+      if (!isSuperAdmin) {
+        try {
+          const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
+          if (userResult.rows.length > 0) {
+            userCompanyId = userResult.rows[0].company_id
+          }
+        } catch (err: any) {
+          // If company_id column doesn't exist, log warning but continue
+          if (err.message?.includes('column "company_id"') || err.code === '42703') {
+            logger.warn('company_id column not found, checking access by owner_id only')
+          } else {
+            throw err
+          }
+        }
+      }
 
       // Verify user has access
-      const accessCheck = await pool.query(
-        `SELECT d.id, d.project_id
-         FROM documents d
-         JOIN projects p ON d.project_id = p.id
-         WHERE d.id = $1
-         AND (p.created_by = $2 OR p.owner_id = $2)
-         LIMIT 1`,
-        [documentId, userId]
-      )
+      let accessCheck
+      try {
+        if (isSuperAdmin) {
+          // Super admin can access any document - just verify document exists
+          accessCheck = await pool.query(
+            `SELECT d.id, d.project_id, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1
+             LIMIT 1`,
+            [documentId]
+          )
+        } else if (isAdmin && userCompanyId) {
+          // Admin can access documents from their company
+          accessCheck = await pool.query(
+            `SELECT d.id, d.project_id, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1 AND p.company_id = $2
+             LIMIT 1`,
+            [documentId, userCompanyId]
+          )
+        } else {
+          // Regular users: check ownership
+          accessCheck = await pool.query(
+            `SELECT d.id, d.project_id, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1
+             AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)
+             LIMIT 1`,
+            [documentId, userId]
+          )
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, fall back to owner check
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          if (isSuperAdmin) {
+            accessCheck = await pool.query(
+              `SELECT d.id, d.project_id
+               FROM documents d
+               JOIN projects p ON d.project_id = p.id
+               WHERE d.id = $1
+               LIMIT 1`,
+              [documentId]
+            )
+          } else {
+            accessCheck = await pool.query(
+              `SELECT d.id, d.project_id
+               FROM documents d
+               JOIN projects p ON d.project_id = p.id
+               WHERE d.id = $1
+               AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)
+               LIMIT 1`,
+              [documentId, userId]
+            )
+          }
+        } else {
+          throw err
+        }
+      }
 
       if (accessCheck.rows.length === 0) {
         return res.status(403).json({
@@ -355,13 +501,17 @@ router.post(
       const { suggestionId } = req.params
       const userId = (req as any).user?.id
 
-      // Check if user is admin
+      // Check if user is admin or super_admin
       const userResult = await pool.query(
         'SELECT role FROM users WHERE id = $1',
         [userId]
       )
 
-      if (userResult.rows.length === 0 || userResult.rows[0].role !== 'admin') {
+      const userRole = userResult.rows[0]?.role?.toLowerCase()
+      const isAdmin = userRole === 'admin'
+      const isSuperAdmin = userRole === 'super_admin'
+
+      if (userResult.rows.length === 0 || (!isAdmin && !isSuperAdmin)) {
         return res.status(403).json({
           success: false,
           error: 'Only administrators can apply template optimizations'
@@ -433,10 +583,12 @@ router.post(
   authenticateToken,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const userRole = (req as any).user?.role
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isAdmin = userRole === 'admin'
+      const isSuperAdmin = userRole === 'super_admin'
 
-      // Admin only
-      if (userRole !== 'admin') {
+      // Admin or super_admin only
+      if (!isAdmin && !isSuperAdmin) {
         return res.status(403).json({
           success: false,
           error: 'Admin access required'

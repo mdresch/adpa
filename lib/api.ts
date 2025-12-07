@@ -428,14 +428,39 @@ class ApiClient {
     this.baseURL = baseURL
     // Get token from localStorage if available
     if (typeof window !== "undefined") {
-      this.token = localStorage.getItem("auth_token")
+      const storedToken = localStorage.getItem("auth_token")
+      // Validate token format before using it
+      if (storedToken && this.isValidTokenFormat(storedToken)) {
+        this.token = storedToken
+      } else if (storedToken) {
+        // Token exists but is invalid - clear it
+        console.warn("Invalid token format in localStorage, clearing it")
+        localStorage.removeItem("auth_token")
+        this.token = null
+      }
     }
   }
 
+  /**
+   * Validates that a token has the basic JWT structure (3 parts separated by dots)
+   */
+  private isValidTokenFormat(token: string): boolean {
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      return false
+    }
+    const parts = token.trim().split(".")
+    return parts.length === 3 && parts.every(part => part.length > 0)
+  }
+
   setToken(token: string) {
-    this.token = token
+    // Validate token format before storing
+    if (!this.isValidTokenFormat(token)) {
+      console.error("Attempted to set invalid token format")
+      throw new Error("Invalid token format. Token must be a valid JWT.")
+    }
+    this.token = token.trim()
     if (typeof window !== "undefined") {
-      localStorage.setItem("auth_token", token)
+      localStorage.setItem("auth_token", this.token)
     }
   }
 
@@ -464,8 +489,9 @@ class ApiClient {
       ...(options.headers as Record<string, string>),
     }
 
-    if (this.token) {
-      headers['authorization'] = `Bearer ${this.token}`
+    // Only add authorization header if token exists and is not empty
+    if (this.token && typeof this.token === 'string' && this.token.trim().length > 0) {
+      headers['authorization'] = `Bearer ${this.token.trim()}`
     }
 
     try {
@@ -1299,19 +1325,20 @@ class ApiClient {
     limit?: number
     status?: string
     type?: string
+    allUsers?: boolean // If true, uses admin endpoint to get all users' jobs
   }): Promise<{ jobs: Job[]; pagination: any }> {
     const queryParams = new URLSearchParams()
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
+        if (value !== undefined && key !== 'allUsers') {
           queryParams.append(key, value.toString())
         }
       })
     }
 
-    const response = await this.request<{ jobs: Job[]; pagination: any }>(
-      `/jobs?${queryParams}`
-    )
+    // Use admin endpoint if allUsers is true
+    const endpoint = params?.allUsers ? `/jobs/admin/all?${queryParams}` : `/jobs?${queryParams}`
+    const response = await this.request<{ jobs: Job[]; pagination: any }>(endpoint)
     return response
   }
 
@@ -1349,6 +1376,53 @@ class ApiClient {
 
   async getQueueHealth(): Promise<{ status: string; failedJobs: number; stalledJobs: number }> {
     const response = await this.request<{ status: string; failedJobs: number; stalledJobs: number }>("/queue-stats/health")
+    return response
+  }
+
+  // Job Diagnostics API
+  async getPendingJobsDiagnostics(): Promise<{
+    diagnostics: {
+      totalPending: number
+      jobs: Array<{
+        jobId: string
+        type: string
+        queueName: string
+        ageMinutes: number
+        inQueue: boolean
+        queueStatus: string
+        queuePosition: number | null
+        issues: string[]
+        createdAt: string
+        hasError: boolean
+      }>
+      summary: {
+        inQueue: number
+        notInQueue: number
+        oldPending: number
+        withErrors: number
+      }
+    }
+    queueStats: Record<string, any>
+    recommendations: string[]
+  }> {
+    const response = await this.request("/jobs/diagnostics/pending")
+    return response
+  }
+
+  async fixPendingJobs(action: 're-add' | 'mark-failed', maxAge?: number): Promise<{
+    success: boolean
+    message: string
+    results: {
+      processed: number
+      reAdded: number
+      markedFailed: number
+      errors: string[]
+    }
+  }> {
+    const response = await this.request("/jobs/diagnostics/fix-pending", {
+      method: "POST",
+      body: JSON.stringify({ action, maxAge }),
+    })
     return response
   }
 

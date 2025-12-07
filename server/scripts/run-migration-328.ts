@@ -94,8 +94,75 @@ async function runMigration() {
       console.log('   DROP TABLE IF EXISTS prioritization_criteria CASCADE;')
       console.log('   Then run this script again.\n')
       
+      // Check if view exists
+      console.log('🔍 Checking if project_priority_rankings view exists...')
+      const viewCheck = await client.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.views 
+          WHERE table_schema = 'public' 
+          AND table_name = 'project_priority_rankings'
+        ) as exists
+      `)
+      
+      if (!viewCheck.rows[0]?.exists) {
+        console.log('⚠️  View project_priority_rankings does not exist - creating it now...\n')
+        
+        // Extract just the view creation SQL from the migration file
+        const viewSQL = `
+-- Project Priority Rankings View
+CREATE OR REPLACE VIEW project_priority_rankings AS
+SELECT 
+  p.id as project_id,
+  p.name as project_name,
+  p.program_id,
+  pr.name as program_name,
+  COALESCE(SUM(ps.weighted_score), 0) as total_score,
+  ROW_NUMBER() OVER (
+    PARTITION BY p.program_id 
+    ORDER BY COALESCE(SUM(ps.weighted_score), 0) DESC
+  ) as rank,
+  CASE 
+    WHEN COALESCE(SUM(ps.weighted_score), 0) >= 4.0 THEN 'Critical'
+    WHEN COALESCE(SUM(ps.weighted_score), 0) >= 3.0 THEN 'High'
+    WHEN COALESCE(SUM(ps.weighted_score), 0) >= 2.0 THEN 'Medium'
+    ELSE 'Low'
+  END as priority_tier,
+  COUNT(ps.id) as criteria_count,
+  MAX(ps.scored_at) as last_scored_at
+FROM projects p
+LEFT JOIN programs pr ON p.program_id = pr.id
+LEFT JOIN project_priority_scores ps ON p.id = ps.project_id
+GROUP BY p.id, p.name, p.program_id, pr.name;
+
+-- Comments for view
+COMMENT ON VIEW project_priority_rankings IS 'Computed view showing project priority rankings based on weighted scores';
+COMMENT ON COLUMN project_priority_rankings.project_id IS 'Project identifier';
+COMMENT ON COLUMN project_priority_rankings.project_name IS 'Project name';
+COMMENT ON COLUMN project_priority_rankings.program_id IS 'Program identifier (if project belongs to a program)';
+COMMENT ON COLUMN project_priority_rankings.program_name IS 'Program name';
+COMMENT ON COLUMN project_priority_rankings.total_score IS 'Sum of all weighted scores for this project';
+COMMENT ON COLUMN project_priority_rankings.rank IS 'Rank within program (1 = highest priority)';
+COMMENT ON COLUMN project_priority_rankings.priority_tier IS 'Priority tier: Critical (4.0+), High (3.0-3.9), Medium (2.0-2.9), Low (<2.0)';
+COMMENT ON COLUMN project_priority_rankings.criteria_count IS 'Number of criteria scored for this project';
+COMMENT ON COLUMN project_priority_rankings.last_scored_at IS 'Most recent scoring timestamp';
+        `
+        
+        await client.query('BEGIN')
+        try {
+          await client.query(viewSQL)
+          await client.query('COMMIT')
+          console.log('✅ View project_priority_rankings created successfully\n')
+        } catch (viewError: any) {
+          await client.query('ROLLBACK')
+          console.error('❌ Failed to create view:', viewError.message)
+          throw viewError
+        }
+      } else {
+        console.log('✅ View project_priority_rankings already exists\n')
+      }
+      
       // Ask if user wants to continue
-      console.log('⚠️  Skipping migration - tables already exist')
+      console.log('⚠️  Migration partially complete - tables exist, view checked/created')
       return
     }
     

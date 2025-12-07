@@ -4,6 +4,9 @@
  * 
  * Extracted from queueService.ts as part of Phase 2 refactoring
  * to improve code organization and maintainability.
+ * 
+ * Phase 5: Updated to support dependency injection while maintaining
+ * backward compatibility with static methods.
  */
 
 import { pool } from '@/database/connection'
@@ -13,44 +16,73 @@ import { ContextAwareAIService } from '../../modules/context/integration'
 import { io } from '../../server'
 import { v4 as uuidv4 } from 'uuid'
 import type Bull from 'bull'
-
-interface AIGenerationJobData {
-  jobId: string
-  userId?: string
-  prompt: string
-  provider?: string
-  model?: string
-  temperature?: number
-  max_tokens?: number
-  template_id?: string
-  variables?: any
-  projectId?: string
-  documentIds?: string[]
-  use_context?: boolean
-  include_integrations?: boolean
-  custom_context?: any
-  name?: string
-  description?: string
-  framework?: string
-  started_at?: string
-  timestamp?: number
-  project_name?: string
-  projectName?: string
-}
+// Phase 3: Use centralized types
+import type { AIGenerationJobData, JobStatus, QueueName } from './types'
+// Phase 5: Dependency injection
+import type { QueueServiceDependencies } from './queue/QueueDependencies'
 
 interface ProcessJobOptions {
   workerId: string
-  updateJobStatus: (jobId: string, status: string, progress: number, workerId?: string, queueName?: string, errorMessage?: string) => Promise<void>
+  updateJobStatus: (jobId: string, status: JobStatus, progress: number, workerId?: string, queueName?: QueueName | string, errorMessage?: string) => Promise<void>
+  dependencies?: QueueServiceDependencies // Phase 5: Optional dependencies for DI
 }
 
 /**
  * Service class for processing AI generation jobs
+ * Phase 5: Supports both static methods (backward compatibility) and instance methods (DI)
  */
 export class AIGenerationJobService {
+  // Phase 5: Instance properties for dependency injection
+  private database: QueueServiceDependencies['database']
+  private websocket: QueueServiceDependencies['websocket']
+  private aiService: QueueServiceDependencies['aiService']
+  private contextAwareAIService: QueueServiceDependencies['contextAwareAIService']
+  private logger: QueueServiceDependencies['logger']
+
   /**
-   * Process an AI generation job
+   * Phase 5: Constructor for dependency injection
    */
-  static async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
+  constructor(dependencies?: QueueServiceDependencies) {
+    if (dependencies) {
+      this.database = dependencies.database
+      this.websocket = dependencies.websocket
+      this.aiService = dependencies.aiService
+      this.contextAwareAIService = dependencies.contextAwareAIService
+      this.logger = dependencies.logger
+    } else {
+      // Fallback to global imports for backward compatibility
+      this.database = { query: pool.query.bind(pool), connect: pool.connect.bind(pool), end: pool.end.bind(pool) } as any
+      this.websocket = io as any
+      this.aiService = aiService as any
+      this.contextAwareAIService = ContextAwareAIService as any
+      this.logger = logger as any
+    }
+  }
+
+  /**
+   * Process an AI generation job (instance method with DI)
+   */
+  async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
+    return AIGenerationJobService.processJob(job, options, {
+      database: this.database,
+      websocket: this.websocket,
+      aiService: this.aiService,
+      contextAwareAIService: this.contextAwareAIService,
+      logger: this.logger,
+    } as QueueServiceDependencies)
+  }
+
+  /**
+   * Process an AI generation job (static method for backward compatibility)
+   * Phase 5: Now accepts optional dependencies parameter
+   */
+  static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
+    // Phase 5: Use injected dependencies or fall back to global imports
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const ws = deps?.websocket || io
+    const ai = deps?.aiService || aiService
+    const contextAI = deps?.contextAwareAIService || ContextAwareAIService
+    const log = deps?.logger || logger
     const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data as AIGenerationJobData
     const { workerId, updateJobStatus } = options
 
@@ -59,25 +91,25 @@ export class AIGenerationJobService {
       await updateJobStatus(jobId, "processing", 10, workerId, "ai-processing")
 
       // Generate content using AI service
-      const result = await this.generateContent(job.data as AIGenerationJobData)
+      const result = await this.generateContent(job.data as AIGenerationJobData, deps)
 
       // Update job status to 50%
       await updateJobStatus(jobId, "processing", 50)
 
       // Update usage stats
       if (result.usage) {
-        await aiService.updateUsageStats(provider || 'openai', result.usage)
+        await ai.updateUsageStats(provider || 'openai', result.usage)
       }
 
       // Update job status to 90%
       await updateJobStatus(jobId, "processing", 90)
 
       // Create document from generated content
-      const { documentId: createdDocumentId, documentRow: createdDocumentRow } = await this.createDocument(job.data as AIGenerationJobData, result)
+      const { documentId: createdDocumentId, documentRow: createdDocumentRow } = await this.createDocument(job.data as AIGenerationJobData, result, deps)
 
       // Validate document against baseline
       if (createdDocumentId) {
-        await this.validateAgainstBaseline(job.data as AIGenerationJobData, createdDocumentId, result)
+        await this.validateAgainstBaseline(job.data as AIGenerationJobData, createdDocumentId, result, deps)
       }
 
       // Save result to database
@@ -86,7 +118,7 @@ export class AIGenerationJobService {
         documentId: createdDocumentId,
       }
 
-      await pool.query(
+      await db.query(
         `
         UPDATE jobs 
         SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
@@ -96,30 +128,33 @@ export class AIGenerationJobService {
       )
 
       // Create audit log for AI analytics
-      await this.createAuditLog(job.data as AIGenerationJobData, result, createdDocumentId)
+      await this.createAuditLog(job.data as AIGenerationJobData, result, createdDocumentId, deps)
 
       // Emit real-time updates
-      this.emitCompletionEvents(job.data as AIGenerationJobData, finalResult, createdDocumentId)
+      await this.emitCompletionEvents(job.data as AIGenerationJobData, finalResult, createdDocumentId, deps)
 
-      logger.info(`AI generation job completed: ${jobId}`)
+      log.info(`AI generation job completed: ${jobId}`)
 
       return finalResult
     } catch (error: any) {
-      await this.handleError(jobId, job.data as AIGenerationJobData, error, options)
+      await this.handleError(jobId, job.data as AIGenerationJobData, error, options, deps)
       throw error
     }
   }
 
   /**
    * Generate content using AI service
+   * Phase 5: Accepts optional dependencies
    */
-  private static async generateContent(jobData: AIGenerationJobData): Promise<any> {
+  private static async generateContent(jobData: AIGenerationJobData, deps?: QueueServiceDependencies): Promise<any> {
     const { prompt, provider, model, temperature, max_tokens, template_id, variables, userId, projectId, documentIds, use_context, include_integrations, custom_context } = jobData
     
     const useContext = !!use_context || !!projectId || !!documentIds || !!template_id
+    const contextAI = deps?.contextAwareAIService || ContextAwareAIService
+    const ai = deps?.aiService || aiService
 
     if (useContext) {
-      return await ContextAwareAIService.generateWithContext({
+      return await contextAI.generateWithContext({
         prompt,
         provider,
         model,
@@ -134,7 +169,7 @@ export class AIGenerationJobService {
         custom_context,
       })
     } else {
-      return await aiService.generateWithFallback({
+      return await ai.generateWithFallback({
         prompt,
         provider,
         model,
@@ -148,8 +183,12 @@ export class AIGenerationJobService {
 
   /**
    * Create a document from generated content
+   * Phase 5: Accepts optional dependencies
    */
-  private static async createDocument(jobData: AIGenerationJobData, result: any): Promise<string | null> {
+  private static async createDocument(jobData: AIGenerationJobData, result: any, deps?: QueueServiceDependencies): Promise<string | null> {
+    // Phase 5: Extract dependencies or use fallbacks
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const log = deps?.logger || logger
     const { jobId, userId, template_id, variables, projectId, documentIds, name, description, framework } = jobData
 
     let createdDocumentId: string | null = null
@@ -213,7 +252,7 @@ export class AIGenerationJobService {
       })
 
       // Insert document into database
-      const insertResult = await pool.query(
+      const insertResult = await db.query(
         `
         INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count)
         VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11)
@@ -225,20 +264,20 @@ export class AIGenerationJobService {
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
         const createdDocumentRow = insertResult.rows[0]
-        logger.info(`Document created: ${createdDocumentId} (project: ${projectIdForDoc || 'none'}) - ${wordCount} words, ${characterCount} chars`)
+        log.info(`Document created: ${createdDocumentId} (project: ${projectIdForDoc || 'none'}) - ${wordCount} words, ${characterCount} chars`)
 
         // Increment template usage count
         if (template_id) {
-          await this.incrementTemplateUsage(template_id)
+          await this.incrementTemplateUsage(template_id, deps)
         }
 
         // Trigger automatic entity extraction
         if (projectIdForDoc && docContent && docContent.trim().length > 0) {
-          await this.triggerAutoExtraction(jobId, projectIdForDoc, userId, createdDocumentId, docName)
+          await this.triggerAutoExtraction(jobId, projectIdForDoc, userId, createdDocumentId, docName, deps)
         }
       }
     } catch (docErr: any) {
-      logger.error(`Failed to create document for job ${jobId}:`, docErr)
+      log.error(`Failed to create document for job ${jobId}:`, docErr)
       // Continue - document creation failure shouldn't block marking job as completed
     }
 
@@ -402,10 +441,13 @@ export class AIGenerationJobService {
 
   /**
    * Increment template usage count
+   * Phase 5: Accepts optional dependencies
    */
-  private static async incrementTemplateUsage(templateId: string): Promise<void> {
+  private static async incrementTemplateUsage(templateId: string, deps?: QueueServiceDependencies): Promise<void> {
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const log = deps?.logger || logger
     try {
-      await pool.query(
+      await db.query(
         `UPDATE templates 
          SET usage_count = usage_count + 1,
              last_used_at = CURRENT_TIMESTAMP,
@@ -413,29 +455,33 @@ export class AIGenerationJobService {
          WHERE id = $1`,
         [templateId]
       )
-      logger.info(`✅ Template usage incremented: ${templateId}`)
+      log.info(`✅ Template usage incremented: ${templateId}`)
     } catch (templateErr: any) {
-      logger.error(`Failed to increment template usage for ${templateId}:`, templateErr)
+      log.error(`Failed to increment template usage for ${templateId}:`, templateErr)
       // Don't fail the job if template update fails
     }
   }
 
   /**
    * Trigger automatic entity extraction for newly created document
+   * Phase 5: Accepts optional dependencies
    */
   private static async triggerAutoExtraction(
     sourceJobId: string,
     projectId: string,
     userId: string | undefined,
     documentId: string,
-    documentName: string
+    documentName: string,
+    deps?: QueueServiceDependencies
   ): Promise<void> {
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const log = deps?.logger || logger
     try {
-      logger.info(`[AUTO-EXTRACTION] Triggering extraction for document ${documentId} in project ${projectId}`)
+      log.info(`[AUTO-EXTRACTION] Triggering extraction for document ${documentId} in project ${projectId}`)
 
       // Create extraction job record
       const extractionJobId = uuidv4()
-      await pool.query(
+      await db.query(
         `INSERT INTO jobs (
           id, type, status, data, created_by, project_id
         ) VALUES ($1, $2, $3, $4, $5, $6)
@@ -474,21 +520,25 @@ export class AIGenerationJobService {
         priority: 5 // Lower priority than manual extractions
       })
 
-      logger.info(`✅ [AUTO-EXTRACTION] Extraction job ${extractionJobId} queued for document ${documentId}`)
+      log.info(`✅ [AUTO-EXTRACTION] Extraction job ${extractionJobId} queued for document ${documentId}`)
     } catch (extractionErr: any) {
-      logger.error(`❌ [AUTO-EXTRACTION] Failed to trigger extraction for document ${documentId}:`, extractionErr)
+      log.error(`❌ [AUTO-EXTRACTION] Failed to trigger extraction for document ${documentId}:`, extractionErr)
       // Don't fail the AI generation job if extraction trigger fails
     }
   }
 
   /**
    * Validate document against project baseline
+   * Phase 5: Accepts optional dependencies
    */
   private static async validateAgainstBaseline(
     jobData: AIGenerationJobData,
     documentId: string,
-    result: any
+    result: any,
+    deps?: QueueServiceDependencies
   ): Promise<void> {
+    const ws = deps?.websocket || io
+    const log = deps?.logger || logger
     const projectIdForValidation = jobData.projectId || jobData.variables?.project_id
 
     if (!projectIdForValidation) {
@@ -501,7 +551,7 @@ export class AIGenerationJobService {
       const documentContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
       const docName = (jobData.name && jobData.name.trim()) ? jobData.name.trim() : 'Generated Document'
 
-      logger.info(`[Baseline Validation] Checking document ${documentId} against project ${projectIdForValidation} baseline`)
+      log.info(`[Baseline Validation] Checking document ${documentId} against project ${projectIdForValidation} baseline`)
       
       const drifts = await baselineService.validateDocumentAgainstBaseline(
         projectIdForValidation,
@@ -511,9 +561,9 @@ export class AIGenerationJobService {
       )
 
       if (drifts.length > 0) {
-        logger.warn(`[Baseline Validation] Detected ${drifts.length} drift(s) in document ${documentId}`)
+        log.warn(`[Baseline Validation] Detected ${drifts.length} drift(s) in document ${documentId}`)
         // Emit drift alert to project room
-        io.to(`project:${projectIdForValidation}`).emit("baseline:drift", {
+        ws.to(`project:${projectIdForValidation}`).emit("baseline:drift", {
           documentId,
           driftCount: drifts.length,
           drifts: drifts.map((d: any) => ({
@@ -523,33 +573,37 @@ export class AIGenerationJobService {
           }))
         })
       } else {
-        logger.info(`[Baseline Validation] No drift detected in document ${documentId}`)
+        log.info(`[Baseline Validation] No drift detected in document ${documentId}`)
       }
     } catch (baselineErr: any) {
-      logger.error(`[Baseline Validation] Failed to validate document ${documentId}:`, baselineErr)
+      log.error(`[Baseline Validation] Failed to validate document ${documentId}:`, baselineErr)
       // Don't fail the job if baseline validation fails
     }
   }
 
   /**
    * Create audit log for AI analytics
+   * Phase 5: Accepts optional dependencies
    */
   private static async createAuditLog(
     jobData: AIGenerationJobData,
     result: any,
-    documentId: string | null
+    documentId: string | null,
+    deps?: QueueServiceDependencies
   ): Promise<void> {
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const log = deps?.logger || logger
     try {
       const provider = jobData.provider || 'openai'
       
       // Get provider ID for audit log
-      const providerResult = await pool.query(
+      const providerResult = await db.query(
         'SELECT id FROM ai_providers WHERE name = $1 LIMIT 1',
         [provider]
       )
 
       if (providerResult.rows.length > 0) {
-        await pool.query(
+        await db.query(
           `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
            VALUES ($1, $2, $3, $4, $5)`,
           [
@@ -570,29 +624,34 @@ export class AIGenerationJobService {
             })
           ]
         )
-        logger.info(`✅ Audit log created for AI generation (job: ${jobData.jobId})`)
+        log.info(`✅ Audit log created for AI generation (job: ${jobData.jobId})`)
       }
     } catch (auditErr: any) {
-      logger.error(`Failed to create audit log for job ${jobData.jobId}:`, auditErr)
+      log.error(`Failed to create audit log for job ${jobData.jobId}:`, auditErr)
       // Don't fail the job if audit logging fails
     }
   }
 
   /**
    * Emit completion events via WebSocket
+   * Phase 5: Accepts optional dependencies
    */
-  private static emitCompletionEvents(
+  private static async emitCompletionEvents(
     jobData: AIGenerationJobData,
     finalResult: any,
-    createdDocumentId: string | null
-  ): void {
+    createdDocumentId: string | null,
+    deps?: QueueServiceDependencies
+  ): Promise<void> {
+    const ws = deps?.websocket || io
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const log = deps?.logger || logger
     const templateName = jobData.variables?.template_name || jobData.template_name || null
     const projectName = jobData.variables?.project_name || jobData.projectName || null
     const documentName = templateName || 'Document'
     const projectIdForNotification = jobData.projectId || jobData.variables?.project_id || null
 
     // Emit job completion event
-    io.emit("job:completed", {
+    ws.emit("job:completed", {
       jobId: jobData.jobId,
       userId: jobData.userId,
       status: "completed",
@@ -608,10 +667,10 @@ export class AIGenerationJobService {
     if (createdDocumentId && projectIdForNotification) {
       try {
         // Fetch document row for complete event data
-        const docResult = await pool.query('SELECT * FROM documents WHERE id = $1', [createdDocumentId])
+        const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [createdDocumentId])
         const createdDocumentRow = docResult.rows[0] || null
         
-        io.to(`project:${projectIdForNotification}`).emit("document:created", {
+        ws.to(`project:${projectIdForNotification}`).emit("document:created", {
           document: createdDocumentRow,
           documentId: createdDocumentId,
           documentName,
@@ -621,26 +680,31 @@ export class AIGenerationJobService {
           model: jobData.model,
         })
       } catch (emitErr: any) {
-        logger.error(`Failed to emit document:created for job ${jobData.jobId}:`, emitErr)
+        log.error(`Failed to emit document:created for job ${jobData.jobId}:`, emitErr)
       }
     }
   }
 
   /**
    * Handle errors during job processing
+   * Phase 5: Accepts optional dependencies
    */
   private static async handleError(
     jobId: string,
     jobData: AIGenerationJobData,
     error: any,
-    options: ProcessJobOptions
+    options: ProcessJobOptions,
+    deps?: QueueServiceDependencies
   ): Promise<void> {
-    logger.error(`AI generation job failed: ${jobId}`, error)
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const ws = deps?.websocket || io
+    const log = deps?.logger || logger
+    log.error(`AI generation job failed: ${jobId}`, error)
 
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
 
     // Update job with error
-    await pool.query(
+    await db.query(
       `
       UPDATE jobs 
       SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
@@ -653,7 +717,7 @@ export class AIGenerationJobService {
     const templateName = jobData.variables?.template_name || jobData.template_name || null
     const documentName = templateName || 'Document'
 
-    io.emit("job:failed", {
+    ws.emit("job:failed", {
       jobId,
       userId: jobData.userId,
       status: "failed",

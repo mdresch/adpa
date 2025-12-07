@@ -215,7 +215,7 @@ router.post(
 
       // Verify user has access to project (skip for auto-created projects)
       if (projectId) {
-        const hasAccess = await verifyProjectAccess(req.user.id, projectId);
+        const hasAccess = await verifyProjectAccess(req.user, projectId);
         if (!hasAccess) {
           return res.status(403).json({
             success: false,
@@ -319,7 +319,7 @@ router.get(
       }
 
       // Verify user has access
-      const hasAccess = await verifyProjectAccess(req.user.id, status.projectId);
+      const hasAccess = await verifyProjectAccess(req.user, status.projectId);
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
@@ -365,7 +365,7 @@ router.get(
       const { projectId } = req.params;
 
       // Verify access
-      const hasAccess = await verifyProjectAccess(req.user.id, projectId);
+      const hasAccess = await verifyProjectAccess(req.user, projectId);
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
@@ -426,7 +426,7 @@ router.delete(
       }
 
       // Verify user has access
-      const hasAccess = await verifyProjectAccess(req.user.id, status.projectId);
+      const hasAccess = await verifyProjectAccess(req.user, status.projectId);
       if (!hasAccess) {
         return res.status(403).json({
           success: false,
@@ -473,29 +473,68 @@ router.delete(
 /**
  * Verify user has access to project
  */
-async function verifyProjectAccess(userId: string, projectId: string): Promise<boolean> {
+async function verifyProjectAccess(user: any, projectId: string): Promise<boolean> {
   await connectDatabase();
   const sharedPool = getDatabasePool();
   const client = await sharedPool.connect();
 
   try {
+    const userId = user?.id;
+    const userRole = user?.role?.toLowerCase();
+    const userCompanyId = user?.company_id;
+    const isSuperAdmin = userRole === 'super_admin';
+    const isAdmin = userRole === 'admin';
+
+    // Super admin can access any project - just verify project exists
+    if (isSuperAdmin) {
+      const projectExists = await client.query(
+        'SELECT id FROM projects WHERE id = $1',
+        [projectId]
+      );
+      return projectExists.rows.length > 0;
+    }
+
+    // Admin can access projects from their company
+    if (isAdmin) {
+      if (userCompanyId) {
+        const projectCheck = await client.query(
+          'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
+          [projectId, userCompanyId]
+        );
+        return projectCheck.rows.length > 0;
+      } else {
+        // Admin with no company_id - fall back to ownership check
+        const projectCheck = await client.query(
+          'SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2)',
+          [projectId, userId]
+        );
+        return projectCheck.rows.length > 0;
+      }
+    }
+
+    // Regular users: check ownership, created_by, or team_members
     const query = `
-      SELECT 1 FROM projects
-      WHERE id = $1 AND (
-        created_by = $2 OR
-        EXISTS (
-          SELECT 1 FROM project_members
-          WHERE project_id = $1 AND user_id = $2
-        )
-      )
+      SELECT id, owner_id, created_by, team_members
+      FROM projects
+      WHERE id = $1
     `;
 
-    const result = await client.query(query, [projectId, userId]);
-    return result.rows.length > 0;
+    const result = await client.query(query, [projectId]);
+    
+    if (result.rows.length === 0) {
+      return false; // Project doesn't exist
+    }
+
+    const project = result.rows[0];
+    const isOwner = project.owner_id === userId || project.created_by === userId;
+    const teamMembers = project.team_members || [];
+    const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId);
+
+    return isOwner || isInTeam;
 
   } catch (error: any) {
     logger.error('Project access verification failed', {
-      userId,
+      userId: user?.id,
       projectId,
       error: error.message
     });

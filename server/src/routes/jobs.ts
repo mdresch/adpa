@@ -11,6 +11,73 @@ import AnalyticsTrackingService from "../services/analyticsTrackingService"
 
 const router = express.Router()
 
+// Helper function to get queue name from job type
+function getQueueNameFromType(jobType: string): string {
+  const queueMap: Record<string, string> = {
+    'ai-generate': 'ai-processing',
+    'document-convert': 'document-processing',
+    'pipeline-processing': 'pipeline-processing',
+    'baseline-extract': 'baseline-processing',
+    'process-flow': 'process-flow-processing',
+    'document-regeneration': 'document-regeneration',
+    'quality-audit': 'quality-audit',
+    'extract-project-data': 'project-data-extraction',
+    // Handle child extraction jobs (extract-entity-*)
+    'extract-entity-stakeholders': 'project-data-extraction',
+    'extract-entity-requirements': 'project-data-extraction',
+    'extract-entity-risks': 'project-data-extraction',
+    'extract-entity-assumptions': 'project-data-extraction',
+    'extract-entity-constraints': 'project-data-extraction',
+    'extract-entity-dependencies': 'project-data-extraction',
+    'extract-entity-milestones': 'project-data-extraction',
+    'extract-entity-deliverables': 'project-data-extraction',
+    'extract-entity-activities': 'project-data-extraction',
+    'extract-entity-resources': 'project-data-extraction',
+    'extract-entity-budget': 'project-data-extraction',
+    'extract-entity-timeline': 'project-data-extraction',
+    'extract-entity-quality': 'project-data-extraction',
+    'extract-entity-communication': 'project-data-extraction',
+    'extract-entity-procurement': 'project-data-extraction',
+    'extract-entity-stakeholder': 'project-data-extraction',
+  }
+  
+  // Check exact match first
+  if (queueMap[jobType]) {
+    return queueMap[jobType]
+  }
+  
+  // Check if it's a child extraction job (extract-entity-*)
+  if (jobType.startsWith('extract-entity-')) {
+    return 'project-data-extraction'
+  }
+  
+  // Default fallback - try to infer from job type
+  if (jobType.includes('ai') || jobType.includes('generate')) {
+    return 'ai-processing'
+  }
+  if (jobType.includes('document') || jobType.includes('convert')) {
+    return 'document-processing'
+  }
+  if (jobType.includes('pipeline')) {
+    return 'pipeline-processing'
+  }
+  if (jobType.includes('baseline')) {
+    return 'baseline-processing'
+  }
+  if (jobType.includes('process-flow') || jobType.includes('processflow')) {
+    return 'process-flow-processing'
+  }
+  if (jobType.includes('quality') || jobType.includes('audit')) {
+    return 'quality-audit'
+  }
+  if (jobType.includes('extract') || jobType.includes('extraction')) {
+    return 'project-data-extraction'
+  }
+  
+  // Last resort: return a generic queue name based on job type
+  return jobType + '-queue'
+}
+
 // Get user's jobs
 router.get("/", 
   authenticateToken,
@@ -147,7 +214,7 @@ router.get("/",
           queuedTime: job.queued_at || job.created_at,
           processingStartedAt: job.processing_started_at,
           priority: jobData.priority || 'medium',
-          queue: job.queue_name || (job.type === 'ai-generate' ? 'ai-processing' : job.type),
+          queue: job.queue_name || getQueueNameFromType(job.type),
           worker: job.worker_id || jobData.worker_id || jobData.worker || 'Unassigned',
           workerProcessId: job.worker_process_id,
           queuePosition: job.queue_position,
@@ -500,8 +567,87 @@ router.get("/admin/all",
       const countResult = await pool.query(countQuery, countParams)
       const total = Number.parseInt(countResult.rows[0].count)
 
+      // Enrich jobs with queue names (same logic as regular endpoint)
+      const enrichedJobs = result.rows.map((job: any) => {
+        const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : (job.data || {})
+        
+        // Build descriptive job name
+        let jobName = ''
+        const docName = jobData.documentName || jobData.document_name
+        const templateName = jobData.template_name || jobData.variables?.template_name
+        const genericName = jobData.name || `${job.type} Job`
+        const projectName = jobData.projectName || jobData.variables?.project_name
+        
+        if (docName && projectName) {
+          jobName = `${docName} - ${projectName}`
+        } else if (templateName && projectName) {
+          jobName = `${templateName} - ${projectName}`
+        } else if (docName) {
+          jobName = docName
+        } else if (templateName) {
+          jobName = templateName
+        } else if (projectName) {
+          jobName = `${genericName} - ${projectName}`
+        } else {
+          jobName = genericName
+        }
+        
+        // If job has an error message but status is still "processing", treat it as "failed"
+        const effectiveStatus = (job.error_message && job.status === 'processing') 
+          ? 'failed' 
+          : job.status
+        
+        return {
+          id: job.id,
+          name: jobName,
+          type: job.type,
+          status: effectiveStatus,
+          progress: job.progress || 0,
+          error: job.error_message,
+          startTime: job.started_at,
+          completedTime: job.completed_at,
+          queuedTime: job.queued_at || job.created_at,
+          processingStartedAt: job.processing_started_at,
+          priority: jobData.priority || 'medium',
+          queue: job.queue_name || getQueueNameFromType(job.type),
+          worker: job.worker_id || jobData.worker_id || jobData.worker || 'Unassigned',
+          workerProcessId: job.worker_process_id,
+          queuePosition: job.queue_position,
+          logs: jobData.logs || [],
+          projectName: jobData.projectName || jobData.variables?.project_name,
+          templateName: jobData.template_name || jobData.variables?.template_name,
+          documentName: jobData.documentName || jobData.document_name,
+          userName: job.created_by_name,
+          userEmail: job.created_by_email,
+          metadata: {
+            provider: jobData.provider,
+            model: jobData.model,
+            temperature: jobData.temperature,
+            template_id: jobData.template_id,
+            template_name: jobData.template_name || jobData.variables?.template_name,
+            project_id: jobData.projectId || jobData.variables?.project_id,
+            project_name: jobData.projectName || jobData.variables?.project_name,
+            document_id: jobData.documentId || jobData.document_id,
+            document_name: jobData.documentName || jobData.document_name,
+            tokens: jobData.tokens || job.result?.usage,
+            worker_id: job.worker_id,
+            worker_process_id: job.worker_process_id,
+            queue_name: job.queue_name,
+            queue_position: job.queue_position,
+            user_name: job.created_by_name,
+            user_email: job.created_by_email,
+            currentStep: jobData.currentStep,
+            compressionProgress: jobData.compressionProgress,
+            currentDocument: jobData.currentDocument,
+            stepProgress: jobData.stepProgress,
+            activeDocuments: jobData.activeDocuments || [],
+            parallelCount: jobData.activeDocuments?.length || 0
+          }
+        }
+      })
+
       res.json({
-        jobs: result.rows,
+        jobs: enrichedJobs,
         pagination: {
           page: Number(page),
           limit: Number(limit),
@@ -530,12 +676,23 @@ router.post(
     
     try {
       const { id } = req.params
+      const userId = req.user?.id
+      const userRole = req.user?.role?.toLowerCase()
+      const isAdmin = userRole === 'admin' || userRole === 'super_admin'
       
-      // Get the job
-      const jobResult = await pool.query(
-        "SELECT * FROM jobs WHERE id = $1 AND created_by = $2",
-        [id, req.user?.id]
-      )
+      // Get the job - admins can retry any job, regular users can only retry their own
+      let jobResult
+      if (isAdmin) {
+        jobResult = await pool.query(
+          "SELECT * FROM jobs WHERE id = $1",
+          [id]
+        )
+      } else {
+        jobResult = await pool.query(
+          "SELECT * FROM jobs WHERE id = $1 AND created_by = $2",
+          [id, userId]
+        )
+      }
       
       if (jobResult.rows.length === 0) {
         return res.status(404).json({ error: "Job not found" })
@@ -551,9 +708,26 @@ router.post(
       // Create new job with same data
       const { v4: uuidv4 } = await import('uuid')
       const { addJob } = await import('../services/queueService')
+      const { validateJobType } = await import('../services/jobs/validation')
       
       const newJobId = uuidv4()
       const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : job.data
+      
+      // Normalize job type (handles legacy names like 'project-data-extraction' -> 'extract-project-data')
+      let normalizedJobType: string
+      try {
+        normalizedJobType = validateJobType(job.type)
+      } catch (typeError) {
+        log.error("Invalid job type for retry:", { 
+          originalType: job.type, 
+          error: typeError instanceof Error ? typeError.message : String(typeError) 
+        })
+        return res.status(400).json({ 
+          error: "Invalid job type", 
+          details: typeError instanceof Error ? typeError.message : String(typeError),
+          jobType: job.type
+        })
+      }
       
       const newJobData = {
         ...jobData,
@@ -568,10 +742,13 @@ router.post(
         [id]
       )
       
-      // Add new job to queue
-      await addJob(job.type, newJobData)
+      // Add new job to queue with normalized type
+      await addJob(normalizedJobType, newJobData)
       
-      log.info(`Job ${id} retried as ${newJobId}`)
+      log.info(`Job ${id} retried as ${newJobId}`, { 
+        originalType: job.type, 
+        normalizedType: normalizedJobType 
+      })
       
       res.json({
         success: true,
@@ -579,9 +756,19 @@ router.post(
         newJobId,
         originalJobId: id
       })
-    } catch (error) {
+    } catch (error: any) {
       log.error("Retry job error:", error)
-      res.status(500).json({ error: "Failed to retry job" })
+      
+      // Return more detailed error information
+      const errorMessage = error?.message || "Failed to retry job"
+      const errorCode = error?.code || "RETRY_ERROR"
+      const errorDetails = error?.details || (error instanceof Error ? error.stack : undefined)
+      
+      res.status(500).json({ 
+        error: errorMessage,
+        code: errorCode,
+        ...(process.env.NODE_ENV === 'development' && errorDetails ? { details: errorDetails } : {})
+      })
     }
   }
 )

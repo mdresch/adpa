@@ -311,7 +311,15 @@ export default function JobMonitorPage() {
   useEffect(() => {
     const fetchJobs = async () => {
       try {
-        const response = await apiClient.getJobs({ limit: 50 })
+        // Check if user is admin/super_admin - if so, fetch all jobs
+        const userRole = user?.role?.toLowerCase()
+        const isAdminOrSuperAdmin = userRole === 'admin' || userRole === 'super_admin'
+        const canViewAllJobs = isAdminOrSuperAdmin || hasPermission('jobs.admin')
+        
+        const response = await apiClient.getJobs({ 
+          limit: 50,
+          allUsers: canViewAllJobs // Use admin endpoint if user has permission
+        })
         const mappedJobs = response.jobs.map((job: any) => ({
           ...job, // Spread all job fields first
           name: job.name ?? "", // Then set defaults only if missing
@@ -541,6 +549,10 @@ export default function JobMonitorPage() {
     return matchesSearch && matchesStatus
   })
 
+  // Separate pending jobs for special display
+  const pendingJobs = filteredJobs.filter(j => j.status === 'pending' || j.status === 'queued')
+  const otherJobs = filteredJobs.filter(j => j.status !== 'pending' && j.status !== 'queued')
+
   // Calculate stats from real data or metrics
   const stats = {
     totalJobs: metrics.totalJobs || jobs.length,
@@ -750,7 +762,7 @@ export default function JobMonitorPage() {
                               <div className="flex-1">
                                 <p className="font-semibold text-sm">{job.name}</p>
                                 <p className="text-xs text-muted-foreground mt-1">
-                                  {job.worker !== 'Unassigned' ? `Worker: ${job.worker.substring(0, 25)}...` : '⏳ Waiting for worker assignment...'}
+                                  {job.worker && job.worker !== 'Unassigned' ? `Worker: ${job.worker.substring(0, 25)}...` : '⏳ Waiting for worker assignment...'}
                                 </p>
                               </div>
                               <div className="text-right">
@@ -818,8 +830,74 @@ export default function JobMonitorPage() {
                       </TabsList>
 
                       <TabsContent value="jobs" className="space-y-4">
+                        {/* Pending Jobs Alert */}
+                        {pendingJobs.length > 0 && (
+                          <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-900/10">
+                            <CardHeader>
+                              <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                <AlertCircle className="h-5 w-5" />
+                                Pending Jobs ({pendingJobs.length})
+                              </CardTitle>
+                              <CardDescription>
+                                These jobs are waiting to be processed. If they remain pending for more than 5 minutes, they may be stuck.
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-2">
+                              {pendingJobs.map((job) => {
+                                const createdAt = job.queuedTime || job.startTime
+                                const ageMinutes = createdAt 
+                                  ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000 / 60)
+                                  : 0
+                                const isOld = ageMinutes > 5
+                                
+                                return (
+                                  <div 
+                                    key={job.id} 
+                                    className={`p-3 rounded-lg border ${
+                                      isOld 
+                                        ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700' 
+                                        : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
+                                    }`}
+                                  >
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex-1">
+                                        <p className="font-medium text-sm">{job.name}</p>
+                                        <p className="text-xs text-muted-foreground mt-1">
+                                          {job.type} • Queue: {job.queue || 'unknown'} • Age: {ageMinutes} min
+                                        </p>
+                                        {isOld && (
+                                          <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
+                                            ⚠️ This job has been pending for {ageMinutes} minutes - may be stuck
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div className="flex gap-2">
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          onClick={async () => {
+                                            try {
+                                              await apiClient.request(`/jobs/${job.id}/cancel`, { method: 'POST' })
+                                              toast.success('Job cancelled')
+                                              window.location.reload()
+                                            } catch (error: any) {
+                                              toast.error(error?.message || 'Failed to cancel job')
+                                            }
+                                          }}
+                                        >
+                                          Cancel
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </CardContent>
+                          </Card>
+                        )}
+                        
                         <div className="space-y-4">
-                          {filteredJobs.map((job, index) => (
+                          {otherJobs.map((job, index) => (
                             <AnimatedGridItemWithDelay
                               key={job.id}
                               className="animate-fade-in-up"

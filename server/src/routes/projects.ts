@@ -1462,6 +1462,66 @@ router.put("/:id", authenticateToken, requirePermission("projects.update"), asyn
     const { id } = req.params
     const { name, description, framework, status, priority, start_date, end_date, budget, team_members, program_id } = req.body
 
+    // Check if user has access to this project
+    const userId = req.user?.id
+    const userRole = (req as any).user?.role?.toLowerCase()
+    const isSuperAdmin = userRole === 'super_admin'
+    const isAdmin = userRole === 'admin'
+
+    // Get user's company_id for access checking
+    let userCompanyId: string | null = null
+    if (!isSuperAdmin) {
+      try {
+        const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
+        if (userResult.rows.length > 0) {
+          userCompanyId = userResult.rows[0].company_id
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, log warning but continue
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          log.warn('company_id column not found, checking access by owner_id and team_members only')
+        } else {
+          throw err
+        }
+      }
+    }
+
+    // Verify project exists and user has access
+    let projectCheck
+    try {
+      if (isSuperAdmin) {
+        // Super admin can access any project - just verify project exists
+        projectCheck = await pool.query('SELECT id, owner_id, created_by, company_id, team_members FROM projects WHERE id = $1', [id])
+      } else if (isAdmin && userCompanyId) {
+        // Admin can access projects from their company
+        projectCheck = await pool.query('SELECT id, owner_id, created_by, company_id, team_members FROM projects WHERE id = $1 AND company_id = $2', [id, userCompanyId])
+      } else {
+        // Regular users: check ownership, created_by, or team_members
+        projectCheck = await pool.query(
+          'SELECT id, owner_id, created_by, company_id, team_members FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)',
+          [id, userId]
+        )
+      }
+    } catch (err: any) {
+      // If company_id column doesn't exist, fall back to owner/team member check
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        if (isSuperAdmin) {
+          projectCheck = await pool.query('SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [id])
+        } else {
+          projectCheck = await pool.query(
+            'SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)',
+            [id, userId]
+          )
+        }
+      } else {
+        throw err
+      }
+    }
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found or access denied" })
+    }
+
     // Convert empty strings to null for date and numeric fields
     const startDateValue = start_date && start_date.trim() !== '' ? start_date : null
     const endDateValue = end_date && end_date.trim() !== '' ? end_date : null
@@ -1536,6 +1596,66 @@ router.delete("/:id", authenticateToken, requirePermission("projects.delete"), a
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
+
+    // Check if user has access to this project
+    const userId = req.user?.id
+    const userRole = (req as any).user?.role?.toLowerCase()
+    const isSuperAdmin = userRole === 'super_admin'
+    const isAdmin = userRole === 'admin'
+
+    // Get user's company_id for access checking
+    let userCompanyId: string | null = null
+    if (!isSuperAdmin) {
+      try {
+        const userResult = await pool.query("SELECT company_id FROM users WHERE id = $1", [userId])
+        if (userResult.rows.length > 0) {
+          userCompanyId = userResult.rows[0].company_id
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, log warning but continue
+        if (err.message?.includes('column "company_id"') || err.code === '42703') {
+          log.warn('company_id column not found, checking access by owner_id and team_members only')
+        } else {
+          throw err
+        }
+      }
+    }
+
+    // Verify project exists and user has access before deleting
+    let projectCheck
+    try {
+      if (isSuperAdmin) {
+        // Super admin can delete any project - just verify project exists
+        projectCheck = await pool.query('SELECT id, owner_id, created_by, company_id, team_members FROM projects WHERE id = $1', [id])
+      } else if (isAdmin && userCompanyId) {
+        // Admin can delete projects from their company
+        projectCheck = await pool.query('SELECT id, owner_id, created_by, company_id, team_members FROM projects WHERE id = $1 AND company_id = $2', [id, userCompanyId])
+      } else {
+        // Regular users: check ownership, created_by, or team_members
+        projectCheck = await pool.query(
+          'SELECT id, owner_id, created_by, company_id, team_members FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)',
+          [id, userId]
+        )
+      }
+    } catch (err: any) {
+      // If company_id column doesn't exist, fall back to owner/team member check
+      if (err.message?.includes('column "company_id"') || err.code === '42703') {
+        if (isSuperAdmin) {
+          projectCheck = await pool.query('SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [id])
+        } else {
+          projectCheck = await pool.query(
+            'SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2 OR team_members ? $2::text)',
+            [id, userId]
+          )
+        }
+      } else {
+        throw err
+      }
+    }
+
+    if (projectCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Project not found or access denied" })
+    }
 
     const result = await pool.query("DELETE FROM projects WHERE id = $1 RETURNING name", [id])
 

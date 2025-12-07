@@ -2,16 +2,33 @@
 const config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
-  roots: ['<rootDir>/__tests__', '<rootDir>/components'],
+  roots: ['<rootDir>/__tests__', '<rootDir>/components', '<rootDir>/server/src/__tests__'],
   testMatch: [
     '**/__tests__/**/*.test.ts',
-    '**/__tests__/**/*.test.tsx'
+    '**/__tests__/**/*.test.tsx',
+    '**/__tests__/**/*.benchmark.ts'
   ],
   transform: {
-    '^.+\\.tsx?$': ['ts-jest', { tsconfig: { jsx: 'react-jsx' } }],
+    '^.+\\.tsx?$': ['ts-jest', { 
+      tsconfig: { 
+        jsx: 'react-jsx',
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+      } 
+    }],
+    '^.+\\.js$': ['ts-jest', {
+      tsconfig: {
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
+        allowJs: true,
+      }
+    }]
   },
+  transformIgnorePatterns: [
+    'node_modules/(?!uuid)',
+  ],
   moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/$1'
+    '^@/(.*)$': '<rootDir>/$1',
   },
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
@@ -26,7 +43,7 @@ const config = {
     'lcov',
     'html'
   ],
-  setupFilesAfterEnv: ['@testing-library/jest-dom'],
+  setupFilesAfterEnv: [],
   testTimeout: 30000,
   verbose: true,
 };

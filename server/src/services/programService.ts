@@ -174,30 +174,101 @@ export async function getProgramProjects(programId: string): Promise<Record<stri
         u.name as owner_name,
         COUNT(DISTINCT d.id) as document_count,
         -- Quality Metrics (from qualityMetrics object)
+        -- Safely extract numeric values using jsonb_extract_path_text to handle both JSONB and text formats
+        -- Strip percentage signs and other formatting before casting to numeric
         AVG(
           CASE 
             WHEN d.generation_metadata->>'quality' IS NOT NULL 
-            THEN (d.generation_metadata->>'quality')::numeric * 100
-            WHEN d.generation_metadata->'qualityMetrics'->>'overallQuality' IS NOT NULL
-            THEN (d.generation_metadata->'qualityMetrics'->>'overallQuality')::numeric
+              AND regexp_replace(d.generation_metadata->>'quality', '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(d.generation_metadata->>'quality', '[^0-9.]', '', 'g')::numeric * 100
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'overallQuality') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'overallQuality'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'overallQuality'), '[^0-9.]', '', 'g')::numeric
             ELSE NULL
           END
         ) as document_quality_score,
-        AVG((d.generation_metadata->'qualityMetrics'->>'completeness')::numeric) as avg_completeness,
-        AVG((d.generation_metadata->'qualityMetrics'->>'structureScore')::numeric) as avg_structure_score,
-        AVG((d.generation_metadata->'qualityMetrics'->>'formattingScore')::numeric) as avg_formatting_score,
-        AVG((d.generation_metadata->'qualityMetrics'->>'contentDepth')::numeric) as avg_content_depth,
-        AVG((d.generation_metadata->'qualityMetrics'->>'accuracy')::numeric) as avg_accuracy,
-        AVG((d.generation_metadata->'qualityMetrics'->>'consistency')::numeric) as avg_consistency,
-        AVG((d.generation_metadata->'qualityMetrics'->>'contextRelevance')::numeric) as avg_context_relevance,
-        AVG((d.generation_metadata->'qualityMetrics'->>'professionalQuality')::numeric) as avg_professional_quality,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'completeness') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'completeness'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'completeness'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_completeness,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'structureScore') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'structureScore'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'structureScore'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_structure_score,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'formattingScore') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'formattingScore'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'formattingScore'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_formatting_score,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'contentDepth') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'contentDepth'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'contentDepth'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_content_depth,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'accuracy') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'accuracy'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'accuracy'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_accuracy,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'consistency') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'consistency'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'consistency'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_consistency,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'contextRelevance') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'contextRelevance'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'contextRelevance'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_context_relevance,
+        AVG(
+          CASE 
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'professionalQuality') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'professionalQuality'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'professionalQuality'), '[^0-9.]', '', 'g')::numeric
+            ELSE NULL
+          END
+        ) as avg_professional_quality,
         -- Compliance Metrics (ONLY standardsCompliance - do NOT mix with quality score)
         -- This is specifically for framework compliance (PMBOK/BABOK/DMBOK standards adherence)
         AVG(
           CASE 
-            WHEN d.generation_metadata->'qualityMetrics'->>'standardsCompliance' IS NOT NULL 
-              AND (d.generation_metadata->'qualityMetrics'->>'standardsCompliance')::numeric > 0
-            THEN (d.generation_metadata->'qualityMetrics'->>'standardsCompliance')::numeric
+            WHEN d.generation_metadata ? 'qualityMetrics'
+              AND jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'standardsCompliance') IS NOT NULL
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'standardsCompliance'), '[^0-9.]', '', 'g') ~ '^[0-9]+\.?[0-9]*$'
+              AND regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'standardsCompliance'), '[^0-9.]', '', 'g')::numeric > 0
+            THEN regexp_replace(jsonb_extract_path_text(d.generation_metadata, 'qualityMetrics', 'standardsCompliance'), '[^0-9.]', '', 'g')::numeric
             ELSE NULL
           END
         ) as avg_standards_compliance,

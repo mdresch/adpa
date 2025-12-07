@@ -529,6 +529,23 @@ class PrioritizationService {
     offset?: number
   } = {}): Promise<{ rankings: ProjectRanking[], total: number }> {
     try {
+      // Check if the view exists first
+      const viewCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.views 
+          WHERE table_schema = 'public' 
+          AND table_name = 'project_priority_rankings'
+        ) as exists
+      `)
+
+      if (!viewCheck.rows[0]?.exists) {
+        logger.warn('project_priority_rankings view does not exist - returning empty results. Run migration 328 to create it.')
+        return {
+          rankings: [],
+          total: 0
+        }
+      }
+
       let query = `
         SELECT * FROM project_priority_rankings
         WHERE 1=1
@@ -585,6 +602,20 @@ class PrioritizationService {
    */
   async getProjectRanking(projectId: string): Promise<ProjectRanking | null> {
     try {
+      // Check if the view exists first
+      const viewCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.views 
+          WHERE table_schema = 'public' 
+          AND table_name = 'project_priority_rankings'
+        ) as exists
+      `)
+
+      if (!viewCheck.rows[0]?.exists) {
+        logger.warn('project_priority_rankings view does not exist - returning null. Run migration 328 to create it.')
+        return null
+      }
+
       const result = await pool.query(
         'SELECT * FROM project_priority_rankings WHERE project_id = $1',
         [projectId]

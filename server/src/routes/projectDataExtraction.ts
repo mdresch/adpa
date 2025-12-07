@@ -145,9 +145,14 @@ router.get(
       }
 
       // SECURITY: Verify user has access to this project
-      const userRole = (req as any).user?.role
-      if (userRole === 'admin') {
-        // Admin can access any project - verify project exists
+      // Super admin can access all projects
+      // Admin can access projects from their company
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      
+      if (isSuperAdmin) {
+        // Super admin can access any project - verify project exists
         const projectCheck = await pool!.query(
           'SELECT id FROM projects WHERE id = $1',
           [projectId]
@@ -157,6 +162,34 @@ router.get(
             success: false,
             error: 'Project not found'
           })
+        }
+      } else if (isAdmin) {
+        // Admin can access projects from their company
+        const userCompanyId = (req as any).user?.company_id
+        if (userCompanyId) {
+          const projectCheck = await pool!.query(
+            'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
+            [projectId, userCompanyId]
+          )
+          if (projectCheck.rows.length === 0) {
+            return res.status(403).json({
+              success: false,
+              error: 'Access denied to project'
+            })
+          }
+        } else {
+          // Admin with no company_id - fall back to ownership check
+          const projectCheck = await pool!.query(
+            `SELECT p.id FROM projects p
+             WHERE p.id = $1 AND (p.owner_id = $2 OR p.created_by = $2)`,
+            [projectId, userId]
+          )
+          if (projectCheck.rows.length === 0) {
+            return res.status(403).json({
+              success: false,
+              error: 'Access denied to project'
+            })
+          }
         }
       } else {
         // Non-admin users must be project owner or member
@@ -322,12 +355,15 @@ router.get(
     try {
       const { projectId } = req.params
       const userId = (req as any).user?.id
-      const userRole = (req as any).user?.role
+      const userRole = (req as any).user?.role?.toLowerCase()
 
       // SECURITY: Verify user has access to this project
-      // Admins have access to all projects
-      if (userRole === 'admin') {
-        // Admin can access any project - verify project exists
+      // Super admin and admin have access to all projects
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      
+      if (isSuperAdmin || isAdmin) {
+        // Super admin and admin can access any project - verify project exists
         const projectExists = await pool!.query(
           'SELECT id FROM projects WHERE id = $1',
           [projectId]
@@ -576,10 +612,13 @@ router.get(
       }
 
       // SECURITY: Verify user has access to this project
-      // Admins have access to all projects
-      const userRole = (req as any).user?.role
-      if (userRole === 'admin') {
-        // Admin can access any project - verify project exists
+      // Super admin and admin have access to all projects
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      
+      if (isSuperAdmin || isAdmin) {
+        // Super admin and admin can access any project - verify project exists
         const projectExists = await pool!.query(
           'SELECT id FROM projects WHERE id = $1',
           [projectId]
@@ -792,10 +831,13 @@ router.get(
 
       const document = docCheck.rows[0]
       const projectId = document.project_id
-      const userRole = (req as any).user?.role
+      const userRole = (req as any).user?.role?.toLowerCase()
 
-      // Check access: Admin or project owner
-      if (userRole !== 'admin') {
+      // Check access: Super admin, admin, or project owner
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      
+      if (!isSuperAdmin && !isAdmin) {
         const projectOwnerId = document.owner_id || document.project_created_by
         if (projectOwnerId !== userId) {
           logger.warn('[DOCUMENT-ENTITIES-API] Unauthorized access attempt', {

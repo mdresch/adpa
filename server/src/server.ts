@@ -30,7 +30,9 @@ import aiProvidersRoutes from "./routes/ai-providers"
 import aiFailoverRoutes from "./routes/ai-failover"
 import analyticsRoutes from "./routes/analytics"
 import jobRoutes from "./routes/jobs"
+import jobsDiagnosticsRoutes from "./routes/jobs-diagnostics"
 import queueStatsRoutes from "./routes/queue-stats"
+import metricsRoutes from "./routes/metrics"
 import securityRoutes from "./routes/security"
 import integrationRoutes from "./routes/integrations"
 import confluenceRoutes from "./routes/confluenceRoutes"
@@ -227,7 +229,9 @@ app.use("/api/ai-providers", aiProvidersRoutes)
 app.use("/api/ai-failover", aiFailoverRoutes)
 app.use("/api/analytics", analyticsRoutes)
 app.use("/api/jobs", jobRoutes)
+app.use("/api/jobs/diagnostics", jobsDiagnosticsRoutes)
 app.use("/api/queue-stats", queueStatsRoutes)
+app.use("/metrics", metricsRoutes) // Prometheus metrics endpoint (no /api prefix for standard Prometheus scraping)
 app.use("/api/security", securityRoutes)
 app.use("/api/integrations/confluence", confluenceRoutes)
 app.use("/api/integrations/github", githubRoutes)

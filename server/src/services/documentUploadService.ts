@@ -468,13 +468,41 @@ export async function processUploadedFile(
     emitFileProgress(batchId, projectId, filename, 50, 'Creating document record');
 
     // Step 3: Create document in database
+    // CRITICAL: Ensure markdown is a string, not an object
+    let markdownContent = conversionResult.markdown;
+    if (typeof markdownContent !== 'string') {
+      logger.error('Conversion result markdown is not a string', {
+        filename,
+        markdownType: typeof markdownContent,
+        markdownValue: markdownContent
+      });
+      
+      // Extract string from object if it's an object
+      if (markdownContent && typeof markdownContent === 'object') {
+        markdownContent = markdownContent.text || markdownContent.content || markdownContent.markdown || JSON.stringify(markdownContent);
+      } else {
+        markdownContent = String(markdownContent || '');
+      }
+      
+      logger.warn('Converted markdown to string', {
+        filename,
+        finalType: typeof markdownContent,
+        length: markdownContent.length
+      });
+    }
+    
+    // Validate markdown is not empty
+    if (!markdownContent || markdownContent.trim() === '') {
+      throw new Error(`PDF conversion resulted in empty Markdown content for file: ${filename}`);
+    }
+    
     const documentId = await createDocumentRecord(client, {
       projectId,
       uploadedBy,
       batchId,
       filename,
       originalFormat,
-      markdown: conversionResult.markdown,
+      markdown: markdownContent, // Ensure it's a string
       detectedType: detectionResult.type,
       detectionConfidence: detectionResult.confidence,
       conversionMetadata: conversionResult.metadata,
@@ -831,6 +859,32 @@ async function createDocumentRecord(
 ): Promise<string> {
   const documentId = uuidv4();
 
+  // CRITICAL: Ensure markdown is a string, never an object
+  let markdownContent = data.markdown;
+  if (typeof markdownContent !== 'string') {
+    logger.error('createDocumentRecord received non-string markdown', {
+      filename: data.filename,
+      markdownType: typeof markdownContent,
+      markdownValue: markdownContent
+    });
+    
+    // Extract string from object if it's an object
+    if (markdownContent && typeof markdownContent === 'object') {
+      markdownContent = markdownContent.text || markdownContent.content || markdownContent.markdown || JSON.stringify(markdownContent);
+      logger.warn('Extracted string from markdown object', {
+        filename: data.filename,
+        extractedLength: markdownContent.length
+      });
+    } else {
+      markdownContent = String(markdownContent || '');
+    }
+  }
+  
+  // Validate markdown is not empty
+  if (!markdownContent || markdownContent.trim() === '') {
+    throw new Error(`Cannot create document record with empty Markdown content for file: ${data.filename}`);
+  }
+
   // Use actual documents table schema (from information_schema check)
   const query = `
     INSERT INTO documents (
@@ -870,12 +924,19 @@ async function createDocumentRecord(
     data.projectId,
     documentName, // name
     documentTitle, // title
-    data.markdown, // content (Markdown)
+    markdownContent, // content (Markdown string - NEVER an object)
     'upload', // source
     data.detectedType || 'Unknown', // framework (document type)
     JSON.stringify(metadata), // metadata (JSONB - all extra data)
     data.uploadedBy // created_by
   ]);
+
+  logger.info('Document record created with Markdown content', {
+    documentId,
+    filename: data.filename,
+    contentLength: markdownContent.length,
+    contentType: typeof markdownContent
+  });
 
   return documentId;
 }

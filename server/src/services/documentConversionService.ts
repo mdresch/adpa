@@ -186,14 +186,23 @@ async function convertPDFToMarkdown(
     // Convert extracted text to structured Markdown
     const markdown = formatPDFTextToMarkdown(data.text, data.info);
 
+    // CRITICAL: Ensure markdown is always a string, never an object
+    const markdownString = typeof markdown === 'string' 
+      ? markdown 
+      : (markdown?.text || markdown?.content || markdown?.markdown || String(markdown || ''));
+
+    if (!markdownString || markdownString.trim() === '') {
+      throw new Error('PDF conversion resulted in empty Markdown content');
+    }
+
     return {
-      markdown,
+      markdown: markdownString, // Always a string
       metadata: {
         originalFormat: 'pdf',
         conversionMethod: 'pdf-parse',
         pageCount: data.numpages,
-        wordCount: countWords(markdown),
-        characterCount: markdown.length,
+        wordCount: countWords(markdownString),
+        characterCount: markdownString.length,
         conversionDuration: Date.now() - startTime,
         quality: 'medium',
         warnings
@@ -251,18 +260,27 @@ async function convertPDFWithAdobe(
     const resultData = await extractAdobeResult(resultPath);
     const markdown = convertAdobeResultToMarkdown(resultData);
 
+    // CRITICAL: Ensure markdown is always a string, never an object
+    const markdownString = typeof markdown === 'string' 
+      ? markdown 
+      : (markdown?.text || markdown?.content || markdown?.markdown || String(markdown || ''));
+
+    if (!markdownString || markdownString.trim() === '') {
+      throw new Error('Adobe PDF conversion resulted in empty Markdown content');
+    }
+
     // Cleanup temp files
     await fs.unlink(tempInputPath);
     await fs.unlink(resultPath);
 
     return {
-      markdown,
+      markdown: markdownString, // Always a string
       metadata: {
         originalFormat: 'pdf',
         conversionMethod: 'adobe-pdf-services',
         pageCount: resultData.pages?.length || 0,
-        wordCount: countWords(markdown),
-        characterCount: markdown.length,
+        wordCount: countWords(markdownString),
+        characterCount: markdownString.length,
         conversionDuration: Date.now() - startTime,
         quality: 'high',
         warnings: []

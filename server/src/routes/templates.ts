@@ -31,9 +31,13 @@ router.get("/",
       
       log.info(`Fetching templates: page=${page}, limit=${limit}, framework=${framework || 'all'}, scope=${template_scope || 'all'}`)
 
+      // Check if user is super_admin
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+
       // Get user's company_id for filtering company templates
       let userCompanyId: string | null = null
-      if (req.user?.id) {
+      if (req.user?.id && !isSuperAdmin) {
         try {
           const userResult = await pool.query(
             "SELECT company_id FROM users WHERE id = $1",
@@ -73,20 +77,26 @@ router.get("/",
         LEFT JOIN template_entity_profile tep ON tep.template_id = t.id
         WHERE t.deleted_at IS NULL
           AND (t.development_status IS NULL OR t.development_status != 'archived')
-          AND (
+      `
+
+      const params: any[] = []
+      let paramCount = 0
+
+      // Super admin can see all templates - no scope filtering
+      if (!isSuperAdmin) {
+        query += ` AND (
             -- Standard templates: available to everyone
             t.template_scope = 'standard'
             OR
             -- Company templates: available to users in the same company
-            (t.template_scope = 'company' AND t.company_id = $1)
+            (t.template_scope = 'company' AND t.company_id = $${paramCount + 1})
             OR
             -- User templates: available to the creator or if public
-            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $2))
-          )
-      `
-
-      const params: any[] = [userCompanyId, req.user?.id]
-      let paramCount = 2
+            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $${paramCount + 2}))
+          )`
+        params.push(userCompanyId, req.user?.id)
+        paramCount = 2
+      }
 
       if (framework) {
         paramCount++
@@ -138,16 +148,22 @@ router.get("/",
         FROM templates t
         WHERE t.deleted_at IS NULL
           AND (t.development_status IS NULL OR t.development_status != 'archived')
-          AND (
+      `
+      const countParams: any[] = []
+      let countParamCount = 0
+
+      // Super admin can see all templates - no scope filtering
+      if (!isSuperAdmin) {
+        countQuery += ` AND (
             t.template_scope = 'standard'
             OR
-            (t.template_scope = 'company' AND t.company_id = $1)
+            (t.template_scope = 'company' AND t.company_id = $${countParamCount + 1})
             OR
-            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $2))
-          )
-      `
-      const countParams: any[] = [userCompanyId, req.user?.id]
-      let countParamCount = 2
+            (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $${countParamCount + 2}))
+          )`
+        countParams.push(userCompanyId, req.user?.id)
+        countParamCount = 2
+      }
 
       if (framework) {
         countParamCount++
@@ -380,9 +396,13 @@ router.get("/:id",
         return res.json({ template: cached, recentUsage })
       }
 
+      // Check if user is super_admin
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+
       // Get user's company_id for permission checking
       let userCompanyId: string | null = null
-      if (req.user?.id) {
+      if (req.user?.id && !isSuperAdmin) {
         try {
           const userResult = await pool.query(
             "SELECT company_id FROM users WHERE id = $1",
@@ -394,8 +414,7 @@ router.get("/:id",
         }
       }
 
-      const result = await pool.query(
-        `
+      let query = `
         SELECT 
           t.*, 
           u.name as created_by_name,
@@ -423,7 +442,13 @@ router.get("/:id",
         LEFT JOIN template_entity_profile tep ON tep.template_id = t.id
         WHERE t.id = $1 
           AND t.deleted_at IS NULL
-          AND (
+      `
+
+      const params: any[] = [id]
+
+      // Super admin can see all templates - no scope filtering
+      if (!isSuperAdmin) {
+        query += ` AND (
             -- Standard templates: available to everyone
             t.template_scope = 'standard'
             OR
@@ -432,10 +457,11 @@ router.get("/:id",
             OR
             -- User templates: available to the creator or if public
             (t.template_scope = 'user' AND (t.is_public = true OR t.created_by = $3))
-          )
-      `,
-        [id, userCompanyId, req.user?.id]
-      )
+          )`
+        params.push(userCompanyId, req.user?.id)
+      }
+
+      const result = await pool.query(query, params)
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: "Template not found" })
@@ -614,29 +640,35 @@ router.put("/:id",
         return res.status(403).json({ error: "Standard templates cannot be edited" })
       }
 
-      // Check permissions based on scope
-      if (template.template_scope === 'company') {
-        // Get user's company_id
-        let userCompanyId: string | null = null
-        if (req.user?.id) {
-          try {
-            const userResult = await pool.query(
-              "SELECT company_id FROM users WHERE id = $1",
-              [req.user.id]
-            )
-            userCompanyId = userResult.rows[0]?.company_id || null
-          } catch (err) {
-            log.warn("Failed to fetch user company_id:", err)
+      // Super admin can edit any template (except read-only standard templates)
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+
+      // Check permissions based on scope (unless super admin)
+      if (!isSuperAdmin) {
+        if (template.template_scope === 'company') {
+          // Get user's company_id
+          let userCompanyId: string | null = null
+          if (req.user?.id) {
+            try {
+              const userResult = await pool.query(
+                "SELECT company_id FROM users WHERE id = $1",
+                [req.user.id]
+              )
+              userCompanyId = userResult.rows[0]?.company_id || null
+            } catch (err) {
+              log.warn("Failed to fetch user company_id:", err)
+            }
           }
-        }
-        // Only users in the same company or admins can edit company templates
-        if (template.company_id !== userCompanyId && req.user?.role !== "admin") {
-          return res.status(403).json({ error: "Access denied: You can only edit templates from your company" })
-        }
-      } else if (template.template_scope === 'user') {
-        // Only the creator or admins can edit user templates
-        if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
-          return res.status(403).json({ error: "Access denied" })
+          // Only users in the same company or admins can edit company templates
+          if (template.company_id !== userCompanyId && req.user?.role !== "admin") {
+            return res.status(403).json({ error: "Access denied: You can only edit templates from your company" })
+          }
+        } else if (template.template_scope === 'user') {
+          // Only the creator or admins can edit user templates
+          if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+            return res.status(403).json({ error: "Access denied" })
+          }
         }
       }
 
@@ -759,29 +791,35 @@ router.delete("/:id",
         return res.status(403).json({ error: "Standard templates cannot be deleted" })
       }
 
-      // Check permissions based on scope
-      if (template.template_scope === 'company') {
-        // Get user's company_id
-        let userCompanyId: string | null = null
-        if (req.user?.id) {
-          try {
-            const userResult = await pool.query(
-              "SELECT company_id FROM users WHERE id = $1",
-              [req.user.id]
-            )
-            userCompanyId = userResult.rows[0]?.company_id || null
-          } catch (err) {
-            log.warn("Failed to fetch user company_id:", err)
+      // Super admin can delete any template (except read-only standard templates)
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+
+      // Check permissions based on scope (unless super admin)
+      if (!isSuperAdmin) {
+        if (template.template_scope === 'company') {
+          // Get user's company_id
+          let userCompanyId: string | null = null
+          if (req.user?.id) {
+            try {
+              const userResult = await pool.query(
+                "SELECT company_id FROM users WHERE id = $1",
+                [req.user.id]
+              )
+              userCompanyId = userResult.rows[0]?.company_id || null
+            } catch (err) {
+              log.warn("Failed to fetch user company_id:", err)
+            }
           }
-        }
-        // Only users in the same company or admins can delete company templates
-        if (template.company_id !== userCompanyId && req.user?.role !== "admin") {
-          return res.status(403).json({ error: "Access denied: You can only delete templates from your company" })
-        }
-      } else if (template.template_scope === 'user') {
-        // Only the creator or admins can delete user templates
-        if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
-          return res.status(403).json({ error: "Access denied" })
+          // Only users in the same company or admins can delete company templates
+          if (template.company_id !== userCompanyId && req.user?.role !== "admin") {
+            return res.status(403).json({ error: "Access denied: You can only delete templates from your company" })
+          }
+        } else if (template.template_scope === 'user') {
+          // Only the creator or admins can delete user templates
+          if (template.created_by !== req.user?.id && req.user?.role !== "admin") {
+            return res.status(403).json({ error: "Access denied" })
+          }
         }
       }
 

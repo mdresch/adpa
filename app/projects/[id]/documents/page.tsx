@@ -370,6 +370,13 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    console.log('🚀 [UPLOAD] handleUploadSubmit called', {
+      fileName: uploadForm.file?.name,
+      fileType: uploadForm.file?.type,
+      hasFile: !!uploadForm.file,
+      fileInstance: uploadForm.file instanceof File
+    })
+    
     if (!uploadForm.name || !uploadForm.file || !uploadForm.template_id) {
       toast.error("Please fill in all required fields including template selection")
       return
@@ -378,47 +385,175 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     try {
       setUploadingDocument(true)
       
-      // Handle file content
-      let content: any
-      if (uploadForm.file.type === 'text/plain' || 
-          uploadForm.file.type === 'application/json' ||
-          uploadForm.file.name.endsWith('.txt') ||
-          uploadForm.file.name.endsWith('.md')) {
-        const textContent = await uploadForm.file.text()
-        content = {
-          text: textContent,
-          fileName: uploadForm.file.name,
-          fileType: uploadForm.file.type,
-          uploadedAt: new Date().toISOString()
-        }
-      } else {
-        content = {
-          fileName: uploadForm.file.name,
-          fileSize: uploadForm.file.size,
-          fileType: uploadForm.file.type,
-          uploadedAt: new Date().toISOString(),
-          note: "Binary file uploaded - content stored separately"
-        }
+      // CRITICAL: Validate file object is actually a File, not a metadata object
+      if (!(uploadForm.file instanceof File)) {
+        console.error('❌ Invalid file object:', uploadForm.file)
+        throw new Error("Invalid file object. Please select a valid file.")
       }
+
+      // CRITICAL: For PDF/DOCX files, use the upload endpoint that converts to Markdown
+      // For text files, we can create directly with Markdown content
+      // Use case-insensitive file extension checks as primary detection method
+      const fileName = uploadForm.file.name.toLowerCase()
+      const fileType = uploadForm.file.type?.toLowerCase() || ''
       
-      await apiClient.createDocument(projectId, {
-        name: uploadForm.name,
-        content: content,
-        template_id: uploadForm.template_id,
-        status: "draft"
+      // Check file extension first (more reliable than MIME type)
+      const isPDF = fileName.endsWith('.pdf')
+      const isDOCX = fileName.endsWith('.docx') || fileName.endsWith('.doc')
+      const isTXT = fileName.endsWith('.txt')
+      const isMD = fileName.endsWith('.md') || fileName.endsWith('.markdown')
+      
+      // Also check MIME types as secondary check
+      const isPDFMime = fileType === 'application/pdf'
+      const isDOCXMime = fileType.includes('wordprocessingml') || 
+                         fileType.includes('msword') ||
+                         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+                         fileType === 'application/msword'
+      const isTextMime = fileType === 'text/plain' || fileType === 'text/markdown'
+      
+      // Determine file category (prioritize extension over MIME type)
+      const isBinaryFile = isPDF || isDOCX || isPDFMime || isDOCXMime
+      const isTextFile = isTXT || isMD || isTextMime
+      
+      console.log('📄 File upload detection:', {
+        fileName: uploadForm.file.name,
+        fileType: uploadForm.file.type,
+        isPDF,
+        isDOCX,
+        isTXT,
+        isMD,
+        isBinaryFile,
+        isTextFile
       })
       
-      toast.success("Document uploaded successfully!")
-      setUploadDialogOpen(false)
-      setUploadForm({
-        name: "",
-        file: null,
-        template_id: "",
-      })
-      await fetchDocuments()
-    } catch (error) {
+      if (isBinaryFile) {
+        // Use the upload endpoint that converts PDFs/DOCX to Markdown
+        console.log('📤 Uploading binary file via file upload endpoint:', {
+          fileName: uploadForm.file.name,
+          fileType: uploadForm.file.type,
+          fileSize: uploadForm.file.size
+        })
+
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+        if (!token) {
+          throw new Error('Authentication required. Please log in again.')
+        }
+
+        const formData = new FormData()
+        formData.append('files', uploadForm.file)
+        formData.append('projectId', projectId)
+        formData.append('assessmentName', uploadForm.name)
+        
+        try {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/onboarding/upload`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formData
+          })
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: { message: 'Unknown error' } }))
+            console.error('❌ Upload endpoint failed:', {
+              status: response.status,
+              statusText: response.statusText,
+              error
+            })
+            throw new Error(error.error?.message || error.message || 'Failed to upload document via upload endpoint')
+          }
+
+          const result = await response.json()
+          console.log('✅ Upload endpoint success:', result)
+          
+          toast.success("Document uploaded successfully! Processing will begin shortly.")
+          setUploadDialogOpen(false)
+          setUploadForm({
+            name: "",
+            file: null,
+            template_id: "",
+          })
+          
+          // Wait a moment for processing, then refresh documents
+          setTimeout(() => {
+            fetchDocuments()
+          }, 2000)
+        } catch (uploadError: any) {
+          // CRITICAL: Never fall back to createDocument for binary files
+          console.error('❌ Upload endpoint error - DO NOT fall back to createDocument:', uploadError)
+          throw new Error(`Failed to upload binary file: ${uploadError.message}. Please try again or contact support.`)
+        }
+      } else if (isTextFile) {
+        // FINAL SAFEGUARD: Double-check file extension before allowing createDocument
+        // Even if detection says it's a text file, if it has a binary extension, reject it
+        const fileNameLower = uploadForm.file.name.toLowerCase()
+        if (fileNameLower.endsWith('.pdf') || fileNameLower.endsWith('.docx') || fileNameLower.endsWith('.doc')) {
+          console.error('❌ SAFEGUARD TRIGGERED: File has binary extension but was detected as text file', {
+            fileName: uploadForm.file.name,
+            fileType: uploadForm.file.type,
+            isBinaryFile,
+            isTextFile
+          })
+          throw new Error(`File "${uploadForm.file.name}" appears to be a binary file (PDF/DOCX) but was not properly detected. Please use the upload endpoint.`)
+        }
+
+        // For text files, read content and create document directly with Markdown
+        const textContent = await uploadForm.file.text()
+        
+        // CRITICAL: Ensure content is a string, never an object
+        if (typeof textContent !== 'string' || textContent.trim() === '') {
+          throw new Error("File content is empty or invalid. Cannot create document.")
+        }
+
+        // Ensure we're not sending any file metadata
+        const documentData = {
+          name: uploadForm.name,
+          content: textContent, // Store as plain Markdown string (never an object)
+          template_id: uploadForm.template_id,
+          status: "draft"
+        }
+
+        // Final validation: ensure content is not a file metadata object
+        if (typeof documentData.content === 'object' || 
+            (typeof documentData.content === 'string' && 
+             (documentData.content.includes('"fileName"') || 
+              documentData.content.includes('"fileSize"') ||
+              documentData.content.includes('"fileType"')))) {
+          console.error('❌ Attempted to send file metadata as content:', documentData)
+          throw new Error("Invalid content format. For binary files (PDF/DOCX), please use the upload button which handles conversion automatically.")
+        }
+
+        console.log('✅ Creating document with text content (not binary):', {
+          fileName: uploadForm.file.name,
+          contentLength: textContent.length,
+          isBinaryFile,
+          isTextFile
+        })
+
+        await apiClient.createDocument(projectId, documentData)
+        
+        toast.success("Document uploaded successfully!")
+        setUploadDialogOpen(false)
+        setUploadForm({
+          name: "",
+          file: null,
+          template_id: "",
+        })
+        await fetchDocuments()
+      } else {
+        // If file type cannot be determined, reject it to prevent sending metadata objects
+        console.error('❌ Unsupported file type:', {
+          fileName: uploadForm.file.name,
+          fileType: uploadForm.file.type,
+          fileSize: uploadForm.file.size,
+          isBinaryFile,
+          isTextFile
+        })
+        throw new Error(`Unsupported file type: ${uploadForm.file.name}. Please upload PDF, DOCX, TXT, or Markdown files. The file type could not be determined.`)
+      }
+    } catch (error: any) {
       console.error("Failed to upload document:", error)
-      toast.error("Failed to upload document")
+      toast.error(error.message || "Failed to upload document. Please ensure the file is a PDF, DOCX, TXT, or Markdown file.")
     } finally {
       setUploadingDocument(false)
     }

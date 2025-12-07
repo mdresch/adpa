@@ -1,0 +1,212 @@
+/**
+ * Queue Job Type Definitions
+ * Phase 3: Type Safety and Validation
+ * 
+ * This file contains all TypeScript interfaces and types for queue jobs,
+ * ensuring type safety throughout the queue system.
+ */
+
+import type Bull from 'bull'
+
+/**
+ * Job Type Union
+ * All valid job types in the system
+ */
+export type JobType =
+  | 'ai-generate'
+  | 'document-convert'
+  | 'baseline-extract'
+  | 'extract-project-data'
+  | 'process-flow'
+  | 'document-regeneration'
+  | 'quality-audit'
+  | 'pipeline-processing'
+
+/**
+ * Base Job Data
+ * Common fields present in all job types
+ */
+export interface BaseJobData {
+  jobId: string
+  userId?: string | null
+}
+
+/**
+ * AI Generation Job Data
+ */
+export interface AIGenerationJobData extends BaseJobData {
+  projectId: string
+  prompt?: string
+  provider?: string
+  model?: string | null
+  template_id?: string | null
+  max_tokens?: number
+  variables?: Record<string, unknown>
+  documentId?: string
+}
+
+/**
+ * Document Conversion Job Data
+ */
+export interface DocumentConversionJobData extends BaseJobData {
+  documentId: string
+  fromFormat: string
+  toFormat: 'pdf' | 'docx' | 'markdown'
+  projectId?: string
+}
+
+/**
+ * Baseline Extraction Job Data
+ */
+export interface BaselineExtractionJobData extends BaseJobData {
+  project_id: string
+  document_ids: string[]
+  ai_provider?: string
+  ai_model?: string
+}
+
+/**
+ * Project Data Extraction Job Data
+ */
+export interface ProjectDataExtractionJobData extends BaseJobData {
+  projectId: string
+  aiProvider?: string
+  aiModel?: string
+  documentIds?: string[]
+  domains?: string[]
+}
+
+/**
+ * Process Flow Job Data
+ */
+export interface ProcessFlowJobData extends BaseJobData {
+  config: {
+    projectId: string
+    templateId?: string
+    templateName?: string
+    documentName?: string
+    templateType?: string
+    includeStakeholders?: boolean
+    [key: string]: unknown
+  }
+}
+
+/**
+ * Document Regeneration Job Data
+ */
+export interface DocumentRegenerationJobData extends BaseJobData {
+  documentId: string
+  templateId: string
+  provider: string
+  model: string
+  versionType: 'major' | 'minor' | 'patch'
+  temperature?: number
+}
+
+/**
+ * Quality Audit Job Data
+ */
+export interface QualityAuditJobData extends BaseJobData {
+  documentId: string
+  documentContent: string
+  documentType: string
+  projectContext: {
+    id: string
+    name?: string
+    [key: string]: unknown
+  }
+}
+
+/**
+ * Pipeline Processing Job Data
+ */
+export interface PipelineProcessingJobData extends BaseJobData {
+  requestId: string
+  templateId: string
+  projectId: string
+}
+
+/**
+ * Union type for all job data types
+ */
+export type JobData =
+  | AIGenerationJobData
+  | DocumentConversionJobData
+  | BaselineExtractionJobData
+  | ProjectDataExtractionJobData
+  | ProcessFlowJobData
+  | DocumentRegenerationJobData
+  | QualityAuditJobData
+  | PipelineProcessingJobData
+
+/**
+ * Bull Queue Job Options
+ */
+export interface JobOptions {
+  priority?: number
+  delay?: number
+  attempts?: number
+  backoff?: {
+    type: 'fixed' | 'exponential'
+    delay: number
+  }
+  timeout?: number
+  removeOnComplete?: boolean | number
+  removeOnFail?: boolean | number
+  jobId?: string
+}
+
+/**
+ * Job Status
+ */
+export type JobStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled'
+
+/**
+ * Queue Name
+ */
+export type QueueName =
+  | 'ai-processing'
+  | 'document-processing'
+  | 'pipeline-processing'
+  | 'baseline-processing'
+  | 'process-flow-processing'
+  | 'document-regeneration'
+  | 'quality-audit'
+  | 'project-data-extraction'
+
+/**
+ * Type guard to check if data matches a specific job type
+ */
+export function isAIGenerationJobData(data: JobData): data is AIGenerationJobData {
+  return 'projectId' in data && 'prompt' in data
+}
+
+export function isDocumentConversionJobData(data: JobData): data is DocumentConversionJobData {
+  return 'documentId' in data && 'fromFormat' in data && 'toFormat' in data
+}
+
+export function isBaselineExtractionJobData(data: JobData): data is BaselineExtractionJobData {
+  return 'project_id' in data && 'document_ids' in data
+}
+
+export function isProjectDataExtractionJobData(data: JobData): data is ProjectDataExtractionJobData {
+  return 'projectId' in data && 'aiProvider' in data
+}
+
+export function isProcessFlowJobData(data: JobData): data is ProcessFlowJobData {
+  return 'config' in data && typeof data.config === 'object' && 'projectId' in data.config
+}
+
+export function isDocumentRegenerationJobData(data: JobData): data is DocumentRegenerationJobData {
+  return 'documentId' in data && 'templateId' in data && 'versionType' in data
+}
+
+export function isQualityAuditJobData(data: JobData): data is QualityAuditJobData {
+  return 'documentId' in data && 'documentContent' in data && 'projectContext' in data
+}
+
+export function isPipelineProcessingJobData(data: JobData): data is PipelineProcessingJobData {
+  return 'requestId' in data && 'templateId' in data && 'projectId' in data
+}
+
+

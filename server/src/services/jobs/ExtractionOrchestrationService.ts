@@ -7,6 +7,9 @@
  * 
  * This service orchestrates parent-child job patterns for extracting
  * entities from project documents across multiple PMBOK domains.
+ * 
+ * Phase 5: Updated to support dependency injection while maintaining
+ * backward compatibility with static methods.
  */
 
 import { pool } from '@/database/connection'
@@ -15,6 +18,10 @@ import { io } from '../../server'
 import { PMBOK_DOMAINS } from '@/types/pmbok'
 import type { PmbokDomain } from '@/types/pmbok'
 import type Bull from 'bull'
+// Phase 3: Use centralized types
+import type { ProjectDataExtractionJobData, JobStatus, QueueName } from './types'
+// Phase 5: Dependency injection
+import type { QueueServiceDependencies } from './queue/QueueDependencies'
 
 // ============================================================================
 // Constants and Types
@@ -309,14 +316,8 @@ const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
 
 type DomainRunIdMap = Partial<Record<PmbokDomain, string>>
 
-interface ExtractionJobData {
-  jobId: string
-  projectId: string
-  userId?: string
-  aiProvider?: string
-  aiModel?: string
-  documentIds?: string[]
-  domains?: unknown
+// Phase 3: Use centralized type (extended for internal use)
+interface ExtendedExtractionJobData extends ProjectDataExtractionJobData {
   autoTriggered?: boolean
   sourceDocumentId?: string
   domainRunIds?: DomainRunIdMap
@@ -324,7 +325,7 @@ interface ExtractionJobData {
 
 interface ProcessJobOptions {
   workerId: string
-  updateJobStatus: (jobId: string, status: string, progress: number, workerId?: string, queueName?: string, errorMessage?: string) => Promise<void>
+  updateJobStatus: (jobId: string, status: JobStatus, progress: number, workerId?: string, queueName?: QueueName | string, errorMessage?: string) => Promise<void>
 }
 
 // ============================================================================
@@ -361,6 +362,7 @@ function resolveEntityTypesForDomains(domains?: PmbokDomain[]): EntityType[] {
 
 /**
  * Register domain extraction runs in database
+ * Phase 5: Accepts optional dependencies
  */
 async function registerDomainRuns(params: {
   jobId: string
@@ -370,7 +372,8 @@ async function registerDomainRuns(params: {
   aiModel?: string
   documentIds?: string[]
   domains: PmbokDomain[]
-}): Promise<DomainRunIdMap> {
+}, deps?: QueueServiceDependencies): Promise<DomainRunIdMap> {
+  const db = deps?.database || { query: pool.query.bind(pool) } as any
   const {
     jobId,
     projectId,
@@ -386,7 +389,7 @@ async function registerDomainRuns(params: {
 
   for (const domain of domains) {
     const entityTypes = DOMAIN_ENTITY_MAP[domain] || []
-    const result = await pool.query(
+    const result = await db.query(
       `INSERT INTO domain_extraction_runs (
         project_id,
         domain,
@@ -418,11 +421,16 @@ async function registerDomainRuns(params: {
 /**
  * Complete domain runs with counts and status
  */
+/**
+ * Mark domain runs as completed
+ * Phase 5: Accepts optional dependencies
+ */
 async function completeDomainRuns(params: {
   domainRunIds: DomainRunIdMap
   domainCounts: Record<PmbokDomain, number>
   failedEntityTypes: string[]
-}): Promise<void> {
+}, deps?: QueueServiceDependencies): Promise<void> {
+  const db = deps?.database || { query: pool.query.bind(pool) } as any
   const { domainRunIds, domainCounts, failedEntityTypes } = params
   if (!domainRunIds) return
 
@@ -439,7 +447,7 @@ async function completeDomainRuns(params: {
       totalEntityTypes === 0 ? 100 : ((totalEntityTypes - failedForDomain.length) / totalEntityTypes) * 100
     const status = hasFailures ? (totalEntities > 0 ? 'partial' : 'failed') : 'completed'
 
-    await pool.query(
+    await db.query(
       `UPDATE domain_extraction_runs
          SET status = $1,
              completed_at = CURRENT_TIMESTAMP,
@@ -462,14 +470,16 @@ async function completeDomainRuns(params: {
 
 /**
  * Mark domain runs as failed
+ * Phase 5: Accepts optional dependencies
  */
-async function failDomainRuns(domainRunIds?: DomainRunIdMap, reason?: string): Promise<void> {
+async function failDomainRuns(domainRunIds?: DomainRunIdMap, reason?: string, deps?: QueueServiceDependencies): Promise<void> {
+  const db = deps?.database || { query: pool.query.bind(pool) } as any
   if (!domainRunIds) return
   const entries = Object.values(domainRunIds).filter((id): id is string => Boolean(id))
   if (!entries.length) return
   await Promise.all(
     entries.map((runId) =>
-      pool.query(
+      db.query(
         `UPDATE domain_extraction_runs
            SET status = 'failed',
                completed_at = CURRENT_TIMESTAMP,
@@ -487,20 +497,58 @@ async function failDomainRuns(domainRunIds?: DomainRunIdMap, reason?: string): P
 
 /**
  * Service class for processing extraction orchestration jobs
+ * Phase 5: Supports both static methods (backward compatibility) and instance methods (DI)
  */
 export class ExtractionOrchestrationService {
+  // Phase 5: Instance properties for dependency injection
+  private database: QueueServiceDependencies['database']
+  private websocket: QueueServiceDependencies['websocket']
+  private logger: QueueServiceDependencies['logger']
+
   /**
-   * Process an extraction orchestration job
+   * Phase 5: Constructor for dependency injection
    */
-  static async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
-    const { jobId, projectId, userId, aiProvider, aiModel, documentIds, domains } = job.data as ExtractionJobData
+  constructor(dependencies?: QueueServiceDependencies) {
+    if (dependencies) {
+      this.database = dependencies.database
+      this.websocket = dependencies.websocket
+      this.logger = dependencies.logger
+    } else {
+      // Fallback to global imports for backward compatibility
+      this.database = { query: pool.query.bind(pool), connect: pool.connect.bind(pool), end: pool.end.bind(pool) } as any
+      this.websocket = io as any
+      this.logger = logger as any
+    }
+  }
+
+  /**
+   * Process an extraction orchestration job (instance method with DI)
+   */
+  async processJob(job: Bull.Job, options: ProcessJobOptions): Promise<any> {
+    return ExtractionOrchestrationService.processJob(job, options, {
+      database: this.database,
+      websocket: this.websocket,
+      logger: this.logger,
+    } as QueueServiceDependencies)
+  }
+
+  /**
+   * Process an extraction orchestration job (static method for backward compatibility)
+   * Phase 5: Now accepts optional dependencies parameter
+   */
+  static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
+    // Phase 5: Use injected dependencies or fall back to global imports
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const ws = deps?.websocket || io
+    const log = deps?.logger || logger
+    const { jobId, projectId, userId, aiProvider, aiModel, documentIds, domains } = job.data as ExtendedExtractionJobData
     const selectedDomains = normalizeDomains(domains)
     const entityTypesForRun = resolveEntityTypesForDomains(selectedDomains)
     const { workerId, updateJobStatus } = options
 
     try {
       // Check if job is already marked as failed/cancelled in database before processing
-      const jobCheck = await pool.query(
+      const jobCheck = await db.query(
         'SELECT status, error_message FROM jobs WHERE id = $1',
         [jobId]
       )
@@ -509,9 +557,9 @@ export class ExtractionOrchestrationService {
         const dbJob = jobCheck.rows[0]
         // Skip processing if job is already failed, cancelled, or has an error message
         if (dbJob.status === 'failed' || dbJob.status === 'cancelled' || dbJob.error_message) {
-          logger.warn(`[EXTRACTION-PARENT] ⚠️ Skipping job ${jobId} - already ${dbJob.status} with error: ${dbJob.error_message?.substring(0, 50)}`)
+          log.warn(`[EXTRACTION-PARENT] ⚠️ Skipping job ${jobId} - already ${dbJob.status} with error: ${dbJob.error_message?.substring(0, 50)}`)
           // Update database to ensure it's marked as failed
-          await pool.query(
+          await db.query(
             `UPDATE jobs 
              SET status = 'failed',
                  completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP)
@@ -524,18 +572,18 @@ export class ExtractionOrchestrationService {
         }
       } else {
         // Job not found in database - this shouldn't happen, but skip it
-        logger.warn(`[EXTRACTION-PARENT] ⚠️ Job ${jobId} not found in database - skipping`)
+        log.warn(`[EXTRACTION-PARENT] ⚠️ Job ${jobId} not found in database - skipping`)
         await job.remove()
         return
       }
 
-      logger.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, { 
+      log.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, { 
         projectId, 
         userId,
         documentIds,
         domains: selectedDomains,
-        autoTriggered: (job.data as ExtractionJobData).autoTriggered || false,
-        sourceDocumentId: (job.data as ExtractionJobData).sourceDocumentId
+        autoTriggered: (job.data as ExtendedExtractionJobData).autoTriggered || false,
+        sourceDocumentId: (job.data as ExtendedExtractionJobData).sourceDocumentId
       })
       
       // Mark job as processing and set started_at/processing_started_at for stall detection
@@ -549,11 +597,11 @@ export class ExtractionOrchestrationService {
         aiModel,
         documentIds,
         domains: selectedDomains
-      })
+      }, deps)
 
       // ensure job data reflects selected domains for downstream processing
-      ;(job.data as ExtractionJobData).domains = selectedDomains
-      ;(job.data as ExtractionJobData).domainRunIds = domainRunIds
+      ;(job.data as ExtendedExtractionJobData).domains = selectedDomains
+      ;(job.data as ExtendedExtractionJobData).domainRunIds = domainRunIds
       
       // Dynamically import extractionQueue to avoid circular dependency
       const { extractionQueue } = await import('../queueService')
@@ -582,12 +630,12 @@ export class ExtractionOrchestrationService {
       // Wait for all child jobs to be created
       const childJobs = await Promise.all(childJobPromises)
       
-      logger.info(`[EXTRACTION-PARENT] Created ${childJobs.length} child extraction jobs`, { jobId })
+      log.info(`[EXTRACTION-PARENT] Created ${childJobs.length} child extraction jobs`, { jobId })
       
       await updateJobStatus(jobId, "processing", 10, workerId)
       
       // Store child job IDs in parent job data
-      await pool.query(
+      await db.query(
         `UPDATE jobs SET data = data || $1 WHERE id = $2`,
         [
           JSON.stringify({
@@ -650,14 +698,14 @@ export class ExtractionOrchestrationService {
                     }
                     
                     failedJobs.push({ entityType, error: errorMessage })
-                    logger.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
+                    log.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
                       jobId: job.id,
                       error: errorMessage,
                       parentJobId: jobId,
                       jobData: job.data
                     })
                   } catch (err: any) {
-                    logger.error(`[EXTRACTION-PARENT] Could not get failed job details: ${err?.message || err}`, {
+                    log.error(`[EXTRACTION-PARENT] Could not get failed job details: ${err?.message || err}`, {
                       jobId: childJobs[i].id,
                       error: err
                     })
@@ -670,7 +718,7 @@ export class ExtractionOrchestrationService {
               
               // Log all failed entity types
               const failedTypes = failedJobs.map(f => f.entityType).join(', ')
-              logger.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
+              log.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
                 failedJobs,
                 completed,
                 total: childJobs.length
@@ -679,9 +727,9 @@ export class ExtractionOrchestrationService {
               // Allow partial success if at least 50% succeeded
               const successRate = completed / childJobs.length
               if (successRate >= 0.5) {
-                logger.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
+                log.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
                 // Finalize with partial results
-                await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds)
+                await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
               } else {
                 // Too many failures - fail the entire job
                 const errorMessage = `${failed} entity extraction(s) failed: ${failedTypes}. Errors: ${failedJobs.map(f => `${f.entityType}: ${f.error}`).join('; ')}`
@@ -689,7 +737,7 @@ export class ExtractionOrchestrationService {
               }
             } else {
               // All succeeded - finalize parent job
-              await this.finalizeExtractionJob(jobId, projectId, undefined, workerId, updateJobStatus, domainRunIds)
+              await this.finalizeExtractionJob(jobId, projectId, undefined, workerId, updateJobStatus, domainRunIds, deps)
             }
           } else {
             // Update progress based on completed child jobs
@@ -707,7 +755,7 @@ export class ExtractionOrchestrationService {
           }
 
           const errorMessage = error?.message || 'Unknown extraction monitoring error'
-          logger.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
+          log.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
             projectId,
             stack: error?.stack
           })
@@ -715,7 +763,7 @@ export class ExtractionOrchestrationService {
           try {
             // Mark the parent job as failed in our jobs table
             await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
-            await pool.query(
+            await db.query(
               `UPDATE jobs 
                SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP 
                WHERE id = $2`,
@@ -723,9 +771,9 @@ export class ExtractionOrchestrationService {
             )
 
             // Mark associated domain runs as failed so analytics stay consistent
-            await failDomainRuns((job.data as ExtractionJobData).domainRunIds || domainRunIds, errorMessage)
+            await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds || domainRunIds, errorMessage, deps)
           } catch (updateError: any) {
-            logger.error(
+            log.error(
               `[EXTRACTION-PARENT] Failed to record monitoring failure for job ${jobId}: ${updateError?.message || updateError}`,
               { projectId }
             )
@@ -739,12 +787,12 @@ export class ExtractionOrchestrationService {
       checkInterval = setInterval(async () => {
         // Check if job was cancelled before processing
         try {
-          const statusCheck = await pool.query(
+          const statusCheck = await db.query(
             'SELECT status FROM jobs WHERE id = $1',
             [jobId]
           )
           if (statusCheck.rows.length > 0 && statusCheck.rows[0].status === 'cancelled') {
-            logger.info(`[EXTRACTION-PARENT] Job ${jobId} was cancelled - stopping monitoring`)
+            log.info(`[EXTRACTION-PARENT] Job ${jobId} was cancelled - stopping monitoring`)
             if (checkInterval) {
               clearInterval(checkInterval)
               checkInterval = null
@@ -752,12 +800,12 @@ export class ExtractionOrchestrationService {
             return
           }
         } catch (err) {
-          logger.warn(`[EXTRACTION-PARENT] Failed to check job status for cancellation: ${err}`)
+          log.warn(`[EXTRACTION-PARENT] Failed to check job status for cancellation: ${err}`)
         }
         
         // Skip if previous check is still running
         if (checkPromise) {
-          logger.debug(`[EXTRACTION-PARENT] Skipping check - previous check still running for job ${jobId}`)
+          log.debug(`[EXTRACTION-PARENT] Skipping check - previous check still running for job ${jobId}`)
           return
         }
         
@@ -766,7 +814,7 @@ export class ExtractionOrchestrationService {
         
         // Handle promise rejection (shouldn't happen due to try-catch, but safety first)
         checkPromise.catch((err) => {
-          logger.error(`[EXTRACTION-PARENT] Unhandled error in check promise for job ${jobId}:`, err)
+          log.error(`[EXTRACTION-PARENT] Unhandled error in check promise for job ${jobId}:`, err)
           checkPromise = null
         })
       }, 3000) // Check every 3 seconds
@@ -779,7 +827,7 @@ export class ExtractionOrchestrationService {
       ;(global as any).extractionIntervals.set(jobId, checkInterval)
       
     } catch (error: any) {
-      logger.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
+      log.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
       
       // Clear monitoring interval if it exists (prevent memory leak)
       if ((global as any).extractionIntervals) {
@@ -787,16 +835,16 @@ export class ExtractionOrchestrationService {
         if (interval) {
           clearInterval(interval)
           ;(global as any).extractionIntervals.delete(jobId)
-          logger.info(`Cleared monitoring interval for failed job: ${jobId}`)
+          log.info(`Cleared monitoring interval for failed job: ${jobId}`)
         }
       }
       
       await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
-      await pool.query(
+      await db.query(
         `UPDATE jobs SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
         [error.message, jobId]
       )
-      await failDomainRuns((job.data as ExtractionJobData).domainRunIds, error.message)
+      await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds, error.message, deps)
       throw error
     }
   }
@@ -804,6 +852,7 @@ export class ExtractionOrchestrationService {
   /**
    * Finalize parent job after all child jobs complete
    * @param failedJobs Optional array of failed entity types for partial success scenarios
+   * Phase 5: Accepts optional dependencies
    */
   private static async finalizeExtractionJob(
     jobId: string,
@@ -811,176 +860,247 @@ export class ExtractionOrchestrationService {
     failedJobs: Array<{ entityType: string; error: string }> | undefined,
     workerId: string,
     updateJobStatus: ProcessJobOptions['updateJobStatus'],
-    domainRunIds: DomainRunIdMap
+    domainRunIds: DomainRunIdMap,
+    deps?: QueueServiceDependencies
   ): Promise<void> {
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const ws = deps?.websocket || io
+    const log = deps?.logger || logger
     try {
-      logger.info(`[EXTRACTION-PARENT] Finalizing job ${jobId}`)
+      log.info(`[EXTRACTION-PARENT] Finalizing job ${jobId}`)
       
       await updateJobStatus(jobId, "processing", 95, workerId, "project-data-extraction")
       
-      // Query actual counts from database (child jobs already saved)
-      // Includes all entity types including PMBOK 8 Performance and Knowledge Area Domain entities
-      // Helper to safely query count (returns 0 if table doesn't exist)
-      const safeCount = async (table: string): Promise<number> => {
-        try {
-          const result = await pool.query(`SELECT COUNT(*) as count FROM ${table} WHERE project_id = $1`, [projectId])
-          return parseInt(result.rows[0].count)
-        } catch {
-          // Table might not exist yet (e.g., for new Knowledge Area tables)
-          return 0
+      // Phase 4: Optimize count queries - use PostgreSQL function for single optimized query
+      // This replaces 63 separate queries with one function call that handles missing tables gracefully
+      const startTime = Date.now()
+      let countResult
+      let countsJson: Record<string, number>
+      
+      try {
+        // Use the optimized PostgreSQL function that handles missing tables gracefully
+        const functionResult = await db.query(
+          'SELECT get_all_entity_counts($1) as counts',
+          [projectId]
+        )
+        
+        countsJson = functionResult.rows[0].counts as Record<string, number>
+        const queryTime = Date.now() - startTime
+        log.debug(`[EXTRACTION-PARENT] Optimized count query completed in ${queryTime}ms`, { projectId })
+        
+        // Convert JSONB result to row format for compatibility with existing code
+        countResult = {
+          rows: [{
+            stakeholders: countsJson.stakeholders || 0,
+            requirements: countsJson.requirements || 0,
+            risks: countsJson.risks || 0,
+            milestones: countsJson.milestones || 0,
+            constraints: countsJson.constraints || 0,
+            success_criteria: countsJson.success_criteria || 0,
+            best_practices: countsJson.best_practices || 0,
+            phases: countsJson.phases || 0,
+            resources: countsJson.resources || 0,
+            technologies: countsJson.technologies || 0,
+            quality_standards: countsJson.quality_standards || 0,
+            compliance_security: countsJson.compliance_security || 0,
+            deliverables: countsJson.deliverables || 0,
+            scope_items: countsJson.scope_items || 0,
+            activities: countsJson.activities || 0,
+            team_agreements: countsJson.team_agreements || 0,
+            development_approaches: countsJson.development_approaches || 0,
+            project_iterations: countsJson.project_iterations || 0,
+            work_items: countsJson.work_items || 0,
+            capacity_plans: countsJson.capacity_plans || 0,
+            performance_measurements: countsJson.performance_measurements || 0,
+            earned_value_metrics: countsJson.earned_value_metrics || 0,
+            opportunities: countsJson.opportunities || 0,
+            risk_responses: countsJson.risk_responses || 0,
+            performance_actuals: countsJson.performance_actuals || 0,
+            governance_decisions: countsJson.governance_decisions || 0,
+            approval_workflows: countsJson.approval_workflows || 0,
+            steering_committees: countsJson.steering_committees || 0,
+            change_control_boards: countsJson.change_control_boards || 0,
+            policy_compliance: countsJson.policy_compliance || 0,
+            scope_baselines: countsJson.scope_baselines || 0,
+            wbs_nodes: countsJson.wbs_nodes || 0,
+            scope_change_requests: countsJson.scope_change_requests || 0,
+            requirements_traceability: countsJson.requirements_traceability || 0,
+            scope_verification: countsJson.scope_verification || 0,
+            schedule_baselines: countsJson.schedule_baselines || 0,
+            schedule_activities: countsJson.schedule_activities || 0,
+            critical_path_activities: countsJson.critical_path_activities || 0,
+            schedule_variances: countsJson.schedule_variances || 0,
+            schedule_forecasts: countsJson.schedule_forecasts || 0,
+            budget_baselines: countsJson.budget_baselines || 0,
+            cost_actuals: countsJson.cost_actuals || 0,
+            cost_estimates: countsJson.cost_estimates || 0,
+            funding_tranches: countsJson.funding_tranches || 0,
+            financial_variances: countsJson.financial_variances || 0,
+            procurement_costs: countsJson.procurement_costs || 0,
+            resource_assignments: countsJson.resource_assignments || 0,
+            resource_pool: countsJson.resource_pool || 0,
+            capacity_forecasts: countsJson.capacity_forecasts || 0,
+            utilization_records: countsJson.utilization_records || 0,
+            resource_conflicts: countsJson.resource_conflicts || 0,
+            onboarding_offboarding: countsJson.onboarding_offboarding || 0,
+            risk_assessments: countsJson.risk_assessments || 0,
+            risk_response_plans: countsJson.risk_response_plans || 0,
+            risk_triggers: countsJson.risk_triggers || 0,
+            risk_reviews: countsJson.risk_reviews || 0,
+            contingency_reserves: countsJson.contingency_reserves || 0,
+            risk_metrics: countsJson.risk_metrics || 0,
+            engagement_actions: countsJson.engagement_actions || 0,
+            communication_logs: countsJson.communication_logs || 0,
+            satisfaction_surveys: countsJson.satisfaction_surveys || 0,
+            stakeholder_issues: countsJson.stakeholder_issues || 0,
+            relationship_health: countsJson.relationship_health || 0
+          }]
+        }
+      } catch (error: unknown) {
+        // Fallback to individual queries if function doesn't exist or fails
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        log.warn(`[EXTRACTION-PARENT] Optimized count function failed, falling back to individual queries: ${errorMessage}`)
+        
+        const safeCount = async (table: string): Promise<number> => {
+          try {
+            const result = await db.query(`SELECT COUNT(*) as count FROM ${table} WHERE project_id = $1`, [projectId])
+            return parseInt(result.rows[0].count)
+          } catch {
+            return 0
+          }
+        }
+        
+        const fallbackStartTime = Date.now()
+        const countQueries = await Promise.all([
+          safeCount('stakeholders'), safeCount('requirements'), safeCount('risks'), safeCount('milestones'),
+          safeCount('constraints'), safeCount('success_criteria'), safeCount('best_practices'), safeCount('phases'),
+          safeCount('resources'), safeCount('technologies'), safeCount('quality_standards'), safeCount('compliance_security'),
+          safeCount('deliverables'), safeCount('scope_items'), safeCount('activities'),
+          safeCount('team_agreements'), safeCount('development_approaches'), safeCount('project_iterations'),
+          safeCount('work_items'), safeCount('capacity_plans'), safeCount('performance_measurements'),
+          safeCount('earned_value_metrics'), safeCount('opportunities'), safeCount('risk_responses'),
+          safeCount('performance_actuals'), safeCount('governance_decisions'), safeCount('approval_workflows'),
+          safeCount('steering_committees'), safeCount('change_control_boards'), safeCount('policy_compliance'),
+          safeCount('scope_baselines'), safeCount('wbs_nodes'), safeCount('scope_change_requests'),
+          safeCount('requirements_traceability'), safeCount('scope_verification'), safeCount('schedule_baselines'),
+          safeCount('schedule_activities'), safeCount('critical_path_activities'), safeCount('schedule_variances'),
+          safeCount('schedule_forecasts'), safeCount('budget_baselines'), safeCount('cost_actuals'),
+          safeCount('cost_estimates'), safeCount('funding_tranches'), safeCount('financial_variances'),
+          safeCount('procurement_costs'), safeCount('resource_assignments'), safeCount('resource_pool'),
+          safeCount('capacity_forecasts'), safeCount('utilization_records'), safeCount('resource_conflicts'),
+          safeCount('onboarding_offboarding'), safeCount('risk_assessments'), safeCount('risk_response_plans'),
+          safeCount('risk_triggers'), safeCount('risk_reviews'), safeCount('contingency_reserves'),
+          safeCount('risk_metrics'), safeCount('engagement_actions'), safeCount('communication_logs'),
+          safeCount('satisfaction_surveys'), safeCount('stakeholder_issues'), safeCount('relationship_health')
+        ])
+        const fallbackTime = Date.now() - fallbackStartTime
+        log.warn(`[EXTRACTION-PARENT] Fallback queries completed in ${fallbackTime}ms (63 queries)`, { projectId })
+        
+        // Convert to object format for compatibility
+        countResult = {
+          rows: [{
+            stakeholders: countQueries[0], requirements: countQueries[1], risks: countQueries[2],
+            milestones: countQueries[3], constraints: countQueries[4], success_criteria: countQueries[5],
+            best_practices: countQueries[6], phases: countQueries[7], resources: countQueries[8],
+            technologies: countQueries[9], quality_standards: countQueries[10], compliance_security: countQueries[11],
+            deliverables: countQueries[12], scope_items: countQueries[13], activities: countQueries[14],
+            team_agreements: countQueries[15], development_approaches: countQueries[16], project_iterations: countQueries[17],
+            work_items: countQueries[18], capacity_plans: countQueries[19], performance_measurements: countQueries[20],
+            earned_value_metrics: countQueries[21], opportunities: countQueries[22], risk_responses: countQueries[23],
+            performance_actuals: countQueries[24], governance_decisions: countQueries[25], approval_workflows: countQueries[26],
+            steering_committees: countQueries[27], change_control_boards: countQueries[28], policy_compliance: countQueries[29],
+            scope_baselines: countQueries[30], wbs_nodes: countQueries[31], scope_change_requests: countQueries[32],
+            requirements_traceability: countQueries[33], scope_verification: countQueries[34], schedule_baselines: countQueries[35],
+            schedule_activities: countQueries[36], critical_path_activities: countQueries[37], schedule_variances: countQueries[38],
+            schedule_forecasts: countQueries[39], budget_baselines: countQueries[40], cost_actuals: countQueries[41],
+            cost_estimates: countQueries[42], funding_tranches: countQueries[43], financial_variances: countQueries[44],
+            procurement_costs: countQueries[45], resource_assignments: countQueries[46], resource_pool: countQueries[47],
+            capacity_forecasts: countQueries[48], utilization_records: countQueries[49], resource_conflicts: countQueries[50],
+            onboarding_offboarding: countQueries[51], risk_assessments: countQueries[52], risk_response_plans: countQueries[53],
+            risk_triggers: countQueries[54], risk_reviews: countQueries[55], contingency_reserves: countQueries[56],
+            risk_metrics: countQueries[57], engagement_actions: countQueries[58], communication_logs: countQueries[59],
+            satisfaction_surveys: countQueries[60], stakeholder_issues: countQueries[61], relationship_health: countQueries[62]
+          }]
         }
       }
       
-      // Core entities (indices 0-14)
-      const countQueries = await Promise.all([
-        safeCount('stakeholders'),
-        safeCount('requirements'),
-        safeCount('risks'),
-        safeCount('milestones'),
-        safeCount('constraints'),
-        safeCount('success_criteria'),
-        safeCount('best_practices'),
-        safeCount('phases'),
-        safeCount('resources'),
-        safeCount('technologies'),
-        safeCount('quality_standards'),
-        safeCount('compliance_security'),
-        safeCount('deliverables'),
-        safeCount('scope_items'),
-        safeCount('activities'),
-        // Performance Domain entities (indices 15-24)
-        safeCount('team_agreements'),
-        safeCount('development_approaches'),
-        safeCount('project_iterations'),
-        safeCount('work_items'),
-        safeCount('capacity_plans'),
-        safeCount('performance_measurements'),
-        safeCount('earned_value_metrics'),
-        safeCount('opportunities'),
-        safeCount('risk_responses'),
-        safeCount('performance_actuals'),
-        // Knowledge Area Domain entities (indices 25-62)
-        // Governance (5)
-        safeCount('governance_decisions'),
-        safeCount('approval_workflows'),
-        safeCount('steering_committees'),
-        safeCount('change_control_boards'),
-        safeCount('policy_compliance'),
-        // Scope (5)
-        safeCount('scope_baselines'),
-        safeCount('wbs_nodes'),
-        safeCount('scope_change_requests'),
-        safeCount('requirements_traceability'),
-        safeCount('scope_verification'),
-        // Schedule (5)
-        safeCount('schedule_baselines'),
-        safeCount('schedule_activities'),
-        safeCount('critical_path_activities'),
-        safeCount('schedule_variances'),
-        safeCount('schedule_forecasts'),
-        // Finance (6)
-        safeCount('budget_baselines'),
-        safeCount('cost_actuals'),
-        safeCount('cost_estimates'),
-        safeCount('funding_tranches'),
-        safeCount('financial_variances'),
-        safeCount('procurement_costs'),
-        // Resources (6)
-        safeCount('resource_assignments'),
-        safeCount('resource_pool'),
-        safeCount('capacity_forecasts'),
-        safeCount('utilization_records'),
-        safeCount('resource_conflicts'),
-        safeCount('onboarding_offboarding'),
-        // Risk (6)
-        safeCount('risk_assessments'),
-        safeCount('risk_response_plans'),
-        safeCount('risk_triggers'),
-        safeCount('risk_reviews'),
-        safeCount('contingency_reserves'),
-        safeCount('risk_metrics'),
-        // Stakeholders Ops (5)
-        safeCount('engagement_actions'),
-        safeCount('communication_logs'),
-        safeCount('satisfaction_surveys'),
-        safeCount('stakeholder_issues'),
-        safeCount('relationship_health')
-      ])
+      const row = countResult.rows[0]
       
+      // Phase 4: Use optimized query result (single row with all counts)
       const counts: DomainCountSummary = {
         // Core entities
-        stakeholders: countQueries[0],
-        requirements: countQueries[1],
-        risks: countQueries[2],
-        milestones: countQueries[3],
-        constraints: countQueries[4],
-        successCriteria: countQueries[5],
-        bestPractices: countQueries[6],
-        phases: countQueries[7],
-        resources: countQueries[8],
-        technologies: countQueries[9],
-        qualityStandards: countQueries[10],
-        complianceSecurity: countQueries[11],
-        deliverables: countQueries[12],
-        scopeItems: countQueries[13],
-        activities: countQueries[14],
+        stakeholders: parseInt(row.stakeholders) || 0,
+        requirements: parseInt(row.requirements) || 0,
+        risks: parseInt(row.risks) || 0,
+        milestones: parseInt(row.milestones) || 0,
+        constraints: parseInt(row.constraints) || 0,
+        successCriteria: parseInt(row.success_criteria) || 0,
+        bestPractices: parseInt(row.best_practices) || 0,
+        phases: parseInt(row.phases) || 0,
+        resources: parseInt(row.resources) || 0,
+        technologies: parseInt(row.technologies) || 0,
+        qualityStandards: parseInt(row.quality_standards) || 0,
+        complianceSecurity: parseInt(row.compliance_security) || 0,
+        deliverables: parseInt(row.deliverables) || 0,
+        scopeItems: parseInt(row.scope_items) || 0,
+        activities: parseInt(row.activities) || 0,
         // Performance Domain entities
-        teamAgreements: countQueries[15],
-        developmentApproaches: countQueries[16],
-        projectIterations: countQueries[17],
-        workItems: countQueries[18],
-        capacityPlans: countQueries[19],
-        performanceMeasurements: countQueries[20],
-        earnedValueMetrics: countQueries[21],
-        opportunities: countQueries[22],
-        riskResponses: countQueries[23],
-        performanceActuals: countQueries[24],
+        teamAgreements: parseInt(row.team_agreements) || 0,
+        developmentApproaches: parseInt(row.development_approaches) || 0,
+        projectIterations: parseInt(row.project_iterations) || 0,
+        workItems: parseInt(row.work_items) || 0,
+        capacityPlans: parseInt(row.capacity_plans) || 0,
+        performanceMeasurements: parseInt(row.performance_measurements) || 0,
+        earnedValueMetrics: parseInt(row.earned_value_metrics) || 0,
+        opportunities: parseInt(row.opportunities) || 0,
+        riskResponses: parseInt(row.risk_responses) || 0,
+        performanceActuals: parseInt(row.performance_actuals) || 0,
         // Knowledge Area Domain entities
         // Governance
-        governanceDecisions: countQueries[25],
-        approvalWorkflows: countQueries[26],
-        steeringCommittees: countQueries[27],
-        changeControlBoards: countQueries[28],
-        policyCompliance: countQueries[29],
+        governanceDecisions: parseInt(row.governance_decisions) || 0,
+        approvalWorkflows: parseInt(row.approval_workflows) || 0,
+        steeringCommittees: parseInt(row.steering_committees) || 0,
+        changeControlBoards: parseInt(row.change_control_boards) || 0,
+        policyCompliance: parseInt(row.policy_compliance) || 0,
         // Scope
-        scopeBaselines: countQueries[30],
-        wbsNodes: countQueries[31],
-        scopeChangeRequests: countQueries[32],
-        requirementsTraceability: countQueries[33],
-        scopeVerification: countQueries[34],
+        scopeBaselines: parseInt(row.scope_baselines) || 0,
+        wbsNodes: parseInt(row.wbs_nodes) || 0,
+        scopeChangeRequests: parseInt(row.scope_change_requests) || 0,
+        requirementsTraceability: parseInt(row.requirements_traceability) || 0,
+        scopeVerification: parseInt(row.scope_verification) || 0,
         // Schedule
-        scheduleBaselines: countQueries[35],
-        scheduleActivities: countQueries[36],
-        criticalPathActivities: countQueries[37],
-        scheduleVariances: countQueries[38],
-        scheduleForecasts: countQueries[39],
+        scheduleBaselines: parseInt(row.schedule_baselines) || 0,
+        scheduleActivities: parseInt(row.schedule_activities) || 0,
+        criticalPathActivities: parseInt(row.critical_path_activities) || 0,
+        scheduleVariances: parseInt(row.schedule_variances) || 0,
+        scheduleForecasts: parseInt(row.schedule_forecasts) || 0,
         // Finance
-        budgetBaselines: countQueries[40],
-        costActuals: countQueries[41],
-        costEstimates: countQueries[42],
-        fundingTranches: countQueries[43],
-        financialVariances: countQueries[44],
-        procurementCosts: countQueries[45],
+        budgetBaselines: parseInt(row.budget_baselines) || 0,
+        costActuals: parseInt(row.cost_actuals) || 0,
+        costEstimates: parseInt(row.cost_estimates) || 0,
+        fundingTranches: parseInt(row.funding_tranches) || 0,
+        financialVariances: parseInt(row.financial_variances) || 0,
+        procurementCosts: parseInt(row.procurement_costs) || 0,
         // Resources
-        resourceAssignments: countQueries[46],
-        resourcePool: countQueries[47],
-        capacityForecasts: countQueries[48],
-        utilizationRecords: countQueries[49],
-        resourceConflicts: countQueries[50],
-        onboardingOffboarding: countQueries[51],
+        resourceAssignments: parseInt(row.resource_assignments) || 0,
+        resourcePool: parseInt(row.resource_pool) || 0,
+        capacityForecasts: parseInt(row.capacity_forecasts) || 0,
+        utilizationRecords: parseInt(row.utilization_records) || 0,
+        resourceConflicts: parseInt(row.resource_conflicts) || 0,
+        onboardingOffboarding: parseInt(row.onboarding_offboarding) || 0,
         // Risk
-        riskAssessments: countQueries[52],
-        riskResponsePlans: countQueries[53],
-        riskTriggers: countQueries[54],
-        riskReviews: countQueries[55],
-        contingencyReserves: countQueries[56],
-        riskMetrics: countQueries[57],
+        riskAssessments: parseInt(row.risk_assessments) || 0,
+        riskResponsePlans: parseInt(row.risk_response_plans) || 0,
+        riskTriggers: parseInt(row.risk_triggers) || 0,
+        riskReviews: parseInt(row.risk_reviews) || 0,
+        contingencyReserves: parseInt(row.contingency_reserves) || 0,
+        riskMetrics: parseInt(row.risk_metrics) || 0,
         // Stakeholders Ops
-        engagementActions: countQueries[58],
-        communicationLogs: countQueries[59],
-        satisfactionSurveys: countQueries[60],
-        stakeholderIssues: countQueries[61],
-        relationshipHealth: countQueries[62]
+        engagementActions: parseInt(row.engagement_actions) || 0,
+        communicationLogs: parseInt(row.communication_logs) || 0,
+        satisfactionSurveys: parseInt(row.satisfaction_surveys) || 0,
+        stakeholderIssues: parseInt(row.stakeholder_issues) || 0,
+        relationshipHealth: parseInt(row.relationship_health) || 0
       }
       
       const entityCountLookup = Object.entries(ENTITY_COUNT_KEY_MAP).reduce(
@@ -991,7 +1111,7 @@ export class ExtractionOrchestrationService {
         {} as Record<EntityType, number>
       )
 
-      const jobData = await pool.query(`SELECT created_by, data FROM jobs WHERE id = $1`, [jobId])
+      const jobData = await db.query(`SELECT created_by, data FROM jobs WHERE id = $1`, [jobId])
       const jobRow = jobData.rows[0] || {}
       const jobDataJson = (jobRow.data as Record<string, any>) || {}
       const selectedDomains = normalizeDomains(jobDataJson.domains)
@@ -1008,11 +1128,11 @@ export class ExtractionOrchestrationService {
         domainRunIds,
         domainCounts,
         failedEntityTypes
-      })
+      }, deps)
 
       const totalEntities = Object.values(counts).reduce((sum, count) => sum + count, 0)
       
-      logger.info(`[EXTRACTION-PARENT] Total entities extracted: ${totalEntities}`)
+      log.info(`[EXTRACTION-PARENT] Total entities extracted: ${totalEntities}`)
       
       // After we know project-level entity tables are populated, rebuild
       // per-document entity_counts and inferred_*_domain, then refresh
@@ -1021,13 +1141,13 @@ export class ExtractionOrchestrationService {
         const { default: DocumentPurposeService } = await import('../documentPurposeService')
         const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
 
-        logger.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
+        log.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
         await DocumentPurposeService.rebuildForProject(projectId)
 
-        logger.info('[EXTRACTION-PARENT] Updating template entity profiles from aggregated_template_entity_view')
+        log.info('[EXTRACTION-PARENT] Updating template entity profiles from aggregated_template_entity_view')
         await TemplateAnalyticsService.updateTemplateEntityProfile()
       } catch (hookError: any) {
-        logger.error(
+        log.error(
           `[EXTRACTION-PARENT] Failed to update document purposes / template profiles for project ${projectId}: ${hookError?.message || hookError}`
         )
       }
@@ -1046,7 +1166,7 @@ export class ExtractionOrchestrationService {
         result.failedEntityTypes = failedJobs.map(f => f.entityType)
         result.failedCount = failedJobs.length
         result.warnings = failedJobs.map(f => `${f.entityType}: ${f.error}`)
-        logger.warn(`[EXTRACTION-PARENT] Partial success: ${failedJobs.length} entity types failed`, {
+        log.warn(`[EXTRACTION-PARENT] Partial success: ${failedJobs.length} entity types failed`, {
           failedTypes: result.failedEntityTypes
         })
       }
@@ -1060,7 +1180,7 @@ export class ExtractionOrchestrationService {
         await DocumentPurposeService.rebuildForProject(projectId)
 
         // Recompute template_entity_profile rows only for templates used in this project
-        const templatesRes = await pool.query(
+        const templatesRes = await db.query(
           `SELECT DISTINCT template_id
            FROM documents
            WHERE project_id = $1 AND template_id IS NOT NULL`,
@@ -1074,7 +1194,7 @@ export class ExtractionOrchestrationService {
           }
         }
       } catch (analyticsError: any) {
-        logger.error('[EXTRACTION-PARENT] Failed to rebuild document/template purpose analytics', {
+        log.error('[EXTRACTION-PARENT] Failed to rebuild document/template purpose analytics', {
           jobId,
           projectId,
           error: analyticsError.message
@@ -1084,7 +1204,7 @@ export class ExtractionOrchestrationService {
       // Update job to completed (status is VARCHAR(20), so we use 'completed' and store warnings in result)
       // Note: Status column is VARCHAR(20), so we can't use 'completed_with_warnings' (25 chars)
       // Instead, we store the partial success info in the result JSON
-      await pool.query(
+      await db.query(
         `UPDATE jobs 
          SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
@@ -1098,7 +1218,7 @@ export class ExtractionOrchestrationService {
           : `Successfully extracted ${totalEntities} entities from project documents`
         
         // Emit job completion event (status is always 'completed', warnings are in the event data)
-        io.emit("job:completed", {
+        ws.emit("job:completed", {
           jobId,
           userId,
           status: "completed",
@@ -1111,22 +1231,22 @@ export class ExtractionOrchestrationService {
       }
       
       // Emit project:entities-extracted event
-      io.to(`project:${projectId}`).emit("project:entities-extracted", {
+      ws.to(`project:${projectId}`).emit("project:entities-extracted", {
         projectId,
         totalEntities,
         entityCounts: counts
       })
       
-      logger.info(`[EXTRACTION-PARENT] Extraction completed: ${jobId}`, { 
+      log.info(`[EXTRACTION-PARENT] Extraction completed: ${jobId}`, { 
         projectId, 
         totalEntities 
       })
       
     } catch (error: any) {
-      logger.error(`[EXTRACTION-PARENT] Failed to finalize: ${jobId} ${error.message}`)
+      log.error(`[EXTRACTION-PARENT] Failed to finalize: ${jobId} ${error.message}`)
       
       // Update job with error
-      await pool.query(
+      await db.query(
         `UPDATE jobs 
          SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,

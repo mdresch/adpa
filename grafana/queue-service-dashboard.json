@@ -1,0 +1,303 @@
+{
+  "dashboard": {
+    "title": "ADPA Queue Service Monitoring",
+    "tags": ["queue", "jobs", "performance"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Queue Jobs - Waiting",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(queue_ai_processing_jobs_waiting)",
+            "legendFormat": "Waiting Jobs"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 100, "color": "yellow" },
+                { "value": 500, "color": "red" }
+              ]
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 2,
+        "title": "Queue Jobs - Active",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(queue_ai_processing_jobs_active)",
+            "legendFormat": "Active Jobs"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "blue" },
+                { "value": 50, "color": "yellow" },
+                { "value": 100, "color": "red" }
+              ]
+            },
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Queue Jobs - Failed",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(queue_ai_processing_jobs_failed_total[5m]))",
+            "legendFormat": "Failed Jobs/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "green" },
+                { "value": 0.1, "color": "yellow" },
+                { "value": 1, "color": "red" }
+              ]
+            },
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "Queue Jobs - Completed",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(rate(queue_ai_processing_jobs_completed_total[5m]))",
+            "legendFormat": "Completed Jobs/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+        "fieldConfig": {
+          "defaults": {
+            "color": { "mode": "thresholds" },
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                { "value": 0, "color": "red" },
+                { "value": 1, "color": "yellow" },
+                { "value": 10, "color": "green" }
+              ]
+            },
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 5,
+        "title": "Job States Over Time",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "queue_ai_processing_jobs_waiting",
+            "legendFormat": "Waiting"
+          },
+          {
+            "expr": "queue_ai_processing_jobs_active",
+            "legendFormat": "Active"
+          },
+          {
+            "expr": "queue_ai_processing_jobs_delayed",
+            "legendFormat": "Delayed"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 6,
+        "title": "Job Completion Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(queue_ai_processing_jobs_completed_total[5m])",
+            "legendFormat": "Completed/sec"
+          },
+          {
+            "expr": "rate(queue_ai_processing_jobs_failed_total[5m])",
+            "legendFormat": "Failed/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 7,
+        "title": "Operation Duration - P95",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "queue_service_add_job_duration_ms{quantile=\"0.95\"}",
+            "legendFormat": "Add Job P95"
+          },
+          {
+            "expr": "queue_service_get_job_status_duration_ms{quantile=\"0.95\"}",
+            "legendFormat": "Get Status P95"
+          },
+          {
+            "expr": "queue_service_update_job_status_duration_ms{quantile=\"0.95\"}",
+            "legendFormat": "Update Status P95"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      },
+      {
+        "id": 8,
+        "title": "Operation Duration - P99",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "queue_service_add_job_duration_ms{quantile=\"0.99\"}",
+            "legendFormat": "Add Job P99"
+          },
+          {
+            "expr": "queue_service_get_job_status_duration_ms{quantile=\"0.99\"}",
+            "legendFormat": "Get Status P99"
+          },
+          {
+            "expr": "queue_service_update_job_status_duration_ms{quantile=\"0.99\"}",
+            "legendFormat": "Update Status P99"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      },
+      {
+        "id": 9,
+        "title": "Cache Hit Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "cache_queue_service_name_resolution_hit_rate",
+            "legendFormat": "Name Resolution"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1
+          }
+        }
+      },
+      {
+        "id": 10,
+        "title": "Cache Hits vs Misses",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(cache_queue_service_name_resolution_hits_total[5m])",
+            "legendFormat": "Hits/sec"
+          },
+          {
+            "expr": "rate(cache_queue_service_name_resolution_misses_total[5m])",
+            "legendFormat": "Misses/sec"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        }
+      },
+      {
+        "id": 11,
+        "title": "Total Operations",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "sum(queue_service_add_job_duration_ms_count) + sum(queue_service_get_job_status_duration_ms_count) + sum(queue_service_update_job_status_duration_ms_count)",
+            "legendFormat": "Total Operations"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 0, "y": 32 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short"
+          }
+        }
+      },
+      {
+        "id": 12,
+        "title": "Average Operation Duration",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "(sum(queue_service_add_job_duration_ms_sum) + sum(queue_service_get_job_status_duration_ms_sum) + sum(queue_service_update_job_status_duration_ms_sum)) / (sum(queue_service_add_job_duration_ms_count) + sum(queue_service_get_job_status_duration_ms_count) + sum(queue_service_update_job_status_duration_ms_count))",
+            "legendFormat": "Avg Duration"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 6, "x": 6, "y": 32 },
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms"
+          }
+        }
+      }
+    ],
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    },
+    "timepicker": {},
+    "templating": {
+      "list": []
+    },
+    "annotations": {
+      "list": []
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 0,
+    "links": [],
+    "liveNow": false,
+    "weekStart": ""
+  }
+}

@@ -68,6 +68,7 @@
     "migrate:357": "tsx scripts/run-migration-357.ts",
     "migrate:358": "tsx scripts/run-migration-358.ts",
     "migrate:359": "tsx scripts/run-migration-359.ts",
+    "migrate:360": "tsx scripts/run-migration-360.ts",
     "migrate:700": "tsx scripts/run-migration-700-template-purpose.ts",
     "setup:super-admin": "tsx scripts/setup-super-admin.ts",
     "cache:clear-team-agreements": "tsx scripts/clear-team-agreements-cache.ts",

@@ -6987,10 +6987,33 @@ Output valid JSON object with "performance_actuals" array only.`
         }
       }
 
-      // Ensure agreed_by is properly formatted as JSONB
+      // Ensure agreed_by is properly formatted as JSONB array of UUIDs
       // Handle edge cases: null, undefined, empty arrays, and ensure valid JSON
-      // For PostgreSQL JSONB, pass the array directly (pg library handles conversion)
-      const agreedByArray = this.ensureStringArray(agreement.agreed_by || [])
+      // CRITICAL: agreed_by must contain user IDs (UUIDs), not names
+      // Filter out any non-UUID values (AI sometimes extracts names instead of IDs)
+      const rawAgreedBy = this.ensureStringArray(agreement.agreed_by || [])
+      
+      if (rawAgreedBy.length > 0) {
+        logger.debug(`[EXTRACTION-TEAM_AGREEMENTS] Processing agreed_by array with ${rawAgreedBy.length} items:`, rawAgreedBy)
+      }
+      
+      const agreedByArray = rawAgreedBy
+        .map(item => {
+          const trimmed = item.trim()
+          // Only keep valid UUIDs
+          if (uuidRegex.test(trimmed)) {
+            return trimmed
+          } else {
+            logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] Filtered out non-UUID value from agreed_by: "${item}" (agreement: "${agreement.title}")`)
+            return null
+          }
+        })
+        .filter((item): item is string => item !== null) // Remove nulls
+      
+      if (rawAgreedBy.length > 0 && agreedByArray.length === 0) {
+        logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] All agreed_by values were filtered out (no valid UUIDs found) for agreement: "${agreement.title}"`)
+      }
+      
       // Pass as array, not stringified - pg library will convert to JSONB
       const agreedByJson = agreedByArray.length > 0 ? agreedByArray : []
 

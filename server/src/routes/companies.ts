@@ -25,6 +25,31 @@ router.get("/",
       const { page = 1, limit = 10, search, is_active } = req.query
       const offset = (Number(page) - 1) * Number(limit)
 
+      // Check if user is super_admin (sees all companies) or regular admin (sees only their company)
+      const userRole = (req as any).user?.role?.toLowerCase()
+      const isSuperAdmin = userRole === 'super_admin'
+      
+      // Get user's company_id if not super_admin
+      let userCompanyId: string | null = null
+      if (!isSuperAdmin) {
+        try {
+          const userResult = await pool.query(
+            'SELECT company_id FROM users WHERE id = $1',
+            [(req as any).user?.id]
+          )
+          if (userResult.rows.length > 0) {
+            userCompanyId = userResult.rows[0].company_id
+          }
+        } catch (err: any) {
+          // If company_id column doesn't exist, log warning but continue
+          if (err.message?.includes('column "company_id"') || err.code === '42703') {
+            log.warn('company_id column not found on users table')
+          } else {
+            throw err
+          }
+        }
+      }
+
       let query = `
         SELECT 
           c.id, c.name, c.domain, c.metadata, c.is_active, c.created_at, c.updated_at,
@@ -36,6 +61,13 @@ router.get("/",
       `
       const params: any[] = []
       let paramCount = 0
+
+      // Filter by company_id for regular admins (super_admin sees all)
+      if (!isSuperAdmin && userCompanyId) {
+        paramCount++
+        query += ` AND c.id = $${paramCount}`
+        params.push(userCompanyId)
+      }
 
       if (is_active !== undefined) {
         paramCount++
@@ -60,6 +92,13 @@ router.get("/",
       let countQuery = "SELECT COUNT(*) FROM companies WHERE 1=1"
       const countParams: any[] = []
       let countParamCount = 0
+
+      // Filter by company_id for regular admins (super_admin sees all)
+      if (!isSuperAdmin && userCompanyId) {
+        countParamCount++
+        countQuery += ` AND id = $${countParamCount}`
+        countParams.push(userCompanyId)
+      }
 
       if (is_active !== undefined) {
         countParamCount++
