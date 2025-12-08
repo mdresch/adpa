@@ -2955,7 +2955,15 @@ Rules:
 
       const documentContext = this.buildDocumentContext(documents)
 
-      const prompt = `Identify **work items / tasks / backlog items** with effort tracking details.
+      const prompt = `Identify **all work items / tasks / backlog items** with effort tracking details.
+      
+IMPORTANT:
+- The document contains an "Activity List" table with rows like "Activity ID | Activity Name | WBS Element ID Reference | Predecessors | Successors | Constraint Type | Critical Path".
+- Create **one work item per table row** (even if hours/assignee/progress are missing). Do not skip rows.
+- Use "Activity Name" as name, and also set activity_name = Activity Name.
+- If available, include Activity ID and WBS reference in description for traceability.
+- If no hours, progress, or blockers are provided, set estimated_hours = null, actual_hours = null, progress_percentage = null, blockers = [].
+- Default status to "todo" when not given.
 
 SOURCE DOCUMENTS:
 ${documentContext}
@@ -2983,7 +2991,8 @@ JSON schema:
 }
 
 Guidelines:
-- Include items with measurable effort or progress tracking.
+- Include **every activity table row as a work item**; do not omit rows that lack hours or assignees.
+- Include items with measurable effort or progress tracking when present.
 - Convert percentages like "65%" to numbers.
 - Use arrays for blockers even if single.
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
@@ -2993,8 +3002,8 @@ Guidelines:
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
-        temperature: 0.25,
-        max_tokens: 2600
+        temperature: 0.2,
+        max_tokens: 5200
       })
 
       const parsed = this.parseAIResponse(response.content)

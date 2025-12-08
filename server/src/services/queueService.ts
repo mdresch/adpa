@@ -25,6 +25,8 @@ import {
 } from "./jobs/errors"
 // Phase 4: Query result caching
 import { cache } from "../utils/redis"
+// Phase 5: Performance monitoring utilities
+import { PerformanceMonitor } from "../utils/performanceMonitor"
 
 // Set global max listeners for all EventEmitters to prevent MaxListenersExceededWarning
 // Bull queues create multiple Redis connections (Commander instances) with many event listeners
@@ -928,7 +930,7 @@ export async function updateJobStatus(
     } else {
       // Fallback to direct query (shouldn't happen, but safety first)
       await pool.query(
-        `UPDATE jobs SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        `UPDATE jobs SET status = $1 WHERE id = $2`,
         [status, jobId]
       )
     }

@@ -36,7 +36,9 @@ const ENTITY_TYPES = [
   'activities',
   'success_criteria',
   'resources',
-  'quality_standards'
+  'quality_standards',
+  // PMBOK 8 Performance Domain entities
+  'work_items'
 ]
 
 async function clearExtractionCache(projectId: string, entityTypes: string[]) {
@@ -60,8 +62,10 @@ async function clearExtractionCache(projectId: string, entityTypes: string[]) {
     let totalCleared = 0
 
     for (const entityType of entityTypes) {
-      // Cache key pattern: ai:extraction:<projectId>:<entityType>:*
-      const pattern = `ai:extraction:${projectId}:${entityType}:*`
+      // Cache key pattern (hash + provider in middle):
+      // ai:extraction:<projectId>:<contentHash>:<entityType>:<providerKey>
+      // Use wildcards around the hash/provider portion.
+      const pattern = `ai:extraction:${projectId}:*:${entityType}:*`
       
       console.log(`🔎 Searching pattern: ${pattern}`)
       

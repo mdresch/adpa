@@ -562,7 +562,6 @@ export class QueueService {
       }
 
       values.push(jobId)
-      updates.push(`updated_at = CURRENT_TIMESTAMP`)
 
       await this.dependencies.database.query(
         `UPDATE jobs SET ${updates.join(', ')} WHERE id = $${paramIndex}`,
@@ -587,7 +586,7 @@ export class QueueService {
     try {
       // Update database
       await this.dependencies.database.query(
-        "UPDATE jobs SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+        "UPDATE jobs SET status = 'cancelled' WHERE id = $1",
         [jobId]
       )
 
