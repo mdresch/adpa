@@ -700,9 +700,9 @@ router.post(
       
       const job = jobResult.rows[0]
       
-      // Can retry failed jobs or stuck processing jobs
-      if (job.status !== 'failed' && job.status !== 'processing') {
-        return res.status(400).json({ error: "Can only retry failed or stuck jobs" })
+      // Can retry failed jobs, stuck processing jobs, or cancelled jobs
+      if (!['failed', 'processing', 'cancelled'].includes(job.status)) {
+        return res.status(400).json({ error: "Can only retry failed, stuck, or cancelled jobs" })
       }
       
       // Create new job with same data

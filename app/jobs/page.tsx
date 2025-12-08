@@ -245,12 +245,16 @@ const mockWorkers = [
 const getStatusIcon = (status: string) => {
   switch (status) {
     case "running":
+    case "processing":
       return <Play className="h-4 w-4" />
     case "completed":
       return <CheckCircle className="h-4 w-4" />
     case "failed":
       return <XCircle className="h-4 w-4" />
+    case "cancelled":
+      return <XCircle className="h-4 w-4" />
     case "queued":
+    case "pending":
       return <Clock className="h-4 w-4" />
     case "paused":
       return <Pause className="h-4 w-4" />
@@ -262,12 +266,16 @@ const getStatusIcon = (status: string) => {
 const getStatusColor = (status: string) => {
   switch (status) {
     case "running":
+    case "processing":
       return "bg-blue-500/10 text-blue-600 border-blue-200"
     case "completed":
       return "bg-green-500/10 text-green-600 border-green-200"
     case "failed":
       return "bg-red-500/10 text-red-600 border-red-200"
+    case "cancelled":
+      return "bg-orange-500/10 text-orange-600 border-orange-200"
     case "queued":
+    case "pending":
       return "bg-yellow-500/10 text-yellow-600 border-yellow-200"
     case "paused":
       return "bg-gray-500/10 text-gray-600 border-gray-200"
@@ -815,6 +823,7 @@ export default function JobMonitorPage() {
                             <SelectItem value="running">Running</SelectItem>
                             <SelectItem value="completed">Completed</SelectItem>
                             <SelectItem value="failed">Failed</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
                             <SelectItem value="queued">Queued</SelectItem>
                           </SelectContent>
                         </Select>
@@ -1119,7 +1128,7 @@ export default function JobMonitorPage() {
                                           <FileText className="h-4 w-4 mr-2" />
                                           View Logs
                                         </DropdownMenuItem>
-                                        {(job.status === "failed" || job.status === "processing") && (
+                                        {(job.status === "failed" || job.status === "processing" || job.status === "cancelled") && (
                                           <DropdownMenuItem
                                             onSelect={async (e) => {
                                               e.preventDefault()
@@ -1133,7 +1142,7 @@ export default function JobMonitorPage() {
                                             }}
                                           >
                                             <RefreshCw className="h-4 w-4 mr-2" />
-                                            {job.status === "processing" ? "Retry Stuck Job" : "Retry Job"}
+                                            {job.status === "processing" ? "Retry Stuck Job" : job.status === "cancelled" ? "Retry Cancelled Job" : "Retry Job"}
                                           </DropdownMenuItem>
                                         )}
                                         {(job.status === "pending" || job.status === "processing") && (
