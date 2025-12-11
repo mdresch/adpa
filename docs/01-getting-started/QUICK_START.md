@@ -13,8 +13,8 @@ Your local development environment is **successfully configured and running**!
 | **Frontend** | http://localhost:3000 | ✅ Running |
 | **Backend API** | http://localhost:5000 | ✅ Running |
 | **Health Check** | http://localhost:5000/health | ✅ Active |
-| **Database** | Neon PostgreSQL (Cloud) | ✅ Connected |
-| **Cache** | Redis (localhost:6379) | ✅ Connected |
+| **Database** | Supabase PostgreSQL (Cloud) | ✅ Connected |
+| **Cache** | Railway Redis (Cloud) | ✅ Connected |
 
 ---
 
@@ -46,7 +46,7 @@ Get-Process -Name node | Stop-Process -Force
 
 ```powershell
 # Recreate environment files
-.\setup-neon-env.ps1
+.\setup-supabase-env.ps1
 
 # Restart servers
 Get-Process -Name node | Stop-Process -Force
@@ -60,9 +60,9 @@ npm run dev               # In terminal 2
 
 ### Backend: `server/.env`
 ```env
-# Database (Neon PostgreSQL)
-DB_HOST=ep-royal-morning-a9j6aaq0-pooler.gwc.azure.neon.tech
-POSTGRES_URL=postgresql://neondb_owner:...@ep-royal-morning-a9j6aaq0-pooler.gwc.azure.neon.tech/adpa_db?sslmode=require
+# Database (Supabase PostgreSQL)
+DB_HOST=aws-0-[REGION].pooler.supabase.com
+POSTGRES_URL=postgresql://postgres:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true
 
 # Server
 PORT=5000
@@ -79,7 +79,7 @@ NODE_ENV=development
 NEXT_PUBLIC_API_URL=http://localhost:5000
 
 # Database (same as backend)
-POSTGRES_URL=postgresql://neondb_owner:...@ep-royal-morning-a9j6aaq0-pooler.gwc.azure.neon.tech/adpa_db?sslmode=require
+POSTGRES_URL=postgresql://postgres:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres?pgbouncer=true
 ```
 
 ---
@@ -110,7 +110,7 @@ Open http://localhost:3000 in your browser
 ### ✅ Working Features
 - ✅ Frontend UI (Next.js)
 - ✅ Backend API (Express)
-- ✅ Database Connection (Neon PostgreSQL)
+- ✅ Database Connection (Supabase PostgreSQL)
 - ✅ Redis Caching
 - ✅ Authentication System
 - ✅ Multi-Stage Document Processing Pipeline
@@ -158,8 +158,8 @@ npm run lint    # Check code quality
 
 **Run Migrations:**
 ```powershell
-# Connect to Neon database
-psql 'postgresql://neondb_owner:npg_6H1YnZiDleEV@ep-royal-morning-a9j6aaq0-pooler.gwc.azure.neon.tech/adpa_db?sslmode=require'
+# Connect to Supabase database
+# Use the connection string from your Supabase dashboard
 
 # Run migration file
 \i server/migrations/your-migration.sql
@@ -168,10 +168,10 @@ psql 'postgresql://neondb_owner:npg_6H1YnZiDleEV@ep-royal-morning-a9j6aaq0-poole
 **Check Tables:**
 ```powershell
 # List tables
-psql '...' -c "\dt"
+# psql command
 
 # Query data
-psql '...' -c "SELECT * FROM users LIMIT 5;"
+# psql command
 ```
 
 ---
@@ -189,7 +189,7 @@ Get-Process -Name node | Stop-Process -Force
 
 ### Database Connection Failed
 ```bash
-# Verify Neon database is active in dashboard
+# Verify Supabase database is active in dashboard
 # Check internet connection
 # Confirm credentials in .env file
 ```
@@ -231,9 +231,9 @@ npx tsc --noEmit
 | Document | Description |
 |----------|-------------|
 | [LOCAL_DEVELOPMENT_SUCCESS.md](./LOCAL_DEVELOPMENT_SUCCESS.md) | Complete setup summary |
-| [NEON_DATABASE_SETUP.md](./NEON_DATABASE_SETUP.md) | Neon database configuration |
-| [README.md](./README.md) | Project overview |
-| [DOCKER_SETUP_SUMMARY.md](./DOCKER_SETUP_SUMMARY.md) | Docker deployment guide |
+| [SUPABASE_DATABASE_SETUP.md](../02-setup-configuration/SUPABASE_DATABASE_SETUP.md) | Supabase database configuration |
+| [README.md](../README.md) | Project overview |
+| [DOCKER_SETUP_SUMMARY.md](../03-development/DOCKER_SETUP_SUMMARY.md) | Docker deployment guide |
 
 ---
 
@@ -292,8 +292,8 @@ node -e "require('dotenv').config(); console.log('DB_HOST:', process.env.DB_HOST
 
 **Status**: ✅ All Systems Operational  
 **Environment**: Local Development  
-**Database**: Neon PostgreSQL (Cloud)  
-**Last Updated**: October 7, 2025
+**Database**: Supabase PostgreSQL (Cloud)  
+**Last Updated**: December 11, 2025
 
 🎉 **Happy Coding!**
 

@@ -77,9 +77,9 @@ router.get("/:id/quality-audit", authenticateToken, async (req, res) => {
     )
 
     if (auditResult.rows.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        error: "Quality audit not found for this document" 
+        error: "Quality audit not found for this document"
       })
     }
 
@@ -146,9 +146,9 @@ router.get("/:id/quality-audit", authenticateToken, async (req, res) => {
 
   } catch (error) {
     log.error("Error fetching quality audit:", error)
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
-      error: "Failed to fetch quality audit" 
+      error: "Failed to fetch quality audit"
     })
   }
 })
@@ -160,16 +160,16 @@ router.get("/test", (req, res) => {
 
 // Test feedback endpoint (no auth required for testing)
 router.post("/test-feedback", (req, res) => {
-  res.json({ 
-    message: "Feedback endpoint is working", 
+  res.json({
+    message: "Feedback endpoint is working",
     body: req.body,
-    timestamp: new Date().toISOString() 
+    timestamp: new Date().toISOString()
   })
 })
 
 // Submit feedback for a document
-router.post("/:id/feedback", 
-  authenticateToken, 
+router.post("/:id/feedback",
+  authenticateToken,
   requirePermission("documents.update"),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
@@ -177,23 +177,23 @@ router.post("/:id/feedback",
     try {
       const { id } = req.params
       const { comment, rating, category } = req.body
-      
+
       // Debug logging
       log.info("Submit feedback request:", { id, body: req.body })
-      
+
       // Basic validation
       if (!id) {
         return res.status(400).json({ error: "Document ID is required" })
       }
-      
+
       if (!comment || comment.trim() === "") {
         return res.status(400).json({ error: "Comment is required" })
       }
-      
+
       if (!rating || rating < 1 || rating > 5) {
         return res.status(400).json({ error: "Rating must be between 1 and 5" })
       }
-      
+
       // Check if document exists and user has access
       const docCheck = await pool.query(
         `
@@ -234,7 +234,7 @@ router.post("/:id/feedback",
       // Get current metadata and add feedback
       const currentMetadata = doc.metadata || {}
       const currentFeedback = currentMetadata.stakeholder_feedback || []
-      
+
       const updatedMetadata = {
         ...currentMetadata,
         stakeholder_feedback: [...currentFeedback, newFeedback]
@@ -279,7 +279,7 @@ router.get("/:id/summaries",
     const log = childLogger({ requestId: (req as any).requestId })
     try {
       const { id } = req.params
-      
+
       // Check if document_summaries table exists
       const tableCheck = await pool.query(`
         SELECT EXISTS (
@@ -287,7 +287,7 @@ router.get("/:id/summaries",
           WHERE table_name = 'document_summaries'
         ) as exists
       `)
-      
+
       if (!tableCheck.rows[0].exists) {
         return res.json({
           success: true,
@@ -295,7 +295,7 @@ router.get("/:id/summaries",
           message: 'Summary caching not yet enabled. Run migration to enable.'
         })
       }
-      
+
       // Get all summaries for this document, grouped by compression level
       const result = await pool.query(
         `SELECT 
@@ -318,20 +318,20 @@ router.get("/:id/summaries",
         ORDER BY compression_level ASC, created_at DESC`,
         [id]
       )
-      
+
       log.info(`Retrieved ${result.rows.length} summaries for document: ${id}`)
-      
+
       res.json({
         success: true,
         summaries: result.rows,
         count: result.rows.length
       })
-      
+
     } catch (error) {
       log.error("Error fetching summaries:", error)
-      res.status(500).json({ 
+      res.status(500).json({
         success: false,
-        error: "Failed to fetch summaries" 
+        error: "Failed to fetch summaries"
       })
     }
   }
@@ -341,7 +341,7 @@ router.get("/:id/summaries",
 router.get("/", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    const { page = 1, limit = 50, search } = req.query
+    const { page = 1, limit = 50, search, status, framework, project_id } = req.query
     const offset = (Number(page) - 1) * Number(limit)
 
     let query = `
@@ -352,32 +352,77 @@ router.get("/", authenticateToken, async (req, res) => {
         d.status,
         d.created_at,
         d.updated_at,
-        p.name as project_name
+        d.project_id,
+        p.name as project_name,
+        t.name as template_name
       FROM documents d
       LEFT JOIN projects p ON d.project_id = p.id
-      WHERE 1=1
+      LEFT JOIN templates t ON d.template_id = t.id
+      WHERE d.deleted_at IS NULL
     `
     const params: any[] = []
 
     // Add search filter if provided
     if (search) {
-      query += ` AND (d.name ILIKE $${params.length + 1} OR p.name ILIKE $${params.length + 1})`
       params.push(`%${search}%`)
+      query += ` AND (d.name ILIKE $${params.length} OR p.name ILIKE $${params.length})`
+    }
+
+    // Add status filter
+    if (status && status !== 'all') {
+      params.push(status)
+      query += ` AND d.status = $${params.length}`
+    }
+
+    // Add framework filter
+    if (framework && framework !== 'all') {
+      params.push(framework)
+      query += ` AND (d.framework = $${params.length} OR t.framework = $${params.length})`
+    }
+
+    // Add project_id filter
+    if (project_id && project_id !== 'all') {
+      params.push(project_id)
+      query += ` AND d.project_id = $${params.length}`
     }
 
     // Add ordering and pagination
-    query += ` ORDER BY d.updated_at DESC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`
-    params.push(Number(limit), offset)
+    params.push(Number(limit))
+    query += ` ORDER BY d.updated_at DESC LIMIT $${params.length}`
+
+    params.push(offset)
+    query += ` OFFSET $${params.length}`
 
     const result = await pool.query(query, params)
 
     // Get total count for pagination
-    let countQuery = `SELECT COUNT(*) FROM documents d LEFT JOIN projects p ON d.project_id = p.id WHERE 1=1`
+    let countQuery = `
+      SELECT COUNT(*) 
+      FROM documents d 
+      LEFT JOIN projects p ON d.project_id = p.id 
+      LEFT JOIN templates t ON d.template_id = t.id
+      WHERE d.deleted_at IS NULL
+    `
     const countParams: any[] = []
 
     if (search) {
-      countQuery += ` AND (d.name ILIKE $1 OR p.name ILIKE $1)`
       countParams.push(`%${search}%`)
+      countQuery += ` AND (d.name ILIKE $${countParams.length} OR p.name ILIKE $${countParams.length})`
+    }
+
+    if (status && status !== 'all') {
+      countParams.push(status)
+      countQuery += ` AND d.status = $${countParams.length}`
+    }
+
+    if (framework && framework !== 'all') {
+      countParams.push(framework)
+      countQuery += ` AND (d.framework = $${countParams.length} OR t.framework = $${countParams.length})`
+    }
+
+    if (project_id && project_id !== 'all') {
+      countParams.push(project_id)
+      countQuery += ` AND d.project_id = $${countParams.length}`
     }
 
     const countResult = await pool.query(countQuery, countParams)
@@ -426,9 +471,9 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
     const userRole = (req as any).user?.role?.toLowerCase()
     const isSuperAdmin = userRole === 'super_admin'
     const isAdmin = userRole === 'admin'
-    
+
     let hasAccess = false
-    
+
     if (isSuperAdmin) {
       // Super admin can access any project - just verify project exists
       const projectExists = await pool.query(
@@ -536,7 +581,7 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
     const totalWords = docs.reduce((sum: number, doc: any) => sum + (doc.word_count || 0), 0)
     const totalCharacters = docs.reduce((sum: number, doc: any) => sum + (doc.character_count || 0), 0)
     const totalSize = docs.reduce((sum: number, doc: any) => sum + (doc.file_size || 0), 0)
-    
+
     // Average reading speed is 200-250 words per minute, using 225
     const readingTimeMinutes = Math.ceil(totalWords / 225)
 
@@ -556,8 +601,8 @@ router.get("/project/:projectId/stats", authenticateToken, validateParams(Joi.ob
       totalCharacters,
       totalSize,
       readingTimeMinutes,
-      readingTimeFormatted: readingTimeMinutes < 60 
-        ? `${readingTimeMinutes} min` 
+      readingTimeFormatted: readingTimeMinutes < 60
+        ? `${readingTimeMinutes} min`
         : `${Math.floor(readingTimeMinutes / 60)}h ${readingTimeMinutes % 60}m`,
       counts: {
         published: publishedCount,
@@ -589,9 +634,9 @@ router.get("/project/:projectId", authenticateToken, validateParams(Joi.object({
     const userRole = (req as any).user?.role?.toLowerCase()
     const isSuperAdmin = userRole === 'super_admin'
     const isAdmin = userRole === 'admin'
-    
+
     let hasAccess = false
-    
+
     if (isSuperAdmin) {
       // Super admin can access any project - just verify project exists
       const projectExists = await pool.query(
@@ -827,7 +872,7 @@ router.get("/:id/pdf-preview",
       }
 
       const doc = docResult.rows[0]
-      
+
       // Extract markdown content
       let markdownContent = ''
       if (typeof doc.content === 'string') {
@@ -898,7 +943,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     }
 
     const document = result.rows[0]
-    
+
     // 🔍 DEBUG: Log what we got from database
     log.info('📊 [GET-DOC] Retrieved from database:', {
       id: document.id,
@@ -908,7 +953,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
       generation_metadata_is_string: typeof document.generation_metadata === 'string',
       generation_metadata_length: document.generation_metadata ? JSON.stringify(document.generation_metadata).length : 0
     })
-    
+
     // Parse JSON fields if they're strings
     if (document.generation_metadata && typeof document.generation_metadata === 'string') {
       try {
@@ -921,7 +966,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     } else if (document.generation_metadata) {
       log.info('✅ [GET-DOC] generation_metadata is already an OBJECT (pg parsed it)')
     }
-    
+
     if (document.metadata && typeof document.metadata === 'string') {
       try {
         document.metadata = JSON.parse(document.metadata)
@@ -929,7 +974,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
         log.warn('Failed to parse metadata:', e)
       }
     }
-    
+
     if (document.template_metadata && typeof document.template_metadata === 'string') {
       try {
         document.template_metadata = JSON.parse(document.template_metadata)
@@ -937,7 +982,7 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
         log.warn('Failed to parse template_metadata:', e)
       }
     }
-    
+
     // 🔍 DEBUG: Log what we're sending
     log.info('📤 [GET-DOC] Sending to frontend:', {
       id: document.id,
@@ -953,9 +998,9 @@ router.get("/:id", authenticateToken, validateParams(Joi.object({ id: schemas.uu
     const userRole = (req as any).user?.role?.toLowerCase()
     const isSuperAdmin = userRole === 'super_admin'
     const isAdmin = userRole === 'admin'
-    
+
     let hasAccess = false
-    
+
     if (isSuperAdmin) {
       // Super admin can access any project - just verify project exists
       const projectExists = await pool.query(
@@ -1031,7 +1076,7 @@ router.get("/:id/versions", authenticateToken, validateParams(Joi.object({ id: s
   const log = childLogger({ requestId: (req as any).requestId })
   try {
     const { id } = req.params
-    
+
     log.info(`Fetching version history for document ${id}`)
 
     // Get all versions from document_versions table
@@ -1054,7 +1099,7 @@ router.get("/:id/versions", authenticateToken, validateParams(Joi.object({ id: s
        ORDER BY dv.created_at DESC`,
       [id]
     )
-    
+
     // Also get current document version
     const currentDocResult = await pool.query(
       `SELECT 
@@ -1074,13 +1119,13 @@ router.get("/:id/versions", authenticateToken, validateParams(Joi.object({ id: s
        WHERE d.id = $1 AND d.deleted_at IS NULL`,
       [id]
     )
-    
+
     // Combine versions: current version + historical versions
     const allVersions = [
       ...(currentDocResult.rows.length > 0 ? currentDocResult.rows : []),
       ...versionsResult.rows
     ]
-    
+
     log.info(`Found ${versionsResult.rows.length} historical versions + ${currentDocResult.rows.length} current version`)
 
     res.json(allVersions)
@@ -1091,8 +1136,8 @@ router.get("/:id/versions", authenticateToken, validateParams(Joi.object({ id: s
 })
 
 // Create document
-router.post("/project/:projectId", 
-  authenticateToken, 
+router.post("/project/:projectId",
+  authenticateToken,
   requirePermission("documents.create"),
   validateParams(Joi.object({ projectId: schemas.uuid })),
   validate(schemas.createDocument),
@@ -1107,9 +1152,9 @@ router.post("/project/:projectId",
       const userRole = (req as any).user?.role?.toLowerCase()
       const isSuperAdmin = userRole === 'super_admin'
       const isAdmin = userRole === 'admin'
-      
+
       let hasAccess = false
-      
+
       if (isSuperAdmin || isAdmin) {
         // Super admin and admin can access any project - just verify project exists
         const projectExists = await pool.query(
@@ -1143,11 +1188,11 @@ router.post("/project/:projectId",
             fileType: content.fileType,
             projectId
           })
-          return res.status(400).json({ 
-            error: "PDF and DOCX files must be uploaded using the file upload feature, not created directly. The upload will automatically convert them to Markdown." 
+          return res.status(400).json({
+            error: "PDF and DOCX files must be uploaded using the file upload feature, not created directly. The upload will automatically convert them to Markdown."
           })
         }
-        
+
         // Handle different content object formats
         if (content.text) {
           contentString = content.text
@@ -1161,17 +1206,17 @@ router.post("/project/:projectId",
             contentKeys: Object.keys(content),
             projectId
           })
-          return res.status(400).json({ 
-            error: "Invalid content format. Content must be a Markdown string or an object with 'text', 'markdown', or 'content' property. For PDF/DOCX files, use the upload endpoint." 
+          return res.status(400).json({
+            error: "Invalid content format. Content must be a Markdown string or an object with 'text', 'markdown', or 'content' property. For PDF/DOCX files, use the upload endpoint."
           })
         }
       }
-      
+
       // Ensure content is a string
       if (typeof contentString !== 'string') {
         contentString = String(contentString || '')
       }
-      
+
       // Validate content is not empty
       if (!contentString || contentString.trim() === '') {
         return res.status(400).json({ error: "Document content cannot be empty" })
@@ -1222,7 +1267,7 @@ router.post("/project/:projectId",
               created_at: template.created_at,
               updated_at: template.updated_at
             }
-            
+
             log.info('Template metadata captured:', templateMetadata)
           }
         } catch (error) {
@@ -1232,7 +1277,7 @@ router.post("/project/:projectId",
 
       // Extract generation metadata from request if provided
       const generationMetadata = req.body.generation_metadata || null
-      
+
       // 🔍 DEBUG: Log what we received
       log.info('📊 [CREATE-DOC] Received generation_metadata:', {
         has_metadata: !!generationMetadata,
@@ -1253,7 +1298,7 @@ router.post("/project/:projectId",
         RETURNING *
       `,
         [
-          id, projectId, name, contentString, template_id, status, req.user?.id, 
+          id, projectId, name, contentString, template_id, status, req.user?.id,
           wordCount, characterCount, 1, '1.0.0', // Initial version and semantic_version
           templateVersion, templateAuthor, templateFramework, templateCategory,
           templateComplexity, templateMetadata ? JSON.stringify(templateMetadata) : null,
@@ -1281,7 +1326,7 @@ router.post("/project/:projectId",
             generationMetadata ? JSON.stringify(generationMetadata) : null
           ]
         )
-        
+
         log.info(`📸 Initial version v1.0.0 saved to version history`)
       } catch (versionError: any) {
         log.warn('[VERSION-SNAPSHOT] Failed to save initial version', { error: versionError.message })
@@ -1299,9 +1344,9 @@ router.post("/project/:projectId",
             )
             VALUES ($1, $2, $3, $4, NOW(), $5, true)
           `, [template_id, id, req.user?.id, projectId, wordCount])
-          
+
           log.info('Template usage tracked in template_usage table')
-          
+
           // 🔧 FIX: Increment template's usage_count (displayed in UI)
           // This must be done separately from validation_count/success_count
           try {
@@ -1321,24 +1366,24 @@ router.post("/project/:projectId",
             })
             // Don't fail the document creation if counter update fails
           }
-          
+
           // 🔧 FIX: Also increment template's validation_count and success_count
           // This was previously only done for AI-generated documents, causing counters to get stuck
           try {
             // Default quality score of 0.85 (85%) for manually created documents
             // This marks them as successful since default quality_threshold is 0.70 (70%)
             const qualityScore = 0.85
-            
+
             await pool.query(
               'SELECT update_template_validation($1, $2, $3)',
               [template_id, qualityScore, req.user?.id]
             )
-            
+
             log.info('✅ Template validation counters incremented', {
               template_id,
               quality_score: qualityScore
             })
-            
+
             // Clear template cache so UI shows updated metrics immediately
             try {
               const { cache } = require('../utils/redis')
@@ -1359,11 +1404,11 @@ router.post("/project/:projectId",
         }
       }
 
-  log.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`, {
-    templateUsed: !!template_id,
-    templateVersion: templateVersion,
-    wordCount: wordCount
-  })
+      log.info(`Document created: ${name} in project ${projectId} by ${req.user?.email}`, {
+        templateUsed: !!template_id,
+        templateVersion: templateVersion,
+        wordCount: wordCount
+      })
 
       // Track document creation
       if (req.user?.id) {
@@ -1421,8 +1466,8 @@ router.post("/project/:projectId",
             [
               'project-data-extraction',
               'pending',
-              JSON.stringify({ 
-                projectId, 
+              JSON.stringify({
+                projectId,
                 documentIds: [id], // Extract only from this newly created document
                 autoTriggered: true,
                 sourceDocumentId: id,
@@ -1485,8 +1530,8 @@ router.post("/project/:projectId",
 )
 
 // Update document
-router.put("/:id", 
-  authenticateToken, 
+router.put("/:id",
+  authenticateToken,
   requirePermission("documents.update"),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
@@ -1494,22 +1539,22 @@ router.put("/:id",
     try {
       const { id } = req.params
       const { name, content, status, tags, template_id, metadata } = req.body
-      
+
       // Debug logging
-      log.info("Update document request:", { 
-        id, 
+      log.info("Update document request:", {
+        id,
         body: req.body,
         hasTemplateId: !!template_id,
         hasMetadata: !!metadata,
         templateIdType: typeof template_id,
         metadataType: typeof metadata
       })
-      
+
       // Manual validation
       if (!id) {
         return res.status(400).json({ error: "Document ID is required" })
       }
-      
+
       // Validate template_id if provided
       if (template_id && template_id.trim() !== "") {
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
@@ -1517,12 +1562,12 @@ router.put("/:id",
           return res.status(400).json({ error: "Invalid template_id format" })
         }
       }
-      
+
       // Validate status if provided
       if (status && !["draft", "review", "approved", "published"].includes(status)) {
         return res.status(400).json({ error: "Invalid status value" })
       }
-      
+
       // Validate name if provided
       if (name && (typeof name !== "string" || name.length < 1 || name.length > 255)) {
         return res.status(400).json({ error: "Invalid name format" })
@@ -1560,7 +1605,7 @@ router.put("/:id",
       // - Manual edit: Patch (1.0.0 → 1.0.1)
       let versionIncrement = ""
       let newVersion = doc.version || 1
-      
+
       if (content) {
         // Parse current version (handles both "1" and "1.0" and "1.0.0" formats)
         const versionStr = String(doc.version || "1")
@@ -1568,11 +1613,11 @@ router.put("/:id",
         let major = parseInt(versionParts[0]) || 1
         let minor = parseInt(versionParts[1]) || 0
         let patch = parseInt(versionParts[2]) || 0
-        
+
         // Determine version increment type
         const templateChanged = template_id && template_id !== doc.template_id
         const isRegeneration = metadata?.regenerated === true
-        
+
         if (templateChanged) {
           // Major version change: 1.0.0 → 2.0.0
           major += 1
@@ -1586,7 +1631,7 @@ router.put("/:id",
           // Patch version change (manual edit): 1.0.0 → 1.0.1
           patch += 1
         }
-        
+
         newVersion = `${major}.${minor}.${patch}`
         versionIncrement = `, version = $${999}` // Placeholder, we'll add it to params later
       }
@@ -1620,7 +1665,7 @@ router.put("/:id",
       let wordCountUpdate = ""
       let characterCountUpdate = ""
       const params: any[] = [name, contentString, status, template_id, JSON.stringify(metadataUpdate), req.user?.id]
-      
+
       if (contentString) {
         const wordCount = contentString.trim().split(/\s+/).filter(Boolean).length
         const characterCount = contentString.length
@@ -1628,13 +1673,13 @@ router.put("/:id",
         characterCountUpdate = `, character_count = $${params.length + 2}`
         params.push(wordCount, characterCount)
       }
-      
+
       // Add version to params if content changed
       if (content) {
         versionIncrement = `, version = $${params.length + 1}`
         params.push(newVersion)
       }
-      
+
       params.push(id)
 
       const result = await pool.query(
@@ -1662,8 +1707,8 @@ router.put("/:id",
       log.info(`Document updated: ${id} by ${req.user?.email}`, {
         oldVersion: doc.version,
         newVersion: content ? newVersion : doc.version,
-        versionType: template_id !== doc.template_id ? 'major' : 
-                     metadata?.regenerated ? 'minor' : 'patch',
+        versionType: template_id !== doc.template_id ? 'major' :
+          metadata?.regenerated ? 'minor' : 'patch',
         hasContent: !!content,
         hasContentString: !!contentString,
         hasProjectId: !!result.rows[0]?.project_id
@@ -1693,7 +1738,7 @@ router.put("/:id",
       if (content && contentString && result.rows[0]) {
         try {
           const { qualityAuditService } = await import('../services/qualityAuditService')
-          
+
           log.info('[MANUAL-EDIT] Triggering quality audit after content modification', {
             documentId: id,
             documentName: result.rows[0].name,
@@ -1723,16 +1768,16 @@ router.put("/:id",
 
       // ⭐ AUTOMATIC DRIFT DETECTION on document save
       let driftRevalidation = null
-      
+
       // Only run drift validation if content has ACTUALLY CHANGED
       // This prevents false drift detection on every save
       // Note: We check both contentString existence AND inequality to handle edge cases
       const contentHasChanged = contentString !== undefined && doc.content !== contentString
-      
+
       if (contentHasChanged && result.rows[0]?.project_id && result.rows[0]?.content) {
         try {
           const { driftDetectionService } = await import('../services/driftDetectionService')
-          
+
           log.info(`[DRIFT] Auto-detecting drift after document content change`, {
             projectId: result.rows[0].project_id,
             documentId: id,
@@ -1740,27 +1785,27 @@ router.put("/:id",
             oldContentLength: doc.content?.length || 0,
             newContentLength: contentString?.length || 0
           })
-          
+
           // Check for drift using new drift detection service
           const driftResult = await driftDetectionService.checkForDrift(
             result.rows[0].project_id,
             id
           )
-          
+
           driftRevalidation = {
             hasDrift: driftResult.hasDrift,
             severity: driftResult.severity,
             driftCount: driftResult.driftPoints.length,
             summary: driftResult.summary
           }
-          
+
           if (driftResult.hasDrift) {
             log.warn(`[DRIFT] Detected drift after document update`, {
               documentId: id,
               severity: driftResult.severity,
               driftCount: driftResult.driftPoints.length
             })
-            
+
             // Get baseline ID for drift record
             const baselineResult = await pool.query(
               `SELECT id FROM project_baselines 
@@ -1769,7 +1814,7 @@ router.put("/:id",
                ORDER BY approved_at DESC LIMIT 1`,
               [result.rows[0].project_id]
             )
-            
+
             if (baselineResult.rows.length > 0) {
               // Create drift record
               const driftRecord = await driftDetectionService.createDriftRecord({
@@ -1780,10 +1825,10 @@ router.put("/:id",
                 severity: driftResult.severity,
                 triggeredBy: 'manual' // Manual user edit
               })
-              
+
               // Add drift record ID to response
               driftRevalidation.driftRecordId = driftRecord.id
-              
+
               // Trigger escalation check (TASK-742: Escalation matrix)
               try {
                 await driftDetectionService.checkAndTriggerEscalation(driftRecord, driftResult.driftPoints)
@@ -1792,7 +1837,7 @@ router.put("/:id",
                 log.error('[DRIFT] Error triggering escalation:', escalationError)
                 // Don't fail the request if escalation fails
               }
-              
+
               // Emit WebSocket event for drift detection
               try {
                 const { io } = await import('../server')
@@ -1809,7 +1854,7 @@ router.put("/:id",
             }
           } else {
             log.info(`[DRIFT] ✅ No drift detected - document aligns with baseline`)
-            
+
             // Mark any existing drift as resolved
             await pool.query(
               `UPDATE baseline_drift_detection 
@@ -1822,7 +1867,7 @@ router.put("/:id",
               [req.user?.id, id]
             )
           }
-          
+
         } catch (driftErr: any) {
           log.error('[DRIFT] Drift validation failed:', driftErr)
           // Don't fail the update if drift validation fails
@@ -1842,8 +1887,8 @@ router.put("/:id",
 )
 
 // Delete document
-router.delete("/:id", 
-  authenticateToken, 
+router.delete("/:id",
+  authenticateToken,
   requirePermission("documents.delete"),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
@@ -1868,7 +1913,7 @@ router.delete("/:id",
       }
 
       const doc = docCheck.rows[0]
-      
+
       // SECURITY: Verify user has access to this document
       // Super admin can delete any document
       // Admin can delete documents from their company
@@ -1877,9 +1922,9 @@ router.delete("/:id",
       const isSuperAdmin = userRole === 'super_admin'
       const isAdmin = userRole === 'admin'
       const userId = (req as any).user?.id
-      
+
       let hasAccess = false
-      
+
       if (isSuperAdmin) {
         // Super admin can delete any document
         hasAccess = true
@@ -1893,13 +1938,13 @@ router.delete("/:id",
           const isOwner = doc.owner_id === userId || doc.created_by === userId
           const teamMembers = doc.team_members || []
           let isInTeam = false
-          
+
           if (Array.isArray(teamMembers)) {
             isInTeam = teamMembers.includes(userId)
           } else if (typeof teamMembers === 'object' && teamMembers !== null) {
             isInTeam = Object.values(teamMembers).includes(userId)
           }
-          
+
           hasAccess = isOwner || isInTeam
         }
       } else {
@@ -1907,14 +1952,14 @@ router.delete("/:id",
         const isOwner = doc.owner_id === userId || doc.created_by === userId
         const teamMembers = doc.team_members || []
         let isInTeam = false
-        
+
         if (Array.isArray(teamMembers)) {
           isInTeam = teamMembers.includes(userId)
         } else if (typeof teamMembers === 'object' && teamMembers !== null) {
           // Handle JSONB case
           isInTeam = Object.values(teamMembers).includes(userId)
         }
-        
+
         hasAccess = isOwner || isInTeam
       }
 
@@ -1943,7 +1988,7 @@ router.delete("/:id",
       // Clear cache
       await cache.del(`document:${id}`)
 
-  log.info(`Document soft deleted: ${id} by ${req.user?.email}`)
+      log.info(`Document soft deleted: ${id} by ${req.user?.email}`)
 
       // Audit delete
       await AuditService.log({
@@ -1964,8 +2009,8 @@ router.delete("/:id",
 )
 
 // Get deleted documents for a project
-router.get("/project/:projectId/deleted", 
-  authenticateToken, 
+router.get("/project/:projectId/deleted",
+  authenticateToken,
   validateParams(Joi.object({ projectId: schemas.uuid })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -1977,7 +2022,7 @@ router.get("/project/:projectId/deleted",
       const userRole = (req as any).user?.role?.toLowerCase()
       const isSuperAdmin = userRole === 'super_admin'
       const isAdmin = userRole === 'admin'
-      
+
       const projectCheck = await pool.query(
         `
         SELECT p.owner_id, p.team_members
@@ -2028,8 +2073,8 @@ router.get("/project/:projectId/deleted",
 )
 
 // Restore a soft-deleted document
-router.post("/:id/restore", 
-  authenticateToken, 
+router.post("/:id/restore",
+  authenticateToken,
   requirePermission("documents.update"),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
@@ -2054,7 +2099,7 @@ router.post("/:id/restore",
       }
 
       const doc = docCheck.rows[0]
-      
+
       // SECURITY: Verify user has access to restore this document
       // Super admin can restore any document
       // Admin can restore documents from their company
@@ -2063,9 +2108,9 @@ router.post("/:id/restore",
       const isSuperAdmin = userRole === 'super_admin'
       const isAdmin = userRole === 'admin'
       const userId = (req as any).user?.id
-      
+
       let hasAccess = false
-      
+
       if (isSuperAdmin) {
         // Super admin can restore any document
         hasAccess = true
@@ -2115,9 +2160,9 @@ router.post("/:id/restore",
         ctx: { userId: req.user?.id, ip: req.ip, userAgent: req.headers['user-agent'] as string, requestId: (req as any).requestId }
       })
 
-      res.json({ 
+      res.json({
         message: "Document restored successfully",
-        documentId: id 
+        documentId: id
       })
 
     } catch (error) {
@@ -2128,8 +2173,8 @@ router.post("/:id/restore",
 )
 
 // Permanently delete a soft-deleted document (hard delete)
-router.delete("/:id/permanent", 
-  authenticateToken, 
+router.delete("/:id/permanent",
+  authenticateToken,
   requirePermission("documents.delete"),
   validateParams(Joi.object({ id: schemas.uuid })),
   async (req, res) => {
@@ -2154,7 +2199,7 @@ router.delete("/:id/permanent",
       }
 
       const doc = docCheck.rows[0]
-      
+
       // SECURITY: Verify user has access to permanently delete this document
       // Super admin can permanently delete any document
       // Admin can permanently delete documents from their company
@@ -2163,9 +2208,9 @@ router.delete("/:id/permanent",
       const isSuperAdmin = userRole === 'super_admin'
       const isAdmin = userRole === 'admin'
       const userId = (req as any).user?.id
-      
+
       let hasAccess = false
-      
+
       if (isSuperAdmin) {
         // Super admin can permanently delete any document
         hasAccess = true
@@ -2211,9 +2256,9 @@ router.delete("/:id/permanent",
         ctx: { userId: req.user?.id, ip: req.ip, userAgent: req.headers['user-agent'] as string, requestId: (req as any).requestId }
       })
 
-      res.json({ 
+      res.json({
         message: "Document permanently deleted",
-        documentId: id 
+        documentId: id
       })
 
     } catch (error) {
@@ -2396,7 +2441,7 @@ function parseMarkdownToWordElements(markdown: string): any[] {
           while (paddedRow.length < maxCells) {
             paddedRow.push("")
           }
-          
+
           return new TableRow({
             children: paddedRow.map(
               (cell) =>
@@ -2409,9 +2454,9 @@ function parseMarkdownToWordElements(markdown: string): any[] {
                   ],
                   shading: isHeader
                     ? {
-                        type: ShadingType.SOLID,
-                        color: "E0E0E0",
-                      }
+                      type: ShadingType.SOLID,
+                      color: "E0E0E0",
+                    }
                     : undefined,
                 })
             ),
@@ -2600,7 +2645,7 @@ function parseMarkdownToWordElements(markdown: string): any[] {
       while (paddedRow.length < maxCells) {
         paddedRow.push("")
       }
-      
+
       return new TableRow({
         children: paddedRow.map(
           (cell) =>
@@ -2613,9 +2658,9 @@ function parseMarkdownToWordElements(markdown: string): any[] {
               ],
               shading: isHeader
                 ? {
-                    type: ShadingType.SOLID,
-                    color: "E0E0E0",
-                  }
+                  type: ShadingType.SOLID,
+                  color: "E0E0E0",
+                }
                 : undefined,
             })
         ),
@@ -2642,27 +2687,27 @@ function parseMarkdownToWordElements(markdown: string): any[] {
  */
 function stripMarkdownFormatting(text: string): string {
   let cleaned = text
-  
+
   // Remove bold: **text** (must come before single *)
   cleaned = cleaned.replace(/\*\*([^*]+?)\*\*/g, '$1')
   cleaned = cleaned.replace(/__([^_]+?)__/g, '$1')
-  
+
   // Remove italic: *text* (single asterisk, not double)
   cleaned = cleaned.replace(/\*([^*\s][^*]*?)\*/g, '$1')
   cleaned = cleaned.replace(/_([^_\s][^_]*?)_/g, '$1')
-  
+
   // Remove inline code: `code`
   cleaned = cleaned.replace(/`([^`]+?)`/g, '$1')
-  
+
   // Remove links: [text](url) -> keep text
   cleaned = cleaned.replace(/\[([^\]]+?)\]\([^)]+?\)/g, '$1')
-  
+
   // Remove any remaining markdown syntax (cleanup)
   cleaned = cleaned.replace(/\*\*/g, '') // Any remaining **
   cleaned = cleaned.replace(/__/g, '') // Any remaining __
   cleaned = cleaned.replace(/\*/g, '') // Any remaining single *
   cleaned = cleaned.replace(/_/g, '') // Any remaining single _
-  
+
   return cleaned.trim()
 }
 
@@ -2768,7 +2813,7 @@ function parseInlineMarkdown(text: string): TextRun[] {
     if (!boldMatch) {
       const singleAsteriskMatch = text.substring(currentIndex).match(/^\*([^*\s][^*]*?)\*/)
       const singleUnderscoreMatch = text.substring(currentIndex).match(/^_([^_\s][^_]*?)_/)
-      
+
       if (singleAsteriskMatch) {
         flushBuffer()
         buffer = singleAsteriskMatch[1]
@@ -2776,7 +2821,7 @@ function parseInlineMarkdown(text: string): TextRun[] {
         currentIndex += singleAsteriskMatch[0].length
         continue
       }
-      
+
       if (singleUnderscoreMatch) {
         flushBuffer()
         buffer = singleUnderscoreMatch[1]
