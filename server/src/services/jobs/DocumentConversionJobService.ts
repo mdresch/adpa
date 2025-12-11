@@ -81,13 +81,13 @@ export class DocumentConversionJobService {
       const document = await this.getDocument(documentId, deps)
 
       // Update progress
-      await updateJobStatus(jobId, "processing", 50)
+      await updateJobStatus(jobId, "processing", 50, workerId, "document-processing")
 
       // Convert document to target format
       const convertedContent = await this.convertDocument(document, format)
 
       // Update progress
-      await updateJobStatus(jobId, "processing", 90)
+      await updateJobStatus(jobId, "processing", 90, workerId, "document-processing")
 
       // Prepare result
       const result = {
@@ -101,10 +101,14 @@ export class DocumentConversionJobService {
       await db.query(
         `
         UPDATE jobs 
-        SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+        SET status = 'completed', result = $1, progress = 100, 
+            worker_id = COALESCE(worker_id, $3),
+            started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+            processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+            completed_at = CURRENT_TIMESTAMP
         WHERE id = $2
       `,
-        [JSON.stringify(result), jobId]
+        [JSON.stringify(result), jobId, workerId]
       )
 
       // Emit real-time update
@@ -125,10 +129,14 @@ export class DocumentConversionJobService {
       await db.query(
         `
         UPDATE jobs 
-        SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+        SET status = 'failed', error_message = $1, 
+            worker_id = COALESCE(worker_id, $3),
+            started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+            processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+            completed_at = CURRENT_TIMESTAMP
         WHERE id = $2
       `,
-        [error instanceof Error ? error.message : "Unknown error", jobId]
+        [error instanceof Error ? error.message : "Unknown error", jobId, workerId]
       )
 
       // Emit real-time update

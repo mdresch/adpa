@@ -12,6 +12,8 @@
 import { Pool } from 'pg';
 import { v4 as uuidv4 } from 'uuid';
 import { logger } from '../utils/logger';
+import { aiRecommendationsService } from './aiRecommendationsService';
+import type { AIRecommendation, GeneratedRecommendations } from './aiRecommendationsService';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -84,6 +86,7 @@ export interface PortfolioAssessmentResult {
   gap_analysis: GapAnalysis;
   top_documents: TopDocument[];
   roi_calculation?: ROICalculation;
+  ai_recommendations?: GeneratedRecommendations;
 }
 
 export interface TopDocument {
@@ -168,6 +171,32 @@ export async function assessProjectPortfolio(
     // Step 7: Calculate ROI
     const roiCalculation = calculateROI(portfolioMetrics, auditData.length);
 
+    // Step 7.5: Generate AI-powered recommendations
+    let aiRecommendations: GeneratedRecommendations | undefined;
+    try {
+      logger.info('Generating AI recommendations for portfolio');
+      const allGaps = [
+        ...gapAnalysis.critical_gaps,
+        ...gapAnalysis.high_priority_gaps,
+        ...gapAnalysis.medium_priority_gaps
+      ];
+      aiRecommendations = await aiRecommendationsService.generateRecommendations(
+        allGaps,
+        portfolioMetrics,
+        auditData
+      );
+      logger.info('AI recommendations generated successfully', {
+        criticalCount: aiRecommendations.critical_actions.length,
+        highCount: aiRecommendations.high_priority_actions.length,
+        quickWinsCount: aiRecommendations.quick_wins.length
+      });
+    } catch (recError: any) {
+      logger.warn('Failed to generate AI recommendations, continuing without them', {
+        error: recError.message
+      });
+      // Continue without recommendations rather than failing entire assessment
+    }
+
     // Step 8: Save assessment to database (ONLY if portfolio_assessments table exists)
     // For onboarding flow, we skip this and just return calculated metrics
     let assessmentId: string | null = null;
@@ -217,7 +246,8 @@ export async function assessProjectPortfolio(
       breakdown,
       gap_analysis: gapAnalysis,
       top_documents: topDocuments,
-      roi_calculation: roiCalculation
+      roi_calculation: roiCalculation,
+      ai_recommendations: aiRecommendations
     };
 
   } catch (error: any) {

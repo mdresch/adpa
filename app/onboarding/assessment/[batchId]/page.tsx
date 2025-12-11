@@ -39,6 +39,47 @@ import {
 import apiClient from '@/lib/api';
 import { getApiBaseUrl } from '@/lib/api-url';
 
+interface AIRecommendation {
+  id: string;
+  title: string;
+  description: string;
+  priority: 'critical' | 'high' | 'medium' | 'low';
+  category: 'structure' | 'completeness' | 'compliance' | 'quality' | 'consistency';
+  impact_score: number;
+  effort_level: 'low' | 'medium' | 'high';
+  estimated_time_hours: number;
+  steps: {
+    step_number: number;
+    action: string;
+    details: string;
+    estimated_time_minutes: number;
+    tools_needed?: string[];
+  }[];
+  affected_documents: string[];
+  expected_improvement: string;
+  success_criteria: string[];
+  resources_needed: string[];
+  template_suggestions?: string[];
+  best_practices: string[];
+}
+
+interface GeneratedRecommendations {
+  critical_actions: AIRecommendation[];
+  high_priority_actions: AIRecommendation[];
+  medium_priority_actions: AIRecommendation[];
+  low_priority_actions: AIRecommendation[];
+  quick_wins: AIRecommendation[];
+  long_term_initiatives: AIRecommendation[];
+  implementation_roadmap: {
+    phase_number: number;
+    phase_name: string;
+    duration_weeks: number;
+    recommendations: string[];
+    expected_maturity_improvement: number;
+    success_metrics: string[];
+  }[];
+}
+
 interface AssessmentData {
   batchId: string;
   projectId: string;
@@ -67,6 +108,7 @@ interface AssessmentData {
     issueCategory?: string;
   }[];
   recommendations?: string[];
+  ai_recommendations?: GeneratedRecommendations;
   benchmarks: {
     industryAverage: number;
     topPerformers: number;
@@ -3450,6 +3492,242 @@ export default function AssessmentResultsPage() {
 
         {/* Action Plan Tab */}
         <TabsContent value="action-plan" className="space-y-4">
+          {/* AI-Powered Recommendations Section */}
+          {assessment.ai_recommendations && (
+            <div className="space-y-4">
+              {/* Quick Wins */}
+              {assessment.ai_recommendations.quick_wins && assessment.ai_recommendations.quick_wins.length > 0 && (
+                <MaturityCard variant="elevated">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
+                      <TrendingUp className="h-5 w-5" style={{ color: maturityTheme.colors.success.text }} />
+                      AI-Powered Quick Wins ({assessment.ai_recommendations.quick_wins.length})
+                    </CardTitle>
+                    <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                      High-impact actions with low effort - start here for immediate improvements
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {assessment.ai_recommendations.quick_wins.map((rec) => {
+                        const categoryColors = {
+                          structure: maturityTheme.colors.primary,
+                          completeness: maturityTheme.colors.warning,
+                          compliance: maturityTheme.colors.info,
+                          quality: maturityTheme.colors.success,
+                          consistency: maturityTheme.colors.error,
+                        };
+                        const categoryColor = categoryColors[rec.category] || maturityTheme.colors.primary;
+                        
+                        return (
+                          <div
+                            key={rec.id}
+                            className="p-4 rounded-lg border"
+                            style={{
+                              backgroundColor: maturityTheme.colors.background.tertiary,
+                              borderColor: categoryColor.border || maturityTheme.colors.border.default,
+                              borderWidth: '2px',
+                            }}
+                          >
+                            <div className="flex items-start justify-between mb-3">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h4 className="font-semibold" style={{ color: maturityTheme.colors.text.primary }}>
+                                    {rec.title}
+                                  </h4>
+                                  <Badge style={{
+                                    backgroundColor: categoryColor.bg,
+                                    color: categoryColor.text,
+                                  }}>
+                                    {rec.category}
+                                  </Badge>
+                                  <Badge style={{
+                                    backgroundColor: maturityTheme.colors.success.bg,
+                                    color: maturityTheme.colors.success.text,
+                                  }}>
+                                    {rec.effort_level} effort
+                                  </Badge>
+                                </div>
+                                <p className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                                  {rec.description}
+                                </p>
+                              </div>
+                              <div className="ml-4 text-right">
+                                <div className="text-2xl font-bold" style={{ color: categoryColor.text }}>
+                                  {rec.impact_score}
+                                </div>
+                                <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                                  Impact Score
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Expected Improvement */}
+                            <div className="mb-3 p-3 rounded-lg" style={{
+                              backgroundColor: maturityTheme.colors.success.bg,
+                              borderColor: maturityTheme.colors.success.border,
+                              borderWidth: '1px',
+                            }}>
+                              <div className="text-xs font-semibold mb-1" style={{ color: maturityTheme.colors.success.text }}>
+                                Expected Improvement
+                              </div>
+                              <div className="text-sm" style={{ color: maturityTheme.colors.text.primary }}>
+                                {rec.expected_improvement}
+                              </div>
+                            </div>
+
+                            {/* Action Steps */}
+                            <div className="mb-3">
+                              <div className="text-xs font-semibold mb-2" style={{ color: maturityTheme.colors.text.primary }}>
+                                Action Steps ({rec.estimated_time_hours}h total)
+                              </div>
+                              <div className="space-y-2">
+                                {rec.steps.map((step) => (
+                                  <div
+                                    key={step.step_number}
+                                    className="flex items-start gap-3 p-2 rounded"
+                                    style={{ backgroundColor: maturityTheme.colors.background.elevated }}
+                                  >
+                                    <div
+                                      className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold"
+                                      style={{
+                                        backgroundColor: categoryColor.bg,
+                                        color: categoryColor.text,
+                                      }}
+                                    >
+                                      {step.step_number}
+                                    </div>
+                                    <div className="flex-1">
+                                      <div className="text-sm font-medium" style={{ color: maturityTheme.colors.text.primary }}>
+                                        {step.action}
+                                      </div>
+                                      <div className="text-xs mt-1" style={{ color: maturityTheme.colors.text.secondary }}>
+                                        {step.details}
+                                      </div>
+                                      <div className="text-xs mt-1" style={{ color: maturityTheme.colors.text.muted }}>
+                                        ⏱ {step.estimated_time_minutes} min
+                                        {step.tools_needed && step.tools_needed.length > 0 && (
+                                          <span> | 🔧 {step.tools_needed.join(', ')}</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Template Suggestions */}
+                            {rec.template_suggestions && rec.template_suggestions.length > 0 && (
+                              <div className="mb-3">
+                                <div className="text-xs font-semibold mb-1" style={{ color: maturityTheme.colors.text.primary }}>
+                                  📄 Suggested Templates
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {rec.template_suggestions.map((template, idx) => (
+                                    <Badge
+                                      key={idx}
+                                      variant="outline"
+                                      style={{
+                                        backgroundColor: maturityTheme.colors.background.elevated,
+                                        color: maturityTheme.colors.text.secondary,
+                                      }}
+                                    >
+                                      {template}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Affected Documents */}
+                            {rec.affected_documents && rec.affected_documents.length > 0 && (
+                              <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                                Affects: {rec.affected_documents.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </CardContent>
+                </MaturityCard>
+              )}
+
+              {/* Implementation Roadmap */}
+              {assessment.ai_recommendations.implementation_roadmap && assessment.ai_recommendations.implementation_roadmap.length > 0 && (
+                <MaturityCard variant="elevated">
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2" style={{ color: maturityTheme.colors.text.primary }}>
+                      <Target className="h-5 w-5" style={{ color: maturityTheme.colors.primary[400] }} />
+                      AI-Generated Implementation Roadmap
+                    </CardTitle>
+                    <CardDescription style={{ color: maturityTheme.colors.text.secondary }}>
+                      Phased approach to achieve your target maturity level
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      {assessment.ai_recommendations.implementation_roadmap.map((phase) => (
+                        <div
+                          key={phase.phase_number}
+                          className="p-4 rounded-lg border"
+                          style={{
+                            backgroundColor: maturityTheme.colors.background.tertiary,
+                            borderColor: maturityTheme.colors.border.default,
+                            borderWidth: '1px',
+                          }}
+                        >
+                          <div className="flex items-start justify-between mb-3">
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <Badge style={{
+                                  backgroundColor: maturityTheme.colors.primary[500],
+                                  color: 'white',
+                                }}>
+                                  Phase {phase.phase_number}
+                                </Badge>
+                                <h4 className="font-semibold" style={{ color: maturityTheme.colors.text.primary }}>
+                                  {phase.phase_name}
+                                </h4>
+                              </div>
+                              <div className="text-sm" style={{ color: maturityTheme.colors.text.secondary }}>
+                                Duration: {phase.duration_weeks} weeks
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-lg font-bold" style={{ color: maturityTheme.colors.success.text }}>
+                                +{phase.expected_maturity_improvement.toFixed(1)}
+                              </div>
+                              <div className="text-xs" style={{ color: maturityTheme.colors.text.muted }}>
+                                Maturity Gain
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="mb-2">
+                            <div className="text-xs font-semibold mb-1" style={{ color: maturityTheme.colors.text.primary }}>
+                              Success Metrics
+                            </div>
+                            <div className="space-y-1">
+                              {phase.success_metrics.map((metric, idx) => (
+                                <div key={idx} className="flex items-start gap-2">
+                                  <CheckCircle className="h-3 w-3 mt-0.5" style={{ color: maturityTheme.colors.success.text }} />
+                                  <span className="text-xs" style={{ color: maturityTheme.colors.text.secondary }}>
+                                    {metric}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </MaturityCard>
+              )}
+            </div>
+          )}
+
           {(() => {
             // Generate prioritized action plan from gaps
             const actionItems = (assessment.gaps || [])

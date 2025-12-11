@@ -1171,7 +1171,7 @@ export async function getBatchStatus(batchId: string): Promise<BatchStatusRespon
         '[]'
       ) as files
     FROM upload_batches ub
-    LEFT JOIN documents d ON d.upload_batch_id = ub.id
+    LEFT JOIN documents d ON (d.metadata->>'upload_batch_id')::uuid = ub.id
     LEFT JOIN quality_audits qa ON qa.document_id = d.id
     WHERE ub.id = $1
     GROUP BY ub.id
@@ -1206,7 +1206,8 @@ export async function getUploadedDocuments(projectId: string): Promise<any[]> {
   const query = `
     SELECT 
       d.id, d.title, d.original_filename, d.detected_type,
-      d.original_format, d.created_at, d.upload_batch_id,
+      d.original_format, d.created_at, 
+      (d.metadata->>'upload_batch_id')::uuid as upload_batch_id,
       qa.overall_score, qa.grade
     FROM documents d
     LEFT JOIN quality_audits qa ON qa.document_id = d.id

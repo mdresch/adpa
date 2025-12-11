@@ -647,184 +647,209 @@ export class ExtractionOrchestrationService {
         ]
       )
       
-      // Monitor child job completion with Promise-based guard to prevent race conditions
-      let completedCount = 0
-      let checkPromise: Promise<void> | null = null // Promise-based guard (better than boolean)
-      let checkInterval: NodeJS.Timeout | null = null
-      
-      const performCheck = async (): Promise<void> => {
-        try {
-          const states = await Promise.all(
-            childJobs.map(j => j.getState())
-          )
-          
-          const completed = states.filter(s => s === 'completed').length
-          const failed = states.filter(s => s === 'failed').length
-          
-          if (completed + failed === childJobs.length) {
-            // Clear interval before finalizing
-            if (checkInterval) {
-              clearInterval(checkInterval)
-              checkInterval = null
-            }
-            
-            // Get details about failed jobs for better error reporting
-            const failedJobs: Array<{ entityType: string; error: string }> = []
-            if (failed > 0) {
-              for (let i = 0; i < childJobs.length; i++) {
-                if (states[i] === 'failed') {
-                  try {
-                    const job = childJobs[i]
-                    const entityType = (job.data as any)?.entityType || 'unknown'
-                    
-                    // Try to get error from job's failedReason or returnvalue
-                    let errorMessage = 'Unknown error'
-                    try {
-                      // Bull stores error in failedReason property
-                      if ((job as any).failedReason) {
-                        errorMessage = (job as any).failedReason
-                      } else {
-                        // Try to get from returnvalue (if error was returned)
-                        const returnValue = job.returnvalue ?? null
-                        if (returnValue?.error) {
-                          errorMessage = returnValue.error
-                        } else if (returnValue?.message) {
-                          errorMessage = returnValue.message
-                        }
-                      }
-                    } catch (err) {
-                      // If we can't get error details, use generic message
-                      errorMessage = 'Failed after retries'
-                    }
-                    
-                    failedJobs.push({ entityType, error: errorMessage })
-                    log.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
-                      jobId: job.id,
-                      error: errorMessage,
-                      parentJobId: jobId,
-                      jobData: job.data
-                    })
-                  } catch (err: any) {
-                    log.error(`[EXTRACTION-PARENT] Could not get failed job details: ${err?.message || err}`, {
-                      jobId: childJobs[i].id,
-                      error: err
-                    })
-                    // Still add to failed list with generic error
-                    const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
-                    failedJobs.push({ entityType, error: `Could not retrieve error: ${err?.message || 'Unknown'}` })
-                  }
-                }
-              }
-              
-              // Log all failed entity types
-              const failedTypes = failedJobs.map(f => f.entityType).join(', ')
-              log.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
-                failedJobs,
-                completed,
-                total: childJobs.length
-              })
-              
-              // Allow partial success if at least 50% succeeded
-              const successRate = completed / childJobs.length
-              if (successRate >= 0.5) {
-                log.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
-                // Finalize with partial results
-                await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
-              } else {
-                // Too many failures - fail the entire job
-                const errorMessage = `${failed} entity extraction(s) failed: ${failedTypes}. Errors: ${failedJobs.map(f => `${f.entityType}: ${f.error}`).join('; ')}`
-                throw new Error(errorMessage)
-              }
-            } else {
-              // All succeeded - finalize parent job
-              await this.finalizeExtractionJob(jobId, projectId, undefined, workerId, updateJobStatus, domainRunIds, deps)
-            }
-          } else {
-            // Update progress based on completed child jobs
-            const progress = 10 + Math.floor((completed / childJobs.length) * 85)
-            await updateJobStatus(jobId, "processing", progress, workerId)
-            completedCount = completed
-          }
-        } catch (error: any) {
-          // IMPORTANT: Never throw from the interval callback.
-          // Throwing here would create an unhandled rejection and leave the
-          // parent extraction job stuck in "processing" forever.
+      // Monitor child job completion using a Promise that resolves when all children complete
+      // This ensures Bull doesn't mark the parent job as complete prematurely
+      const monitoringResult = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
+        let completedCount = 0
+        let checkInterval: NodeJS.Timeout | null = null
+        let isResolved = false // Prevent multiple resolutions
+        
+        const cleanup = () => {
           if (checkInterval) {
             clearInterval(checkInterval)
             checkInterval = null
           }
-
-          const errorMessage = error?.message || 'Unknown extraction monitoring error'
-          log.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
-            projectId,
-            stack: error?.stack
-          })
-
+          // Clean up global reference
+          if ((global as any).extractionIntervals) {
+            (global as any).extractionIntervals.delete(jobId)
+          }
+        }
+        
+        const performCheck = async (): Promise<void> => {
+          if (isResolved) return // Skip if already resolved
+          
           try {
-            // Mark the parent job as failed in our jobs table
-            await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
-            await db.query(
-              `UPDATE jobs 
-               SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP 
-               WHERE id = $2`,
-              [errorMessage, jobId]
+            // Check if job was cancelled
+            const statusCheck = await db.query(
+              'SELECT status FROM jobs WHERE id = $1',
+              [jobId]
             )
-
-            // Mark associated domain runs as failed so analytics stay consistent
-            await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds || domainRunIds, errorMessage, deps)
-          } catch (updateError: any) {
-            log.error(
-              `[EXTRACTION-PARENT] Failed to record monitoring failure for job ${jobId}: ${updateError?.message || updateError}`,
-              { projectId }
-            )
-          }
-        } finally {
-          checkPromise = null // Release guard
-        }
-      }
-      
-      // Start monitoring interval with Promise-based guard
-      checkInterval = setInterval(async () => {
-        // Check if job was cancelled before processing
-        try {
-          const statusCheck = await db.query(
-            'SELECT status FROM jobs WHERE id = $1',
-            [jobId]
-          )
-          if (statusCheck.rows.length > 0 && statusCheck.rows[0].status === 'cancelled') {
-            log.info(`[EXTRACTION-PARENT] Job ${jobId} was cancelled - stopping monitoring`)
-            if (checkInterval) {
-              clearInterval(checkInterval)
-              checkInterval = null
+            if (statusCheck.rows.length > 0 && statusCheck.rows[0].status === 'cancelled') {
+              log.info(`[EXTRACTION-PARENT] Job ${jobId} was cancelled - stopping monitoring`)
+              cleanup()
+              isResolved = true
+              resolve({ success: false, error: 'Job was cancelled' })
+              return
             }
-            return
+            
+            const states = await Promise.all(
+              childJobs.map(async (j) => {
+                try {
+                  const state = await j.getState()
+                  // Treat 'unknown' (job removed from queue) as completed
+                  // This happens when jobs are auto-cleaned after completion
+                  if (state === 'unknown') {
+                    log.debug(`[EXTRACTION-PARENT] Child job ${j.id} state is 'unknown' (removed from queue), treating as completed`)
+                    return 'completed'
+                  }
+                  return state
+                } catch (err) {
+                  // If we can't get state, assume completed (job was cleaned up)
+                  log.warn(`[EXTRACTION-PARENT] Could not get state for child job ${j.id}, assuming completed: ${err}`)
+                  return 'completed'
+                }
+              })
+            )
+            
+            const completed = states.filter(s => s === 'completed').length
+            const failed = states.filter(s => s === 'failed').length
+            
+            log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
+            
+            if (completed + failed === childJobs.length) {
+              // All children done - clean up and finalize
+              cleanup()
+              isResolved = true
+              
+              // Get details about failed jobs for better error reporting
+              const failedJobs: Array<{ entityType: string; error: string }> = []
+              if (failed > 0) {
+                for (let i = 0; i < childJobs.length; i++) {
+                  if (states[i] === 'failed') {
+                    try {
+                      const childJob = childJobs[i]
+                      const entityType = (childJob.data as any)?.entityType || 'unknown'
+                      
+                      // Try to get error from job's failedReason or returnvalue
+                      let errorMessage = 'Unknown error'
+                      try {
+                        if ((childJob as any).failedReason) {
+                          errorMessage = (childJob as any).failedReason
+                        } else {
+                          const returnValue = childJob.returnvalue ?? null
+                          if (returnValue?.error) {
+                            errorMessage = returnValue.error
+                          } else if (returnValue?.message) {
+                            errorMessage = returnValue.message
+                          }
+                        }
+                      } catch (err) {
+                        errorMessage = 'Failed after retries'
+                      }
+                      
+                      failedJobs.push({ entityType, error: errorMessage })
+                      log.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
+                        jobId: childJob.id,
+                        error: errorMessage,
+                        parentJobId: jobId,
+                        jobData: childJob.data
+                      })
+                    } catch (err: any) {
+                      log.error(`[EXTRACTION-PARENT] Could not get failed job details: ${err?.message || err}`, {
+                        jobId: childJobs[i].id,
+                        error: err
+                      })
+                      const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
+                      failedJobs.push({ entityType, error: `Could not retrieve error: ${err?.message || 'Unknown'}` })
+                    }
+                  }
+                }
+                
+                const failedTypes = failedJobs.map(f => f.entityType).join(', ')
+                log.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
+                  failedJobs,
+                  completed,
+                  total: childJobs.length
+                })
+                
+                // Allow partial success if at least 50% succeeded
+                const successRate = completed / childJobs.length
+                if (successRate >= 0.5) {
+                  log.info(`[EXTRACTION-PARENT] Allowing partial success: ${completed}/${childJobs.length} succeeded (${(successRate * 100).toFixed(1)}%)`)
+                  await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
+                  resolve({ success: true })
+                } else {
+                  const errorMessage = `${failed} entity extraction(s) failed: ${failedTypes}. Errors: ${failedJobs.map(f => `${f.entityType}: ${f.error}`).join('; ')}`
+                  reject(new Error(errorMessage))
+                }
+              } else {
+                // All succeeded
+                await this.finalizeExtractionJob(jobId, projectId, undefined, workerId, updateJobStatus, domainRunIds, deps)
+                resolve({ success: true })
+              }
+            } else {
+              // Update progress based on completed child jobs
+              const progress = 10 + Math.floor((completed / childJobs.length) * 85)
+              await updateJobStatus(jobId, "processing", progress, workerId)
+              completedCount = completed
+            }
+          } catch (error: any) {
+            if (isResolved) return
+            
+            cleanup()
+            isResolved = true
+            
+            const errorMessage = error?.message || 'Unknown extraction monitoring error'
+            log.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
+              projectId,
+              stack: error?.stack
+            })
+
+            try {
+              await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
+              await db.query(
+                `UPDATE jobs 
+                 SET status = 'failed', error_message = $1, 
+                     started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                     processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+                     completed_at = CURRENT_TIMESTAMP 
+                 WHERE id = $2`,
+                [errorMessage, jobId]
+              )
+              await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds || domainRunIds, errorMessage, deps)
+            } catch (updateError: any) {
+              log.error(
+                `[EXTRACTION-PARENT] Failed to record monitoring failure for job ${jobId}: ${updateError?.message || updateError}`,
+                { projectId }
+              )
+            }
+            
+            reject(error)
           }
-        } catch (err) {
-          log.warn(`[EXTRACTION-PARENT] Failed to check job status for cancellation: ${err}`)
         }
         
-        // Skip if previous check is still running
-        if (checkPromise) {
-          log.debug(`[EXTRACTION-PARENT] Skipping check - previous check still running for job ${jobId}`)
-          return
+        // Start monitoring interval
+        checkInterval = setInterval(() => {
+          performCheck().catch(err => {
+            log.error(`[EXTRACTION-PARENT] Unhandled error in check for job ${jobId}:`, err)
+          })
+        }, 3000) // Check every 3 seconds
+        
+        // Store interval reference for cleanup on cancellation
+        if (!(global as any).extractionIntervals) {
+          (global as any).extractionIntervals = new Map<string, NodeJS.Timeout>()
         }
+        (global as any).extractionIntervals.set(jobId, checkInterval)
         
-        // Start new check and store promise
-        checkPromise = performCheck()
-        
-        // Handle promise rejection (shouldn't happen due to try-catch, but safety first)
-        checkPromise.catch((err) => {
-          log.error(`[EXTRACTION-PARENT] Unhandled error in check promise for job ${jobId}:`, err)
-          checkPromise = null
+        // Run first check immediately
+        performCheck().catch(err => {
+          log.error(`[EXTRACTION-PARENT] Initial check failed for job ${jobId}:`, err)
         })
-      }, 3000) // Check every 3 seconds
+        
+        // Add a timeout to prevent jobs from hanging forever (30 minutes max)
+        setTimeout(() => {
+          if (!isResolved) {
+            cleanup()
+            isResolved = true
+            const timeoutError = 'Extraction job timed out after 30 minutes'
+            log.error(`[EXTRACTION-PARENT] ${timeoutError}: ${jobId}`)
+            reject(new Error(timeoutError))
+          }
+        }, 30 * 60 * 1000) // 30 minute timeout
+      })
       
-      // Store interval reference in a global map for cleanup on cancellation
-      // Note: In production, consider using Redis or a shared store for multi-process scenarios
-      if (!(global as any).extractionIntervals) {
-        (global as any).extractionIntervals = new Map<string, NodeJS.Timeout>()
-      }
-      ;(global as any).extractionIntervals.set(jobId, checkInterval)
+      log.info(`[EXTRACTION-PARENT] Monitoring completed for job ${jobId}`, { result: monitoringResult })
+      return monitoringResult
       
     } catch (error: any) {
       log.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
@@ -841,7 +866,10 @@ export class ExtractionOrchestrationService {
       
       await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
       await db.query(
-        `UPDATE jobs SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+        `UPDATE jobs SET status = 'failed', error_message = $1, 
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+             completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
         [error.message, jobId]
       )
       await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds, error.message, deps)
@@ -1206,7 +1234,10 @@ export class ExtractionOrchestrationService {
       // Instead, we store the partial success info in the result JSON
       await db.query(
         `UPDATE jobs 
-         SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+         SET status = 'completed', result = $1, progress = 100, 
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+             completed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [JSON.stringify(result), jobId]
       )
@@ -1248,7 +1279,10 @@ export class ExtractionOrchestrationService {
       // Update job with error
       await db.query(
         `UPDATE jobs 
-         SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+         SET status = 'failed', error_message = $1, 
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+             completed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [error.message || "Unknown error", jobId]
       )

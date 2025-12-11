@@ -10,7 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
-import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Cloud, Loader2 } from "lucide-react"
+import { Settings, Plus, TestTube, CheckCircle, AlertCircle, ExternalLink, RefreshCw, Cloud, Loader2, FileText, Download, ArrowDown } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
@@ -25,6 +25,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 
 export default function Integrations() {
   const { user } = useAuth()
@@ -61,12 +68,46 @@ export default function Integrations() {
     syncInterval: 60,
   })
 
-  // Load existing integrations on component mount
+  // Notion configuration state
+  const [notionConfig, setNotionConfig] = useState({
+    integrationToken: "",
+    defaultDatabaseId: "",
+    syncEnabled: true,
+    autoSync: false,
+    syncInterval: 60,
+  })
+
+  // Projects for Notion sync target selection
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>("")
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<any>(null)
+
+  // Load existing integrations on component mount (only if user is logged in)
   useEffect(() => {
-    loadExistingIntegrations()
-  }, [])
+    if (user) {
+      loadExistingIntegrations()
+      loadProjects()
+    } else {
+      setLoading(false)
+    }
+  }, [user])
+
+  const loadProjects = async () => {
+    try {
+      const response = await apiClient.getProjects({ page: 1, pageSize: 100 })
+      setProjects(response.projects || [])
+    } catch (error) {
+      console.error("Failed to load projects:", error)
+    }
+  }
 
   const loadExistingIntegrations = async () => {
+    if (!user) {
+      console.log("User not logged in, skipping integration load")
+      setLoading(false)
+      return
+    }
     try {
       setLoading(true)
       console.log("Loading integrations from backend...")
@@ -197,6 +238,19 @@ export default function Integrations() {
           clientId: config.client_id || "",
           clientSecret: config.client_secret || "",
           defaultSiteId: config.default_site_id || "",
+          syncEnabled: config.sync_enabled !== undefined ? config.sync_enabled : prev.syncEnabled,
+          autoSync: config.auto_sync !== undefined ? config.auto_sync : prev.autoSync,
+          syncInterval: config.sync_interval || prev.syncInterval,
+        }))
+      }
+
+      const notionIntegration = backendIntegrations.find((i: any) => i.type === "notion")
+      if (notionIntegration) {
+        const config = notionIntegration.configuration || {}
+        setNotionConfig(prev => ({
+          ...prev,
+          integrationToken: "", // Credentials are encrypted and not returned
+          defaultDatabaseId: config.default_database_id || "",
           syncEnabled: config.sync_enabled !== undefined ? config.sync_enabled : prev.syncEnabled,
           autoSync: config.auto_sync !== undefined ? config.auto_sync : prev.autoSync,
           syncInterval: config.sync_interval || prev.syncInterval,
@@ -477,6 +531,165 @@ export default function Integrations() {
     }
   }
 
+  // Notion handlers
+  const handleNotionConfigChange = (field: string, value: any) => {
+    console.log("Notion config change:", field, value)
+    setNotionConfig(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const testNotionConnection = async () => {
+    console.log("Testing Notion connection...")
+    console.log("realIntegrations:", realIntegrations)
+    setTesting(true)
+    try {
+      if (!user) {
+        toast.error("Please log in first to test the connection")
+        setTesting(false)
+        return
+      }
+
+      const existingNotionIntegration = realIntegrations.find(i => i.type === "notion")
+      
+      // Check if we have a valid NEW token entered (must start with ntn_ or secret_ and be long enough)
+      const enteredToken = notionConfig.integrationToken?.trim() || ""
+      const isValidNewToken = enteredToken.length >= 40 && (enteredToken.startsWith("ntn_") || enteredToken.startsWith("secret_"))
+
+      console.log("Test connection debug:", {
+        enteredTokenLength: enteredToken.length,
+        enteredTokenPrefix: enteredToken.substring(0, 10),
+        isValidNewToken,
+        hasStoredIntegration: !!existingNotionIntegration,
+        existingIntegrationId: existingNotionIntegration?.id,
+        realIntegrationsCount: realIntegrations.length
+      })
+
+      // Priority 1: If there's a stored integration, use stored credentials (most reliable)
+      if (existingNotionIntegration) {
+        console.log("Using stored credentials for test via /:id/test endpoint...")
+        const response = await apiClient.post(`/integrations/${existingNotionIntegration.id}/test`, {})
+
+        console.log("Response data:", response)
+
+        const resp = response as { success?: boolean; message?: string; details?: any; error?: string }
+        if (resp.success) {
+          toast.success(`Notion connection successful! ${resp.message || ''} ✅`)
+        } else {
+          const errorMessage = resp.error || resp.message || "Connection failed"
+          toast.error(`Notion connection failed: ${errorMessage}`)
+          console.error("Notion connection test failed:", resp)
+        }
+      } 
+      // Priority 2: No stored integration but user entered a valid new token
+      else if (isValidNewToken) {
+        console.log("Testing with newly entered token...")
+        const response = await apiClient.post("/integrations/notion/test", {
+          integrationToken: enteredToken,
+        })
+
+        console.log("Response data:", response)
+
+        const resp = response as { success?: boolean; workspaceName?: string; pagesFound?: number; error?: string; message?: string }
+        if (resp.success) {
+          toast.success(`Notion connection successful! Found ${resp.pagesFound || 0} accessible pages ✅`)
+        } else {
+          const errorMessage = resp.error || resp.message || "Connection failed"
+          toast.error(`Notion connection failed: ${errorMessage}`)
+          console.error("Notion connection test failed:", resp)
+        }
+      } 
+      // No stored integration and no valid token
+      else {
+        toast.error("Please enter a valid Notion Integration Token (starts with 'ntn_' or 'secret_')")
+      }
+    } catch (error: any) {
+      console.error("Notion connection test failed:", error)
+      toast.error(`Connection test failed: ${error.message}`)
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const saveNotionConfiguration = async () => {
+    console.log("Saving Notion configuration...")
+    setSaving(true)
+    try {
+      if (!user) {
+        toast.error("Please log in to save configuration")
+        setSaving(false)
+        return
+      }
+
+      const existingNotionIntegration = realIntegrations.find(i => i.type === "notion")
+      
+      // For new integrations, a valid token is required
+      const enteredToken = notionConfig.integrationToken?.trim() || ""
+      const isValidToken = enteredToken.length >= 40 && (enteredToken.startsWith("ntn_") || enteredToken.startsWith("secret_"))
+      
+      if (!existingNotionIntegration && !isValidToken) {
+        toast.error("A valid Integration Token is required for new Notion integrations (must start with 'ntn_' or 'secret_')")
+        setSaving(false)
+        return
+      }
+
+      const configData: any = {
+        name: "Notion",
+        type: "notion",
+        configuration: {
+          default_database_id: notionConfig.defaultDatabaseId,
+          sync_enabled: notionConfig.syncEnabled,
+          auto_sync: notionConfig.autoSync,
+          sync_interval: notionConfig.syncInterval,
+        },
+        is_active: true,
+      }
+
+      // Only include credentials if a valid new token was provided
+      // (invalid/empty token means keep the existing encrypted one)
+      if (isValidToken) {
+        configData.credentials = {
+          integration_token: notionConfig.integrationToken.trim(),
+        }
+      }
+
+      console.log("Config data:", {
+        ...configData,
+        credentials: configData.credentials ? { integration_token: "***" } : "not updating credentials"
+      })
+
+      console.log("Existing integration:", existingNotionIntegration?.id || "none")
+
+      if (existingNotionIntegration) {
+        console.log("Updating existing integration...")
+        await apiClient.updateIntegration(existingNotionIntegration.id, configData)
+        toast.success("Notion configuration updated successfully! ✅")
+      } else {
+        console.log("Creating new integration...")
+        await apiClient.createIntegration(configData)
+        toast.success("Notion configuration saved successfully! ✅")
+      }
+
+      console.log("Reloading integrations...")
+      await loadExistingIntegrations()
+
+    } catch (error) {
+      console.error("Failed to save Notion configuration:", error)
+      let errorMessage = "Failed to save configuration"
+      if (typeof error === "object" && error !== null && "message" in error && typeof (error as any).message === "string") {
+        errorMessage = (error as any).message
+      } else if (typeof error === "string") {
+        errorMessage = error
+      } else if (error !== null && error !== undefined) {
+        errorMessage = String(error)
+      }
+      toast.error(`Save failed: ${errorMessage}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // Overview tab handlers
   const handleTestIntegration = async (integration: any) => {
     console.log("Testing integration:", integration.name, integration.type)
@@ -484,6 +697,8 @@ export default function Integrations() {
       await testConfluenceConnection()
     } else if (integration.type === "sharepoint") {
       await testSharepointConnection()
+    } else if (integration.type === "notion") {
+      await testNotionConnection()
     } else {
       toast.info(`Testing for ${integration.name} not yet implemented`)
     }
@@ -524,6 +739,9 @@ export default function Integrations() {
         } else {
           toast.error(`SharePoint sync failed: ${data.error}`)
         }
+      } else if (integration.type === "notion") {
+        // Use the dedicated Notion sync function with project selection
+        await handleNotionSync()
       } else {
         toast.info(`Sync for ${integration.name} not yet implemented`)
       }
@@ -532,6 +750,89 @@ export default function Integrations() {
     } catch (error) {
       console.error("Sync failed:", error)
       toast.error("Sync failed - please check your connection")
+    }
+  }
+
+  // Dedicated Notion sync function with project selection
+  const handleNotionSync = async (projectId?: string) => {
+    const notionIntegration = realIntegrations.find(i => i.type === "notion")
+    if (!notionIntegration) {
+      toast.error("Please save a Notion integration configuration first")
+      return
+    }
+
+    if (!user) {
+      toast.error("Please login first")
+      return
+    }
+
+    try {
+      setSyncing(true)
+      setSyncResult(null)
+
+      const targetProjectId = projectId || selectedProjectId
+
+      // Get token from auth_token (where apiClient stores it)
+      const token = localStorage.getItem('auth_token')
+      if (!token) {
+        toast.error("Session expired - please login again")
+        return
+      }
+
+      // Call API directly on port 5000 to bypass Next.js proxy
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const response = await fetch(`${apiBaseUrl}/integrations/${notionIntegration.id}/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          projectId: targetProjectId || null,
+          companyId: user?.company_id || null
+        })
+      })
+
+      // Handle non-JSON responses - read as text first, then parse
+      const responseText = await response.text()
+      let data: any
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        throw new Error(`Server error: ${response.status} - ${responseText || response.statusText}`)
+      }
+      
+      if (data.success) {
+        const count = data.details?.synced_items || 0
+        const projectName = targetProjectId 
+          ? projects.find(p => p.id === targetProjectId)?.name || "selected project"
+          : "no project (unassigned)"
+        toast.success(`Imported ${count} documents from Notion into ${projectName}`)
+        setSyncResult({
+          success: true,
+          count,
+          projectId: targetProjectId,
+          timestamp: new Date().toISOString()
+        })
+      } else {
+        const errorMsg = data.message || data.details?.error || data.error || "Unknown error"
+        toast.error(`Notion import failed: ${errorMsg}`)
+        setSyncResult({
+          success: false,
+          error: errorMsg
+        })
+      }
+
+      await loadExistingIntegrations()
+    } catch (error: any) {
+      console.error("Notion sync failed:", error)
+      toast.error(`Notion import failed: ${error.message}`)
+      setSyncResult({
+        success: false,
+        error: error.message
+      })
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -601,6 +902,7 @@ export default function Integrations() {
                         <option value="">Select integration type</option>
                         <option value="confluence">Atlassian Confluence</option>
                         <option value="sharepoint">Microsoft SharePoint</option>
+                        <option value="notion">Notion</option>
                         <option value="adobe">Adobe Document Services</option>
                         <option value="github">GitHub</option>
                         <option value="gitlab">GitLab</option>
@@ -631,6 +933,7 @@ export default function Integrations() {
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="confluence">Confluence</TabsTrigger>
                 <TabsTrigger value="sharepoint">SharePoint</TabsTrigger>
+                <TabsTrigger value="notion">Notion</TabsTrigger>
                 <TabsTrigger value="adobe">Adobe</TabsTrigger>
                 <TabsTrigger value="vcs">Version Control</TabsTrigger>
               </TabsList>
@@ -1211,6 +1514,324 @@ export default function Integrations() {
                       <h6 className="font-medium text-blue-900 mb-2">Testing Your Setup</h6>
                       <p className="text-sm text-blue-800">
                         After completing the setup, enter your Tenant ID, Client ID, and Client Secret above, then click "Test Connection" to verify the integration works correctly.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="notion" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Notion Configuration</CardTitle>
+                    <CardDescription>
+                      Configure Notion integration for document synchronization and knowledge management
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                        <span>Loading configuration...</span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Authentication */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Authentication</h4>
+                          <div className="space-y-2">
+                            <Label htmlFor="notion-token">Integration Token</Label>
+                            <Input
+                              id="notion-token"
+                              type="password"
+                              placeholder="Your Notion Internal Integration Token"
+                              value={notionConfig.integrationToken}
+                              onChange={(e) => handleNotionConfigChange('integrationToken', e.target.value)}
+                              autoComplete="off"
+                              data-lpignore="true"
+                              data-form-type="other"
+                            />
+                            {notionConfig.integrationToken && (
+                              <p className="text-xs text-green-600">Token entered ({notionConfig.integrationToken.length} characters)</p>
+                            )}
+                            {!notionConfig.integrationToken && realIntegrations.find(i => i.type === "notion") && (
+                              <p className="text-xs text-blue-600">Using stored token from saved configuration</p>
+                            )}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Create an internal integration in Notion and copy the token.
+                            <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-1">
+                              Manage integrations
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Optional Configuration */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Optional Configuration</h4>
+                          <div className="space-y-2">
+                            <Label htmlFor="notion-database">Default Database ID (optional)</Label>
+                            <Input
+                              id="notion-database"
+                              placeholder="Database ID to sync documents to"
+                              value={notionConfig.defaultDatabaseId}
+                              onChange={(e) => handleNotionConfigChange('defaultDatabaseId', e.target.value)}
+                            />
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            The database ID can be found in the URL of your Notion database (the 32-character string after the workspace name).
+                          </div>
+                        </div>
+
+                        {/* Sync Options */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Sync Options</h4>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Enable Synchronization</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Allow documents to be synchronized between ADPA and Notion
+                              </p>
+                            </div>
+                            <Switch
+                              checked={notionConfig.syncEnabled}
+                              onCheckedChange={(checked) => handleNotionConfigChange('syncEnabled', checked)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Auto Sync</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically sync documents at regular intervals
+                              </p>
+                            </div>
+                            <Switch
+                              checked={notionConfig.autoSync}
+                              onCheckedChange={(checked) => handleNotionConfigChange('autoSync', checked)}
+                            />
+                          </div>
+
+                          {notionConfig.autoSync && (
+                            <div className="space-y-2">
+                              <Label htmlFor="notion-sync-interval">Sync Interval (minutes)</Label>
+                              <Input
+                                id="notion-sync-interval"
+                                type="number"
+                                min="5"
+                                max="1440"
+                                placeholder="60"
+                                value={notionConfig.syncInterval}
+                                onChange={(e) => handleNotionConfigChange('syncInterval', parseInt(e.target.value) || 60)}
+                              />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            onClick={testNotionConnection}
+                            disabled={testing || !notionConfig.integrationToken}
+                          >
+                            {testing ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Testing...
+                              </>
+                            ) : (
+                              <>
+                                <TestTube className="h-4 w-4 mr-2" />
+                                Test Connection
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={saveNotionConfiguration}
+                            disabled={saving || !notionConfig.integrationToken}
+                          >
+                            {saving ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Settings className="h-4 w-4 mr-2" />
+                                Save Configuration
+                              </>
+                            )}
+                          </Button>
+                          <Button variant="outline" asChild>
+                            <Link href="/integrations/notion">
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              Advanced Settings
+                            </Link>
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Import from Notion Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Download className="h-5 w-5" />
+                      Import from Notion
+                    </CardTitle>
+                    <CardDescription>
+                      Import pages and database entries from your Notion workspace into ADPA
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Sync Direction Indicator */}
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 text-blue-700">
+                          <span className="font-medium">Notion</span>
+                          <ArrowDown className="h-4 w-4" />
+                          <span className="font-medium">ADPA</span>
+                        </div>
+                        <Badge variant="secondary">One-way Import</Badge>
+                      </div>
+                      <p className="text-sm text-blue-600 mt-2">
+                        Documents from Notion will be imported into ADPA. Changes made in ADPA will not sync back to Notion.
+                      </p>
+                    </div>
+
+                    {/* Project Selection */}
+                    <div className="space-y-2">
+                      <Label htmlFor="notion-target-project">Target Project (optional)</Label>
+                      <Select value={selectedProjectId || "none"} onValueChange={(value) => setSelectedProjectId(value === "none" ? "" : value)}>
+                        <SelectTrigger id="notion-target-project">
+                          <SelectValue placeholder="Select a project to import documents into" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No project (import as unassigned)</SelectItem>
+                          {projects.map((project) => (
+                            <SelectItem key={project.id} value={project.id}>
+                              {project.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        {selectedProjectId 
+                          ? `Documents will be added to the selected project.`
+                          : `Documents will be imported without a project. You can assign them later.`}
+                      </p>
+                    </div>
+
+                    {/* Import Status/Result */}
+                    {syncResult && (
+                      <div className={`p-4 rounded-lg ${syncResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                        {syncResult.success ? (
+                          <div className="flex items-center gap-2 text-green-700">
+                            <CheckCircle className="h-5 w-5" />
+                            <span>Successfully imported {syncResult.count} documents</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-red-700">
+                            <AlertCircle className="h-5 w-5" />
+                            <span>Import failed: {syncResult.error}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Import Button */}
+                    <div className="pt-2">
+                      <Button 
+                        onClick={() => handleNotionSync()}
+                        disabled={syncing || !realIntegrations.find(i => i.type === "notion")}
+                        className="w-full"
+                      >
+                        {syncing ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Importing from Notion...
+                          </>
+                        ) : (
+                          <>
+                            <Download className="h-4 w-4 mr-2" />
+                            Import Documents from Notion
+                          </>
+                        )}
+                      </Button>
+                      {!realIntegrations.find(i => i.type === "notion") && (
+                        <p className="text-xs text-muted-foreground text-center mt-2">
+                          Save a Notion configuration above before importing
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Notion Setup Instructions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Notion Integration Setup
+                    </CardTitle>
+                    <CardDescription>
+                      Step-by-step instructions to set up Notion integration
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="space-y-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold">1</div>
+                        <div>
+                          <h5 className="font-medium">Create an Internal Integration</h5>
+                          <p className="text-sm text-muted-foreground">
+                            Go to <a href="https://www.notion.so/my-integrations" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Notion Integrations</a> → Create new integration
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold">2</div>
+                        <div>
+                          <h5 className="font-medium">Configure Capabilities</h5>
+                          <p className="text-sm text-muted-foreground">Enable these capabilities:</p>
+                          <ul className="text-sm text-muted-foreground mt-1 ml-4 list-disc">
+                            <li>Read content</li>
+                            <li>Update content</li>
+                            <li>Insert content</li>
+                          </ul>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold">3</div>
+                        <div>
+                          <h5 className="font-medium">Copy the Integration Token</h5>
+                          <p className="text-sm text-muted-foreground">
+                            Copy the "Internal Integration Token" from the secrets section
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-6 h-6 bg-black text-white rounded-full flex items-center justify-center text-sm font-bold">4</div>
+                        <div>
+                          <h5 className="font-medium">Connect Pages/Databases to Integration</h5>
+                          <p className="text-sm text-muted-foreground">
+                            In Notion, open any page or database you want to sync → Click ⋯ (more) → Add connections → Select your integration
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                      <h6 className="font-medium text-gray-900 mb-2">Testing Your Setup</h6>
+                      <p className="text-sm text-gray-800">
+                        After completing the setup, enter your Integration Token above, then click "Test Connection" to verify the integration works correctly.
                       </p>
                     </div>
                   </CardContent>

@@ -5,6 +5,7 @@ import { authenticateToken, requirePermission } from "../middleware/auth"
 import { validate, validateParams, validateQuery } from "../middleware/validation"
 import { logger, childLogger } from "../utils/logger"
 import { v4 as uuidv4 } from "uuid"
+import { NotionIntegration } from "../integrations/notion"
 
 const router = express.Router()
 
@@ -138,7 +139,7 @@ router.post("/",
   requirePermission("integrations.create"),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).required(),
-    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira").required(),
+    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion").required(),
     configuration: Joi.object().required(),
     credentials: Joi.object().required(),
     is_active: Joi.boolean().default(true),
@@ -192,6 +193,7 @@ router.put("/:id",
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   validate(Joi.object({
     name: Joi.string().min(2).max(100).optional(),
+    type: Joi.string().valid("confluence", "sharepoint", "github", "slack", "teams", "adobe", "jira", "notion").optional(),
     configuration: Joi.object().optional(),
     credentials: Joi.object().optional(),
     is_active: Joi.boolean().optional(),
@@ -292,6 +294,65 @@ router.delete("/:id",
   }
 )
 
+// Test Notion connection directly (without existing integration)
+// This route MUST come before /:id/test to avoid "notion" being matched as an ID
+router.post("/notion/test",
+  authenticateToken,
+  validate(Joi.object({
+    integrationToken: Joi.string().required(),
+  })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { integrationToken } = req.body
+
+      log.info("Testing Notion connection...", { 
+        tokenLength: integrationToken?.length,
+        tokenPrefix: integrationToken?.substring(0, 10) + "..."
+      })
+
+      if (!integrationToken || integrationToken.trim().length === 0) {
+        return res.json({
+          success: false,
+          message: "Connection test failed",
+          error: "Integration token is required",
+        })
+      }
+
+      const { NotionClient } = await import("../integrations/notion")
+      const client = new NotionClient({ apiKey: integrationToken.trim() })
+      
+      // Test connection by getting current user
+      const testResult = await client.testConnection()
+      
+      if (testResult) {
+        // Try to search for pages to verify access
+        const searchResult = await client.search("", undefined, 1)
+        
+        res.json({
+          success: true,
+          message: "Notion connection successful",
+          workspaceName: "Connected",
+          pagesFound: searchResult.results?.length || 0,
+        })
+      } else {
+        res.json({
+          success: false,
+          message: "Failed to connect to Notion",
+          error: "Connection test failed",
+        })
+      }
+    } catch (error: any) {
+      log.error("Notion connection test error:", error)
+      res.json({
+        success: false,
+        message: "Connection test failed",
+        error: error.message || "Unknown error",
+      })
+    }
+  }
+)
+
 // Test integration connection
 router.post("/:id/test", 
   authenticateToken, 
@@ -317,6 +378,13 @@ router.post("/:id/test",
       const credentials = JSON.parse(
         Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
       )
+
+      log.info("Decrypted credentials for test:", {
+        hasIntegrationToken: !!credentials.integration_token,
+        hasApiKey: !!credentials.apiKey,
+        tokenLength: credentials.integration_token?.length || credentials.apiKey?.length || 0,
+        tokenPrefix: (credentials.integration_token || credentials.apiKey)?.substring(0, 10) + "..."
+      })
 
       // Test connection based on integration type
       const testResult = await testIntegrationConnection(integration.type, integration.configuration, credentials)
@@ -348,8 +416,11 @@ router.post("/:id/sync",
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
+    log.info("Sync endpoint hit", { id: req.params.id, body: req.body })
     try {
       const { id } = req.params
+      const { projectId, companyId } = req.body || {}
+      const user = (req as any).user
 
       const result = await pool.query(
         "SELECT * FROM integrations WHERE id = $1 AND is_active = true",
@@ -368,8 +439,13 @@ router.post("/:id/sync",
         [id]
       )
 
-      // Perform sync (placeholder implementation)
-      const syncResult = await performIntegrationSync(integration)
+      // Perform sync with options (project, company, author)
+      const syncOptions = {
+        projectId: projectId || null,
+        companyId: companyId || user?.company_id || null,
+        authorId: user?.id || null
+      }
+      const syncResult = await performIntegrationSync(integration, syncOptions)
 
       // Update sync status and timestamp
       await pool.query(
@@ -388,16 +464,28 @@ router.post("/:id/sync",
         success: syncResult.success,
         details: syncResult.details,
       })
-    } catch (error) {
-      log.error("Sync integration error:", error)
+    } catch (error: any) {
+      log.error("Sync integration error:", { 
+        error: error.message, 
+        stack: error.stack,
+        integrationId: req.params.id 
+      })
       
       // Update sync status to error
-  await pool.query(
-        "UPDATE integrations SET sync_status = 'error', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-        [req.params.id]
-      )
+      try {
+        await pool.query(
+          "UPDATE integrations SET sync_status = 'error', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+          [req.params.id]
+        )
+      } catch (updateError) {
+        log.error("Failed to update sync status:", updateError)
+      }
 
-      res.status(500).json({ error: "Internal server error" })
+      res.status(500).json({ 
+        error: "Internal server error", 
+        message: error.message,
+        success: false 
+      })
   }
   }
 )
@@ -449,6 +537,12 @@ router.get("/types/available", authenticateToken, async (req, res) => {
         description: "Project management and issue tracking",
         features: ["project_sync", "issue_tracking", "workflow_management"],
       },
+      {
+        type: "notion",
+        name: "Notion",
+        description: "Full sync of pages and databases from Notion workspaces",
+        features: ["document_sync", "database_sync", "markdown_conversion", "full_sync"],
+      },
     ]
 
     res.json({ types })
@@ -460,23 +554,93 @@ router.get("/types/available", authenticateToken, async (req, res) => {
 
 // Placeholder functions for integration testing and syncing
 async function testIntegrationConnection(type: string, configuration: any, credentials: any) {
-  // This would implement actual connection testing for each integration type
-  return {
-    success: true,
-    message: "Connection test successful",
-    details: { type, tested_at: new Date().toISOString() },
+  // Implement actual connection testing for each integration type
+  switch (type) {
+    case "notion":
+      try {
+        const { NotionClient } = await import("../integrations/notion")
+        const client = new NotionClient({ apiKey: credentials.integration_token || credentials.apiKey })
+        const connected = await client.testConnection()
+        return {
+          success: connected,
+          message: connected ? "Connection test successful" : "Connection test failed",
+          details: { type, tested_at: new Date().toISOString() },
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          message: `Connection test failed: ${error.message}`,
+          details: { type, tested_at: new Date().toISOString(), error: error.message },
+        }
+      }
+    default:
+      return {
+        success: true,
+        message: "Connection test successful",
+        details: { type, tested_at: new Date().toISOString() },
+      }
   }
 }
 
-async function performIntegrationSync(integration: any) {
-  // This would implement actual sync logic for each integration type
-  return {
-    success: true,
-    details: {
-      synced_items: 0,
-      sync_duration: "0.5s",
-      last_sync: new Date().toISOString(),
-    },
+interface SyncOptions {
+  projectId?: string | null
+  companyId?: string | null
+  authorId?: string | null
+}
+
+async function performIntegrationSync(integration: any, syncOptions: SyncOptions = {}) {
+  // Decrypt credentials
+  const credentials = JSON.parse(
+    Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+  )
+
+  // Implement actual sync logic for each integration type
+  switch (integration.type) {
+    case "notion":
+      try {
+        const notionIntegration = new NotionIntegration(
+          { apiKey: credentials.integration_token || credentials.apiKey },
+          integration.id,
+          {
+            projectId: syncOptions.projectId || undefined,
+            companyId: syncOptions.companyId || undefined,
+            authorId: syncOptions.authorId || undefined
+          }
+        )
+        
+        // Perform full sync
+        const documents = await notionIntegration.syncDocuments()
+        
+        return {
+          success: true,
+          details: {
+            synced_items: documents.length,
+            sync_duration: "completed",
+            last_sync: new Date().toISOString(),
+            projectId: syncOptions.projectId || null,
+            companyId: syncOptions.companyId || null,
+          },
+        }
+      } catch (error: any) {
+        logger.error("Notion sync error:", error)
+        return {
+          success: false,
+          details: {
+            synced_items: 0,
+            error: error.message,
+            last_sync: new Date().toISOString(),
+          },
+        }
+      }
+    default:
+      return {
+        success: true,
+        details: {
+          synced_items: 0,
+          sync_duration: "0.5s",
+          last_sync: new Date().toISOString(),
+        },
+      }
   }
 }
 

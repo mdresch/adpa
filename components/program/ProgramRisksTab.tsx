@@ -208,21 +208,70 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
     void fetchRisks();
   }, [programId]);
 
+  // Convert numeric impact (1-5) to text format for database
+  const impactToText = (impact: number): string => {
+    if (impact >= 4) return 'high';
+    if (impact >= 2) return 'medium';
+    return 'low';
+  };
+
+  // Convert numeric probability (0-100) to text format for database
+  const probabilityToText = (probability: number): string => {
+    if (probability >= 66) return 'high';
+    if (probability >= 33) return 'medium';
+    return 'low';
+  };
+
+  // Map frontend status to database status format
+  // DB expects: 'identified', 'mitigated', 'accepted', 'transferred'
+  // Frontend uses: 'open', 'mitigating', 'mitigated', 'accepted', 'closed'
+  const statusToDbFormat = (status: string): string => {
+    const statusMap: Record<string, string> = {
+      'open': 'identified',
+      'mitigating': 'identified',
+      'mitigated': 'mitigated',
+      'accepted': 'accepted',
+      'closed': 'mitigated',
+    };
+    return statusMap[status] || 'identified';
+  };
+
   // Handle form submission
   const handleSubmit = async () => {
     try {
+      const { getApiUrl } = await import('@/lib/api-url');
       const severity = calculateSeverity(formData.probability, formData.impact);
+      
+      // Convert values to format expected by database constraints
       const riskData = {
-        ...formData,
-        severity,
-        programId,
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        owner: formData.owner,
+        status: statusToDbFormat(formData.status),
+        probability: probabilityToText(formData.probability),
+        impact: impactToText(formData.impact),
+        mitigation_strategy: formData.mitigation,
       };
 
-      const url = editingRisk
-        ? `${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/risks/${editingRisk.id}`
-        : `${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/risks`;
-
-      const method = editingRisk ? 'PUT' : 'POST';
+      let url: string;
+      let method: 'PUT' | 'POST';
+      
+      if (editingRisk) {
+        // When editing, use the project endpoint if the risk has a project_id
+        // This preserves the project association
+        if (editingRisk.projectId) {
+          url = getApiUrl(`/projects/${editingRisk.projectId}/risks/${editingRisk.id}`);
+        } else {
+          // Fallback for risks without a project (shouldn't happen but handle gracefully)
+          url = getApiUrl(`/programs/${programId}/risks/${editingRisk.id}`);
+        }
+        method = 'PUT';
+      } else {
+        // For new risks created at program level (if supported in future)
+        url = getApiUrl(`/programs/${programId}/risks`);
+        method = 'POST';
+      }
 
       const response = await fetch(url, {
         method,
@@ -239,24 +288,9 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
         resetForm();
         fetchRisks();
       } else {
-        // For demo, simulate success
-        const newRisk: Risk = {
-          id: Date.now().toString(),
-          ...riskData,
-          severity,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        if (editingRisk) {
-          setRisks(risks.map((r) => (r.id === editingRisk.id ? newRisk : r)));
-          toast.success('Risk updated successfully');
-        } else {
-          setRisks([...risks, newRisk]);
-          toast.success('Risk created successfully');
-        }
-        setDialogOpen(false);
-        resetForm();
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to save risk:', response.status, errorData);
+        toast.error(errorData.message || `Failed to ${editingRisk ? 'update' : 'create'} risk`);
       }
     } catch (error) {
       console.error('Failed to save risk:', error);
@@ -283,23 +317,34 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
     if (!confirm('Are you sure you want to delete this risk?')) return;
 
     try {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/programs/${programId}/risks/${riskId}`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
-          },
-        }
-      );
+      const { getApiUrl } = await import('@/lib/api-url');
+      
+      // Find the risk to get its projectId
+      const riskToDelete = risks.find(r => r.id === riskId);
+      let url: string;
+      
+      if (riskToDelete?.projectId) {
+        // Use project endpoint to delete the risk
+        url = getApiUrl(`/projects/${riskToDelete.projectId}/risks/${riskId}`);
+      } else {
+        // Fallback for risks without a project
+        url = getApiUrl(`/programs/${programId}/risks/${riskId}`);
+      }
+
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+      });
 
       if (response.ok) {
         toast.success('Risk deleted successfully');
         fetchRisks();
       } else {
-        // For demo, simulate success
-        setRisks(risks.filter((r) => r.id !== riskId));
-        toast.success('Risk deleted successfully');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Failed to delete risk:', response.status, errorData);
+        toast.error(errorData.message || 'Failed to delete risk');
       }
     } catch (error) {
       console.error('Failed to delete risk:', error);

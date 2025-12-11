@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
+import { Skeleton } from "@/components/ui/skeleton"
 
 // Extend AnimatedGridItem to accept animationDelay prop
 type AnimatedGridItemProps = React.ComponentProps<typeof AnimatedGridItem> & {
@@ -56,7 +57,7 @@ import { useAuth } from "@/contexts/AuthContext"
 import { useWebSocket, useJobUpdates } from "@/contexts/WebSocketContext"
 import { apiClient } from "@/lib/api"
 
-// Extend Job type to include 'name' property for compatibility with mockJobs and API jobs
+// Extend Job type to include 'name' property for compatibility with API jobs
 type Job = {
   id: string
   name: string
@@ -78,169 +79,6 @@ type Job = {
   metadata?: any
 }
 import { toast } from "sonner"
-
-// Mock data for jobs
-const mockJobs = [
-  {
-    id: "job-001",
-    name: "Document Generation - Project Alpha",
-    type: "document_generation",
-    status: "running",
-    progress: 65,
-    startTime: "2024-01-20T10:30:00Z",
-    estimatedCompletion: "2024-01-20T11:15:00Z",
-    priority: "high",
-    queue: "documents",
-    worker: "worker-01",
-    logs: ["Started document generation", "Processing templates", "Generating content..."],
-  },
-  {
-    id: "job-002",
-    name: "AI Analysis - Requirements Review",
-    type: "ai_analysis",
-    status: "completed",
-    progress: 100,
-    startTime: "2024-01-20T09:45:00Z",
-    completedTime: "2024-01-20T10:20:00Z",
-    priority: "medium",
-    queue: "ai_processing",
-    worker: "worker-02",
-    logs: ["Analysis started", "Processing requirements", "Analysis completed successfully"],
-  },
-  {
-    id: "job-003",
-    name: "Data Export - User Reports",
-    type: "data_export",
-    status: "failed",
-    progress: 45,
-    startTime: "2024-01-20T08:15:00Z",
-    failedTime: "2024-01-20T08:45:00Z",
-    priority: "low",
-    queue: "exports",
-    worker: "worker-03",
-    error: "Database connection timeout",
-    logs: ["Export started", "Querying database", "Error: Connection timeout"],
-  },
-  {
-    id: "job-004",
-    name: "Template Compilation",
-    type: "template_processing",
-    status: "queued",
-    progress: 0,
-    queuedTime: "2024-01-20T10:45:00Z",
-    priority: "medium",
-    queue: "templates",
-    logs: ["Job queued for processing"],
-  },
-  {
-    id: "job-005",
-    name: "System Backup",
-    type: "system_backup",
-    status: "running",
-    progress: 30,
-    startTime: "2024-01-20T10:00:00Z",
-    estimatedCompletion: "2024-01-20T12:00:00Z",
-    priority: "high",
-    queue: "system",
-    worker: "worker-04",
-    logs: ["Backup started", "Archiving documents", "Processing user data..."],
-  },
-]
-
-const mockQueues = [
-  {
-    name: "documents",
-    active: 3,
-    waiting: 7,
-    completed: 145,
-    failed: 2,
-    workers: 2,
-    avgProcessingTime: "8m 32s",
-  },
-  {
-    name: "ai_processing",
-    active: 1,
-    waiting: 12,
-    completed: 89,
-    failed: 5,
-    workers: 3,
-    avgProcessingTime: "15m 45s",
-  },
-  {
-    name: "exports",
-    active: 0,
-    waiting: 3,
-    completed: 67,
-    failed: 8,
-    workers: 1,
-    avgProcessingTime: "5m 12s",
-  },
-  {
-    name: "templates",
-    active: 2,
-    waiting: 5,
-    completed: 234,
-    failed: 1,
-    workers: 2,
-    avgProcessingTime: "3m 28s",
-  },
-  {
-    name: "system",
-    active: 1,
-    waiting: 0,
-    completed: 45,
-    failed: 0,
-    workers: 1,
-    avgProcessingTime: "45m 12s",
-  },
-]
-
-const mockWorkers = [
-  {
-    id: "worker-01",
-    name: "Document Worker 1",
-    status: "active",
-    currentJob: "job-001",
-    queue: "documents",
-    uptime: "2d 14h 32m",
-    jobsCompleted: 156,
-    cpu: 45,
-    memory: 68,
-  },
-  {
-    id: "worker-02",
-    name: "AI Processing Worker",
-    status: "active",
-    currentJob: "job-002",
-    queue: "ai_processing",
-    uptime: "1d 8h 15m",
-    jobsCompleted: 89,
-    cpu: 72,
-    memory: 84,
-  },
-  {
-    id: "worker-03",
-    name: "Export Worker",
-    status: "idle",
-    currentJob: null,
-    queue: "exports",
-    uptime: "3d 2h 45m",
-    jobsCompleted: 234,
-    cpu: 12,
-    memory: 35,
-  },
-  {
-    id: "worker-04",
-    name: "System Worker",
-    status: "active",
-    currentJob: "job-005",
-    queue: "system",
-    uptime: "5d 12h 8m",
-    jobsCompleted: 67,
-    cpu: 38,
-    memory: 52,
-  },
-]
 
 const getStatusIcon = (status: string) => {
   switch (status) {
@@ -372,11 +210,11 @@ export default function JobMonitorPage() {
         const response = await apiClient.request('/queue-stats/overview', { suppressNotFoundError: true } as any)
         setQueues(response.queues || [])
       } catch (error: any) {
-        // Gracefully fallback to mock data if stats endpoint unavailable
+        // Log error but don't fallback to mock data - show empty state instead
         if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
-        console.error("Failed to fetch queue stats:", error)
+          console.error("Failed to fetch queue stats:", error)
         }
-        setQueues(mockQueues) // Fallback to mock
+        setQueues([])
       } finally {
         setLoadingQueues(false)
       }
@@ -396,11 +234,11 @@ export default function JobMonitorPage() {
         const response = await apiClient.request('/queue-stats/workers', { suppressNotFoundError: true } as any)
         setWorkers(response.workers || [])
       } catch (error: any) {
-        // Gracefully fallback to mock data if stats endpoint unavailable
+        // Log error but don't fallback to mock data - show empty state instead
         if (error?.status !== 404 && error?.message !== 'Failed to fetch') {
-        console.error("Failed to fetch worker stats:", error)
+          console.error("Failed to fetch worker stats:", error)
         }
-        setWorkers(mockWorkers) // Fallback to mock
+        setWorkers([])
       } finally {
         setLoadingWorkers(false)
       }
@@ -551,7 +389,7 @@ export default function JobMonitorPage() {
     }
   }, [])
 
-  const filteredJobs = (jobs.length > 0 ? jobs : mockJobs).filter((job) => {
+  const filteredJobs = jobs.filter((job) => {
     const matchesSearch = (job.name || job.id).toLowerCase().includes(searchTerm.toLowerCase())
     const matchesStatus = statusFilter === "all" || job.status === statusFilter
     return matchesSearch && matchesStatus
@@ -640,6 +478,27 @@ export default function JobMonitorPage() {
                       size="sm"
                       onClick={async () => {
                         try {
+                          const result = await apiClient.request('/jobs/clean-orphaned-pending', { method: 'POST' }) as any
+                          const msg = result.requeuedCount > 0 
+                            ? `Re-queued ${result.requeuedCount} orphaned jobs` 
+                            : result.cleanedCount > 0 
+                              ? `Cleaned ${result.cleanedCount} orphaned jobs`
+                              : 'No orphaned pending jobs found'
+                          toast.success(msg)
+                          window.location.reload()
+                        } catch (error) {
+                          toast.error('Failed to clean orphaned pending jobs')
+                        }
+                      }}
+                    >
+                      <Clock className="h-4 w-4 mr-2" />
+                      Fix Orphaned
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={async () => {
+                        try {
                           const result = await apiClient.request('/jobs/retry-all-failed', { method: 'POST' }) as any
                           toast.success(`Retried ${result.retriedCount} failed jobs`)
                           window.location.reload()
@@ -655,6 +514,25 @@ export default function JobMonitorPage() {
                 </div>
 
                 {/* Stats Cards */}
+                {loading ? (
+                  <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
+                    {[...Array(6)].map((_, i) => (
+                      <AnimatedGridItem key={i}>
+                        <Card className="glass border-0 shadow-lg">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-2">
+                                <Skeleton className="h-4 w-20" />
+                                <Skeleton className="h-8 w-12" />
+                              </div>
+                              <Skeleton className="h-8 w-8 rounded-full" />
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </AnimatedGridItem>
+                    ))}
+                  </AnimatedGrid>
+                ) : (
                 <AnimatedGrid className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6">
                   <AnimatedGridItem>
                     <Card className="glass border-0 shadow-lg hover-lift">
@@ -740,6 +618,7 @@ export default function JobMonitorPage() {
                     </Card>
                   </AnimatedGridItem>
                 </AnimatedGrid>
+                )}
 
                 {/* Real-Time Active Jobs Status Bar */}
                 {jobs.filter(j => j.status === 'processing' || j.status === 'running').length > 0 && (
@@ -842,48 +721,106 @@ export default function JobMonitorPage() {
                         {/* Pending Jobs Alert */}
                         {pendingJobs.length > 0 && (
                           <Card className="border-yellow-500/50 bg-yellow-50/50 dark:bg-yellow-900/10">
-                            <CardHeader>
-                              <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
-                                <AlertCircle className="h-5 w-5" />
-                                Pending Jobs ({pendingJobs.length})
-                              </CardTitle>
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center justify-between">
+                                <CardTitle className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+                                  <AlertCircle className="h-5 w-5" />
+                                  Pending Jobs ({pendingJobs.length})
+                                </CardTitle>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="text-yellow-700 border-yellow-500 hover:bg-yellow-100 dark:text-yellow-400 dark:hover:bg-yellow-900/30"
+                                  onClick={async () => {
+                                    try {
+                                      const result = await apiClient.request('/jobs/clean-orphaned-pending', { method: 'POST' }) as any
+                                      const msg = result.requeuedCount > 0 
+                                        ? `Re-queued ${result.requeuedCount} orphaned jobs` 
+                                        : result.cleanedCount > 0 
+                                          ? `Cleaned ${result.cleanedCount} orphaned jobs`
+                                          : 'No orphaned pending jobs found'
+                                      toast.success(msg)
+                                      window.location.reload()
+                                    } catch (error) {
+                                      toast.error('Failed to fix orphaned jobs')
+                                    }
+                                  }}
+                                >
+                                  <RefreshCw className="h-4 w-4 mr-1" />
+                                  Fix All Orphaned
+                                </Button>
+                              </div>
                               <CardDescription>
-                                These jobs are waiting to be processed. If they remain pending for more than 5 minutes, they may be stuck.
+                                Jobs waiting to be processed. Jobs pending &gt;5 minutes may be orphaned (not in queue).
                               </CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-2">
+                            <CardContent className="space-y-3">
                               {pendingJobs.map((job) => {
                                 const createdAt = job.queuedTime || job.startTime
                                 const ageMinutes = createdAt 
                                   ? Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000 / 60)
                                   : 0
                                 const isOld = ageMinutes > 5
+                                const isVeryOld = ageMinutes > 15
                                 
                                 return (
                                   <div 
                                     key={job.id} 
-                                    className={`p-3 rounded-lg border ${
-                                      isOld 
-                                        ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700' 
-                                        : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
+                                    className={`p-4 rounded-lg border ${
+                                      isVeryOld 
+                                        ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' 
+                                        : isOld 
+                                          ? 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700' 
+                                          : 'bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800'
                                     }`}
                                   >
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex-1">
-                                        <p className="font-medium text-sm">{job.name}</p>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                          {job.type} • Queue: {job.queue || 'unknown'} • Age: {ageMinutes} min
-                                        </p>
-                                        {isOld && (
-                                          <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-1">
-                                            ⚠️ This job has been pending for {ageMinutes} minutes - may be stuck
+                                    <div className="flex items-start justify-between gap-4">
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2">
+                                          <Clock className={`h-4 w-4 flex-shrink-0 ${isVeryOld ? 'text-red-500' : 'text-yellow-600'}`} />
+                                          <p className="font-medium text-sm truncate">{job.name}</p>
+                                        </div>
+                                        <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                                          <div><span className="font-medium">Type:</span> {job.type}</div>
+                                          <div><span className="font-medium">Queue:</span> {job.queue || 'unknown'}</div>
+                                          <div><span className="font-medium">Age:</span> <span className={isOld ? 'text-yellow-700 dark:text-yellow-400 font-semibold' : ''}>{ageMinutes} min</span></div>
+                                          <div><span className="font-medium">ID:</span> <span className="font-mono text-[10px]">{job.id.slice(0, 8)}...</span></div>
+                                        </div>
+                                        {isVeryOld && (
+                                          <div className="mt-2 p-2 rounded bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800">
+                                            <p className="text-xs text-red-700 dark:text-red-400 font-medium">
+                                              🚨 Likely orphaned - Job not in queue. Click "Retry" to re-queue or "Cancel" to remove.
+                                            </p>
+                                          </div>
+                                        )}
+                                        {isOld && !isVeryOld && (
+                                          <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
+                                            ⚠️ Pending for {ageMinutes} min - may be stuck or orphaned
                                           </p>
                                         )}
                                       </div>
-                                      <div className="flex gap-2">
+                                      <div className="flex flex-col gap-2">
+                                        <Button
+                                          variant={isOld ? "default" : "outline"}
+                                          size="sm"
+                                          className={isOld ? "bg-yellow-600 hover:bg-yellow-700 text-white" : ""}
+                                          onClick={async () => {
+                                            try {
+                                              const result = await apiClient.request(`/jobs/${job.id}/retry`, { method: 'POST' }) as any
+                                              toast.success(`Job re-queued: ${result.newJobId?.slice(0, 8)}...`)
+                                              window.location.reload()
+                                            } catch (error: any) {
+                                              toast.error(error?.message || 'Failed to retry job')
+                                            }
+                                          }}
+                                        >
+                                          <RefreshCw className="h-3 w-3 mr-1" />
+                                          Retry
+                                        </Button>
                                         <Button
                                           variant="outline"
                                           size="sm"
+                                          className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-900/20"
                                           onClick={async () => {
                                             try {
                                               await apiClient.request(`/jobs/${job.id}/cancel`, { method: 'POST' })
@@ -894,6 +831,7 @@ export default function JobMonitorPage() {
                                             }
                                           }}
                                         >
+                                          <XCircle className="h-3 w-3 mr-1" />
                                           Cancel
                                         </Button>
                                       </div>

@@ -155,6 +155,7 @@ function normalizeProviderName(provider: string | undefined | null): string | un
     'openai': 'openai',
     'google': 'google',
     'google ai': 'google',
+    'google gemini': 'google',
     'gemini': 'google',
     'azure': 'azure',
     'azure openai': 'azure',

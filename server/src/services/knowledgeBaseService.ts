@@ -295,12 +295,28 @@ export class KnowledgeBaseService {
     try {
       logger.info('[KNOWLEDGE-BASE] Getting recommendations for project', { projectId })
 
-      // Get project context
+      // Check if knowledge base tables exist
+      const tableCheck = await pool.query(`
+        SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'knowledge_base_entries'
+        ) as entries_exist,
+        EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'knowledge_base_recommendations'
+        ) as recs_exist
+      `)
+      
+      if (!tableCheck.rows[0]?.entries_exist || !tableCheck.rows[0]?.recs_exist) {
+        logger.info('[KNOWLEDGE-BASE] Knowledge base tables do not exist yet, returning empty recommendations')
+        return []
+      }
+
+      // Get project context (without tags - table doesn't exist yet)
       const projectResult = await pool.query(
-        `SELECT p.*, 
-          (SELECT json_agg(t.*) FROM project_tags pt 
-           JOIN tags t ON pt.tag_id = t.id 
-           WHERE pt.project_id = p.id) as tags
+        `SELECT p.*
         FROM projects p
         WHERE p.id = $1`,
         [projectId]
