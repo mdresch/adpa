@@ -120,7 +120,7 @@ class TemplateImprovementService {
     try {
       // 1. Get template details
       const template = await this.getTemplate(templateId)
-      
+
       if (!template) {
         logger.warn('[TEMPLATE-IMPROVEMENT] Template not found', { templateId })
         return
@@ -137,7 +137,7 @@ class TemplateImprovementService {
          LIMIT 1`,
         [templateId]
       )
-      
+
       if (recentSuggestion.rows.length > 0) {
         logger.info('[TEMPLATE-IMPROVEMENT] Recent suggestion exists, skipping analysis', {
           templateId,
@@ -150,14 +150,15 @@ class TemplateImprovementService {
 
       // 3. Get quality audit history (last 30 days)
       const auditHistory = await this.getAuditHistory(templateId, 30)
-      
+
       if (auditHistory.length < 1) {
-        logger.info('[TEMPLATE-IMPROVEMENT] Insufficient data for analysis', {
+        logger.info('[TEMPLATE-IMPROVEMENT] Insufficient data for analysis, attempting static analysis', {
           templateId,
           auditCount: auditHistory.length,
           required: 1
         })
-        return // Need at least 1 audit for meaningful analysis
+        await this.analyzeTemplateStatic(templateId)
+        return
       }
 
       logger.info('[TEMPLATE-IMPROVEMENT] Analyzing quality history', {
@@ -167,11 +168,11 @@ class TemplateImprovementService {
 
       // 4. Calculate aggregate quality metrics
       const qualityMetrics = this.calculateAggregateMetrics(auditHistory)
-      
+
       // 5. Extract common issues and patterns
       const commonIssues = this.extractCommonIssues(auditHistory)
       const issueFrequency = this.calculateIssueFrequency(commonIssues, auditHistory.length)
-      
+
       logger.info('[TEMPLATE-IMPROVEMENT] Found common issues', {
         templateId,
         issueCount: commonIssues.length,
@@ -185,56 +186,9 @@ class TemplateImprovementService {
         commonIssues,
         issueFrequency
       )
-      
-      if (!aiAnalysisResult || !aiAnalysisResult.improvements || aiAnalysisResult.improvements.length === 0) {
-        logger.info('[TEMPLATE-IMPROVEMENT] No improvements suggested', { templateId })
-        return
-      }
 
-      const { improvements, tokens, cost } = aiAnalysisResult
+      this.processAiAnalysisResult(templateId, template, aiAnalysisResult, qualityMetrics, auditHistory.length, commonIssues, issueFrequency)
 
-      // 7. Calculate expected quality gain
-      const expectedGain = this.estimateQualityGain(qualityMetrics, improvements)
-      
-      // 8. Determine priority
-      const priority = this.calculatePriority(
-        qualityMetrics.avgQuality,
-        expectedGain,
-        auditHistory.length
-      )
-      
-      logger.info('[TEMPLATE-IMPROVEMENT] Generated suggestions', {
-        templateId,
-        suggestionCount: improvements.length,
-        expectedGain,
-        priority,
-        analysisTokens: tokens,
-        analysisCost: `$${cost.toFixed(4)}`
-      })
-
-      // 9. Save improvement suggestions
-      await this.saveImprovementSuggestions({
-        templateId,
-        qualityMetrics,
-        commonIssues,
-        issueFrequency,
-        improvements,
-        expectedGain,
-        priority,
-        analysisTokens: tokens,
-        analysisCost: cost
-      })
-      
-      // 9. Notify template owner if high/critical priority
-      if (priority === 'critical' || priority === 'high') {
-        await this.notifyTemplateOwner(template, improvements, priority)
-      }
-
-      logger.info('[TEMPLATE-IMPROVEMENT] Analysis complete', {
-        templateId,
-        priority,
-        expectedGain
-      })
     } catch (error) {
       logger.error('[TEMPLATE-IMPROVEMENT] Analysis failed', {
         templateId,
@@ -245,6 +199,199 @@ class TemplateImprovementService {
   }
 
   /**
+   * Process and save AI analysis results
+   */
+  private async processAiAnalysisResult(
+    templateId: string,
+    template: Template,
+    aiAnalysisResult: any,
+    qualityMetrics: TemplateQualityMetrics,
+    auditCount: number,
+    commonIssues: QualityIssue[],
+    issueFrequency: IssueFrequency
+  ): Promise<void> {
+    if (!aiAnalysisResult || !aiAnalysisResult.improvements || aiAnalysisResult.improvements.length === 0) {
+      logger.info('[TEMPLATE-IMPROVEMENT] No improvements suggested', { templateId })
+      return
+    }
+
+    const { improvements, tokens, cost } = aiAnalysisResult
+
+    // 7. Calculate expected quality gain
+    const expectedGain = this.estimateQualityGain(qualityMetrics, improvements)
+
+    // 8. Determine priority
+    const priority = this.calculatePriority(
+      qualityMetrics.avgQuality,
+      expectedGain,
+      auditCount
+    )
+
+    logger.info('[TEMPLATE-IMPROVEMENT] Generated suggestions', {
+      templateId,
+      suggestionCount: improvements.length,
+      expectedGain,
+      priority,
+      analysisTokens: tokens,
+      analysisCost: `$${cost.toFixed(4)}`
+    })
+
+    // 9. Save improvement suggestions
+    await this.saveImprovementSuggestions({
+      templateId,
+      qualityMetrics,
+      commonIssues,
+      issueFrequency,
+      improvements,
+      expectedGain,
+      priority,
+      analysisTokens: tokens,
+      analysisCost: cost
+    })
+
+    // 9. Notify template owner if high/critical priority
+    if (priority === 'critical' || priority === 'high') {
+      await this.notifyTemplateOwner(template, improvements, priority)
+    }
+
+    logger.info('[TEMPLATE-IMPROVEMENT] Analysis complete', {
+      templateId,
+      priority,
+      expectedGain
+    })
+  }
+
+  /**
+   * Analyze template structure statically (Cold Start / Zero History)
+   */
+  async analyzeTemplateStatic(templateId: string): Promise<void> {
+    logger.info('[TEMPLATE-IMPROVEMENT] Running static analysis', { templateId })
+
+    try {
+      const template = await this.getTemplate(templateId)
+      if (!template) return
+
+      // Build static prompt
+      const prompt = this.buildStaticAnalysisPrompt(template)
+
+      // Get preferred provider (highest priority active)
+      const providerResult = await pool.query(
+        "SELECT provider_type FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+      )
+      const preferredProvider = providerResult.rows[0]?.provider_type || 'google'
+
+      // Call AI with fallback
+      const result = await aiService.generateWithFallback({
+        provider: preferredProvider,
+        model: 'gemini-2.5-flash', // Default model, provider logic handles specific mapping if needed
+        prompt: prompt,
+        system_prompt: `You are an expert in document template design. Analyze the template structure and system prompt for clarity, completeness, and best practices. Respond with valid JSON.`,
+        temperature: 0.3,
+        max_tokens: 4000
+      })
+
+      // Process result
+      const totalTokens = result.usage?.totalTokens || 0
+      const cost = this.estimateCost(totalTokens)
+
+      let improvements: ImprovementItem[] = []
+      try {
+        const cleaned = this.cleanJson(result.content)
+        const parsed = JSON.parse(cleaned)
+        improvements = parsed.improvements || []
+      } catch (e) {
+        logger.error('Failed to parse static analysis', { error: e })
+        return
+      }
+
+      if (improvements.length === 0) return
+
+      // Save as a "Baseline" suggestion
+      // We mock some metrics since we have no history
+      const mockMetrics: TemplateQualityMetrics = {
+        avgQuality: 0, avgCompleteness: 0, avgConsistency: 0,
+        avgProfessionalQuality: 0, avgStandardsCompliance: 0, avgAccuracy: 0,
+        avgContextRelevance: 0, documentCount: 0, lowestScore: 0,
+        highestScore: 0, standardDeviation: 0
+      }
+
+      await this.saveImprovementSuggestions({
+        templateId,
+        qualityMetrics: mockMetrics,
+        commonIssues: [{
+          severity: 'medium',
+          dimension: 'Structure',
+          description: 'Static Analysis Findings',
+          count: 1
+        }],
+        issueFrequency: {},
+        improvements,
+        expectedGain: 10, // Arbitrary estimate for static improvements
+        priority: 'medium',
+        analysisTokens: totalTokens,
+        analysisCost: cost
+      })
+
+    } catch (error) {
+      logger.error('[TEMPLATE-IMPROVEMENT] Static analysis failed', { error })
+    }
+  }
+
+  private cleanJson(content: string): string {
+    let cleaned = content.trim()
+    if (cleaned.startsWith('```json')) cleaned = cleaned.substring(7)
+    if (cleaned.startsWith('```')) cleaned = cleaned.substring(3)
+    if (cleaned.endsWith('```')) cleaned = cleaned.substring(0, cleaned.length - 3)
+    return cleaned.trim()
+  }
+
+  /**
+   * Build prompt for static analysis
+   */
+  private buildStaticAnalysisPrompt(template: Template): string {
+    const templateContent = typeof template.content === 'string'
+      ? template.content
+      : JSON.stringify(template.content, null, 2)
+
+    return `# Static Template Analysis
+
+Analyze this document template for structural quality, best practices, and system prompt clarity.
+
+## Template Info
+Name: ${template.name}
+Framework: ${template.framework}
+Category: ${template.category}
+
+## System Prompt
+${template.system_prompt || 'NO SYSTEM PROMPT DEFINED'}
+
+## Content Structure
+${templateContent.substring(0, 15000)}
+
+## Task
+Identify 3-5 structural improvements. Focus on:
+1. **System Prompt Clarity**: Is it specific enough? Does it define a persona?
+2. **Structure**: Are there missing standard sections for a "${template.category}" document?
+3. **Variables**: Are variables clear and descriptive?
+4. **Best Practices**: Does it use proper markdown or formatting?
+
+## Output Format (JSON)
+{
+  "improvements": [
+    {
+      "issue_addressed": "Missing System Prompt Persona",
+      "proposed_change": "Add 'You are a Senior Architect...' to system prompt",
+      "change_type": "prompt_enhancement",
+      "section": "system_prompt",
+      "expected_impact": { "gain": 10 },
+      "priority": "high",
+      "rationale": "Defining a persona improves tone consistency."
+    }
+  ]
+}`
+  }
+
+  /**
    * Get template details
    */
   private async getTemplate(templateId: string): Promise<Template | null> {
@@ -252,7 +399,7 @@ class TemplateImprovementService {
       'SELECT * FROM templates WHERE id = $1 AND deleted_at IS NULL',
       [templateId]
     )
-    
+
     return result.rows[0] || null
   }
 
@@ -278,9 +425,9 @@ class TemplateImprovementService {
    */
   private calculateAggregateMetrics(auditHistory: AuditHistoryItem[]): TemplateQualityMetrics {
     const count = auditHistory.length
-    
+
     const scores = auditHistory.map(a => a.overall_score)
-    
+
     return {
       avgQuality: Math.round(
         auditHistory.reduce((sum, a) => sum + a.overall_score, 0) / count
@@ -315,13 +462,13 @@ class TemplateImprovementService {
    */
   private extractCommonIssues(auditHistory: AuditHistoryItem[]): QualityIssue[] {
     const issueMap = new Map<string, QualityIssue>()
-    
+
     auditHistory.forEach(audit => {
       const issues = audit.issues || []
-      
+
       issues.forEach((issue: QualityIssue) => {
         const key = `${issue.dimension}:${issue.description}`
-        
+
         if (issueMap.has(key)) {
           const existing = issueMap.get(key)!
           existing.count = (existing.count || 0) + 1
@@ -333,7 +480,7 @@ class TemplateImprovementService {
         }
       })
     })
-    
+
     // Return issues that appear in >20% of audits
     const threshold = auditHistory.length * 0.2
     return Array.from(issueMap.values())
@@ -346,12 +493,12 @@ class TemplateImprovementService {
    */
   private calculateIssueFrequency(commonIssues: QualityIssue[], totalAudits: number): IssueFrequency {
     const frequency: IssueFrequency = {}
-    
+
     commonIssues.forEach(issue => {
       const key = `${issue.dimension}:${issue.description}`
       frequency[key] = Math.round(((issue.count || 0) / totalAudits) * 100)
     })
-    
+
     return frequency
   }
 
@@ -404,7 +551,7 @@ class TemplateImprovementService {
         if (cleaned.endsWith('```')) {
           cleaned = cleaned.substring(0, cleaned.length - 3)
         }
-        
+
         const parsed = JSON.parse(cleaned.trim())
         return {
           improvements: parsed.improvements || [],
@@ -455,16 +602,16 @@ class TemplateImprovementService {
     commonIssues: QualityIssue[],
     issueFrequency: IssueFrequency
   ): string {
-    const templateContent = template.content 
-      ? (typeof template.content === 'string' 
-          ? template.content 
-          : JSON.stringify(template.content))
+    const templateContent = template.content
+      ? (typeof template.content === 'string'
+        ? template.content
+        : JSON.stringify(template.content))
       : 'No template content available'
 
     const issuesText = commonIssues.map((issue, idx) => {
       const key = `${issue.dimension}:${issue.description}`
       const freq = issueFrequency[key] || 0
-      
+
       return `${idx + 1}. **${issue.dimension}** (Frequency: ${freq}% of documents)
    - Description: ${issue.description}
    - Severity: ${issue.severity || 'minor'}
@@ -553,7 +700,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
       (sum, imp) => sum + (imp.expectedImpact?.gain || 0),
       0
     )
-    
+
     // Cap at realistic maximum (diminishing returns)
     const maxGain = 100 - qualityMetrics.avgQuality
     return Math.min(totalGain, Math.round(maxGain * 0.8)) // 80% of theoretical max
@@ -569,13 +716,13 @@ Focus on the most impactful improvements. Be specific and actionable.`
   ): string {
     // Critical: Quality < 70% and expected gain > 10 points
     if (currentQuality < 70 && expectedGain > 10) return 'critical'
-    
+
     // High: Quality < 80% and expected gain > 8 points
     if (currentQuality < 80 && expectedGain > 8) return 'high'
-    
+
     // Medium: Quality < 85% and expected gain > 5 points
     if (currentQuality < 85 && expectedGain > 5) return 'medium'
-    
+
     // Low: Everything else
     return 'low'
   }
@@ -618,7 +765,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
     )
 
     const suggestionId = result.rows[0].id
-    
+
     logger.info('[TEMPLATE-IMPROVEMENT] Suggestions saved', {
       suggestionId,
       templateId: data.templateId,
@@ -642,7 +789,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
       priority,
       improvementCount: improvements.length
     })
-    
+
     // TODO: Integrate with notification system
     // For now, just log the notification
     logger.info('[TEMPLATE-IMPROVEMENT] Notification logged', {
@@ -764,7 +911,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
 
     // 1. Get improvement suggestion
     const suggestion = await this.getSuggestion(suggestionId)
-    
+
     if (!suggestion) {
       throw new Error(`Suggestion not found: ${suggestionId}`)
     }
@@ -775,7 +922,7 @@ Focus on the most impactful improvements. Be specific and actionable.`
 
     // 2. Get current template
     const template = await this.getTemplate(suggestion.template_id)
-    
+
     if (!template) {
       throw new Error(`Template not found: ${suggestion.template_id}`)
     }
@@ -871,9 +1018,9 @@ Focus on the most impactful improvements. Be specific and actionable.`
   ): Promise<string> {
     // For now, return template content with improvements appended as comments
     // In future, implement smart template modification
-    
-    let content = typeof template.content === 'string' 
-      ? template.content 
+
+    let content = typeof template.content === 'string'
+      ? template.content
       : JSON.stringify(template.content, null, 2)
 
     const improvementNotes = `

@@ -595,6 +595,58 @@ class ApiClient {
     })
   }
 
+  /**
+   * Makes a request that returns a Blob (for file downloads like PDF)
+   */
+  async requestBlob(endpoint: string, options: RequestInit = {}): Promise<Blob> {
+    const baseURL = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    const url = `${baseURL}${cleanEndpoint}`
+
+    const headers: Record<string, string> = {
+      ...(options.headers as Record<string, string>),
+    }
+
+    if (this.token && typeof this.token === 'string' && this.token.trim().length > 0) {
+      headers['authorization'] = `Bearer ${this.token.trim()}`
+    }
+
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: 'include',
+    })
+
+    if (!response.ok) {
+      let errorMessage = `HTTP error! status: ${response.status}`
+      try {
+        const errorData = await response.json()
+        errorMessage = errorData?.message || errorData?.error || errorMessage
+      } catch {
+        // If JSON parsing fails, use the status text
+        errorMessage = response.statusText || errorMessage
+      }
+      throw new Error(errorMessage)
+    }
+
+    // Check content type to ensure we got a PDF and not an error JSON response
+    const contentType = response.headers.get('content-type') || ''
+    if (!contentType.includes('application/pdf')) {
+      // Might be a JSON error response with 200 status
+      try {
+        const errorData = await response.json()
+        throw new Error(errorData?.message || errorData?.error || 'Expected PDF but received different content type')
+      } catch (e) {
+        if (e instanceof Error && e.message !== 'Expected PDF but received different content type') {
+          throw e
+        }
+        throw new Error(`Expected PDF but received: ${contentType}`)
+      }
+    }
+
+    return response.blob()
+  }
+
   // WebSocket connection
   connectWebSocket(): Socket {
     if (!this.socket) {
@@ -1423,6 +1475,12 @@ class ApiClient {
   }> {
     const response = await this.request("/jobs/diagnostics/pending")
     return response
+  }
+
+
+
+  async exportDocumentPdf(id: string): Promise<Blob> {
+    return this.requestBlob(`/documents/${id}/export/pdf`)
   }
 
   async fixPendingJobs(action: 're-add' | 'mark-failed', maxAge?: number): Promise<{

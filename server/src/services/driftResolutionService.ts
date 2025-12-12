@@ -84,7 +84,7 @@ export class DriftResolutionService {
       .update(documentContent + driftRecordId + strategy)
       .digest('hex')
       .substring(0, 16)
-    
+
     return `${this.CACHE_PREFIX}${contentHash}`
   }
 
@@ -98,7 +98,7 @@ export class DriftResolutionService {
     strategy: 'conservative' | 'balanced' | 'permissive' = 'balanced'
   ): Promise<ResolutionResult> {
     const startTime = Date.now()
-    
+
     try {
       logger.info('[DRIFT-RESOLUTION] Starting AI-powered drift resolution', {
         documentId,
@@ -111,7 +111,7 @@ export class DriftResolutionService {
         driftRecordId,
         documentId
       )
-      
+
       const dataFetchTime = Date.now() - startTime
       logger.info('[DRIFT-RESOLUTION] Data fetched', { durationMs: dataFetchTime })
 
@@ -155,8 +155,8 @@ export class DriftResolutionService {
       // PERFORMANCE: Call AI with timeout enforcement and fast provider selection
       logger.info('[DRIFT-RESOLUTION] Calling AI to generate resolution')
       const aiStartTime = Date.now()
-      
-      // PERFORMANCE: Use Promise.race to enforce 5-second timeout
+
+      // PERFORMANCE: Use Promise.race to enforce 60-second timeout
       // Prefer fast providers: Google Gemini 2.5 Flash, with fallback to OpenAI gpt-4o-mini
       const aiResponse = await Promise.race([
         // Try fast providers first with fallback
@@ -167,12 +167,12 @@ export class DriftResolutionService {
           temperature: 0.2, // Low temp for consistent, accurate resolution
           max_tokens: 3000 // Optimized for speed
         }, ['google', 'openai', 'groq', 'mistral']),
-        // Timeout after 5 seconds
-        new Promise<never>((_, reject) => 
-          setTimeout(() => reject(new Error('AI resolution timeout: exceeded 5 seconds')), 5000)
+        // Timeout after 60 seconds (allows time for complex drift analysis)
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('AI resolution timeout: exceeded 60 seconds. Please try again or contact support.')), 60000)
         )
       ])
-      
+
       const aiDuration = Date.now() - aiStartTime
       logger.info('[DRIFT-RESOLUTION] ⚡ AI generation completed', { durationMs: aiDuration })
 
@@ -380,12 +380,12 @@ export class DriftResolutionService {
   ): string {
     // PERFORMANCE: Summarize baseline entities instead of full JSON dumps
     const baselineSummary = this.summarizeBaselineEntities(baseline)
-    
+
     // PERFORMANCE: Limit drift points detail if there are many
-    const driftPointsSummary = driftPoints.length > 10 
+    const driftPointsSummary = driftPoints.length > 10
       ? this.summarizeDriftPoints(driftPoints)
       : driftPoints.map((drift, i) => `${i + 1}. ${drift.driftType.toUpperCase()}: ${drift.description}`).join('\n')
-    
+
     return `You are a project management expert resolving baseline drift. Be concise and focused.
 
 ## TASK
@@ -423,22 +423,22 @@ Return the corrected document in Markdown. Add <!-- REQUIRES APPROVAL: reason --
     strategy: string
   ): string {
     // Optimized prompt - reduce token count for faster processing
-    const strategyRules = strategy === 'conservative' 
+    const strategyRules = strategy === 'conservative'
       ? 'Revert ALL changes to baseline exactly'
       : strategy === 'permissive'
-      ? 'Keep most changes, revert only critical violations'
-      : 'Keep valid updates, revert unauthorized changes'
-    
+        ? 'Keep most changes, revert only critical violations'
+        : 'Keep valid updates, revert unauthorized changes'
+
     // Only include affected baseline entities, not all baseline data
     const affectedBaselineData = this.extractAffectedBaselineData(baseline, driftPoints)
-    
+
     return `Resolve baseline drift in: ${document.title}
 
 BASELINE (Version ${baseline.version}):
 ${affectedBaselineData}
 
 DRIFT POINTS (${driftPoints.length}):
-${driftPoints.map((d, i) => `${i+1}. ${d.driftType.toUpperCase()} ${d.entityType}: ${d.description}`).join('\n')}
+${driftPoints.map((d, i) => `${i + 1}. ${d.driftType.toUpperCase()} ${d.entityType}: ${d.description}`).join('\n')}
 
 STRATEGY: ${strategyRules}
 
@@ -449,14 +449,14 @@ ${document.content}
 
 OUTPUT: Revised document (Markdown only, no explanations)`
   }
-  
+
   /**
    * Extract only affected baseline entities to reduce prompt size
    */
   private extractAffectedBaselineData(baseline: Baseline, driftPoints: DriftPoint[]): string {
     const affectedTypes = new Set(driftPoints.map(d => d.entityType))
     const sections: string[] = []
-    
+
     // Only include baseline sections for entity types that have drift
     if (affectedTypes.has('stakeholder') && baseline.resource_baseline?.stakeholders) {
       sections.push(`Stakeholders: ${baseline.resource_baseline.stakeholders.length} total`)
@@ -470,7 +470,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
     if (affectedTypes.has('budget') && baseline.cost_baseline?.total_budget) {
       sections.push(`Budget: $${baseline.cost_baseline.total_budget}`)
     }
-    
+
     return sections.join('\n') || 'Baseline data available'
   }
 
@@ -518,7 +518,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
    */
   private summarizeDriftPoints(driftPoints: DriftPoint[]): string {
     const byType: Record<string, number> = {}
-    
+
     driftPoints.forEach(drift => {
       const key = `${drift.entityType}:${drift.driftType}`
       byType[key] = (byType[key] || 0) + 1
@@ -570,7 +570,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
   private parseResolvedContent(aiContent: string): string {
     // Remove any markdown code blocks if present
     let content = aiContent.trim()
-    
+
     // Remove leading/trailing markdown code fence
     if (content.startsWith('```markdown')) {
       content = content.replace(/^```markdown\n/, '').replace(/\n```$/, '')
@@ -612,7 +612,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
     // Simple line-by-line diff
     const originalLines = originalContent.split('\n')
     const resolvedLines = resolvedContent.split('\n')
-    
+
     const diffLines: string[] = []
     const maxLines = Math.max(originalLines.length, resolvedLines.length)
 
@@ -678,10 +678,11 @@ OUTPUT: Revised document (Markdown only, no explanations)`
         [userId, driftRecordId]
       )
 
+
       // 3. Create audit log
       await client.query(
         `INSERT INTO audit_logs (
-          user_id, action, resource_type, resource_id, details
+          user_id, action, resource_type, resource_id, new_values
         ) VALUES ($1, 'drift_resolved', 'document', $2, $3)`,
         [
           userId,
@@ -693,6 +694,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
           })
         ]
       )
+
 
       // 4. ⭐ Create change request for major changes requiring approval
       let changeRequestId: string | undefined
@@ -921,7 +923,7 @@ OUTPUT: Revised document (Markdown only, no explanations)`
     const now = new Date()
     const timestamp = now.toISOString()
     const dateFormatted = now.toLocaleDateString()
-    
+
     return `# Change Request: Major Drift Changes
 
 **Document**: ${document.name || document.title || 'Unnamed Document'}
@@ -1007,7 +1009,7 @@ These changes have been flagged as **major changes** based on the following crit
   ): Promise<void> {
     try {
       // Check if any major changes involve budget overrun
-      const budgetChanges = majorChanges.filter(change => 
+      const budgetChanges = majorChanges.filter(change =>
         change.entityType === 'budget' && change.variance !== undefined
       )
 
@@ -1049,10 +1051,10 @@ These changes have been flagged as **major changes** based on the following crit
 
       const drift = driftResult.rows[0]
       const costBaseline = drift.cost_baseline || {}
-      
+
       // Extract budget information from baseline and changes
       const approvedBudget = costBaseline.total_budget || costBaseline.budget || 0
-      
+
       if (!approvedBudget || approvedBudget === 0) {
         logger.warn('[DRIFT-RESOLUTION] No approved budget in baseline', { driftRecordId })
         return

@@ -807,27 +807,85 @@ ENTITY_TYPES.forEach((entityType) => {
     try {
       logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId}`)
       
-      const { projectDataExtractionService } = await import('./projectDataExtractionService')
+      // Phase 3: Use new orchestrator for registered entities with feature flag enabled
+      // Fallback to legacy service for entities not yet migrated
+      let entities: any[] = []
       
-      // Extract this specific entity type
-      const entities = await projectDataExtractionService.extractSingleEntityType(
-        projectId,
-        userId,
-        entityType,
-        { aiProvider, aiModel, documentIds }
-      )
-      
-      logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType}`)
-      
-      // Save immediately after extraction (resilient)
-      await projectDataExtractionService.saveSingleEntityType(
-        projectId,
-        userId,
-        entityType,
-        entities
-      )
-      
-      logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType}`)
+      try {
+        const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+        const { extractSingleEntityType, saveSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
+        
+        // Check if entity is registered and enabled via feature flag
+        if (extractionRegistry.hasEntity(entityType) && extractionRegistry.isEnabled(entityType)) {
+          logger.info(`[EXTRACTION-CHILD] Using new orchestrator for ${entityType}`)
+          
+          // Extract using new orchestrator
+          entities = await extractSingleEntityType(
+            projectId,
+            userId,
+            entityType,
+            { aiProvider, aiModel, documentIds }
+          )
+          
+          logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType} (new orchestrator)`)
+          
+          // Save using new orchestrator
+          if (entities.length > 0) {
+            await saveSingleEntityType(
+              projectId,
+              userId,
+              entityType,
+              entities
+            )
+          }
+          
+          logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType} (new orchestrator)`)
+        } else {
+          // Use legacy service for entities not yet migrated or disabled
+          logger.debug(`[EXTRACTION-CHILD] Using legacy service for ${entityType} (not registered or feature flag disabled)`)
+          
+          const { projectDataExtractionService } = await import('./projectDataExtractionService')
+          
+          // Extract this specific entity type
+          entities = await projectDataExtractionService.extractSingleEntityType(
+            projectId,
+            userId,
+            entityType,
+            { aiProvider, aiModel, documentIds }
+          )
+          
+          logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType} (legacy)`)
+          
+          // Save immediately after extraction (resilient)
+          await projectDataExtractionService.saveSingleEntityType(
+            projectId,
+            userId,
+            entityType,
+            entities
+          )
+          
+          logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType} (legacy)`)
+        }
+      } catch (orchestratorError: any) {
+        // If orchestrator fails, fallback to legacy service
+        logger.warn(`[EXTRACTION-CHILD] Orchestrator failed for ${entityType}, falling back to legacy: ${orchestratorError?.message || orchestratorError}`)
+        
+        const { projectDataExtractionService } = await import('./projectDataExtractionService')
+        
+        entities = await projectDataExtractionService.extractSingleEntityType(
+          projectId,
+          userId,
+          entityType,
+          { aiProvider, aiModel, documentIds }
+        )
+        
+        await projectDataExtractionService.saveSingleEntityType(
+          projectId,
+          userId,
+          entityType,
+          entities
+        )
+      }
       
       return { entityType, count: entities.length }
       
@@ -1206,6 +1264,17 @@ pipelineQueue.on("progress", (job, progress) => {
 export async function initializeQueues() {
   try {
     await aiService.initializeProviders()
+    
+    // Initialize extraction registry (Phase 2: modular extraction)
+    try {
+      const { initializeRegistry } = await import('./extraction/ExtractionRegistry')
+      await initializeRegistry()
+      logger.info('[QUEUE-SERVICE] Extraction registry initialized')
+    } catch (registryError: any) {
+      logger.warn('[QUEUE-SERVICE] Failed to initialize extraction registry:', registryError?.message || registryError)
+      // Don't fail queue initialization if registry fails
+    }
+    
     logger.info("Job queues initialized")
   } catch (error) {
     logger.error("Failed to initialize queues:", error)

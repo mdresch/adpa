@@ -614,7 +614,7 @@ export async function createBaselineFromEntities(
 ): Promise<BaselineExtractionResult> {
   try {
     logger.info(`Creating baseline from extracted entities for project ${projectId}`)
-    
+
     // Query all 14 entity types in parallel
     const [
       scopeItemsResult,
@@ -665,7 +665,7 @@ export async function createBaselineFromEntities(
 
     const totalEntities = scopeItems.length + deliverables.length + requirements.length +
       milestones.length + phases.length + activities.length + resources.length +
-      technologies.length + stakeholders.length + constraints.length + risks.length + 
+      technologies.length + stakeholders.length + constraints.length + risks.length +
       successCriteria.length + qualityStandards.length + bestPractices.length
 
     if (totalEntities === 0) {
@@ -907,18 +907,18 @@ export async function createBaselineFromEntities(
  */
 function calculateProjectDuration(phases: any[]): string {
   if (phases.length === 0) return 'Not specified'
-  
+
   const sortedPhases = phases
     .filter(p => p.start_date && p.end_date)
     .sort((a, b) => new Date(a.start_date).getTime() - new Date(b.start_date).getTime())
-  
+
   if (sortedPhases.length === 0) return 'Not specified'
-  
+
   const startDate = new Date(sortedPhases[0].start_date)
   const endDate = new Date(sortedPhases[sortedPhases.length - 1].end_date)
-  
+
   const months = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24 * 30))
-  
+
   return `${months} months (${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()})`
 }
 
@@ -927,23 +927,23 @@ function calculateProjectDuration(phases: any[]): string {
  */
 function identifyCriticalPath(activities: any[], milestones: any[]): string[] {
   const criticalItems: string[] = []
-  
+
   // Add activities with dependencies
   activities
     .filter(a => a.dependencies && a.dependencies.length > 0)
     .forEach(a => {
       criticalItems.push(`Activity: ${a.name} (depends on ${a.dependencies.join(', ')})`)
     })
-  
+
   // Add critical milestones
   milestones
     .filter(m => m.status === 'critical' || m.dependencies)
     .forEach(m => {
       criticalItems.push(`Milestone: ${m.name}`)
     })
-  
-  return criticalItems.length > 0 
-    ? criticalItems 
+
+  return criticalItems.length > 0
+    ? criticalItems
     : ['No critical dependencies identified']
 }
 
@@ -988,29 +988,29 @@ function calculateResourceCosts(resources: any[]): any[] {
  */
 function categorizeCosts(resources: any[]): Record<string, string> {
   const categories: Record<string, number> = {}
-  
+
   resources.forEach(r => {
     if (r.type) {
       // For budget-type resources, parse from name field
       // For other resources, parse from allocation field
       const valueToParse = r.type === 'budget' ? r.name : r.allocation
-      
+
       if (valueToParse) {
         const amount = parseCurrencyToNumber(valueToParse)
-        
+
         if (!isNaN(amount) && amount > 0) {
           categories[r.type] = (categories[r.type] || 0) + amount
         }
       }
     }
   })
-  
+
   // Convert to formatted strings
   const result: Record<string, string> = {}
   Object.keys(categories).forEach(type => {
     result[type] = `€${Math.round(categories[type]).toLocaleString('en-US')}`
   })
-  
+
   return result
 }
 
@@ -1079,7 +1079,7 @@ function generateArchitectureOverview(technologies: any[], requirements: any[], 
   if (technologies.length === 0) {
     return 'Architecture details not specified. See technical requirements and technology stack for available information.'
   }
-  
+
   // Group technologies by category
   const frontend = technologies.filter(t => t.category === 'frontend')
   const backend = technologies.filter(t => t.category === 'backend')
@@ -1088,68 +1088,70 @@ function generateArchitectureOverview(technologies: any[], requirements: any[], 
   const devops = technologies.filter(t => t.category === 'devops')
   const testing = technologies.filter(t => t.category === 'testing')
   const monitoring = technologies.filter(t => t.category === 'monitoring')
-  
+
   // Build architecture description
   let arch = 'Multi-tier application architecture comprising:\n\n'
-  
+
   if (frontend.length > 0) {
     const techList = frontend.map(t => t.version ? `${t.name} ${t.version}` : t.name).join(', ')
     arch += `**Frontend Layer**: ${techList} providing user interface and client-side logic.\n\n`
   }
-  
+
   if (backend.length > 0) {
     const techList = backend.map(t => t.version ? `${t.name} ${t.version}` : t.name).join(', ')
     arch += `**Backend Layer**: ${techList} handling business logic, API endpoints, and server-side processing.\n\n`
   }
-  
+
   if (database.length > 0) {
     const techList = database.map(t => t.version ? `${t.name} ${t.version}` : t.name).join(', ')
     arch += `**Data Layer**: ${techList} for data persistence and caching.\n\n`
   }
-  
+
   if (infrastructure.length > 0) {
     const techList = infrastructure.map(t => t.name).join(', ')
     arch += `**Infrastructure**: ${techList} for deployment, scaling, and cloud services.\n\n`
   }
-  
+
   if (devops.length > 0) {
     const techList = devops.map(t => t.name).join(', ')
     arch += `**DevOps & CI/CD**: ${techList} for automated build, test, and deployment pipelines.\n\n`
   }
-  
+
   if (testing.length > 0) {
     const techList = testing.map(t => t.name).join(', ')
     arch += `**Testing & Quality**: ${techList} for automated testing and quality assurance.\n\n`
   }
-  
+
   if (monitoring.length > 0) {
     const techList = monitoring.map(t => t.name).join(', ')
     arch += `**Monitoring & Observability**: ${techList} for system monitoring and performance tracking.\n\n`
   }
-  
+
   // Add quality aspects if available
   if (qualityStandards.length > 0) {
-    const securityStandards = qualityStandards.filter(q => 
-      q.name.toLowerCase().includes('security') || 
-      q.name.toLowerCase().includes('iso') ||
-      q.name.toLowerCase().includes('gdpr')
-    )
+    const securityStandards = qualityStandards.filter(q => {
+      const name = (q.title || q.name || '').toLowerCase()
+      return name.includes('security') ||
+        name.includes('iso') ||
+        name.includes('gdpr')
+    })
     if (securityStandards.length > 0) {
-      arch += `**Security & Compliance**: Architecture adheres to ${securityStandards.map(s => s.name).join(', ')} standards.\n\n`
+      arch += `**Security & Compliance**: Architecture adheres to ${securityStandards.map(s => s.title || s.name).join(', ')} standards.\n\n`
     }
   }
-  
+
   // Add technical requirements summary
-  const performanceReqs = requirements.filter(r => 
-    r.description?.toLowerCase().includes('performance') || 
-    r.description?.toLowerCase().includes('scalability') ||
-    r.description?.toLowerCase().includes('response time')
-  )
-  
+  const performanceReqs = requirements.filter(r => {
+    const desc = (r.description || '').toLowerCase()
+    return desc.includes('performance') ||
+      desc.includes('scalability') ||
+      desc.includes('response time')
+  })
+
   if (performanceReqs.length > 0) {
     arch += `**Performance Requirements**: System designed to meet ${performanceReqs.length} performance and scalability requirements including response time, throughput, and concurrent user support.`
   }
-  
+
   return arch.trim() || 'See technical requirements and technology stack for details'
 }
 

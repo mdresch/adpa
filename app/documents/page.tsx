@@ -130,6 +130,35 @@ export default function DocumentLibraryPage() {
         }
     }
 
+    const handleExportPdf = async (id: string, name: string) => {
+        try {
+            toast.info("Exporting PDF...")
+            const blob = await apiClient.exportDocumentPdf(id)
+
+            // Ensure the blob has the correct PDF MIME type
+            const pdfBlob = new Blob([blob], { type: 'application/pdf' })
+
+            const url = window.URL.createObjectURL(pdfBlob)
+            const a = document.createElement('a')
+            a.href = url
+            a.download = `${name.replace(/[^a-z0-9]/gi, '_')}.pdf`
+            a.style.display = 'none'
+            document.body.appendChild(a)
+            a.click()
+
+            // Delay cleanup to ensure download starts
+            setTimeout(() => {
+                window.URL.revokeObjectURL(url)
+                document.body.removeChild(a)
+            }, 100)
+
+            toast.success("PDF exported successfully")
+        } catch (error: any) {
+            console.error("Failed to export PDF:", error)
+            toast.error(error?.message || "Failed to export PDF")
+        }
+    }
+
     const getStatusColor = (status: string) => {
         switch (status?.toLowerCase()) {
             case "published": return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100"
@@ -280,6 +309,9 @@ export default function DocumentLibraryPage() {
                                                                             </DropdownMenuItem>
                                                                             <DropdownMenuItem onClick={() => router.push(`/documents/${doc.id}/collaborate`)}>
                                                                                 <Edit className="mr-2 h-4 w-4" /> Edit
+                                                                            </DropdownMenuItem>
+                                                                            <DropdownMenuItem onClick={() => handleExportPdf(doc.id, doc.name)}>
+                                                                                <Download className="mr-2 h-4 w-4" /> Export PDF
                                                                             </DropdownMenuItem>
                                                                             <DropdownMenuItem className="text-red-600" onClick={(e) => handleDelete(doc.id, e as any)}>
                                                                                 <Trash2 className="mr-2 h-4 w-4" /> Delete

@@ -1,0 +1,11 @@
+PASS server/src/__tests__/unit/docxService.test.ts
+  DocxService
+    ΓêÜ should generate a DOCX buffer from simple Markdown (118 ms)
+    ΓêÜ should handle formatting elements (22 ms)
+    ΓêÜ should handle metadata (21 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       3 passed, 3 total
+Snapshots:   0 total
+Time:        2.154 s
+Ran all test suites matching server/src/__tests__/unit/docxService.test.ts.

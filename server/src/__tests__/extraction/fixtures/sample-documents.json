@@ -1,0 +1,18 @@
+{
+  "description": "Sample documents for extraction testing",
+  "documents": [
+    {
+      "id": "doc-1",
+      "title": "Project Charter",
+      "content": "# Project Charter\n\n## Activity List\n\n| Activity ID | Activity Name | WBS Element | Predecessors | Successors | Status |\n|-------------|---------------|-------------|--------------|------------|--------|\n| ACT-001 | Requirements Gathering | 1.1 | - | ACT-002 | In Progress |\n| ACT-002 | System Design | 1.2 | ACT-001 | ACT-003 | Planned |\n| ACT-003 | Implementation | 1.3 | ACT-002 | - | Planned |\n\n## Work Items\n\n- **Task 1**: Develop frontend module (Estimated: 40 hours, Assigned: John Doe, Progress: 65%)\n- **Task 2**: Backend API development (Estimated: 60 hours, Assigned: Jane Smith, Progress: 30%)\n- **Task 3**: Database migration (Estimated: 20 hours, Assigned: Bob Wilson, Progress: 100%, Status: Done)",
+      "template_name": "Project Charter"
+    },
+    {
+      "id": "doc-2",
+      "title": "Project Plan",
+      "content": "# Project Plan\n\n## Tasks\n\n1. Requirements Analysis (40 hours, John, 65% complete)\n2. System Design (60 hours, Jane, 30% complete)\n3. Database Setup (20 hours, Bob, Completed)",
+      "template_name": "Project Plan"
+    }
+  ]
+}
+

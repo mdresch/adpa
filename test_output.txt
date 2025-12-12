@@ -1,0 +1,48 @@
+FAIL server/src/__tests__/unit/docxService.test.ts
+  ΓùÅ Test suite failed to run
+
+    Jest encountered an unexpected token
+
+    Jest failed to parse a file. This happens e.g. when your code or its dependencies use non-standard JavaScript syntax, or when Jest is not configured to support such syntax.
+
+    Out of the box Jest supports Babel, which will be used to transform your files into valid JS based on your Babel configuration.
+
+    By default "node_modules" folder is ignored by transformers.
+
+    Here's what you can do:
+     ΓÇó If you are trying to use ECMAScript Modules, see https://jestjs.io/docs/ecmascript-modules for how to enable it.
+     ΓÇó If you are trying to use TypeScript, see https://jestjs.io/docs/getting-started#using-typescript
+     ΓÇó To have some of your "node_modules" files transformed, you can specify a custom "transformIgnorePatterns" in your config.
+     ΓÇó If you need a custom transformation, specify a "transform" option in your config.
+     ΓÇó If you simply want to mock your non-JS modules (e.g. binary assets) you can stub them out with the "moduleNameMapper" config option.
+
+    You'll find more details and examples of these config options in the docs:
+    https://jestjs.io/docs/configuration
+    For information about custom transformations, see:
+    https://jestjs.io/docs/code-transformation
+
+    Details:
+
+    D:\source\repos\adpa\server\node_modules\marked\lib\marked.esm.js:72
+    Please report this to https://github.com/markedjs/marked.`,e){let r="<p>An error occurred:</p><pre>"+w(n.message+"",!0)+"</pre>";return t?Promise.resolve(r):r}if(t)return Promise.reject(n);throw n}}};var _=new B;function k(l,e){return _.parse(l,e)}k.options=k.setOptions=function(l){return _.setOptions(l),k.defaults=_.defaults,G(k.defaults),k};k.getDefaults=L;k.defaults=T;k.use=function(...l){return _.use(...l),k.defaults=_.defaults,G(k.defaults),k};k.walkTokens=function(l,e){return _.walkTokens(l,e)};k.parseInline=_.parseInline;k.Parser=b;k.parser=b.parse;k.Renderer=P;k.TextRenderer=$;k.Lexer=x;k.lexer=x.lex;k.Tokenizer=y;k.Hooks=S;k.parse=k;var Zt=k.options,Gt=k.setOptions,Nt=k.use,Ft=k.walkTokens,jt=k.parseInline,Qt=k,Ut=b.parse,Kt=x.lex;export{S as Hooks,x as Lexer,B as Marked,b as Parser,P as Renderer,$ as TextRenderer,y as Tokenizer,T as defaults,L as getDefaults,Kt as lexer,k as marked,Zt as options,Qt as parse,jt as parseInline,Ut as parser,Gt as setOptions,Nt as use,Ft as walkTokens};
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  ^^^^^^
+
+    SyntaxError: Unexpected token 'export'
+
+      10 |     convertInchesToTwip
+      11 | } from 'docx';
+    > 12 | import { marked } from 'marked';
+         | ^
+      13 |
+      14 | export class DocxService {
+      15 |     /**
+
+      at Runtime.createScriptFromCode (node_modules/.pnpm/jest-runtime@30.2.0/node_modules/jest-runtime/build/index.js:1318:40)
+      at Object.<anonymous> (server/src/services/docxService.ts:12:1)
+      at Object.<anonymous> (server/src/__tests__/unit/docxService.test.ts:2:1)
+
+Test Suites: 1 failed, 1 total
+Tests:       0 total
+Snapshots:   0 total
+Time:        1.576 s
+Ran all test suites matching server/src/__tests__/unit/docxService.test.ts.

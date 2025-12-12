@@ -15,6 +15,9 @@ import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Skeleton } from "@/components/ui/skeleton"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   AlertTriangle,
   TrendingUp,
@@ -100,6 +103,13 @@ export default function DriftManagementPage() {
   const [actioningDrift, setActioningDrift] = useState<string | null>(null)
   const [selectedDrifts, setSelectedDrifts] = useState<string[]>([])
 
+  // AI Resolution state
+  const [resolutionDialogOpen, setResolutionDialogOpen] = useState(false)
+  const [selectedDriftForResolution, setSelectedDriftForResolution] = useState<DriftDetection | null>(null)
+  const [resolutionStrategy, setResolutionStrategy] = useState<'conservative' | 'balanced' | 'permissive'>('balanced')
+  const [resolutionPreview, setResolutionPreview] = useState<any>(null)
+  const [resolvingDrift, setResolvingDrift] = useState(false)
+
   useEffect(() => {
     fetchDrifts()
   }, [projectId])
@@ -136,7 +146,7 @@ export default function DriftManagementPage() {
     drifts.forEach(drift => {
       // Change Request: Most drifts that represent legitimate changes
       if (
-        drift.drift_severity === 'medium' || 
+        drift.drift_severity === 'medium' ||
         drift.drift_severity === 'high' ||
         drift.detection_type.includes('scope') ||
         drift.detection_type.includes('resource') ||
@@ -144,7 +154,7 @@ export default function DriftManagementPage() {
       ) {
         changeRequests.push(drift)
       }
-      
+
       // Business Case: Success criteria improvements, cost optimizations
       if (
         drift.detection_type.includes('success_criteria') ||
@@ -152,16 +162,16 @@ export default function DriftManagementPage() {
       ) {
         businessCases.push(drift)
       }
-      
+
       // Patent Opportunities: Novel technical approaches
       if (
         drift.detection_type.includes('technical') &&
-        (drift.drift_description.toLowerCase().includes('novel') || 
-         drift.drift_description.toLowerCase().includes('innovative'))
+        (drift.drift_description.toLowerCase().includes('novel') ||
+          drift.drift_description.toLowerCase().includes('innovative'))
       ) {
         patentOpps.push(drift)
       }
-      
+
       // Rejections: Low-value changes, risks
       if (
         drift.drift_severity === 'low' &&
@@ -257,17 +267,17 @@ export default function DriftManagementPage() {
   const handleCreateChangeRequest = async (driftIds: string[]) => {
     try {
       setActioningDrift(driftIds[0])
-      
+
       // TODO: Implement bulk change request creation
       toast.success(`Creating ${driftIds.length} change request(s)...`, {
         description: 'Change requests will be routed to CCB for approval'
       })
-      
+
       // Placeholder for actual implementation
       await new Promise(resolve => setTimeout(resolve, 1000))
-      
+
       toast.success(`${driftIds.length} change request(s) created!`)
-      
+
       // Refresh drifts
       await fetchDrifts()
     } catch (error: any) {
@@ -286,11 +296,11 @@ export default function DriftManagementPage() {
 
     try {
       setActioningDrift(driftIds[0])
-      
+
       toast.success('Generating business case...', {
         description: 'AI is analyzing ROI and strategic value'
       })
-      
+
       // Get the drift record details
       const drift = drifts.find(d => d.id === driftIds[0])
       if (!drift) {
@@ -307,7 +317,7 @@ export default function DriftManagementPage() {
       } else if (drift.drift_impact && typeof drift.drift_impact === 'object' && drift.drift_impact.drift_points) {
         driftPoints = drift.drift_impact.drift_points
       }
-      
+
       if (driftPoints.length === 0) {
         // If no drift points found, create a basic one from the drift description
         driftPoints = [{
@@ -348,7 +358,7 @@ export default function DriftManagementPage() {
           },
           duration: 10000
         })
-        
+
         // Refresh drifts to update status
         await fetchDrifts()
       } else if (response.success && !response.isPositiveDrift) {
@@ -373,7 +383,7 @@ export default function DriftManagementPage() {
   const handleRejectDrift = async (driftId: string) => {
     try {
       setActioningDrift(driftId)
-      
+
       await apiClient.request(`/drift-detections/${driftId}/status`, {
         method: 'PUT',
         body: JSON.stringify({
@@ -381,13 +391,98 @@ export default function DriftManagementPage() {
           resolution_notes: 'Marked for document correction'
         })
       })
-      
+
       toast.success('Drift marked for document correction')
       await fetchDrifts()
     } catch (error) {
       toast.error('Failed to update drift status')
     } finally {
       setActioningDrift(null)
+    }
+  }
+
+  /**
+   * Handle AI-powered drift resolution
+   */
+  const handleResolveWithAI = async (drift: DriftDetection) => {
+    try {
+      setSelectedDriftForResolution(drift)
+      setResolutionDialogOpen(true)
+      setResolvingDrift(true)
+      setResolutionPreview(null)
+
+      toast.info('AI is analyzing drift...', { description: 'This may take a few seconds' })
+
+      // Call backend to generate AI resolution
+      const response = await apiClient.request<{
+        success: boolean
+        resolvedContent: string
+        originalContent: string
+        driftPoints: any[]
+        majorChanges: any[]
+        requiresApproval: boolean
+        strategy: string
+      }>('/drift/resolve', {
+        method: 'POST',
+        body: JSON.stringify({
+          documentId: drift.source_document_id || drift.document_id,
+          driftRecordId: drift.id,
+          strategy: resolutionStrategy
+        })
+      })
+
+      setResolutionPreview(response)
+      toast.success('Resolution prepared!', { description: 'Review changes before applying' })
+    } catch (error: any) {
+      console.error('Error generating AI resolution:', error)
+      toast.error('Failed to generate resolution', {
+        description: error.message || 'Please try again'
+      })
+      setResolutionDialogOpen(false)
+    } finally {
+      setResolvingDrift(false)
+    }
+  }
+
+  /**
+   * Apply AI-generated drift resolution
+   */
+  const handleApplyResolution = async () => {
+    if (!selectedDriftForResolution || !resolutionPreview) {
+      toast.error('No resolution to apply')
+      return
+    }
+
+    try {
+      toast.info('Applying resolution...')
+
+      await apiClient.request('/drift/apply', {
+        method: 'POST',
+        body: JSON.stringify({
+          documentId: selectedDriftForResolution.source_document_id || selectedDriftForResolution.document_id,
+          driftRecordId: selectedDriftForResolution.id,
+          resolvedContent: resolutionPreview.resolvedContent,
+          majorChanges: resolutionPreview.majorChanges
+        })
+      })
+
+      // Close dialog and refresh
+      setResolutionDialogOpen(false)
+      setSelectedDriftForResolution(null)
+      setResolutionPreview(null)
+
+      await fetchDrifts()
+
+      toast.success('✅ Drift resolved successfully!', {
+        description: resolutionPreview.requiresApproval
+          ? 'Document updated. Change request created for major changes.'
+          : 'Document has been realigned with baseline.'
+      })
+    } catch (error: any) {
+      console.error('Error applying resolution:', error)
+      toast.error('Failed to apply resolution', {
+        description: error.message || 'Please try again'
+      })
     }
   }
 
@@ -516,7 +611,7 @@ export default function DriftManagementPage() {
                   {Array.from(new Set(drifts.map(d => d.detection_type))).map(type => {
                     const count = drifts.filter(d => d.detection_type === type).length
                     const percentage = Math.round((count / drifts.length) * 100)
-                    
+
                     return (
                       <div key={type} className="flex items-center gap-2 p-2 border rounded-lg bg-white">
                         <div className="flex-1">
@@ -653,7 +748,7 @@ export default function DriftManagementPage() {
                           </div>
                         )}
 
-                        <div className="grid grid-cols-3 gap-2 pt-3 border-t">
+                        <div className="grid grid-cols-4 gap-2 pt-3 border-t">
                           <Button
                             size="sm"
                             variant="outline"
@@ -675,6 +770,16 @@ export default function DriftManagementPage() {
                           )}
                           <Button
                             size="sm"
+                            onClick={() => handleResolveWithAI(drift)}
+                            disabled={actioningDrift === drift.id}
+                            className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                            variant="outline"
+                          >
+                            <Sparkles className="h-4 w-4 mr-2" />
+                            Resolve AI
+                          </Button>
+                          <Button
+                            size="sm"
                             onClick={() => handleCreateChangeRequest([drift.id])}
                             disabled={actioningDrift === drift.id}
                             className="bg-blue-600 hover:bg-blue-700"
@@ -685,7 +790,7 @@ export default function DriftManagementPage() {
                         </div>
                       </div>
                     ))}
-                    
+
                     {(categories.find(c => c.category === 'change_request')?.count || 0) > 10 && (
                       <p className="text-sm text-muted-foreground text-center py-3">
                         + {(categories.find(c => c.category === 'change_request')?.count || 0) - 10} more change requests
@@ -994,6 +1099,17 @@ export default function DriftManagementPage() {
                       <div className="flex items-center gap-2">
                         <Button
                           onClick={() => {
+                            handleResolveWithAI(drillDownData.drift)
+                            setDrillDownOpen(false)
+                          }}
+                          className="border-purple-300 text-purple-700 hover:bg-purple-50"
+                          variant="outline"
+                        >
+                          <Sparkles className="h-4 w-4 mr-2" />
+                          Resolve with AI
+                        </Button>
+                        <Button
+                          onClick={() => {
                             handleCreateChangeRequest([drillDownData.drift.id])
                             setDrillDownOpen(false)
                           }}
@@ -1002,7 +1118,10 @@ export default function DriftManagementPage() {
                           <CheckCircle className="h-4 w-4 mr-2" />
                           Create Change Request
                         </Button>
-                        <Button variant="outline">
+                        <Button
+                          variant="outline"
+                          onClick={() => setDrillDownOpen(false)}
+                        >
                           <ArrowRight className="h-4 w-4 mr-2" />
                           Skip for Now
                         </Button>
@@ -1016,6 +1135,147 @@ export default function DriftManagementPage() {
                 <Button variant="outline" onClick={() => setDrillDownOpen(false)}>
                   Close
                 </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* AI Resolution Dialog */}
+          <Dialog open={resolutionDialogOpen} onOpenChange={setResolutionDialogOpen}>
+            <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Sparkles className="h-5 w-5 text-purple-600" />
+                  AI-Powered Drift Resolution
+                </DialogTitle>
+                <DialogDescription>
+                  {selectedDriftForResolution && (
+                    <span>Resolving drift: {selectedDriftForResolution.drift_description}</span>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                {/* Strategy Selection */}
+                <div>
+                  <Label className="text-base font-semibold mb-3 block">Resolution Strategy</Label>
+                  <RadioGroup value={resolutionStrategy} onValueChange={(value: any) => setResolutionStrategy(value)}>
+                    <div className="space-y-2">
+                      <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50">
+                        <RadioGroupItem value="conservative" id="conservative" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="conservative" className="font-medium cursor-pointer">
+                            Conservative - Revert all changes
+                          </Label>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Strictly enforces baseline. All drifted content reverted to approved baseline.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start space-x-3 p-3 border-2 border-purple-200 bg-purple-50 rounded-lg">
+                        <RadioGroupItem value="balanced" id="balanced" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="balanced" className="font-medium cursor-pointer">
+                            Balanced - Smart adjustments (Recommended)
+                          </Label>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Keeps minor improvements, reverts unauthorized changes, flags major items for approval.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start space-x-3 p-3 border rounded-lg hover:bg-gray-50">
+                        <RadioGroupItem value="permissive" id="permissive" className="mt-1" />
+                        <div className="flex-1">
+                          <Label htmlFor="permissive" className="font-medium cursor-pointer">
+                            Permissive - Keep most changes
+                          </Label>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Accepts most changes, only reverts critical baseline violations.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </RadioGroup>
+                </div>
+
+                {/* Loading State */}
+                {resolvingDrift && !resolutionPreview && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="text-center">
+                      <RefreshCw className="h-8 w-8 animate-spin text-purple-600 mx-auto mb-3" />
+                      <p className="text-sm font-medium">AI is analyzing drift...</p>
+                      <p className="text-xs text-muted-foreground mt-1">This may take a few seconds</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Preview */}
+                {resolutionPreview && (
+                  <div className="space-y-3">
+                    <div className="border-2 border-purple-200 rounded-lg p-4 bg-purple-50">
+                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-purple-600" />
+                        Resolution Ready
+                      </h4>
+                      <div className="space-y-2 text-sm">
+                        <p>
+                          <strong>Strategy:</strong> {resolutionPreview.strategy.charAt(0).toUpperCase() + resolutionPreview.strategy.slice(1)}
+                        </p>
+                        <p>
+                          <strong>Drift Points:</strong> {resolutionPreview.driftPoints?.length || 0} issues will be resolved
+                        </p>
+                        {resolutionPreview.majorChanges && resolutionPreview.majorChanges.length > 0 && (
+                          <p>
+                            <strong>Major Changes:</strong> {resolutionPreview.majorChanges.length} requiring approval
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Major changes warning */}
+                    {resolutionPreview.requiresApproval && (
+                      <Alert className="border-orange-300 bg-orange-50">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          <strong>Approval Required:</strong> Major changes detected (budget {">"} 10%, key milestones, scope changes).
+                          A change request will be automatically created for review.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setResolutionDialogOpen(false)
+                    setResolutionPreview(null)
+                  }}
+                >
+                  Cancel
+                </Button>
+                {!resolutionPreview && !resolvingDrift && (
+                  <Button
+                    onClick={() => selectedDriftForResolution && handleResolveWithAI(selectedDriftForResolution)}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Generate Resolution
+                  </Button>
+                )}
+                {resolutionPreview && (
+                  <Button
+                    onClick={handleApplyResolution}
+                    disabled={resolvingDrift}
+                    className="bg-purple-600 hover:bg-purple-700"
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Apply Resolution
+                  </Button>
+                )}
               </DialogFooter>
             </DialogContent>
           </Dialog>

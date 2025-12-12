@@ -11,6 +11,8 @@ import { trackActivity } from "../middleware/analyticsMiddleware"
 import AuditService from "../services/auditService"
 import { extractionQueue } from "../services/queueService"
 import { markdownToPdf } from "../utils/pdfGenerator"
+import { PdfService } from "../services/pdf-service"
+import { DocxService } from "../services/docxService"
 import {
   Document,
   Packer,
@@ -152,6 +154,115 @@ router.get("/:id/quality-audit", authenticateToken, async (req, res) => {
     })
   }
 })
+
+// Export document as PDF
+router.get("/:id/export/pdf",
+  authenticateToken,
+  validateParams(Joi.object({ id: schemas.uuid })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // 1. Fetch document content
+      const result = await pool.query(
+        `SELECT d.name, d.content, d.metadata, p.name as project_name
+         FROM documents d
+         JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1 AND d.deleted_at IS NULL`,
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Document not found" })
+      }
+
+      const doc = result.rows[0]
+      let content = ""
+
+      // Handle different content formats (string vs object)
+      if (typeof doc.content === 'string') {
+        content = doc.content
+      } else if (doc.content && typeof doc.content === 'object') {
+        content = doc.content.content || doc.content.text || JSON.stringify(doc.content)
+      }
+
+      // 2. Generate PDF using service
+      const pdfBuffer = await PdfService.generatePdf(
+        content || "",
+        doc.name,
+        {
+          project: doc.project_name,
+          ...doc.metadata
+        }
+      )
+
+      // 3. Send response
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.name.replace(/[^a-z0-9]/gi, '_')}.pdf"`)
+      res.send(pdfBuffer)
+
+    } catch (error) {
+      log.error("Failed to export PDF:", error)
+      res.status(500).json({ error: "Failed to generate PDF" })
+    }
+  }
+)
+
+// Export document as DOCX
+router.get("/:id/export/docx",
+  authenticateToken,
+  validateParams(Joi.object({ id: schemas.uuid })),
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
+      const { id } = req.params
+
+      // 1. Fetch document content
+      const result = await pool.query(
+        `SELECT d.name, d.content, d.metadata, p.name as project_name
+         FROM documents d
+         JOIN projects p ON d.project_id = p.id
+         WHERE d.id = $1 AND d.deleted_at IS NULL`,
+        [id]
+      )
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: "Document not found" })
+      }
+
+      const doc = result.rows[0]
+      let content = ""
+
+      // Handle different content formats (string vs object)
+      if (typeof doc.content === 'string') {
+        content = doc.content
+      } else if (doc.content && typeof doc.content === 'object') {
+        content = doc.content.content || doc.content.text || JSON.stringify(doc.content)
+      }
+
+      // 2. Generate DOCX using service
+      const docxBuffer = await DocxService.generateDocx(
+        content || "",
+        doc.name,
+        {
+          project: doc.project_name,
+          ...doc.metadata
+        }
+      )
+
+      // 3. Send response
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+      res.setHeader('Content-Disposition', `attachment; filename="${doc.name.replace(/[^a-z0-9]/gi, '_')}.docx"`)
+      res.send(docxBuffer)
+
+    } catch (error) {
+      log.error("Failed to export DOCX:", error)
+      res.status(500).json({ error: "Failed to generate DOCX" })
+    }
+  }
+)
+
 
 // Test endpoint to verify server is working
 router.get("/test", (req, res) => {
