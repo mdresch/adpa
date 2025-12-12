@@ -88,7 +88,7 @@ export class BaselineExtractionJobService {
       // Extract baseline using AI (this takes 3-10 seconds)
       const { baselineService } = await import('../baselineService')
       
-      await updateJobStatus(jobId, "processing", 30)
+      await updateJobStatus(jobId, "processing", 30, workerId, "baseline-processing")
       
       const extractionResult = await baselineService.extractBaselineFromCorpus(
         project_id,
@@ -100,7 +100,7 @@ export class BaselineExtractionJobService {
         }
       )
       
-      await updateJobStatus(jobId, "processing", 70)
+      await updateJobStatus(jobId, "processing", 70, workerId, "baseline-processing")
       
       // Create baseline in database
       const corpus = document_ids || (await baselineService.getProjectDocumentCorpus(project_id)).map((d: any) => d.id)
@@ -111,14 +111,18 @@ export class BaselineExtractionJobService {
         corpus
       )
       
-      await updateJobStatus(jobId, "processing", 90)
+      await updateJobStatus(jobId, "processing", 90, workerId, "baseline-processing")
       
       // Update job to completed
       await db.query(
         `UPDATE jobs 
-         SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+         SET status = 'completed', result = $1, progress = 100, 
+             worker_id = COALESCE(worker_id, $3),
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+             completed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
-        [JSON.stringify({ baseline_id: baseline.id, baseline }), jobId]
+        [JSON.stringify({ baseline_id: baseline.id, baseline }), jobId, workerId]
       )
 
       // Emit success notification
@@ -147,9 +151,13 @@ export class BaselineExtractionJobService {
       // Update job with error
       await db.query(
         `UPDATE jobs 
-         SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+         SET status = 'failed', error_message = $1, 
+             worker_id = COALESCE(worker_id, $3),
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+             completed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
-        [error instanceof Error ? error.message : "Unknown error", jobId]
+        [error instanceof Error ? error.message : "Unknown error", jobId, workerId]
       )
 
       // Emit failure notification

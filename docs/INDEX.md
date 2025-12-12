@@ -15,7 +15,7 @@
 
 ### **⚙️ Setup & Configuration**
 → [`docs/02-setup-configuration/`](./02-setup-configuration/)
-- Database setup (Neon, Vercel Postgres)
+- Database setup (Supabase, Vercel Postgres)
 - Redis setup (Vercel KV)
 - Azure SharePoint integration
 

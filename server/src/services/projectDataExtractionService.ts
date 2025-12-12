@@ -957,7 +957,7 @@ Requirements:
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 4000 // Increased from 2000 to handle large documents
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       // Note: response from generateWithFallback includes providerUsed, but validateAIResponse expects standard format
@@ -1173,7 +1173,7 @@ Requirements:
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 5000 // Increased from 2500 to handle large documents with many risks
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -1271,7 +1271,7 @@ Requirements:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -1363,7 +1363,7 @@ Requirements:
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 4000 // Increased from 2000 to handle large documents
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -1546,7 +1546,7 @@ Requirements:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 1500
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -1739,7 +1739,7 @@ Requirements:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 1500
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -2008,7 +2008,7 @@ Requirements:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 2000
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -2174,7 +2174,7 @@ Requirements:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 4000 // Larger token limit due to comprehensive extraction
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -2570,7 +2570,7 @@ Rules:
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 4000 // Increased from 2500 to handle large documents with many team agreements
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -2701,13 +2701,13 @@ Return JSON object only. Return null if no methodology information found.`
       })
 
       // Use generateWithFallback for automatic provider fallback if requested provider is unavailable
-      // Note: max_tokens increased to 5000 to accommodate comprehensive justification field (markdown format)
+      // Note: max_tokens increased to 8000 to accommodate comprehensive justification field (markdown format)
       const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 5000 // Increased from 2500 to handle long justification markdown content
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       // Log the raw response BEFORE any parsing
@@ -2883,7 +2883,7 @@ Rules:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
-        max_tokens: 2600
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -3003,7 +3003,7 @@ Guidelines:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
-        max_tokens: 5200
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -3103,7 +3103,7 @@ Rules:
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 4000 // Increased from 2300 to handle large documents
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -3321,7 +3321,7 @@ Rules:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
-        max_tokens: 2500
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -3427,7 +3427,7 @@ Rules:
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 4000 // Increased from 2400 to handle large documents with many opportunities
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
@@ -3523,7 +3523,7 @@ Guidelines:
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.25,
-        max_tokens: 2300
+        max_tokens: 8000 // Increased for large context windows
       })
 
       const parsed = this.parseAIResponse(response.content)
@@ -3646,7 +3646,7 @@ Output valid JSON object with "performance_actuals" array only.`
         provider: options.aiProvider || 'openai',
         model: options.aiModel,
         temperature: 0.3,
-        max_tokens: 4000
+        max_tokens: 8000 // Increased for large context windows
       }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       this.validateAIResponse(response, 'performance_actuals', options)
@@ -4419,9 +4419,8 @@ Output valid JSON object with "performance_actuals" array only.`
         } else {
           // No closing marker found - might be incomplete JSON, extract from start to end
           cleanedContent = cleanedContent.substring(codeBlockStart).trim()
-          logger.warn('[EXTRACTION-PARSE] No closing code block marker found - JSON may be incomplete', {
-            extractedLength: cleanedContent.length,
-            lastChars: cleanedContent.substring(Math.max(0, cleanedContent.length - 100))
+          logger.debug('[EXTRACTION-PARSE] No closing code block marker found - JSON may be incomplete', {
+            extractedLength: cleanedContent.length
           })
         }
       }
@@ -4478,18 +4477,10 @@ Output valid JSON object with "performance_actuals" array only.`
       const errorContext = errorPosition ? cleanedContent.substring(contextStart, contextEnd) : cleanedContent.substring(0, 500)
       
       // Log the error for debugging
-      logger.warn('[EXTRACTION-PARSE] JSON parse error, attempting fixes', {
+      logger.debug('[EXTRACTION-PARSE] JSON parse error, attempting fixes', {
         error: parseError.message,
         errorPosition: errorPosition?.toString(),
-        errorLine: parseError.message.match(/line (\d+)/)?.[1],
-        errorColumn: parseError.message.match(/column (\d+)/)?.[1],
-        contentLength: cleanedContent.length,
-        contentPreview: cleanedContent.substring(0, 500),
-        errorContext: errorContext, // Context around the error position
-        charAtError: errorPosition !== null && errorPosition < cleanedContent.length ? cleanedContent[errorPosition] : null,
-        charsAroundError: errorPosition !== null && errorPosition > 0 && errorPosition < cleanedContent.length - 1 
-          ? cleanedContent.substring(Math.max(0, errorPosition - 5), Math.min(cleanedContent.length, errorPosition + 5))
-          : null
+        contentLength: cleanedContent.length
       })
       
       // Try to fix common JSON issues
@@ -4532,10 +4523,8 @@ Output valid JSON object with "performance_actuals" array only.`
         
         // If control character error OR unescaped quote error, fix both in a single pass
         if (isControlCharError || isUnescapedQuoteError) {
-          logger.warn('[EXTRACTION] Fixing control characters and/or unescaped quotes in JSON', {
+          logger.debug('[EXTRACTION-PARSE] Fixing control characters and/or unescaped quotes in JSON', {
             originalLength: fixed.length,
-            errorPosition: parseError.message.match(/position (\d+)/)?.[1],
-            preview: fixed.substring(0, 500),
             isControlCharError,
             isUnescapedQuoteError
           })
@@ -4658,12 +4647,10 @@ Output valid JSON object with "performance_actuals" array only.`
           
           fixed = result
           
-          logger.warn('[EXTRACTION-PARSE] Fixed control characters and/or quotes', {
+          logger.debug('[EXTRACTION-PARSE] Fixed control characters and/or quotes', {
             originalLength: cleanedContent.length,
             fixedLength: fixed.length,
-            lengthChange: fixed.length - cleanedContent.length,
-            preview: fixed.substring(0, 500),
-            fixedContent: fixed // Full fixed content for debugging
+            lengthChange: fixed.length - cleanedContent.length
           })
         }
         
@@ -4689,7 +4676,7 @@ Output valid JSON object with "performance_actuals" array only.`
           
           // If we fixed control chars but now have quote error, apply quote fix
           if (isControlCharError && isNewUnescapedQuoteError && !isUnescapedQuoteError) {
-            logger.warn('[EXTRACTION] Applying quote fix after control character fix', {
+            logger.debug('[EXTRACTION-PARSE] Applying quote fix after control character fix', {
               originalError: parseError.message,
               newError: parseAfterFixError.message
             })
@@ -4771,7 +4758,7 @@ Output valid JSON object with "performance_actuals" array only.`
             try {
               return JSON.parse(fixed)
             } catch (retryError: any) {
-              logger.warn('[EXTRACTION] JSON still invalid after quote fix retry', {
+              logger.debug('[EXTRACTION-PARSE] JSON still invalid after quote fix retry', {
                 error: retryError.message
               })
               throw retryError
@@ -4786,11 +4773,10 @@ Output valid JSON object with "performance_actuals" array only.`
                                       errorPosition >= fixed.length - 50 // Within last 50 chars
           
           if (isUnterminatedAtEnd) {
-            logger.warn('[EXTRACTION] Detected incomplete JSON (unterminated string at end) - attempting to close', {
+            logger.debug('[EXTRACTION-PARSE] Detected incomplete JSON (unterminated string at end) - attempting to close', {
               error: parseAfterFixError.message,
               errorPosition,
-              fixedLength: fixed.length,
-              lastChars: fixed.substring(Math.max(0, fixed.length - 200))
+              fixedLength: fixed.length
             })
             
             // Try to salvage partial data by closing the incomplete string and array/object
@@ -4828,19 +4814,18 @@ Output valid JSON object with "performance_actuals" array only.`
                   openBraces--
                 }
                 
-                logger.info('[EXTRACTION] Attempting to parse salvaged JSON', {
-                  salvagedLength: salvaged.length,
-                  lastChars: salvaged.substring(Math.max(0, salvaged.length - 100))
+                logger.debug('[EXTRACTION-PARSE] Attempting to parse salvaged JSON', {
+                  salvagedLength: salvaged.length
                 })
                 
                 try {
                   const salvagedParsed = JSON.parse(salvaged)
-                  logger.warn('[EXTRACTION] Successfully parsed salvaged JSON - some data may be incomplete', {
+                  logger.debug('[EXTRACTION-PARSE] Successfully parsed salvaged JSON - some data may be incomplete', {
                     keys: salvagedParsed && typeof salvagedParsed === 'object' ? Object.keys(salvagedParsed) : []
                   })
                   return salvagedParsed
                 } catch (salvageError: any) {
-                  logger.warn('[EXTRACTION] Failed to parse salvaged JSON', {
+                  logger.debug('[EXTRACTION-PARSE] Failed to parse salvaged JSON', {
                     error: salvageError.message
                   })
                 }
@@ -4865,25 +4850,22 @@ Output valid JSON object with "performance_actuals" array only.`
             
             try {
               const parsed = JSON.parse(closedJson)
-              logger.info('[EXTRACTION] Successfully closed incomplete JSON', {
+              logger.debug('[EXTRACTION-PARSE] Successfully closed incomplete JSON', {
                 originalLength: fixed.length,
-                closedLength: closedJson.length,
-                keys: parsed && typeof parsed === 'object' ? Object.keys(parsed) : []
+                closedLength: closedJson.length
               })
               return parsed
             } catch (closeError) {
-              logger.warn('[EXTRACTION] Failed to close incomplete JSON', {
-                error: closeError instanceof Error ? closeError.message : String(closeError),
-                closedJsonPreview: closedJson.substring(Math.max(0, closedJson.length - 200))
+              logger.debug('[EXTRACTION-PARSE] Failed to close incomplete JSON', {
+                error: closeError instanceof Error ? closeError.message : String(closeError)
               })
             }
           }
           
           // If still failing, log and try alternative approach
-          logger.warn('[EXTRACTION] JSON still invalid after control character/quote fix', {
+          logger.debug('[EXTRACTION-PARSE] JSON still invalid after control character/quote fix', {
             error: parseAfterFixError.message,
-            errorPosition: parseAfterFixError.message.match(/position (\d+)/)?.[1],
-            fixedPreview: fixed.substring(Math.max(0, (parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') - 100)), parseInt(parseAfterFixError.message.match(/position (\d+)/)?.[1] || '0') + 100)
+            errorPosition: parseAfterFixError.message.match(/position (\d+)/)?.[1]
           })
           throw parseAfterFixError // Re-throw to try next fallback
         }
@@ -5042,7 +5024,7 @@ Output valid JSON object with "performance_actuals" array only.`
     }
     
     // Fallback: return empty object
-    logger.warn('[EXTRACTION] Failed to parse AI response as JSON, returning empty object')
+    logger.debug('[EXTRACTION-PARSE] Failed to parse AI response as JSON, returning empty object')
     return {}
   }
 

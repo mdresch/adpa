@@ -446,7 +446,7 @@ processFlowQueue.process("process-flow", async (job) => {
     const ProcessFlowService = (await import('./processFlowService')).default
     const processFlowService = new ProcessFlowService(pool)
     
-    await updateJobStatus(jobId, "processing", 10)
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID, "process-flow-processing")
     
     // Create a progress callback to update job status during processing
     const updateStepProgress = async (stepName: string, stepNumber: number, totalSteps: number) => {
@@ -561,7 +561,7 @@ processFlowQueue.process("process-flow", async (job) => {
     
     const result = await processFlowService.startWorkflowProcessing(configWithCallback)
     
-    await updateJobStatus(jobId, "processing", 95)
+    await updateJobStatus(jobId, "processing", 95, WORKER_ID, "process-flow-processing")
     await updateStepProgress('Finalizing document...', totalSteps, totalSteps)
     
     // Update job to completed with detailed result
@@ -570,6 +570,9 @@ processFlowQueue.process("process-flow", async (job) => {
        SET status = 'completed', 
            result = $1, 
            progress = 100, 
+           worker_id = COALESCE(worker_id, $3),
+           started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+           processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
            completed_at = CURRENT_TIMESTAMP,
            data = jsonb_set(
              COALESCE(data, '{}'::jsonb),
@@ -585,7 +588,7 @@ processFlowQueue.process("process-flow", async (job) => {
         steps: result.steps,
         finalDocumentLength: result.finalDocument.length,
         totalTokens: result.steps.reduce((sum, step) => sum + step.tokens, 0)
-      }), jobId]
+      }), jobId, WORKER_ID]
     )
     
     // Emit success notification
@@ -610,6 +613,9 @@ processFlowQueue.process("process-flow", async (job) => {
         `UPDATE jobs 
          SET status = 'failed', 
              error_message = $1, 
+             worker_id = COALESCE(worker_id, $3),
+             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
              completed_at = CURRENT_TIMESTAMP,
              data = jsonb_set(
                COALESCE(data, '{}'::jsonb),
@@ -617,7 +623,7 @@ processFlowQueue.process("process-flow", async (job) => {
                to_jsonb('Failed'::text)
              )
          WHERE id = $2`,
-        [error.message || "Process-flow job failed", jobId]
+        [error.message || "Process-flow job failed", jobId, WORKER_ID]
       )
     }
     
@@ -638,6 +644,9 @@ regenerationQueue.process("document-regeneration", async (job) => {
   const { jobId, documentId, templateId, provider, model, versionType, temperature, userId } = job.data
 
   try {
+    // Update job status to processing
+    await updateJobStatus(jobId, "processing", 10, WORKER_ID, "document-regeneration")
+    
     logger.info(`Starting document regeneration job ${jobId} for document ${documentId}`)
     
     // Execute regeneration using the service
@@ -653,11 +662,16 @@ regenerationQueue.process("document-regeneration", async (job) => {
       jobId
     })
     
+    // Mark as completed
+    await updateJobStatus(jobId, "completed", 100, WORKER_ID, "document-regeneration")
+    
     logger.info(`Document regeneration job completed: ${jobId}`)
     
     return { success: true, jobId }
   } catch (error) {
     logger.error(`Document regeneration job failed: ${jobId}`, error)
+    // Mark as failed
+    await updateJobStatus(jobId, "failed", 0, WORKER_ID, "document-regeneration", error instanceof Error ? error.message : String(error))
     throw error
   }
 })
@@ -977,9 +991,18 @@ export async function updateJobStatus(
       params.push(queueName)
     }
 
-    if (status === "processing" && progress === 10) {
-      updateFields.push(`started_at = CURRENT_TIMESTAMP`)
-      updateFields.push(`processing_started_at = CURRENT_TIMESTAMP`)
+    // Set started_at when job transitions to processing (any progress, not just 10)
+    if (status === "processing") {
+      // Use COALESCE to only set if not already set
+      updateFields.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
+      updateFields.push(`processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP)`)
+    }
+
+    // Set started_at when job completes if it wasn't set during processing
+    if (status === "completed" || status === "failed") {
+      updateFields.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
+      updateFields.push(`processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP)`)
+      updateFields.push(`completed_at = CURRENT_TIMESTAMP`)
     }
 
     // Prevent long-running workers (especially extraction monitors) from

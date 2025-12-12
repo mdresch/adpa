@@ -100,17 +100,17 @@ router.get("/",
           j.status, 
           j.progress, 
           j.error_message, 
-          j.started_at, 
-          j.completed_at, 
-          j.created_at,
+          j.started_at AT TIME ZONE 'UTC' AS started_at, 
+          j.completed_at AT TIME ZONE 'UTC' AS completed_at, 
+          j.created_at AT TIME ZONE 'UTC' AS created_at,
           j.data as job_data,
           j.result,
           j.worker_id,
           j.worker_process_id,
           j.queue_name,
           j.queue_position,
-          j.queued_at,
-          j.processing_started_at,
+          j.queued_at AT TIME ZONE 'UTC' AS queued_at,
+          j.processing_started_at AT TIME ZONE 'UTC' AS processing_started_at,
           COALESCE(j.project_name, p.name) as project_name,
           COALESCE(j.template_name, t.name) as template_name,
           COALESCE(j.document_name, d.name) as document_name,
@@ -509,7 +509,30 @@ router.get("/admin/all",
       const offset = (Number(page) - 1) * Number(limit)
 
       let query = `
-        SELECT j.*, u.name as created_by_name, u.email as created_by_email
+        SELECT 
+          j.id,
+          j.type,
+          j.status,
+          j.progress,
+          j.error_message,
+          j.data,
+          j.result,
+          j.worker_id,
+          j.worker_process_id,
+          j.queue_name,
+          j.queue_position,
+          j.project_id,
+          j.project_name,
+          j.template_name,
+          j.document_name,
+          j.created_by,
+          j.started_at AT TIME ZONE 'UTC' AS started_at,
+          j.completed_at AT TIME ZONE 'UTC' AS completed_at,
+          j.created_at AT TIME ZONE 'UTC' AS created_at,
+          j.queued_at AT TIME ZONE 'UTC' AS queued_at,
+          j.processing_started_at AT TIME ZONE 'UTC' AS processing_started_at,
+          u.name as created_by_name, 
+          u.email as created_by_email
         FROM jobs j
         LEFT JOIN users u ON j.created_by = u.id
         WHERE 1=1
@@ -700,9 +723,9 @@ router.post(
       
       const job = jobResult.rows[0]
       
-      // Can retry failed jobs, stuck processing jobs, or cancelled jobs
-      if (!['failed', 'processing', 'cancelled'].includes(job.status)) {
-        return res.status(400).json({ error: "Can only retry failed, stuck, or cancelled jobs" })
+      // Can retry failed jobs, stuck processing jobs, cancelled jobs, or orphaned pending jobs
+      if (!['failed', 'processing', 'cancelled', 'pending'].includes(job.status)) {
+        return res.status(400).json({ error: "Can only retry failed, stuck, cancelled, or orphaned pending jobs" })
       }
       
       // Create new job with same data
@@ -927,6 +950,132 @@ router.post(
     } catch (error) {
       log.error("Clean stalled jobs error:", error)
       res.status(500).json({ error: "Failed to clean stalled jobs" })
+    }
+  }
+)
+
+/**
+ * POST /api/jobs/clean-orphaned-pending
+ * Clean orphaned pending jobs that exist in DB but not in Bull queue
+ */
+router.post(
+  "/clean-orphaned-pending",
+  authenticateToken,
+  async (req, res) => {
+    const log = childLogger({ requestId: (req as any).requestId })
+    
+    try {
+      // Import the queues
+      const { 
+        aiQueue, 
+        documentQueue, 
+        pipelineQueue, 
+        processFlowQueue, 
+        baselineQueue,
+        regenerationQueue,
+        extractionQueue
+      } = await import('../services/queueService')
+      
+      const queueMap: Record<string, any> = {
+        'ai-processing': aiQueue,
+        'document-processing': documentQueue,
+        'pipeline-processing': pipelineQueue,
+        'process-flow-processing': processFlowQueue,
+        'baseline-processing': baselineQueue,
+        'document-regeneration': regenerationQueue,
+        'project-data-extraction': extractionQueue
+      }
+      
+      // Find pending jobs older than 5 minutes (orphaned)
+      const orphanedResult = await pool.query(
+        `SELECT id, type, queue_name, data, created_by
+         FROM jobs 
+         WHERE status = 'pending' 
+         AND created_by = $1
+         AND COALESCE(queued_at, created_at) < NOW() - INTERVAL '5 minutes'
+         ORDER BY created_at DESC`,
+        [req.user?.id]
+      )
+      
+      if (orphanedResult.rows.length === 0) {
+        return res.json({
+          success: true,
+          message: "No orphaned pending jobs found",
+          cleanedCount: 0
+        })
+      }
+      
+      const cleanedJobs = []
+      const requeuedJobs = []
+      
+      for (const job of orphanedResult.rows) {
+        try {
+          const queueName = job.queue_name || 'ai-processing'
+          const queue = queueMap[queueName]
+          
+          if (!queue) {
+            // No queue found, mark as failed
+            await pool.query(
+              `UPDATE jobs 
+               SET status = 'failed', 
+                   error_message = 'Orphaned job - no queue found for: ' || $2,
+                   completed_at = CURRENT_TIMESTAMP
+               WHERE id = $1`,
+              [job.id, queueName]
+            )
+            cleanedJobs.push({ jobId: job.id, action: 'marked_failed', reason: 'no_queue' })
+            continue
+          }
+          
+          // Check if job exists in Bull queue
+          const bullJob = await queue.getJob(job.id)
+          
+          if (bullJob) {
+            // Job exists in queue, just waiting - skip
+            log.info(`Job ${job.id} exists in queue, skipping`)
+            continue
+          }
+          
+          // Job not in queue - try to re-add it
+          const jobData = typeof job.data === 'string' ? JSON.parse(job.data) : job.data
+          
+          try {
+            await queue.add(job.type, { ...jobData, jobId: job.id }, {
+              jobId: job.id,
+              priority: jobData.priority || 0,
+            })
+            
+            requeuedJobs.push({ jobId: job.id, queue: queueName })
+            log.info(`Re-queued orphaned job ${job.id} to ${queueName}`)
+          } catch (queueError) {
+            // Failed to re-queue, mark as failed
+            await pool.query(
+              `UPDATE jobs 
+               SET status = 'failed', 
+                   error_message = 'Orphaned job - failed to re-queue: ' || $2,
+                   completed_at = CURRENT_TIMESTAMP
+               WHERE id = $1`,
+              [job.id, queueError instanceof Error ? queueError.message : String(queueError)]
+            )
+            cleanedJobs.push({ jobId: job.id, action: 'marked_failed', reason: 'requeue_failed' })
+          }
+        } catch (err) {
+          log.error(`Failed to process orphaned job ${job.id}:`, err)
+        }
+      }
+      
+      res.json({
+        success: true,
+        message: `Processed ${orphanedResult.rows.length} orphaned pending jobs`,
+        totalOrphaned: orphanedResult.rows.length,
+        requeuedCount: requeuedJobs.length,
+        cleanedCount: cleanedJobs.length,
+        requeuedJobs,
+        cleanedJobs
+      })
+    } catch (error) {
+      log.error("Clean orphaned pending jobs error:", error)
+      res.status(500).json({ error: "Failed to clean orphaned pending jobs" })
     }
   }
 )

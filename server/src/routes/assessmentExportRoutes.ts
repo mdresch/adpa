@@ -322,6 +322,8 @@ router.get('/batch/:batchId', authenticate, async (req: Request, res: Response, 
       }),
       // Include all recommendations
       recommendations: allRecommendations,
+      // Include AI-powered recommendations from assessment_data
+      ai_recommendations: assessmentData?.ai_recommendations || null,
       // Include parsed assessment_data
       assessment_data: assessmentData
     };
@@ -833,7 +835,8 @@ router.post('/batch/:batchId/complete', authenticate, async (req: Request, res: 
       portfolio_summary: assessmentResult.portfolio_summary,
       breakdown: assessmentResult.breakdown,
       gap_analysis: gapAnalysis,
-      top_documents: assessmentResult.top_documents
+      top_documents: assessmentResult.top_documents,
+      ai_recommendations: assessmentResult.ai_recommendations
     };
 
     const assessmentUpdateQuery = `

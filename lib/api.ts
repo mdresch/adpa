@@ -483,7 +483,7 @@ class ApiClient {
     const baseURL = this.baseURL.endsWith('/') ? this.baseURL.slice(0, -1) : this.baseURL
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
     const url = `${baseURL}${cleanEndpoint}`
-    
+
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(options.headers as Record<string, string>),
@@ -525,7 +525,7 @@ class ApiClient {
         // Create an error object that includes the response data for better error handling
         // Extract message from various possible locations in the response
         let errorMessage = data?.message || data?.error || `HTTP error! status: ${response.status}`
-        
+
         // Ensure errorMessage is a string
         if (typeof errorMessage !== 'string') {
           if (typeof errorMessage === 'object' && errorMessage !== null) {
@@ -534,11 +534,11 @@ class ApiClient {
             errorMessage = String(errorMessage)
           }
         }
-        
+
         const error = new Error(errorMessage)
-        ;(error as any).response = { data, status: response.status }
-        ;(error as any).status = response.status
-        ;(error as any).data = data // Also attach data directly for easier access
+          ; (error as any).response = { data, status: response.status }
+          ; (error as any).status = response.status
+          ; (error as any).data = data // Also attach data directly for easier access
         throw error
       }
 
@@ -546,9 +546,9 @@ class ApiClient {
     } catch (error: any) {
       // Don't log expected errors if suppressNotFoundError is set
       // Suppresses: 404 (not found), 401/403 (auth errors - user not logged in)
-      const shouldSuppressLog = (options as any).suppressNotFoundError && 
+      const shouldSuppressLog = (options as any).suppressNotFoundError &&
         (error?.status === 404 || error?.status === 401 || error?.status === 403)
-      
+
       if (!shouldSuppressLog) {
         // Log error with better formatting
         const errorDetails = error?.response?.data || error?.data || error?.message || error
@@ -775,7 +775,7 @@ class ApiClient {
       // Re-throw with better context
       if (error?.status === 404) {
         const notFoundError = new Error('Program not found')
-        ;(notFoundError as any).status = 404
+          ; (notFoundError as any).status = 404
         throw notFoundError
       }
       throw error
@@ -862,9 +862,25 @@ class ApiClient {
   }
 
   // Documents endpoints
-  async getDocuments(projectId?: string): Promise<{ documents: Document[]; pagination?: any }> {
-    const query = projectId ? `?projectId=${projectId}` : ""
-    const response = await this.request<{ documents: Document[]; pagination?: any }>(`/documents${query}`)
+  async getDocuments(params?: {
+    page?: number
+    limit?: number
+    search?: string
+    status?: string
+    framework?: string
+    projectId?: string
+  }): Promise<{ documents: Document[]; pagination?: any }> {
+    const queryParams = new URLSearchParams()
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        // Convert projectId to project_id for backend
+        const paramKey = key === 'projectId' ? 'project_id' : key
+        if (value !== undefined) {
+          queryParams.append(paramKey, value.toString())
+        }
+      })
+    }
+    const response = await this.request<{ documents: Document[]; pagination?: any }>(`/documents?${queryParams}`)
     return response
   }
 
@@ -1033,12 +1049,12 @@ class ApiClient {
   }): Promise<any> {
     try {
       console.log("API Client: Testing feedback endpoint with data:", feedback)
-      
+
       const response = await this.request<any>(`/documents/test-feedback`, {
         method: "POST",
         body: JSON.stringify(feedback),
       })
-      
+
       console.log("API Client: Test response received:", response)
       return response
     } catch (error) {
@@ -1056,12 +1072,12 @@ class ApiClient {
     try {
       console.log("API Client: Submitting feedback to:", `/documents/${id}/feedback`)
       console.log("API Client: Feedback data:", feedback)
-      
+
       const response = await this.request<{ success: boolean; feedback: any; document: any }>(`/documents/${id}/feedback`, {
         method: "POST",
         body: JSON.stringify(feedback),
       })
-      
+
       console.log("API Client: Response received:", response)
       return response
     } catch (error) {
@@ -1126,24 +1142,24 @@ class ApiClient {
         if (value !== undefined) queryParams.append(key, String(value))
       })
     }
-  const qs = queryParams.toString()
-  const response = await this.request<{ templates: Template[]; pagination?: any }>(`/templates/trash${qs ? `?${qs}` : ""}`)
+    const qs = queryParams.toString()
+    const response = await this.request<{ templates: Template[]; pagination?: any }>(`/templates/trash${qs ? `?${qs}` : ""}`)
     return response
   }
 
   async restoreTemplate(id: string): Promise<Template> {
-  const response = await this.request<{ template: Template }>(`/templates/${id}/restore`, {
+    const response = await this.request<{ template: Template }>(`/templates/${id}/restore`, {
       method: "POST",
     })
     return response.template
   }
 
   async hardDeleteTemplate(id: string): Promise<void> {
-  await this.request(`/templates/${id}/hard`, { method: "DELETE" })
+    await this.request(`/templates/${id}/hard`, { method: "DELETE" })
   }
 
   async cloneTemplate(id: string, data: { name: string; description?: string; is_public?: boolean }): Promise<Template> {
-  const response = await this.request<{ template: Template }>(`/templates/${id}/clone`, {
+    const response = await this.request<{ template: Template }>(`/templates/${id}/clone`, {
       method: "POST",
       body: JSON.stringify(data),
     })

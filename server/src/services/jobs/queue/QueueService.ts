@@ -448,7 +448,10 @@ export class QueueService {
             this.dependencies.logger.error(`Failed to rollback database entry for job ${jobId}:`, rollbackError)
             // Mark as failed in database since we can't delete it
             await this.dependencies.database.query(
-              `UPDATE jobs SET status = 'failed', error_message = $1 WHERE id = $2`,
+              `UPDATE jobs SET status = 'failed', error_message = $1, 
+                   started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+                   processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+                   completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
               [`Failed to add to queue: ${errorMessage}`, jobId]
             )
           }

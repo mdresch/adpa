@@ -132,7 +132,8 @@ export class RedisCacheAdapter implements ICache {
 
   async set(key: string, value: string, ttl?: number): Promise<void> {
     if (ttl) {
-      await this.cache.set(key, value, 'EX', ttl)
+      // cache.set expects (key, value, ttl) - not Redis native 'EX' syntax
+      await this.cache.set(key, value, ttl)
     } else {
       await this.cache.set(key, value)
     }

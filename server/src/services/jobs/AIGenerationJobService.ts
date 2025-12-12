@@ -94,7 +94,7 @@ export class AIGenerationJobService {
       const result = await this.generateContent(job.data as AIGenerationJobData, deps)
 
       // Update job status to 50%
-      await updateJobStatus(jobId, "processing", 50)
+      await updateJobStatus(jobId, "processing", 50, workerId, "ai-processing")
 
       // Update usage stats
       if (result.usage) {
@@ -102,7 +102,7 @@ export class AIGenerationJobService {
       }
 
       // Update job status to 90%
-      await updateJobStatus(jobId, "processing", 90)
+      await updateJobStatus(jobId, "processing", 90, workerId, "ai-processing")
 
       // Create document from generated content
       const { documentId: createdDocumentId, documentRow: createdDocumentRow } = await this.createDocument(job.data as AIGenerationJobData, result, deps)
@@ -121,10 +121,14 @@ export class AIGenerationJobService {
       await db.query(
         `
         UPDATE jobs 
-        SET status = 'completed', result = $1, progress = 100, completed_at = CURRENT_TIMESTAMP
+        SET status = 'completed', result = $1, progress = 100, 
+            worker_id = COALESCE(worker_id, $3),
+            started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+            processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+            completed_at = CURRENT_TIMESTAMP
         WHERE id = $2
       `,
-        [JSON.stringify(finalResult), jobId]
+        [JSON.stringify(finalResult), jobId, workerId]
       )
 
       // Create audit log for AI analytics
@@ -707,7 +711,10 @@ export class AIGenerationJobService {
     await db.query(
       `
       UPDATE jobs 
-      SET status = 'failed', error_message = $1, completed_at = CURRENT_TIMESTAMP
+      SET status = 'failed', error_message = $1, 
+          started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
+          processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
+          completed_at = CURRENT_TIMESTAMP
       WHERE id = $2
     `,
       [errorMessage, jobId]
