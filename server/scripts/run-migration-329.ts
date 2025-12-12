@@ -1,11 +1,8 @@
 /**
- * Migration Script: 329_create_team_agreements.sql
- * TASK-138: Database schema for Team Agreements entity type
+ * Migration Script: 329_redesign_portfolios_to_governance.sql
  * 
- * This script executes the migration to create:
- * - team_agreements table
- * - team_agreement_adherence_log table
- * - Required indexes and triggers
+ * Transforms the portfolios table into portfolio_governance to support
+ * hybrid PMO model with strategic alignment and governance configuration
  * 
  * Usage:
  *   npm run migrate:329

@@ -1,12 +1,19 @@
 /**
- * Run Migration 327: Create Portfolios Table
+ * Run Migration 361: Redesign Portfolios to Portfolio Governance
  * 
- * This script creates the portfolios table for portfolio-level constructs and tracking
- * Includes monthly risk review tracking fields
+ * Transforms the portfolios table into portfolio_governance to support
+ * hybrid PMO model with strategic alignment, company linking, and governance configuration.
+ * 
+ * Features:
+ * - Renames portfolios → portfolio_governance
+ * - Adds company_id (1:1 unique constraint per company)
+ * - Adds governance configuration JSONB fields
+ * - Adds strategic alignment fields
+ * - Adds hybrid PMO type blending support
  * 
  * Usage:
- *   npm run migrate:327
- *   npx tsx server/scripts/run-migration-327.ts
+ *   npm run migrate:361
+ *   npx tsx server/scripts/run-migration-361.ts
  */
 
 import dotenv from "dotenv"
@@ -36,48 +43,48 @@ async function runMigration() {
   const client = await pool.connect()
   
   try {
-    console.log('🚀 Running Migration 327: Create Portfolios Table\n')
+    console.log('🚀 Running Migration 361: Redesign Portfolios to Portfolio Governance\n')
     
     // Read migration file
-    const migrationPath = join(__dirname, '../migrations/327_create_portfolios_table.sql')
+    const migrationPath = join(__dirname, '../migrations/361_redesign_portfolios_to_governance.sql')
     const migrationSQL = readFileSync(migrationPath, 'utf-8')
     
     console.log('📄 Migration file loaded:', migrationPath)
     console.log('📊 Migration size:', migrationSQL.length, 'characters\n')
     
-    // Check if table already exists
-    console.log('🔍 Checking if portfolios table exists...')
+    // Check if portfolio_governance table exists
+    console.log('🔍 Checking if portfolio_governance table exists...')
     const tableCheck = await client.query(`
       SELECT EXISTS (
         SELECT FROM information_schema.tables 
         WHERE table_schema = 'public' 
-        AND table_name = 'portfolios'
+        AND table_name = 'portfolio_governance'
       )
     `)
     
     if (tableCheck.rows[0].exists) {
-      console.log('⚠️  Table portfolios already exists')
+      console.log('⚠️  Table portfolio_governance already exists')
       console.log('   Migration may have already been run.\n')
       
       // Check table structure
       const columnsResult = await client.query(`
         SELECT column_name, data_type, is_nullable
         FROM information_schema.columns
-        WHERE table_name = 'portfolios'
+        WHERE table_name = 'portfolio_governance'
         ORDER BY ordinal_position
+        LIMIT 25
       `)
       
-      console.log('📋 Current table structure:')
+      console.log('📋 Current table structure (first 25 columns):')
       columnsResult.rows.forEach(row => {
         console.log(`   ${row.column_name}: ${row.data_type} ${row.is_nullable === 'NO' ? '(NOT NULL)' : ''}`)
       })
       
-      console.log('\n💡 To re-run migration, drop the table first:')
-      console.log('   DROP TABLE IF EXISTS portfolios CASCADE;')
+      console.log('\n💡 To re-run migration, rename table back to portfolios first:')
+      console.log('   ALTER TABLE portfolio_governance RENAME TO portfolios;')
       console.log('   Then run this script again.\n')
       
-      // Ask if user wants to continue
-      console.log('⚠️  Skipping migration - table already exists')
+      console.log('⚠️  Skipping migration - table already migrated')
       return
     }
     
@@ -92,8 +99,8 @@ async function runMigration() {
       
       console.log('✅ Migration executed successfully\n')
       
-      // Verify table was created
-      console.log('🔍 Verifying table creation...')
+      // Verify table was migrated
+      console.log('🔍 Verifying table migration...')
       const verifyResult = await client.query(`
         SELECT 
           column_name, 
@@ -101,12 +108,12 @@ async function runMigration() {
           is_nullable,
           column_default
         FROM information_schema.columns
-        WHERE table_name = 'portfolios'
+        WHERE table_name = 'portfolio_governance'
         ORDER BY ordinal_position
       `)
       
       if (verifyResult.rows.length > 0) {
-        console.log('\n✅ Table portfolios created with columns:')
+        console.log('\n✅ Table portfolio_governance created/migrated with columns:')
         verifyResult.rows.forEach(row => {
           const nullable = row.is_nullable === 'YES' ? '(nullable)' : '(NOT NULL)'
           const defaultVal = row.column_default ? ` DEFAULT ${row.column_default}` : ''
@@ -119,7 +126,7 @@ async function runMigration() {
       const indexResult = await client.query(`
         SELECT indexname, indexdef
         FROM pg_indexes
-        WHERE tablename = 'portfolios'
+        WHERE tablename = 'portfolio_governance'
         ORDER BY indexname
       `)
       
@@ -138,7 +145,7 @@ async function runMigration() {
           contype as constraint_type,
           pg_get_constraintdef(oid) as constraint_definition
         FROM pg_constraint
-        WHERE conrelid = 'portfolios'::regclass
+        WHERE conrelid = 'portfolio_governance'::regclass
         ORDER BY contype, conname
       `)
       
@@ -153,33 +160,16 @@ async function runMigration() {
           }
           const type = typeMap[row.constraint_type] || row.constraint_type
           console.log(`   - ${row.constraint_name}: ${type}`)
-          if (row.constraint_type === 'c') {
-            console.log(`     ${row.constraint_definition}`)
-          }
         })
       }
       
-      // Verify triggers
-      console.log('\n🔍 Verifying triggers...')
-      const triggerResult = await client.query(`
-        SELECT trigger_name, event_manipulation, action_timing
-        FROM information_schema.triggers
-        WHERE event_object_table = 'portfolios'
-      `)
-      
-      if (triggerResult.rows.length > 0) {
-        console.log('\n✅ Triggers:')
-        triggerResult.rows.forEach(row => {
-          console.log(`   - ${row.trigger_name}: ${row.action_timing} ${row.event_manipulation}`)
-        })
-      }
-      
-      console.log('\n✅ Migration 327 completed successfully!')
+      console.log('\n✅ Migration 361 completed successfully!')
       console.log('\n📚 Next steps:')
-      console.log('   1. Verify portfolio_risks foreign key can now be enabled')
-      console.log('   2. Create API routes for portfolios')
-      console.log('   3. Add frontend UI components for portfolio management')
-      console.log('   4. Link portfolio_risks to portfolios via portfolio_id')
+      console.log('   1. Update backend routes: /portfolios → /portfolio-governance')
+      console.log('   2. Update frontend pages: /portfolios → /portfolio-governance')
+      console.log('   3. Create Portfolio Governance configuration UI')
+      console.log('   4. Link programs to portfolio_governance via company')
+      console.log('   5. Build hybrid PMO dashboard with governance controls')
       
     } catch (error) {
       await client.query('ROLLBACK')
@@ -217,4 +207,3 @@ runMigration().catch(error => {
   console.error('Fatal error:', error)
   process.exit(1)
 })
-
