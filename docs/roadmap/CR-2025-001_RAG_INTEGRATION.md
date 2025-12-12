@@ -13,7 +13,7 @@
 | **Target Release** | Q4 2025 |
 | **Status** | Approved and Completed |
 | **Impact Level** | Medium (Integration of existing components) |
-| **Related Documents** | [RAG Integration Plan](./RAG_INTEGRATION_PLAN.md) |
+| **Related Documents** | [RAG Integration Plan](./archive/2025/RAG_INTEGRATION_PLAN_COMPLETED.md) (Archived - Completed) |
 
 ---
 
@@ -424,7 +424,7 @@ ADD COLUMN context_requirements JSONB;
 
 ### 13.1 Related Documents
 
-- [RAG Integration Plan (Detailed)](./RAG_INTEGRATION_PLAN.md)
+- [RAG Integration Plan (Detailed)](./archive/2025/RAG_INTEGRATION_PLAN_COMPLETED.md) (Archived - Completed)
 - [Multi-Stage Document Processor Implementation](../07-architecture/MULTI_STAGE_DOCUMENT_PROCESSOR_IMPLEMENTATION_SUMMARY.md)
 - [Semantic Search Integration Summary](../07-architecture/SEMANTIC_SEARCH_INTEGRATION_SUMMARY.md)
 - [Context Retrieval Service Implementation](../07-architecture/CONTEXT_RETRIEVAL_SERVICE_IMPLEMENTATION_SUMMARY.md)

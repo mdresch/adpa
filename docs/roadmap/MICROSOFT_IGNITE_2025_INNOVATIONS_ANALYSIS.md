@@ -342,7 +342,7 @@
 ## 🔗 Related Documents
 
 - `MICROSOFT_PPM_COMPETITIVE_ANALYSIS.md` - Competitive analysis
-- `RAG_INTEGRATION_PLAN.md` - Current RAG implementation
+- [`RAG_INTEGRATION_PLAN.md`](./archive/2025/RAG_INTEGRATION_PLAN_COMPLETED.md) - Current RAG implementation (Archived - Completed)
 - `UNIVERSAL_SEMANTIC_SEARCH_ENHANCEMENTS.md` - Search capabilities
 - `AI_PROVIDER_SETUP_GUIDE.md` - Current AI provider management
 

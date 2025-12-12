@@ -606,7 +606,7 @@ Assuming only **50% of projected value** is realized:
 ### CR-2025-001: RAG Integration for Intelligent Document Generation ⭐⭐ NEW
 
 **File:** `../CR-2025-001_RAG_INTEGRATION.md`  
-**Detailed Plan:** `../RAG_INTEGRATION_PLAN.md`
+**Detailed Plan:** `../archive/2025/RAG_INTEGRATION_PLAN_COMPLETED.md` (Archived - Completed)
 
 **Executive Summary:**
 Integrate existing RAG (Retrieval-Augmented Generation) infrastructure with Stage 1 (Context Gathering) to enable semantic search-powered context retrieval. This is primarily an **integration project** (90% infrastructure exists) - not building from scratch.

@@ -513,12 +513,13 @@ AI: "I've drafted a new section. Here's a preview: [Preview] [Add to Document]"
 ## 📅 Release Timeline
 
 ### Phase 1: Alpha (Weeks 1-6)
-**Target**: Early November 2025
+**Target**: Early November 2025 ✅ **COMPLETED**
 
 #### Features
-- ✅ Redis Job Queue Stability
+- ✅ Redis Job Queue Stability (October 22, 2025)
 - ✅ PDF Export (basic)
-- ⚠️ DOCX Export (basic)
+- ✅ DOCX Export (basic)
+- ✅ Universal Semantic Search (November 2025)
 
 #### Success Criteria
 - Internal testing only
@@ -533,13 +534,14 @@ AI: "I've drafted a new section. Here's a preview: [Preview] [Add to Document]"
 ---
 
 ### Phase 2: Beta (Weeks 7-12)
-**Target**: Mid-November 2025
+**Target**: Mid-November 2025 ✅ **COMPLETED**
 
 #### Features
 - ✅ PDF Export (advanced: branding, TOC)
 - ✅ DOCX Export (complete)
 - ✅ Batch Generation
-- ✅ Template Builder (MVP)
+- ✅ Template Builder (MVP) (October 18, 2025)
+- ✅ Universal Semantic Search Phase 1 & 2 (November 2025)
 
 #### Success Criteria
 - External beta testing with 5-10 users
