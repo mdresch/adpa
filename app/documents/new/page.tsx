@@ -82,28 +82,30 @@ export default function NewDocumentPage() {
         if (providers.length > 0) {
           setFormData(prev => ({ ...prev, ai_provider: providers[0].name }))
           // Fetch models for first provider
-          const models = await apiClient.getModelsForProvider(providers[0].id)
+          const modelData = await apiClient.getProviderModels(providers[0].id)
+          const models = modelData.models || []
           setModels(models)
           if (models.length > 0) {
             setFormData(prev => ({ ...prev, ai_model: models[0].name }))
           }
         }
       } catch (error) {
-          // When provider changes, fetch models
-          useEffect(() => {
-            if (formData.ai_provider) {
-              (async () => {
-                const provider = aiProviders.find(p => p.name === formData.ai_provider)
-                if (provider) {
-                  const models = await apiClient.getModelsForProvider(provider.id)
-                  setModels(models)
-                  if (models.length > 0) {
-                    setFormData(prev => ({ ...prev, ai_model: models[0].name }))
-                  }
+        // When provider changes, fetch models
+        useEffect(() => {
+          if (formData.ai_provider) {
+            (async () => {
+              const provider = aiProviders.find(p => p.name === formData.ai_provider)
+              if (provider) {
+                const modelData = await apiClient.getProviderModels(provider.id)
+                const models = modelData.models || []
+                setModels(models)
+                if (models.length > 0) {
+                  setFormData(prev => ({ ...prev, ai_model: models[0].name }))
                 }
-              })()
-            }
-          }, [formData.ai_provider])
+              }
+            })()
+          }
+        }, [formData.ai_provider])
         console.error("Failed to fetch data:", error)
         toast.error("Failed to load data")
       } finally {

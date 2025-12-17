@@ -1,15 +1,13 @@
 import { NextResponse } from 'next/server';
-import { createPmbokAgents } from '@/server/src/modules/pmbok6/PMBOKProcessAgent';
+import { PMBOK6_PROCESSES } from '@/types/pmbok6-data';
 
 // This API returns all PMBOK processes for the Gantt chart
 export async function GET() {
-  // Get all agents from the factory
-  const agents = createPmbokAgents();
   // Map to Gantt item format (status, start, end, result are placeholders)
-  const processes = Object.values(agents).map(agent => ({
-    code: agent.code,
-    name: agent.name,
-    group: agent.knowledgeArea || '',
+  const processes = PMBOK6_PROCESSES.map(process => ({
+    code: process.code,
+    name: process.name,
+    group: process.knowledgeArea || '',
     start: null,
     end: null,
     status: 'not_started',
