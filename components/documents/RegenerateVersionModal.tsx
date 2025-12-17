@@ -45,6 +45,7 @@ interface RegenerateVersionModalProps {
     model?: string
     versionType: 'patch' | 'minor' | 'major'
     temperature: number
+    max_tokens?: number
   }) => void
 }
 
@@ -73,6 +74,7 @@ export function RegenerateVersionModal({
   const [selectedModel, setSelectedModel] = useState<string>('default')
   const [versionType, setVersionType] = useState<'patch' | 'minor' | 'major'>('minor') // Default to minor for AI regenerations
   const [temperature, setTemperature] = useState<number>(0.7)
+  const [maxTokens, setMaxTokens] = useState<number>(8000)
   
   const [loading, setLoading] = useState(false)
 
@@ -156,7 +158,8 @@ export function RegenerateVersionModal({
       provider: provider?.provider_type || provider?.name || selectedProvider, // Send provider_type to backend
       model: selectedModel || undefined,
       versionType,
-      temperature
+      temperature,
+      max_tokens: maxTokens
     })
     
     // Reset and close
@@ -358,6 +361,22 @@ export function RegenerateVersionModal({
               <span>More focused</span>
               <span>More creative</span>
             </div>
+          </div>
+
+          {/* Max Tokens */}
+          <div className="space-y-2">
+            <Label htmlFor="max_tokens">Max Output Tokens</Label>
+            <input
+              id="max_tokens"
+              type="number"
+              min={100}
+              max={32000}
+              step={100}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              value={maxTokens}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMaxTokens(parseInt(e.target.value) || 4000)}
+            />
+            <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
           </div>
         </div>
 

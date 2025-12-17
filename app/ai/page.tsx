@@ -96,7 +96,7 @@ export default function AIPage() {
   const [selectedTemplate, setSelectedTemplate] = useState<string>("")
   const [prompt, setPrompt] = useState("")
   const [temperature, setTemperature] = useState([0.7])
-  const [maxTokens, setMaxTokens] = useState([1000])
+  const [maxTokens, setMaxTokens] = useState([8000])
   const [variables, setVariables] = useState<Record<string, string>>({})
   const [isGenerating, setIsGenerating] = useState(false)
   const [result, setResult] = useState<any>(null)

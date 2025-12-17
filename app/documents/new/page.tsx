@@ -33,8 +33,15 @@ export default function NewDocumentPage() {
     template_id: "",
     content: "",
     status: "draft" as "draft" | "published" | "review",
-    project_id: urlProjectId || ""
+    project_id: urlProjectId || "",
+    ai_provider: "",
+    ai_model: "",
+    temperature: 0.7,
+    max_tokens: 8000
   })
+
+  const [aiProviders, setAIProviders] = useState<any[]>([])
+  const [models, setModels] = useState<any[]>([])
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -69,7 +76,34 @@ export default function NewDocumentPage() {
           setProjects(projectOrProjects.projects || [])
         }
 
+        // Fetch AI Providers
+        const providers = await apiClient.getAIProviders()
+        setAIProviders(providers)
+        if (providers.length > 0) {
+          setFormData(prev => ({ ...prev, ai_provider: providers[0].name }))
+          // Fetch models for first provider
+          const models = await apiClient.getModelsForProvider(providers[0].id)
+          setModels(models)
+          if (models.length > 0) {
+            setFormData(prev => ({ ...prev, ai_model: models[0].name }))
+          }
+        }
       } catch (error) {
+          // When provider changes, fetch models
+          useEffect(() => {
+            if (formData.ai_provider) {
+              (async () => {
+                const provider = aiProviders.find(p => p.name === formData.ai_provider)
+                if (provider) {
+                  const models = await apiClient.getModelsForProvider(provider.id)
+                  setModels(models)
+                  if (models.length > 0) {
+                    setFormData(prev => ({ ...prev, ai_model: models[0].name }))
+                  }
+                }
+              })()
+            }
+          }, [formData.ai_provider])
         console.error("Failed to fetch data:", error)
         toast.error("Failed to load data")
       } finally {
@@ -101,7 +135,11 @@ export default function NewDocumentPage() {
         content: formData.content || "",
         template_id: formData.template_id || undefined,
         status: formData.status,
-        ...(formData.description && { description: formData.description })
+        ...(formData.description && { description: formData.description }),
+        ai_provider: formData.ai_provider,
+        ai_model: formData.ai_model,
+        temperature: formData.temperature,
+        max_tokens: formData.max_tokens
       }
 
       const newDocument = await apiClient.createDocument(formData.project_id, documentData)
@@ -277,6 +315,68 @@ export default function NewDocumentPage() {
                       <option value="review">In Review</option>
                       <option value="published">Published</option>
                     </select>
+                  </div>
+
+                  {/* AI Provider Selection */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ai_provider">AI Provider</Label>
+                    <select
+                      id="ai_provider"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.ai_provider}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, ai_provider: e.target.value })}
+                    >
+                      {aiProviders.map((provider) => (
+                        <option key={provider.id} value={provider.name}>{provider.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Model Selection */}
+                  <div className="space-y-2">
+                    <Label htmlFor="ai_model">Model</Label>
+                    <select
+                      id="ai_model"
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.ai_model}
+                      onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFormData({ ...formData, ai_model: e.target.value })}
+                    >
+                      {models.map((model) => (
+                        <option key={model.name} value={model.name}>{model.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Temperature */}
+                  <div className="space-y-2">
+                    <Label htmlFor="temperature">Temperature</Label>
+                    <input
+                      id="temperature"
+                      type="number"
+                      min={0}
+                      max={2}
+                      step={0.01}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.temperature}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, temperature: parseFloat(e.target.value) })}
+                    />
+                    <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
+                  </div>
+
+                  {/* Max Tokens */}
+                  <div className="space-y-2">
+                    <Label htmlFor="max_tokens">Max Output Tokens</Label>
+                    <input
+                      id="max_tokens"
+                      type="number"
+                      min={100}
+                      max={32000}
+                      step={100}
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={formData.max_tokens}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFormData({ ...formData, max_tokens: parseInt(e.target.value) })}
+                    />
+                    <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
                   </div>
 
                   {/* Actions */}

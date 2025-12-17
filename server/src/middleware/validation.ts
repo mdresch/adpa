@@ -162,7 +162,7 @@ export const schemas = {
     provider: Joi.string().required(),  // Allow any provider name - AI Gateway handles validation
     model: Joi.string().optional(),
     temperature: Joi.number().min(0).max(2).default(0.7),
-    max_tokens: Joi.number().min(1).max(16000).default(4000),  // Support long documents (16K tokens)
+    max_tokens: Joi.number().min(1).max(16000).default(8000),  // Support long documents (16K tokens)
     template_id: Joi.string().uuid().optional(),
     variables: Joi.object().optional(),
     // Metadata fields for tracking and context

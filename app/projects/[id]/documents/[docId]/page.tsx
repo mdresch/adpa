@@ -750,6 +750,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
     model?: string
     versionType: 'patch' | 'minor' | 'major'
     temperature: number
+    max_tokens?: number
   }) => {
     if (!docId) return
     

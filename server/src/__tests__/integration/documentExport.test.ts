@@ -15,6 +15,10 @@ jest.mock('../../middleware/auth', () => ({
 
 // Mock DocxService to avoid actual file generation overhead during integration test
 jest.mock('../../services/docxService');
+jest.mock('../../utils/pdfGenerator', () => ({
+    markdownToPdf: jest.fn(),
+    htmlToPdf: jest.fn()
+}));
 
 describe('Document Export API', () => {
 

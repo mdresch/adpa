@@ -184,7 +184,45 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     provider: "Groq AI",
     model: "llama-3.1-8b-instant",
     temperature: 0.7,
+    max_tokens: 8000,
   })
+
+  // AI Providers/Models state
+  const [aiProviders, setAIProviders] = useState<any[]>([])
+  const [models, setModels] = useState<any[]>([])
+
+  // Fetch AI Providers on mount
+  useEffect(() => {
+    (async () => {
+      const providers = await apiClient.getAIProviders?.() || []
+      setAIProviders(providers)
+      if (providers.length > 0) {
+        setGenerateForm(prev => ({ ...prev, provider: providers[0].name }))
+        // Fetch models for first provider
+        const models = await apiClient.getModelsForProvider?.(providers[0].id) || []
+        setModels(models)
+        if (models.length > 0) {
+          setGenerateForm(prev => ({ ...prev, model: models[0].name }))
+        }
+      }
+    })()
+  }, [])
+
+  // When provider changes, fetch models
+  useEffect(() => {
+    if (generateForm.provider) {
+      (async () => {
+        const provider = aiProviders.find(p => p.name === generateForm.provider)
+        if (provider) {
+          const models = await apiClient.getModelsForProvider?.(provider.id) || []
+          setModels(models)
+          if (models.length > 0) {
+            setGenerateForm(prev => ({ ...prev, model: models[0].name }))
+          }
+        }
+      })()
+    }
+  }, [generateForm.provider])
 
   // Fetch project data
   const fetchProject = async () => {
@@ -586,6 +624,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         provider: generateForm.provider || "Groq AI",
         model: generateForm.model || "llama-3.1-8b-instant",
         temperature: generateForm.temperature || 0.7,
+        max_tokens: generateForm.max_tokens || 8000,
         template_id: generateForm.template_id || undefined,
       })
 
@@ -1853,6 +1892,60 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                               </div>
                             )
                           })()}
+                        </div>
+                        <div>
+                          <Label htmlFor="ai_provider">AI Provider</Label>
+                          <select
+                            id="ai_provider"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                            value={generateForm.provider}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, provider: e.target.value })}
+                          >
+                            {aiProviders.map((provider) => (
+                              <option key={provider.id} value={provider.name}>{provider.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="ai_model">Model</Label>
+                          <select
+                            id="ai_model"
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                            value={generateForm.model}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, model: e.target.value })}
+                          >
+                            {models.map((model) => (
+                              <option key={model.name} value={model.name}>{model.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <Label htmlFor="temperature">Temperature</Label>
+                          <input
+                            id="temperature"
+                            type="number"
+                            min={0}
+                            max={2}
+                            step={0.01}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                            value={generateForm.temperature}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, temperature: parseFloat(e.target.value) })}
+                          />
+                          <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
+                        </div>
+                        <div>
+                          <Label htmlFor="max_tokens">Max Output Tokens</Label>
+                          <input
+                            id="max_tokens"
+                            type="number"
+                            min={100}
+                            max={32000}
+                            step={100}
+                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                            value={generateForm.max_tokens}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, max_tokens: parseInt(e.target.value) })}
+                          />
+                          <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
                         </div>
                         <div>
                           <Label htmlFor="generate-prompt">Generation Prompt *</Label>

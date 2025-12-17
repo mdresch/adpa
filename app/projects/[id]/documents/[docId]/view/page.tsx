@@ -757,6 +757,7 @@ The ADPA system represents a significant advancement in document processing auto
     model?: string
     versionType: 'patch' | 'minor' | 'major'
     temperature: number
+    max_tokens?: number
   }) => {
     if (!documentId) return
     

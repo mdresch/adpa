@@ -18,6 +18,7 @@ interface RegenerationJobParams {
   model?: string
   versionType: 'patch' | 'minor' | 'major'
   temperature?: number
+  max_tokens?: number
   userId: string
   jobId: string
 }
@@ -185,7 +186,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         provider: params.provider,
         model: params.model || 'gpt-4',
         temperature: params.temperature || 0.7,
-        max_tokens: 4000,
+        max_tokens: params.max_tokens || 8000,
         project_id: projectId,
         template_id: templateId,
         include_integrations: true,

@@ -1,3 +1,6 @@
+// IMPORTANT: Tracing must be initialized BEFORE any other imports
+import "./tracing"
+
 import dotenv from "dotenv"
 dotenv.config()
 

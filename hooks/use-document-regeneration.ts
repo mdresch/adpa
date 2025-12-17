@@ -21,6 +21,7 @@ interface RegenerationParams {
   model?: string
   versionType: 'patch' | 'minor' | 'major'
   temperature?: number
+  max_tokens?: number
 }
 
 interface RegenerationResult {
@@ -188,7 +189,8 @@ export function useDocumentRegeneration(): UseDocumentRegenerationReturn {
             provider: params.provider,
             model: params.model,
             versionType: params.versionType,
-            temperature: params.temperature || 0.7
+            temperature: params.temperature || 0.7,
+            max_tokens: params.max_tokens || 8000
           })
         }
       )

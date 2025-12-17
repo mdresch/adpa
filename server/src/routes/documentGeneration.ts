@@ -631,6 +631,7 @@ const regenerateDocumentSchema = Joi.object({
   model: Joi.string().optional(),
   versionType: Joi.string().valid('patch', 'minor', 'major').default('minor'), // AI regenerations default to minor
   temperature: Joi.number().min(0).max(2).default(0.7),
+  max_tokens: Joi.number().integer().min(100).max(32000).optional().default(8000),
 })
 
 // Regenerate document with updated context
@@ -649,38 +650,92 @@ router.post("/regenerate/:documentId",
         model,
         versionType,
         temperature,
+        max_tokens,
       } = req.body
 
       log.info(`Regenerating document ${documentId}`)
 
-      // Check document exists and user has access
-      const documentCheck = await pool.query(
-        `SELECT d.id, d.project_id, d.template_id, d.name, p.owner_id, p.team_members
-         FROM documents d
-         JOIN projects p ON d.project_id = p.id
-         WHERE d.id = $1`,
-        [documentId]
-      )
+      const userId = req.user?.id
+      const userRole = (req as any).user?.role
+      const isSuperAdmin = userRole === 'super_admin'
+      const isAdmin = userRole === 'admin'
+      const userCompanyId = (req as any).user?.company_id
 
-      if (documentCheck.rows.length === 0) {
-        return res.status(404).json({ error: "Document not found" })
+      // Check document exists and user has access
+      let documentCheck
+      try {
+        if (isSuperAdmin) {
+          // Super admin can access any document - just verify document exists
+          documentCheck = await pool.query(
+            `SELECT d.id, d.project_id, d.template_id, d.name,
+                    p.owner_id, p.created_by, p.team_members, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1 AND d.deleted_at IS NULL`,
+            [documentId]
+          )
+        } else if (isAdmin && userCompanyId) {
+          // Admin can access documents from their company
+          documentCheck = await pool.query(
+            `SELECT d.id, d.project_id, d.template_id, d.name,
+                    p.owner_id, p.created_by, p.team_members, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1 AND d.deleted_at IS NULL AND p.company_id = $2`,
+            [documentId, userCompanyId]
+          )
+        } else {
+          // Regular users: check project-level access (created_by, owner_id, team_members)
+          documentCheck = await pool.query(
+            `SELECT d.id, d.project_id, d.template_id, d.name,
+                    p.owner_id, p.created_by, p.team_members, p.company_id
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1 
+             AND d.deleted_at IS NULL
+             AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)`,
+            [documentId, userId]
+          )
+        }
+      } catch (err: any) {
+        // If company_id column doesn't exist, fall back to owner check
+        if (err.message?.includes('column') && err.message?.includes('company_id')) {
+          documentCheck = await pool.query(
+            `SELECT d.id, d.project_id, d.template_id, d.name,
+                    p.owner_id, p.created_by, p.team_members
+             FROM documents d
+             JOIN projects p ON d.project_id = p.id
+             WHERE d.id = $1 
+             AND d.deleted_at IS NULL
+             AND (p.created_by = $2 OR p.owner_id = $2 OR p.team_members ? $2::text)`,
+            [documentId, userId]
+          )
+        } else {
+          throw err
+        }
       }
 
-      const document = documentCheck.rows[0]
-      const hasAccess = 
-        document.owner_id === req.user?.id ||
-        (document.team_members && document.team_members.includes(req.user?.id))
-
-      if (!hasAccess) {
+      if (documentCheck.rows.length === 0) {
+        log.warn('Access denied to regenerate document', {
+          documentId,
+          userId,
+          userRole,
+          userCompanyId
+        })
         return res.status(403).json({ error: "Access denied to document" })
       }
 
+      const document = documentCheck.rows[0]
+
       // Create regeneration job in database
       const jobId = uuidv4()
+      const metadata = {
+        max_tokens: max_tokens || 8000
+      }
       await pool.query(
         `INSERT INTO regeneration_jobs 
-         (id, document_id, template_id, provider, model, version_type, temperature, user_id, status, progress)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+         (id, document_id, template_id, provider, model, version_type, temperature, user_id, status, progress, metadata)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           jobId,
           documentId,
@@ -691,7 +746,8 @@ router.post("/regenerate/:documentId",
           temperature,
           req.user?.id,
           'pending',
-          0
+          0,
+          JSON.stringify(metadata)
         ]
       )
 
@@ -705,6 +761,7 @@ router.post("/regenerate/:documentId",
         model,
         versionType,
         temperature,
+        max_tokens: max_tokens || 8000,
         userId: req.user?.id,
         jobId
       })

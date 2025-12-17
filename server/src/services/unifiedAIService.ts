@@ -194,7 +194,7 @@ class UnifiedAIService {
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
         })),
-        maxOutputTokens: request.max_tokens || 1000,
+        maxOutputTokens: request.max_tokens || 8000,
         temperature: request.temperature || 0.7,
       })
 
@@ -377,7 +377,7 @@ class UnifiedAIService {
           role: msg.role as 'user' | 'assistant' | 'system',
           content: msg.content,
         })),
-        maxOutputTokens: request.max_tokens || 1000,
+        maxOutputTokens: request.max_tokens || 8000,
         temperature: request.temperature || 0.7,
       })
 

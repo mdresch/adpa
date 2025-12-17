@@ -653,11 +653,24 @@ export class ExtractionOrchestrationService {
         let completedCount = 0
         let checkInterval: NodeJS.Timeout | null = null
         let isResolved = false // Prevent multiple resolutions
+        const jobStartTimes = new Map<string, number>() // Track when each child job started processing
+        const STUCK_JOB_TIMEOUT = 10 * 60 * 1000 // 10 minutes - consider a job stuck if active this long
+        
+        let partialSuccessTimeout: NodeJS.Timeout | null = null
+        let fullTimeout: NodeJS.Timeout | null = null
         
         const cleanup = () => {
           if (checkInterval) {
             clearInterval(checkInterval)
             checkInterval = null
+          }
+          if (partialSuccessTimeout) {
+            clearTimeout(partialSuccessTimeout)
+            partialSuccessTimeout = null
+          }
+          if (fullTimeout) {
+            clearTimeout(fullTimeout)
+            fullTimeout = null
           }
           // Clean up global reference
           if ((global as any).extractionIntervals) {
@@ -682,20 +695,52 @@ export class ExtractionOrchestrationService {
               return
             }
             
+            const now = Date.now()
             const states = await Promise.all(
               childJobs.map(async (j) => {
                 try {
                   const state = await j.getState()
+                  
+                  // Track when jobs start processing
+                  if (state === 'active' && !jobStartTimes.has(j.id)) {
+                    jobStartTimes.set(j.id, now)
+                    const entityType = (j.data as any)?.entityType || 'unknown'
+                    log.debug(`[EXTRACTION-PARENT] Child job ${j.id} (${entityType}) started processing`)
+                  }
+                  
+                  // Check for stuck jobs (active for too long)
+                  if (state === 'active') {
+                    const startTime = jobStartTimes.get(j.id)
+                    if (startTime && (now - startTime) > STUCK_JOB_TIMEOUT) {
+                      const entityType = (j.data as any)?.entityType || 'unknown'
+                      const stuckDuration = Math.floor((now - startTime) / 1000 / 60) // minutes
+                      log.warn(`[EXTRACTION-PARENT] ⚠️  Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`, {
+                        jobId: j.id,
+                        entityType,
+                        stuckDurationMinutes: stuckDuration,
+                        parentJobId: jobId
+                      })
+                    }
+                  }
+                  
                   // Treat 'unknown' (job removed from queue) as completed
                   // This happens when jobs are auto-cleaned after completion
                   if (state === 'unknown') {
                     log.debug(`[EXTRACTION-PARENT] Child job ${j.id} state is 'unknown' (removed from queue), treating as completed`)
+                    jobStartTimes.delete(j.id)
                     return 'completed'
                   }
+                  
+                  // Clear start time when job completes or fails
+                  if (state === 'completed' || state === 'failed') {
+                    jobStartTimes.delete(j.id)
+                  }
+                  
                   return state
                 } catch (err) {
                   // If we can't get state, assume completed (job was cleaned up)
                   log.warn(`[EXTRACTION-PARENT] Could not get state for child job ${j.id}, assuming completed: ${err}`)
+                  jobStartTimes.delete(j.id)
                   return 'completed'
                 }
               })
@@ -703,8 +748,31 @@ export class ExtractionOrchestrationService {
             
             const completed = states.filter(s => s === 'completed').length
             const failed = states.filter(s => s === 'failed').length
+            const active = states.filter(s => s === 'active').length
+            const waiting = states.filter(s => s === 'waiting' || s === 'delayed').length
             
-            log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
+            // Log detailed progress including stuck jobs
+            const stuckJobs = childJobs
+              .map((j, i) => ({ job: j, state: states[i], index: i }))
+              .filter(({ state }) => state === 'active')
+              .filter(({ job }) => {
+                const startTime = jobStartTimes.get(job.id)
+                return startTime && (now - startTime) > STUCK_JOB_TIMEOUT
+              })
+              .map(({ job }) => {
+                const entityType = (job.data as any)?.entityType || 'unknown'
+                const startTime = jobStartTimes.get(job.id)
+                const stuckDuration = startTime ? Math.floor((now - startTime) / 1000 / 60) : 0
+                return `${entityType} (${stuckDuration}m)`
+              })
+            
+            if (stuckJobs.length > 0) {
+              log.warn(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active (${stuckJobs.length} stuck: ${stuckJobs.join(', ')}), ${waiting} waiting out of ${childJobs.length}`)
+            } else if (active > 0 || waiting > 0) {
+              log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active, ${waiting} waiting out of ${childJobs.length}`)
+            } else {
+              log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
+            }
             
             if (completed + failed === childJobs.length) {
               // All children done - clean up and finalize
@@ -837,8 +905,63 @@ export class ExtractionOrchestrationService {
         })
         
         // Add a timeout to prevent jobs from hanging forever (30 minutes max)
-        setTimeout(() => {
+        // But allow partial success if most jobs completed (after 20 minutes)
+        partialSuccessTimeout = setTimeout(async () => {
           if (!isResolved) {
+            // Check if we have enough completed jobs to allow partial success
+            try {
+              const states = await Promise.all(
+                childJobs.map(async (j) => {
+                  try {
+                    const state = await j.getState()
+                    if (state === 'unknown') return 'completed'
+                    return state
+                  } catch {
+                    return 'completed'
+                  }
+                })
+              )
+              
+              const completed = states.filter(s => s === 'completed').length
+              const failed = states.filter(s => s === 'failed').length
+              const successRate = (completed + failed) / childJobs.length
+              
+              // If at least 80% of jobs are done (completed or failed), allow partial success
+              if (successRate >= 0.8) {
+                log.warn(`[EXTRACTION-PARENT] Job ${jobId} reached 20-minute timeout but ${(successRate * 100).toFixed(1)}% complete - allowing partial success`, {
+                  completed,
+                  failed,
+                  total: childJobs.length,
+                  successRate
+                })
+                
+                const failedJobs: Array<{ entityType: string; error: string }> = []
+                // Collect failed job details
+                for (let i = 0; i < childJobs.length; i++) {
+                  if (states[i] === 'failed') {
+                    const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
+                    failedJobs.push({ entityType, error: 'Job failed or timed out' })
+                  } else if (states[i] === 'active' || states[i] === 'waiting' || states[i] === 'delayed') {
+                    const entityType = (childJobs[i].data as any)?.entityType || 'unknown'
+                    failedJobs.push({ entityType, error: 'Job timed out after 20 minutes' })
+                  }
+                }
+                
+                cleanup()
+                isResolved = true
+                await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
+                resolve({ success: true })
+                return
+              }
+            } catch (err: any) {
+              log.error(`[EXTRACTION-PARENT] Error checking partial success at 20-minute timeout: ${err?.message || err}`)
+            }
+          }
+        }, 20 * 60 * 1000) // 20 minutes - check for partial success
+        
+        fullTimeout = setTimeout(() => {
+          if (!isResolved) {
+            clearTimeout(partialSuccessTimeout)
             cleanup()
             isResolved = true
             const timeoutError = 'Extraction job timed out after 30 minutes'

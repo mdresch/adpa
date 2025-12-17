@@ -569,6 +569,7 @@ ${doc.content}
     model?: string
     versionType: 'patch' | 'minor' | 'major'
     temperature: number
+    max_tokens?: number
   }) => {
     if (!documentId) return
     
