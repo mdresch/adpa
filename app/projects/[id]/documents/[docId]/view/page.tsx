@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
+import { useParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -37,9 +38,10 @@ import {
   MoreHorizontal,
   AlertTriangle,
 } from "@/components/ui/icons-shim"
-import { Award } from "lucide-react"
+import { Award } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
@@ -108,10 +110,10 @@ export default function ProjectDocumentViewer() {
   const params = useParams()
   const router = useRouter()
   const { user } = useAuth()
-  
+
   const projectId = params.id as string
   const documentId = params.docId as string
-  
+
   const [document, setDocument] = useState<DocumentData | null>(null)
   const [versions, setVersions] = useState<VersionData[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -137,7 +139,73 @@ export default function ProjectDocumentViewer() {
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
-  
+
+  // WebSocket event handlers for conflict and regeneration events
+  const { on, off, joinRoom, leaveRoom } = useWebSocket()
+  useEffect(() => {
+    // Join the document and project rooms to receive events
+    const documentRoom = `document:${documentId}`
+    const projectRoom = `project:${projectId}`
+    joinRoom(documentRoom)
+    joinRoom(projectRoom)
+
+    const handleConflictDetected = (data: {
+      jobId: string;
+      conflictId: string;
+      conflictDetails: any;
+      resolutionOptions: string[];
+    }) => {
+      try {
+        toast.warning(`Template conflict detected during regeneration: ${data.conflictDetails.template?.name || 'Unknown Template'}`)
+        // The conflict dialog will be shown by the project page
+      } catch (err) {
+        console.warn('Error handling document:regeneration:conflict_detected event', err)
+      }
+    }
+
+    const handleConflictResolved = (data: {
+      conflictId: string;
+      resolutionMethod: string;
+      documentId: string;
+      newVersionId?: string;
+    }) => {
+      try {
+        if (data.documentId === documentId) {
+          toast.success(`Conflict resolved using ${data.resolutionMethod}`)
+          fetchDocument() // Refresh document to show updates
+        }
+      } catch (err) {
+        console.warn('Error handling document:conflict_resolved event', err)
+      }
+    }
+
+    const handleRegenerationCompleted = (data: {
+      jobId: string;
+      versionId: string;
+      versionNumber: string;
+      documentName?: string;
+    }) => {
+      try {
+        toast.success(`Document regeneration completed (v${data.versionNumber})`)
+        fetchDocument() // Refresh document to show the new version
+      } catch (err) {
+        console.warn('Error handling document:regeneration:completed event', err)
+      }
+    }
+
+    on("document:regeneration:conflict_detected", handleConflictDetected)
+    on("document:conflict_resolved", handleConflictResolved)
+    on("document:regeneration:completed", handleRegenerationCompleted)
+
+    return () => {
+      off("document:regeneration:conflict_detected", handleConflictDetected)
+      off("document:conflict_resolved", handleConflictResolved)
+      off("document:regeneration:completed", handleRegenerationCompleted)
+      leaveRoom(documentRoom)
+      leaveRoom(projectRoom)
+    }
+  }, [documentId, projectId, joinRoom, leaveRoom, on, off])
+
   // Mock data for demonstration
   const mockDocument: DocumentData = {
     id: documentId,
@@ -303,7 +371,7 @@ The ADPA system represents a significant advancement in document processing auto
         created_at: "2024-01-15T11:15:00Z"
       },
       {
-        id: "comment-2", 
+        id: "comment-2",
         author: "Product Manager",
         content: "Great work on the requirements! The performance metrics are well-defined and achievable.",
         created_at: "2024-01-15T12:30:00Z"
@@ -322,7 +390,7 @@ The ADPA system represents a significant advancement in document processing auto
     },
     {
       id: "v2",
-      version: "1.1", 
+      version: "1.1",
       created_at: "2024-01-15T12:15:00Z",
       author: "Technical Lead",
       changes: "Added technical architecture and database schema",
@@ -331,7 +399,7 @@ The ADPA system represents a significant advancement in document processing auto
     {
       id: "v3",
       version: "1.2",
-      created_at: "2024-01-15T14:45:00Z", 
+      created_at: "2024-01-15T14:45:00Z",
       author: "Project Manager",
       changes: "Enhanced with performance requirements and success metrics",
       word_count: 847
@@ -351,128 +419,128 @@ The ADPA system represents a significant advancement in document processing auto
           { suppressNotFoundError: true } as Record<string, unknown>
         ).catch(() => ({ drifts: [] }))
       ])
-      
+
       // Filter drifts for this specific document
       const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId)
       setDrifts(documentDrifts)
-        
-        const documentData = documentResponse
-        const versionsData = versionsResponse || []
-        
-        console.log('[DocumentView] Loaded document:', documentData)
-        console.log('[DocumentView] Loaded versions count:', versionsData.length)
-        console.log('[DocumentView] All versions with timestamps:', versionsData.map((v: any) => ({
-          version: v.version,
-          created_at: v.created_at,
-          timestamp: new Date(v.created_at).getTime()
-        })))
-        
-        // 🆕 Find the latest version (highest semantic version)
-        let latestVersion = null
-        if (versionsData.length > 0) {
-          // Helper function to parse semantic version
-          const parseVersion = (versionStr: string): [number, number, number] => {
-            const parts = versionStr.split('.').map(p => parseInt(p, 10) || 0)
-            return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
-          }
-          
-          // Sort by semantic version DESC (highest version first)
-          const sortedVersions = [...versionsData].sort((a: any, b: any) => {
-            const [aMajor, aMinor, aPatch] = parseVersion(a.version)
-            const [bMajor, bMinor, bPatch] = parseVersion(b.version)
-            
-            // Compare major, then minor, then patch
-            if (bMajor !== aMajor) return bMajor - aMajor
-            if (bMinor !== aMinor) return bMinor - aMinor
-            return bPatch - aPatch
-          })
-          latestVersion = sortedVersions[0]
-          console.log('[DocumentView] Sorted versions (highest first):', sortedVersions.map((v: any) => v.version))
-          console.log('[DocumentView] Latest version selected:', latestVersion.version, 'created:', latestVersion.created_at)
+
+      const documentData = documentResponse
+      const versionsData = versionsResponse || []
+
+      console.log('[DocumentView] Loaded document:', documentData)
+      console.log('[DocumentView] Loaded versions count:', versionsData.length)
+      console.log('[DocumentView] All versions with timestamps:', versionsData.map((v: any) => ({
+        version: v.version,
+        created_at: v.created_at,
+        timestamp: new Date(v.created_at).getTime()
+      })))
+
+      // 🆕 Find the latest version (highest semantic version)
+      let latestVersion = null
+      if (versionsData.length > 0) {
+        // Helper function to parse semantic version
+        const parseVersion = (versionStr: string): [number, number, number] => {
+          const parts = versionStr.split('.').map(p => parseInt(p, 10) || 0)
+          return [parts[0] || 0, parts[1] || 0, parts[2] || 0]
         }
-        
-        // Use latest version's content if available, otherwise fall back to current document
-        const dataToDisplay = latestVersion || documentData
-        
-        console.log('[DocumentView] Displaying version:', latestVersion ? latestVersion.version : 'current')
-        console.log('[DocumentView] Version contents available:', versionsData.map((v: any) => ({
-          version: v.version,
-          hasContent: !!v.content,
-          contentLength: v.content?.length || 0
-        })))
-        
-        // Convert content to string if it's an object
-        let contentString = ''
-        if (typeof dataToDisplay.content === 'string') {
-          contentString = dataToDisplay.content
-        } else if (dataToDisplay.content && typeof dataToDisplay.content === 'object') {
-          // Handle different content object formats
-          if (dataToDisplay.content.text) {
-            contentString = dataToDisplay.content.text
-          } else if (dataToDisplay.content.markdown) {
-            contentString = dataToDisplay.content.markdown
-          } else {
-            // Fallback: stringify the object
-            contentString = JSON.stringify(dataToDisplay.content, null, 2)
-          }
-        }
-        
-        // Use template_name from document response (backend already provides it)
-        if (documentData.template_name) {
-          setTemplateName(documentData.template_name)
-        } else if (documentData.template_id) {
-          // Fallback: fetch template name if not included in response
-          try {
-            const templateResponse = await apiClient.get(`/templates/${documentData.template_id}`)
-            setTemplateName(templateResponse.name || 'Unknown Template')
-          } catch (error) {
-            console.error('Failed to fetch template name:', error)
-            setTemplateName('Unknown Template')
-          }
-        }
-        
-        // 🆕 Extract source_documents from metadata if available
-        const sourceDocuments = dataToDisplay.metadata?.source_documents || 
-                               dataToDisplay.generation_metadata?.source_documents || 
-                               []
-        
-        setDocument({
-          ...documentData, // Keep base document metadata (project_id, template_id, etc.)
-          ...dataToDisplay, // Override with latest version's data
-          content: contentString,
-          source_documents: sourceDocuments, // Expose at top level for UI
-          loaded_version: latestVersion ? latestVersion.version : null,
-          loaded_version_id: latestVersion ? latestVersion.id : null
+
+        // Sort by semantic version DESC (highest version first)
+        const sortedVersions = [...versionsData].sort((a: any, b: any) => {
+          const [aMajor, aMinor, aPatch] = parseVersion(a.version)
+          const [bMajor, bMinor, bPatch] = parseVersion(b.version)
+
+          // Compare major, then minor, then patch
+          if (bMajor !== aMajor) return bMajor - aMajor
+          if (bMinor !== aMinor) return bMinor - aMinor
+          return bPatch - aPatch
         })
-        setVersions(versionsData)
-        setEditedContent(contentString)
-        setBaseContentSnapshot(contentString)
-        setLatestContentSnapshot(contentString)
-        
-        // Extract TOC from real document content
-        if (contentString) {
-          extractTableOfContents(contentString)
-        }
-      } catch (error) {
-        console.error("Failed to load document:", error)
-        
-        // Fallback to mock data if API fails (for development/demo purposes)
-        setDocument(mockDocument)
-        setVersions(mockVersions)
-        setEditedContent(mockDocument.content)
-        setBaseContentSnapshot(mockDocument.content)
-        setLatestContentSnapshot(mockDocument.content)
-        
-        // Show error toast but don't break the UI
-        toast.error("Failed to load document from API, showing demo data")
-      } finally {
-        setIsLoading(false)
+        latestVersion = sortedVersions[0]
+        console.log('[DocumentView] Sorted versions (highest first):', sortedVersions.map((v: any) => v.version))
+        console.log('[DocumentView] Latest version selected:', latestVersion.version, 'created:', latestVersion.created_at)
       }
+
+      // Use latest version's content if available, otherwise fall back to current document
+      const dataToDisplay = latestVersion || documentData
+
+      console.log('[DocumentView] Displaying version:', latestVersion ? latestVersion.version : 'current')
+      console.log('[DocumentView] Version contents available:', versionsData.map((v: any) => ({
+        version: v.version,
+        hasContent: !!v.content,
+        contentLength: v.content?.length || 0
+      })))
+
+      // Convert content to string if it's an object
+      let contentString = ''
+      if (typeof dataToDisplay.content === 'string') {
+        contentString = dataToDisplay.content
+      } else if (dataToDisplay.content && typeof dataToDisplay.content === 'object') {
+        // Handle different content object formats
+        if (dataToDisplay.content.text) {
+          contentString = dataToDisplay.content.text
+        } else if (dataToDisplay.content.markdown) {
+          contentString = dataToDisplay.content.markdown
+        } else {
+          // Fallback: stringify the object
+          contentString = JSON.stringify(dataToDisplay.content, null, 2)
+        }
+      }
+
+      // Use template_name from document response (backend already provides it)
+      if (documentData.template_name) {
+        setTemplateName(documentData.template_name)
+      } else if (documentData.template_id) {
+        // Fallback: fetch template name if not included in response
+        try {
+          const templateResponse = await apiClient.get(`/templates/${documentData.template_id}`)
+          setTemplateName(templateResponse.name || 'Unknown Template')
+        } catch (error) {
+          console.error('Failed to fetch template name:', error)
+          setTemplateName('Unknown Template')
+        }
+      }
+
+      // 🆕 Extract source_documents from metadata if available
+      const sourceDocuments = dataToDisplay.metadata?.source_documents ||
+        dataToDisplay.generation_metadata?.source_documents ||
+        []
+
+      setDocument({
+        ...documentData, // Keep base document metadata (project_id, template_id, etc.)
+        ...dataToDisplay, // Override with latest version's data
+        content: contentString,
+        source_documents: sourceDocuments, // Expose at top level for UI
+        loaded_version: latestVersion ? latestVersion.version : null,
+        loaded_version_id: latestVersion ? latestVersion.id : null
+      })
+      setVersions(versionsData)
+      setEditedContent(contentString)
+      setBaseContentSnapshot(contentString)
+      setLatestContentSnapshot(contentString)
+
+      // Extract TOC from real document content
+      if (contentString) {
+        extractTableOfContents(contentString)
+      }
+    } catch (error) {
+      console.error("Failed to load document:", error)
+
+      // Fallback to mock data if API fails (for development/demo purposes)
+      setDocument(mockDocument)
+      setVersions(mockVersions)
+      setEditedContent(mockDocument.content)
+      setBaseContentSnapshot(mockDocument.content)
+      setLatestContentSnapshot(mockDocument.content)
+
+      // Show error toast but don't break the UI
+      toast.error("Failed to load document from API, showing demo data")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   useEffect(() => {
     fetchDocument()
-    
+
     // Extract TOC when document loads
     if (mockDocument.content) {
       extractTableOfContents(mockDocument.content)
@@ -484,14 +552,14 @@ The ADPA system represents a significant advancement in document processing auto
     const headings: Array<{ id: string; text: string; level: number; isDrift?: boolean }> = []
     const lines = (typeof content === 'string' ? content : '').split('\n')
     const idCounts = new Map<string, number>() // Track duplicate IDs
-    
+
     lines.forEach((line) => {
       const h1Match = line.match(/^#\s+(.+)$/)
       const h2Match = line.match(/^##\s+(.+)$/)
       const h3Match = line.match(/^###\s+(.+)$/)
       const h4Match = line.match(/^####\s+(.+)$/)
       const h5Match = line.match(/^#####\s+(.+)$/)
-      
+
       if (h1Match) {
         const text = h1Match[1].replace(/\*/g, '').trim() // Remove markdown formatting
         let baseId = `heading-${text.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
@@ -533,7 +601,7 @@ The ADPA system represents a significant advancement in document processing auto
         headings.push({ id, text, level: 5, isDrift })
       }
     })
-    
+
     setTableOfContents(headings)
   }, [])
 
@@ -560,10 +628,10 @@ The ADPA system represents a significant advancement in document processing auto
   const scrollToSection = (sectionId: string) => {
     console.log('[TOC] Attempting to scroll to:', sectionId)
     console.log('[TOC] Current TOC items:', tableOfContents.map(h => ({ id: h.id, text: h.text })))
-    
+
     // Use window.document to avoid conflicts
     const element = window.document.getElementById(sectionId)
-    
+
     if (element) {
       console.log('[TOC] ✅ Element found! Scrolling...')
       console.log('[TOC] Element position:', {
@@ -571,44 +639,44 @@ The ADPA system represents a significant advancement in document processing auto
         scrollY: window.scrollY,
         offsetHeight: element.offsetHeight
       })
-      
+
       // Use modern scrollIntoView with offset
       const elementPosition = element.getBoundingClientRect().top
       const offsetPosition = elementPosition + window.scrollY - 120 // 120px offset for header
-      
+
       window.scrollTo({
         top: offsetPosition,
         behavior: 'smooth'
       })
-      
+
       setActiveSection(sectionId)
       console.log('[TOC] Scroll command sent')
     } else {
       console.warn('[TOC] ❌ Element not found with ID:', sectionId)
-      console.log('[TOC] All element IDs on page:', 
+      console.log('[TOC] All element IDs on page:',
         Array.from(window.document.querySelectorAll('[id]')).map(el => el.id).filter(id => id.startsWith('heading-') || id.startsWith('drift-'))
       )
-      
+
       // Fallback: Try to find by text content
       const allHeadings = Array.from(window.document.querySelectorAll('h1, h2, h3, h4, h5, h6'))
       const sectionText = tableOfContents.find(h => h.id === sectionId)?.text
-      
+
       console.log('[TOC] Searching for heading with text:', sectionText)
       console.log('[TOC] All heading texts on page:', allHeadings.map(h => h.textContent?.trim()))
-      
+
       if (sectionText) {
         // Try exact match first
-        let matchingHeading = allHeadings.find(h => 
+        let matchingHeading = allHeadings.find(h =>
           h.textContent?.trim() === sectionText.trim()
         ) as HTMLElement | undefined
-        
+
         // Try case-insensitive partial match if exact fails
         if (!matchingHeading) {
-          matchingHeading = allHeadings.find(h => 
+          matchingHeading = allHeadings.find(h =>
             h.textContent?.toLowerCase().includes(sectionText.toLowerCase())
           ) as HTMLElement | undefined
         }
-        
+
         if (matchingHeading) {
           console.log('[TOC] ✅ Found heading by text content, scrolling...')
           matchingHeading.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -627,11 +695,11 @@ The ADPA system represents a significant advancement in document processing auto
 
     const handleScroll = () => {
       const scrollPosition = window.scrollY + 150
-      
+
       for (let i = tableOfContents.length - 1; i >= 0; i--) {
         const heading = tableOfContents[i]
         const element = window.document.getElementById(heading.id)
-        
+
         if (element && element.offsetTop <= scrollPosition) {
           setActiveSection(heading.id)
           break
@@ -641,13 +709,13 @@ The ADPA system represents a significant advancement in document processing auto
 
     window.addEventListener('scroll', handleScroll, { passive: true })
     handleScroll()
-    
+
     return () => window.removeEventListener('scroll', handleScroll)
   }, [tableOfContents, isEditing])
 
   const exportToPDF = () => {
     if (!document) return
-    
+
     const pdf = new jsPDF()
     pdf.text(document.content, 10, 10, { maxWidth: 180 })
     pdf.save(`${document.title}.pdf`)
@@ -656,7 +724,7 @@ The ADPA system represents a significant advancement in document processing auto
 
   const exportToWord = async () => {
     if (!document) return
-    
+
     const doc = new Document({
       sections: [{
         properties: {},
@@ -690,7 +758,7 @@ The ADPA system represents a significant advancement in document processing auto
 
   const exportToMarkdown = () => {
     if (!document) return
-    
+
     const blob = new Blob([document.content], { type: "text/markdown" })
     saveAs(blob, `${document.title}.md`)
     toast.success("Document exported to Markdown")
@@ -698,14 +766,14 @@ The ADPA system represents a significant advancement in document processing auto
 
   const copyToClipboard = () => {
     if (!document) return
-    
+
     navigator.clipboard.writeText(document.content)
     toast.success("Document content copied to clipboard")
   }
 
   const shareDocument = () => {
     if (!document) return
-    
+
     if (navigator.share) {
       navigator.share({
         title: document.title,
@@ -719,7 +787,7 @@ The ADPA system represents a significant advancement in document processing auto
 
   const saveEdit = async () => {
     if (!document) return
-    
+
     try {
       // Save to the API
       const response = await apiClient.put(`/projects/${projectId}/documents/${documentId}`, {
@@ -727,13 +795,13 @@ The ADPA system represents a significant advancement in document processing auto
         title: document.title,
         tags: document.tags || []
       })
-      
+
       toast.success("Document saved successfully! Refreshing...")
       setIsEditing(false)
-      
+
       // 🔄 Reload document data to get new version number and updated metadata
       await fetchDocument()
-      
+
       // Re-extract TOC from new content
       if (editedContent) {
         extractTableOfContents(editedContent)
@@ -760,7 +828,7 @@ The ADPA system represents a significant advancement in document processing auto
     max_tokens?: number
   }) => {
     if (!documentId) return
-    
+
     try {
       await regenerate({
         documentId,
@@ -781,10 +849,10 @@ The ADPA system represents a significant advancement in document processing auto
             apiClient.get(`/projects/${projectId}/documents/${documentId}`),
             apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`)
           ])
-          
+
           const documentData = documentResponse
           const versionsData = versionsResponse || []
-          
+
           // Convert content to string
           let contentString = ''
           if (typeof documentData.content === 'string') {
@@ -798,45 +866,45 @@ The ADPA system represents a significant advancement in document processing auto
               contentString = JSON.stringify(documentData.content, null, 2)
             }
           }
-          
-          const sourceDocuments = documentData.metadata?.source_documents || 
-                                 documentData.generation_metadata?.source_documents || 
-                                 []
-          
+
+          const sourceDocuments = documentData.metadata?.source_documents ||
+            documentData.generation_metadata?.source_documents ||
+            []
+
           setDocument({
-            ...documentData, 
+            ...documentData,
             content: contentString,
             source_documents: sourceDocuments
           })
           setVersions(versionsData)
           setEditedContent(contentString)
-          
+
           if (contentString) {
             extractTableOfContents(contentString)
           }
-          
+
           toast.success('Document reloaded with new version!')
         } catch (error) {
           console.error('Failed to reload after regeneration:', error)
         }
       }
     }
-    
+
     reloadAfterRegeneration()
   }, [result, documentId, projectId])
 
   const addComment = async () => {
     if (!newComment.trim() || !document) return
-    
+
     try {
       // Save comment to the API
       const response = await apiClient.post(`/projects/${projectId}/documents/${documentId}/comments`, {
         content: newComment,
         author_id: user?.id
       })
-      
+
       const newCommentObj = response.data
-      
+
       setDocument({
         ...document,
         comments: [...(document.comments || []), newCommentObj]
@@ -852,12 +920,12 @@ The ADPA system represents a significant advancement in document processing auto
   const fetchSummaries = async () => {
     setLoadingSummaries(true)
     setShowSummaries(true)
-    
+
     try {
       const response = await apiClient.request(
         `/documents/${documentId}/summaries`
       )
-      
+
       if (response.summaries) {
         setSummaries(response.summaries)
         if (response.summaries.length === 0) {
@@ -907,8 +975,8 @@ The ADPA system represents a significant advancement in document processing auto
               <div className="flex items-center justify-center h-64">
                 <div className="text-center">
                   <p className="text-muted-foreground">Document not found</p>
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="mt-4"
                     onClick={() => router.back()}
                   >
@@ -945,8 +1013,8 @@ The ADPA system represents a significant advancement in document processing auto
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => router.push(`/projects/${projectId}/documents`)}
                       >
@@ -966,28 +1034,28 @@ The ADPA system represents a significant advancement in document processing auto
                     </div>
                     <div className="flex items-center space-x-2">
                       <Badge variant="secondary">{document.status}</Badge>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setShowVersionsDialog(true)}
                       >
                         <History className="h-4 w-4 mr-2" />
-                        {(document as any).loaded_version 
+                        {(document as any).loaded_version
                           ? `v${(document as any).loaded_version} (${versions.length} versions)`
                           : `Versions (${versions.length})`
                         }
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => setShowComments(!showComments)}
                       >
                         <MessageSquare className="h-4 w-4 mr-2" />
                         Comments ({document.comments?.length || 0})
                       </Button>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={fetchSummaries}
                       >
                         <BarChart3 className="h-4 w-4 mr-2" />
@@ -1056,7 +1124,7 @@ The ADPA system represents a significant advancement in document processing auto
                         </CardContent>
                       </Card>
                     )}
-                    
+
                     {drifts.length > 0 && !showDriftHighlights && (
                       <Button
                         variant="outline"
@@ -1097,9 +1165,9 @@ The ADPA system represents a significant advancement in document processing auto
                                   <Share className="h-4 w-4 mr-2" />
                                   Share
                                 </Button>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm" 
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => setShowRegenerateModal(true)}
                                   disabled={isRegenerating}
                                 >
@@ -1172,23 +1240,21 @@ The ADPA system represents a significant advancement in document processing auto
                               <button
                                 key={heading.id}
                                 onClick={() => scrollToSection(heading.id)}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${
-                                  activeSection === heading.id
-                                    ? 'bg-primary text-primary-foreground font-medium'
-                                    : heading.isDrift
-                                    ? (heading.level === 4 
-                                        ? 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 border-l-4 border-red-500' 
-                                        : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100 border-l-4 border-yellow-400')
+                                className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-all ${activeSection === heading.id
+                                  ? 'bg-primary text-primary-foreground font-medium'
+                                  : heading.isDrift
+                                    ? (heading.level === 4
+                                      ? 'hover:bg-red-50 dark:hover:bg-red-900/20 text-red-700 dark:text-red-300 hover:text-red-900 dark:hover:text-red-100 border-l-4 border-red-500'
+                                      : 'hover:bg-yellow-50 dark:hover:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 hover:text-yellow-900 dark:hover:text-yellow-100 border-l-4 border-yellow-400')
                                     : 'hover:bg-muted text-muted-foreground hover:text-foreground'
-                                } ${
-                                  heading.isDrift
+                                  } ${heading.isDrift
                                     ? 'font-semibold ml-6'
                                     : heading.level === 1 ? 'font-semibold' :
                                       heading.level === 2 ? 'ml-3' :
-                                      heading.level === 3 ? 'ml-6 text-xs' :
-                                      heading.level === 4 ? 'ml-9 text-xs' :
-                                      'ml-12 text-xs'
-                                }`}
+                                        heading.level === 3 ? 'ml-6 text-xs' :
+                                          heading.level === 4 ? 'ml-9 text-xs' :
+                                            'ml-12 text-xs'
+                                  }`}
                               >
                                 {heading.isDrift && (
                                   <AlertTriangle className="inline-block h-3 w-3 mr-1 -mt-0.5" />
@@ -1274,16 +1340,16 @@ The ADPA system represents a significant advancement in document processing auto
                             <div>
                               <span className="text-muted-foreground">Words:</span>
                               <span className="ml-2 font-medium">
-                                {(document.word_count || 
-                                  (document as any).generation_metadata?.contentMetrics?.words || 
+                                {(document.word_count ||
+                                  (document as any).generation_metadata?.contentMetrics?.words ||
                                   0).toLocaleString()}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Characters:</span>
                               <span className="ml-2 font-medium">
-                                {(document.character_count || 
-                                  (document as any).generation_metadata?.contentMetrics?.characters || 
+                                {(document.character_count ||
+                                  (document as any).generation_metadata?.contentMetrics?.characters ||
                                   0).toLocaleString()}
                               </span>
                             </div>
@@ -1326,17 +1392,17 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Provider:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.provider || 
-                                 (document as any).metadata?.ai_usage?.provider_used || 
-                                 'N/A'}
+                                {(document as any).generation_metadata?.aiProcessing?.provider ||
+                                  (document as any).metadata?.ai_usage?.provider_used ||
+                                  'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Model:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.model || 
-                                 (document as any).metadata?.ai_usage?.model_used || 
-                                 document.ai_model || 'N/A'}
+                                {(document as any).generation_metadata?.aiProcessing?.model ||
+                                  (document as any).metadata?.ai_usage?.model_used ||
+                                  document.ai_model || 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -1354,22 +1420,22 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Input Tokens:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.input || 
-                                 document.input_tokens || 'N/A'}
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.input ||
+                                  document.input_tokens || 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Output Tokens:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.output || 
-                                 document.output_tokens || 'N/A'}
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.output ||
+                                  document.output_tokens || 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Total Tokens:</span>
                               <span className="font-medium text-primary">
-                                {(document as any).generation_metadata?.aiProcessing?.tokens?.total || 
-                                 ((document.input_tokens || 0) + (document.output_tokens || 0)) || 'N/A'}
+                                {(document as any).generation_metadata?.aiProcessing?.tokens?.total ||
+                                  ((document.input_tokens || 0) + (document.output_tokens || 0)) || 'N/A'}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -1387,11 +1453,11 @@ The ADPA system represents a significant advancement in document processing auto
                             <div className="flex justify-between">
                               <span className="text-muted-foreground">Processing Time:</span>
                               <span className="font-medium">
-                                {(document as any).generation_metadata?.aiProcessing?.processingTime || 
-                                 (document as any).generation_metadata?.generation?.durationFormatted ||
-                                 ((document as any).generation_metadata?.generation?.duration ? 
-                                   `${((document as any).generation_metadata.generation.duration / 1000).toFixed(2)}s` : 
-                                   'N/A')}
+                                {(document as any).generation_metadata?.aiProcessing?.processingTime ||
+                                  (document as any).generation_metadata?.generation?.durationFormatted ||
+                                  ((document as any).generation_metadata?.generation?.duration ?
+                                    `${((document as any).generation_metadata.generation.duration / 1000).toFixed(2)}s` :
+                                    'N/A')}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -1422,16 +1488,16 @@ The ADPA system represents a significant advancement in document processing auto
                             <p className="text-sm font-medium">Overall Quality</p>
                             <div className="flex items-center justify-between">
                               <span className="text-3xl font-bold text-primary">
-                                {(document as any).generation_metadata.qualityMetrics.overallQuality || 
-                                 (document as any).generation_metadata.qualityMetrics.overall || 0}%
+                                {(document as any).generation_metadata.qualityMetrics.overallQuality ||
+                                  (document as any).generation_metadata.qualityMetrics.overall || 0}%
                               </span>
-                              <Badge 
-                                variant="secondary" 
+                              <Badge
+                                variant="secondary"
                                 className="text-sm px-3 py-1"
                               >
                                 {(() => {
-                                  const score = (document as any).generation_metadata.qualityMetrics.overallQuality || 
-                                               (document as any).generation_metadata.qualityMetrics.overall || 0
+                                  const score = (document as any).generation_metadata.qualityMetrics.overallQuality ||
+                                    (document as any).generation_metadata.qualityMetrics.overall || 0
                                   if (score >= 90) return 'A (Excellent)'
                                   if (score >= 80) return 'B (Good)'
                                   if (score >= 70) return 'C (Fair)'
@@ -1449,7 +1515,7 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">Completeness</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                       className="h-full bg-blue-500 transition-all"
                                       style={{ width: `${(document as any).generation_metadata.qualityMetrics.completeness || 0}%` }}
                                     />
@@ -1463,7 +1529,7 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">Structure</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                       className="h-full bg-green-500 transition-all"
                                       style={{ width: `${(document as any).generation_metadata.qualityMetrics.structureScore || (document as any).generation_metadata.qualityMetrics.structure || 0}%` }}
                                     />
@@ -1477,7 +1543,7 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">Formatting & Style</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                       className="h-full bg-purple-500 transition-all"
                                       style={{ width: `${(document as any).generation_metadata.qualityMetrics.formattingScore || (document as any).generation_metadata.qualityMetrics.formatting || 0}%` }}
                                     />
@@ -1491,7 +1557,7 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">Content Depth</span>
                                 <div className="flex items-center space-x-2">
                                   <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                       className="h-full bg-orange-500 transition-all"
                                       style={{ width: `${(document as any).generation_metadata.qualityMetrics.contentDepth || (document as any).generation_metadata.qualityMetrics.depth || 0}%` }}
                                     />
@@ -1501,7 +1567,7 @@ The ADPA system represents a significant advancement in document processing auto
                                   </span>
                                 </div>
                               </div>
-                              
+
                               {/* New Dimensions 5-9 */}
                               {(document as any).generation_metadata.qualityMetrics.accuracy !== undefined && (
                                 <>
@@ -1509,7 +1575,7 @@ The ADPA system represents a significant advancement in document processing auto
                                     <span className="text-sm text-muted-foreground">Accuracy</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div 
+                                        <div
                                           className="h-full bg-indigo-500 transition-all"
                                           style={{ width: `${(document as any).generation_metadata.qualityMetrics.accuracy}%` }}
                                         />
@@ -1519,12 +1585,12 @@ The ADPA system represents a significant advancement in document processing auto
                                       </span>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm text-muted-foreground">Consistency</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div 
+                                        <div
                                           className="h-full bg-teal-500 transition-all"
                                           style={{ width: `${(document as any).generation_metadata.qualityMetrics.consistency}%` }}
                                         />
@@ -1534,12 +1600,12 @@ The ADPA system represents a significant advancement in document processing auto
                                       </span>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm text-muted-foreground">Context Relevance</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div 
+                                        <div
                                           className="h-full bg-cyan-500 transition-all"
                                           style={{ width: `${(document as any).generation_metadata.qualityMetrics.contextRelevance}%` }}
                                         />
@@ -1549,12 +1615,12 @@ The ADPA system represents a significant advancement in document processing auto
                                       </span>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm text-muted-foreground">Professional Quality</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div 
+                                        <div
                                           className="h-full bg-pink-500 transition-all"
                                           style={{ width: `${(document as any).generation_metadata.qualityMetrics.professionalQuality}%` }}
                                         />
@@ -1564,12 +1630,12 @@ The ADPA system represents a significant advancement in document processing auto
                                       </span>
                                     </div>
                                   </div>
-                                  
+
                                   <div className="flex justify-between items-center">
                                     <span className="text-sm text-muted-foreground">Standards Compliance</span>
                                     <div className="flex items-center space-x-2">
                                       <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                        <div 
+                                        <div
                                           className="h-full bg-emerald-500 transition-all"
                                           style={{ width: `${(document as any).generation_metadata.qualityMetrics.standardsCompliance}%` }}
                                         />
@@ -1583,7 +1649,7 @@ The ADPA system represents a significant advancement in document processing auto
                               )}
                             </div>
                           </div>
-                          
+
                           {/* Complexity Score with Time Estimate */}
                           {(document as any).generation_metadata.qualityMetrics.complexityScore !== undefined && (
                             <>
@@ -1594,7 +1660,7 @@ The ADPA system represents a significant advancement in document processing auto
                                   <span className="text-sm text-muted-foreground">Complexity Score</span>
                                   <div className="flex items-center space-x-2">
                                     <div className="w-24 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                                      <div 
+                                      <div
                                         className="h-full bg-red-500 transition-all"
                                         style={{ width: `${(document as any).generation_metadata.qualityMetrics.complexityScore}%` }}
                                       />
@@ -1604,18 +1670,18 @@ The ADPA system represents a significant advancement in document processing auto
                                     </span>
                                   </div>
                                 </div>
-                                
+
                                 {/* Time Estimate Card with Research Breakdown */}
                                 {(() => {
                                   const complexity = (document as any).generation_metadata.qualityMetrics.complexityScore || 0
                                   const research = (document as any).generation_metadata?.researchComplexity
-                                  
+
                                   let level = 'Simple'
                                   let writingTime = '2-4 hours'
                                   let color = 'text-green-600'
                                   let bgColor = 'bg-green-50'
                                   let borderColor = 'border-green-200'
-                                  
+
                                   if (complexity >= 76) {
                                     level = 'Very Complex'
                                     writingTime = '2-4 days (16-32 hours)'
@@ -1635,21 +1701,21 @@ The ADPA system represents a significant advancement in document processing auto
                                     bgColor = 'bg-yellow-50'
                                     borderColor = 'border-yellow-200'
                                   }
-                                  
+
                                   // Calculate research time based on source documents
                                   const sourceDocCount = research?.sourceDocuments || 0
                                   const readingTimeHours = research?.estimatedReadingTimeHours || 0
-                                  const readingTimeDisplay = readingTimeHours >= 8 
-                                    ? `${Math.round(readingTimeHours / 8)} day${readingTimeHours >= 16 ? 's' : ''}` 
+                                  const readingTimeDisplay = readingTimeHours >= 8
+                                    ? `${Math.round(readingTimeHours / 8)} day${readingTimeHours >= 16 ? 's' : ''}`
                                     : `${Math.round(readingTimeHours)} hour${readingTimeHours !== 1 ? 's' : ''}`
-                                  
+
                                   return (
                                     <div className={`p-3 ${bgColor} rounded-lg border ${borderColor} mt-2`}>
                                       <div className="flex justify-between items-center mb-2">
                                         <span className="text-xs text-muted-foreground">Complexity Level:</span>
                                         <span className={`text-sm font-semibold ${color}`}>{level}</span>
                                       </div>
-                                      
+
                                       {sourceDocCount > 0 && (
                                         <div className="space-y-1 mb-2 pb-2 border-b">
                                           <div className="flex justify-between items-center text-xs">
@@ -1664,14 +1730,14 @@ The ADPA system represents a significant advancement in document processing auto
                                           </div>
                                         </div>
                                       )}
-                                      
+
                                       <div className="flex justify-between items-center mb-2">
                                         <span className="text-xs font-medium text-muted-foreground">Total Manual Effort:</span>
                                         <span className={`text-sm font-bold ${color}`}>
                                           {sourceDocCount > 0 ? `${readingTimeDisplay} + ${writingTime}` : writingTime}
                                         </span>
                                       </div>
-                                      
+
                                       <div className="text-xs text-muted-foreground italic pt-2 border-t">
                                         ⚡ Time savings: AI generated in {(document as any).generation_metadata?.generation?.duration || 'N/A'}
                                       </div>
@@ -1749,17 +1815,17 @@ The ADPA system represents a significant advancement in document processing auto
                                   // Try pre-calculated value first
                                   const preCalc = (document as any).generation_metadata?.contentMetrics?.avgWordsPerSentence
                                   if (preCalc && preCalc !== 'N/A') return preCalc
-                                  
+
                                   // Otherwise calculate it
                                   const wc = (document as any).word_count || (document as any).generation_metadata?.contentMetrics?.wordCount || 0
                                   const sc = (document as any).sentence_count || (document as any).generation_metadata?.contentMetrics?.sentenceCount || 0
                                   return (wc > 0 && sc > 0) ? (wc / sc).toFixed(1) : 'N/A'
                                 })()}
                               </span>
+                            </div>
                           </div>
-                        </div>
-                      </CardContent>
-                    </AnimatedCard>
+                        </CardContent>
+                      </AnimatedCard>
                     )}
 
                     {/* Export Options */}
@@ -1872,7 +1938,7 @@ The ADPA system represents a significant advancement in document processing auto
                                   </div>
                                   <div className="flex-1">
                                     <div className="flex items-center space-x-2 mb-1">
-                                <p className="text-sm font-medium">{doc.title}</p>
+                                      <p className="text-sm font-medium">{doc.title}</p>
                                       {doc.status && (
                                         <Badge variant="secondary" className="text-xs">
                                           {doc.status}
@@ -1884,15 +1950,15 @@ The ADPA system represents a significant advancement in document processing auto
                                         </Badge>
                                       )}
                                     </div>
-                                <p className="text-xs text-muted-foreground">{doc.type}</p>
-                              </div>
+                                    <p className="text-xs text-muted-foreground">{doc.type}</p>
+                                  </div>
                                 </div>
                                 <Link href={doc.url || `/projects/${projectId}/documents/${doc.id}/view`}>
-                              <Button variant="ghost" size="sm">
-                                <Eye className="h-4 w-4" />
-                              </Button>
+                                  <Button variant="ghost" size="sm">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
                                 </Link>
-                            </div>
+                              </div>
                             ))
                           )}
                         </div>
@@ -1932,8 +1998,8 @@ The ADPA system represents a significant advancement in document processing auto
                                 <span className="text-sm text-muted-foreground">
                                   {version.word_count} words
                                 </span>
-                                <Button 
-                                  variant="outline" 
+                                <Button
+                                  variant="outline"
                                   size="sm"
                                   onClick={() => {
                                     setSelectedVersion(version)
@@ -1981,7 +2047,7 @@ The ADPA system represents a significant advancement in document processing auto
                               <p className="text-sm">{comment.content}</p>
                             </div>
                           ))}
-                          
+
                           {/* Add Comment Form */}
                           <div className="p-4 border rounded-lg">
                             <div className="space-y-2">
@@ -2009,7 +2075,7 @@ The ADPA system represents a significant advancement in document processing auto
           </PageTransition>
         </main>
       </div>
-      
+
       {/* Summaries Dialog */}
       <Dialog open={showSummaries} onOpenChange={setShowSummaries}>
         <DialogContent className="max-w-5xl max-h-[80vh]">
@@ -2022,7 +2088,7 @@ The ADPA system represents a significant advancement in document processing auto
               View cached AI-generated summaries at different compression levels. These are reused in process-flow jobs to save time and API costs.
             </DialogDescription>
           </DialogHeader>
-          
+
           <ScrollArea className="h-[60vh] pr-4">
             {loadingSummaries ? (
               <div className="flex items-center justify-center py-12">
@@ -2053,11 +2119,11 @@ The ADPA system represents a significant advancement in document processing auto
                       </TabsTrigger>
                     ))}
                 </TabsList>
-                
+
                 {Array.from(new Set(summaries.map(s => s.compression_level))).map((level) => {
                   const summary = summaries.find(s => s.compression_level === level)
                   if (!summary) return null
-                  
+
                   return (
                     <TabsContent key={level} value={level.toString()} className="space-y-4">
                       <Card>
@@ -2083,7 +2149,7 @@ The ADPA system represents a significant advancement in document processing auto
                           </div>
                         </CardContent>
                       </Card>
-                      
+
                       <Card>
                         <CardHeader>
                           <div className="flex items-center justify-between">
@@ -2105,14 +2171,14 @@ The ADPA system represents a significant advancement in document processing auto
                         <CardContent>
                           <div className="bg-muted p-4 rounded-lg max-h-96 overflow-y-auto">
                             <div className="prose prose-sm dark:prose-invert max-w-none">
-                              <ReactMarkdown 
+                              <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                               >
                                 {summary.compressed_content}
                               </ReactMarkdown>
                             </div>
                           </div>
-                          
+
                           <div className="mt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
                             <div>
                               <span className="font-medium">Created:</span>{' '}
@@ -2181,9 +2247,9 @@ The ADPA system represents a significant advancement in document processing auto
           } as any)
           setEditedContent(version.content)
           extractTableOfContents(version.content)
-          
+
           // Show success with metadata info
-          const metaInfo = version.metadata?.provider 
+          const metaInfo = version.metadata?.provider
             ? ` (Generated with ${version.metadata.provider}${version.metadata.model ? ` - ${version.metadata.model}` : ''})`
             : ''
           toast.success(`Loaded version ${version.version}${metaInfo}`)

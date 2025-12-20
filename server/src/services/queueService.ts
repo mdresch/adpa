@@ -36,7 +36,7 @@ EventEmitter.defaultMaxListeners = 150
 // Helper function to parse Redis URL for Bull
 function parseBullRedisConfig() {
   const redisUrl = process.env.REDIS_URL
-  
+
   if (!redisUrl) {
     // Fallback to localhost
     return {
@@ -45,7 +45,7 @@ function parseBullRedisConfig() {
       maxRetriesPerRequest: null,
     }
   }
-  
+
   // Parse Railway/cloud Redis URL (rediss://default:password@host:port)
   try {
     const url = new URL(redisUrl)
@@ -214,8 +214,13 @@ const extractionQueueOptions = {
       type: "exponential",
       delay: 5000,
     },
-    timeout: 600000, // 10 minutes timeout for AI extraction (13 parallel calls)
+    timeout: 2700000, // 45 minutes - accommodate parent orchestration monitoring
   },
+  settings: {
+    lockDuration: 30000, // 30s lock
+    stallInterval: 15000, // check for stalls every 15s
+    maxStalledCount: 3, // allow 3 stalls
+  }
 }
 
 export const extractionQueue = new Bull("project-data-extraction", extractionQueueOptions)
@@ -234,7 +239,7 @@ function setQueueMaxListeners() {
     qualityAuditQueue,
     extractionQueue,
   ]
-  
+
   queues.forEach((queue) => {
     try {
       // Bull uses ioredis, which has a client property
@@ -244,26 +249,26 @@ function setQueueMaxListeners() {
       // Bull creates multiple Redis connections per queue (commander, subscriber, etc.)
       // Each connection can have many listeners (error, ready, end, job events, etc.)
       const maxListeners = 150
-      
+
       if (queue.client) {
         // Set max listeners on the main client
         if (typeof queue.client.setMaxListeners === 'function') {
           queue.client.setMaxListeners(maxListeners)
         }
-        
+
         // Also set on the commander (subscriber) if it exists
         // Commander is the Redis connection used for commands
         const commander = (queue.client as any).commander
         if (commander && typeof commander.setMaxListeners === 'function') {
           commander.setMaxListeners(maxListeners)
         }
-        
+
         // Set on subscriber if it exists (for pub/sub)
         const subscriber = (queue.client as any).subscriber
         if (subscriber && typeof subscriber.setMaxListeners === 'function') {
           subscriber.setMaxListeners(maxListeners)
         }
-        
+
         // Set on all internal Redis connections that Bull might create
         // Bull creates multiple connections: one for commands, one for subscriptions, etc.
         try {
@@ -274,7 +279,7 @@ function setQueueMaxListeners() {
             (queue.client as any).commandTimeout,
             (queue.client as any).connector?.connection,
           ].filter(Boolean)
-          
+
           allConnections.forEach((conn: any) => {
             if (conn && typeof conn.setMaxListeners === 'function') {
               conn.setMaxListeners(maxListeners)
@@ -291,7 +296,7 @@ function setQueueMaxListeners() {
           // Ignore errors - not critical
         }
       }
-      
+
       // Also set on the queue's event emitter itself
       if (typeof queue.setMaxListeners === 'function') {
         queue.setMaxListeners(maxListeners)
@@ -301,7 +306,7 @@ function setQueueMaxListeners() {
       logger.debug(`Could not set max listeners for queue ${queue.name}:`, error)
     }
   })
-  
+
   logger.info('Set max listeners on all Bull queue Redis connections')
 }
 
@@ -309,7 +314,8 @@ function setQueueMaxListeners() {
 setQueueMaxListeners()
 
 // Also set max listeners when queues are ready (in case clients weren't initialized yet)
-const allQueues = [
+// Set max listeners when queues are ready
+const queuesForListeners = [
   aiQueue,
   documentQueue,
   pipelineQueue,
@@ -320,7 +326,7 @@ const allQueues = [
   extractionQueue,
 ]
 
-allQueues.forEach((queue) => {
+queuesForListeners.forEach((queue) => {
   queue.on('ready', () => {
     try {
       const maxListeners = 150 // Match the value in setQueueMaxListeners
@@ -334,14 +340,14 @@ allQueues.forEach((queue) => {
         if (subscriber && typeof subscriber.setMaxListeners === 'function') {
           subscriber.setMaxListeners(maxListeners)
         }
-        
+
         // Set on all internal connections
         const allConnections = [
           queue.client,
           (queue.client as any).connector,
           (queue.client as any).commandQueue,
         ].filter(Boolean)
-        
+
         allConnections.forEach((conn: any) => {
           if (conn && typeof conn.setMaxListeners === 'function') {
             conn.setMaxListeners(maxListeners)
@@ -408,10 +414,10 @@ processFlowQueue.process("process-flow", async (job) => {
       // Can't update status without pool, fail gracefully
       throw new Error('Database connection pool is not available')
     }
-    
+
     // Update job status to processing
     await updateJobStatus(jobId, "processing", 5, WORKER_ID, "process-flow-processing")
-    
+
     // Get project name for better job identification
     let projectName = 'Unknown Project'
     let documentName = config.documentName || config.templateName || 'Process Flow Document'
@@ -426,9 +432,9 @@ processFlowQueue.process("process-flow", async (job) => {
     } catch (error) {
       logger.warn(`Could not fetch project name for ${config.projectId}`)
     }
-    
+
     logger.info(`Starting process-flow job ${jobId} for project: ${projectName} (${config.projectId})`)
-    
+
     // Update job data with initial steps
     const totalSteps = config.includeStakeholders ? 7 : 6
     await pool.query(
@@ -441,17 +447,17 @@ processFlowQueue.process("process-flow", async (job) => {
        WHERE id = $2`,
       ['Initializing workflow...', jobId]
     )
-    
+
     // Get the ProcessFlowService
     const ProcessFlowService = (await import('./processFlowService')).default
     const processFlowService = new ProcessFlowService(pool)
-    
+
     await updateJobStatus(jobId, "processing", 10, WORKER_ID, "process-flow-processing")
-    
+
     // Create a progress callback to update job status during processing
     const updateStepProgress = async (stepName: string, stepNumber: number, totalSteps: number) => {
       const progress = Math.floor(10 + (stepNumber / totalSteps) * 80) // 10% to 90%
-      
+
       await pool.query(
         `UPDATE jobs 
          SET data = jsonb_set(
@@ -467,7 +473,7 @@ processFlowQueue.process("process-flow", async (job) => {
          WHERE id = $4`,
         [stepName, stepNumber, progress, jobId]
       )
-      
+
       // Emit real-time step update
       io.emit("job:step-update", {
         jobId,
@@ -477,32 +483,32 @@ processFlowQueue.process("process-flow", async (job) => {
         totalSteps,
         progress
       })
-      
+
       logger.info(`Process-flow job ${jobId}: Step ${stepNumber}/${totalSteps} - ${stepName}`)
     }
-    
+
     // Track documents with their start times across batches
     const documentStartTimes = new Map<string, number>()
-    
+
     // Create progress callback for document compression
     const onCompressionProgress = async (stepName: string, current: number, total: number, details?: any) => {
       // Calculate progress: 10% (init) + up to 70% for compression + 20% for finalization
       const compressionProgress = Math.floor(10 + (current / total) * 70)
-      
+
       // Track document start time when first seen
       if (details?.documentId && !documentStartTimes.has(details.documentId)) {
         documentStartTimes.set(details.documentId, Date.now())
       }
-      
+
       // Get provider assignments from details (passed from processFlowService)
       const providerAssignments = details?.providerAssignments || []
       const assignedProvider = details?.assignedProvider
-      
+
       // Build message showing current processing status
       const stepMessage = providerAssignments.length > 0
         ? `AI providers processing ${providerAssignments.length} document${providerAssignments.length > 1 ? 's' : ''} (${current}/${total} completed)`
         : `${stepName}: ${current}/${total} - ${details?.documentName || 'processing...'}`
-      
+
       await pool.query(
         `UPDATE jobs 
          SET data = jsonb_set(
@@ -525,7 +531,7 @@ processFlowQueue.process("process-flow", async (job) => {
          progress = $4
          WHERE id = $5`,
         [
-          stepMessage, 
+          stepMessage,
           JSON.stringify({ current, total, percentage: Math.floor((current / total) * 100) }),
           JSON.stringify(details || {}),
           compressionProgress,
@@ -533,7 +539,7 @@ processFlowQueue.process("process-flow", async (job) => {
           JSON.stringify(providerAssignments)
         ]
       )
-      
+
       // Emit real-time update with provider assignments
       io.emit("job:step-update", {
         jobId,
@@ -550,20 +556,20 @@ processFlowQueue.process("process-flow", async (job) => {
         templateName: config?.templateName
       })
     }
-    
+
     await updateStepProgress('Initializing workflow', 1, totalSteps)
-    
+
     // Run the workflow processing with progress callback
     const configWithCallback = {
       ...config,
       onProgress: onCompressionProgress
     }
-    
+
     const result = await processFlowService.startWorkflowProcessing(configWithCallback)
-    
+
     await updateJobStatus(jobId, "processing", 95, WORKER_ID, "process-flow-processing")
     await updateStepProgress('Finalizing document...', totalSteps, totalSteps)
-    
+
     // Update job to completed with detailed result
     await pool.query(
       `UPDATE jobs 
@@ -590,7 +596,7 @@ processFlowQueue.process("process-flow", async (job) => {
         totalTokens: result.steps.reduce((sum, step) => sum + step.tokens, 0)
       }), jobId, WORKER_ID]
     )
-    
+
     // Emit success notification
     io.emit("job:completed", {
       jobId,
@@ -601,12 +607,12 @@ processFlowQueue.process("process-flow", async (job) => {
       documentId: result.savedDocument.id,
       documentName: result.savedDocument.name
     })
-    
+
     logger.info(`Process-flow job completed: ${jobId}`)
-    
+
   } catch (error: any) {
     logger.error(`Process-flow job failed: ${jobId}`, error)
-    
+
     // Only update database if pool is available
     if (pool) {
       await pool.query(
@@ -626,7 +632,7 @@ processFlowQueue.process("process-flow", async (job) => {
         [error.message || "Process-flow job failed", jobId, WORKER_ID]
       )
     }
-    
+
     io.emit("job:failed", {
       jobId,
       userId,
@@ -634,7 +640,7 @@ processFlowQueue.process("process-flow", async (job) => {
       error: error.message || "Process-flow job failed",
       projectId: config?.projectId,
     })
-    
+
     throw error
   }
 })
@@ -646,9 +652,9 @@ regenerationQueue.process("document-regeneration", async (job) => {
   try {
     // Update job status to processing
     await updateJobStatus(jobId, "processing", 10, WORKER_ID, "document-regeneration")
-    
+
     logger.info(`Starting document regeneration job ${jobId} for document ${documentId}`)
-    
+
     // Execute regeneration using the service
     const { DocumentRegenerationService } = await import('./documentRegenerationService')
     await DocumentRegenerationService.executeRegenerationJob({
@@ -661,12 +667,12 @@ regenerationQueue.process("document-regeneration", async (job) => {
       userId,
       jobId
     })
-    
+
     // Mark as completed
     await updateJobStatus(jobId, "completed", 100, WORKER_ID, "document-regeneration")
-    
+
     logger.info(`Document regeneration job completed: ${jobId}`)
-    
+
     return { success: true, jobId }
   } catch (error) {
     logger.error(`Document regeneration job failed: ${jobId}`, error)
@@ -718,16 +724,16 @@ qualityAuditQueue.process("quality-audit", async (job) => {
     return { success: true, auditResult, jobId }
   } catch (error) {
     logger.error(`[QUALITY-AUDIT-JOB] Quality audit job failed: ${jobId}`, error)
-    
+
     // Update job status to failed
     await updateJobStatus(
-      jobId, 
-      "failed", 
-      0, 
-      WORKER_ID, 
+      jobId,
+      "failed",
+      0,
+      WORKER_ID,
       "quality-audit"
     )
-    
+
     throw error
   }
 })
@@ -749,12 +755,12 @@ const ENTITY_TYPES = [
   'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
   'success_criteria', 'best_practices', 'phases', 'resources',
   'technologies', 'quality_standards', 'compliance_security', 'deliverables', 'scope_items', 'activities',
-  
+
   // PMBOK 8 Performance Domain entities
   'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
   'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
   'performance_actuals',
-  
+
   // PMBOK 8 Knowledge Area Domain entities (Tier 2)
   // Governance Domain
   'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
@@ -803,22 +809,22 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
 ENTITY_TYPES.forEach((entityType) => {
   extractionQueue.process(`extract-entity-${entityType}`, 5, async (job) => {
     const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
-    
+
     try {
       logger.info(`[EXTRACTION-CHILD] Extracting ${entityType} for job ${parentJobId}`)
-      
+
       // Phase 3: Use new orchestrator for registered entities with feature flag enabled
       // Fallback to legacy service for entities not yet migrated
       let entities: any[] = []
-      
+
       try {
         const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
         const { extractSingleEntityType, saveSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
-        
+
         // Check if entity is registered and enabled via feature flag
         if (extractionRegistry.hasEntity(entityType) && extractionRegistry.isEnabled(entityType)) {
           logger.info(`[EXTRACTION-CHILD] Using new orchestrator for ${entityType}`)
-          
+
           // Extract using new orchestrator
           entities = await extractSingleEntityType(
             projectId,
@@ -826,9 +832,9 @@ ENTITY_TYPES.forEach((entityType) => {
             entityType,
             { aiProvider, aiModel, documentIds }
           )
-          
+
           logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType} (new orchestrator)`)
-          
+
           // Save using new orchestrator
           if (entities.length > 0) {
             await saveSingleEntityType(
@@ -838,14 +844,14 @@ ENTITY_TYPES.forEach((entityType) => {
               entities
             )
           }
-          
+
           logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType} (new orchestrator)`)
         } else {
           // Use legacy service for entities not yet migrated or disabled
           logger.debug(`[EXTRACTION-CHILD] Using legacy service for ${entityType} (not registered or feature flag disabled)`)
-          
+
           const { projectDataExtractionService } = await import('./projectDataExtractionService')
-          
+
           // Extract this specific entity type
           entities = await projectDataExtractionService.extractSingleEntityType(
             projectId,
@@ -853,9 +859,9 @@ ENTITY_TYPES.forEach((entityType) => {
             entityType,
             { aiProvider, aiModel, documentIds }
           )
-          
+
           logger.info(`[EXTRACTION-CHILD] Extracted ${entities.length} ${entityType} (legacy)`)
-          
+
           // Save immediately after extraction (resilient)
           await projectDataExtractionService.saveSingleEntityType(
             projectId,
@@ -863,22 +869,22 @@ ENTITY_TYPES.forEach((entityType) => {
             entityType,
             entities
           )
-          
+
           logger.info(`[EXTRACTION-CHILD] Saved ${entities.length} ${entityType} (legacy)`)
         }
       } catch (orchestratorError: any) {
         // If orchestrator fails, fallback to legacy service
         logger.warn(`[EXTRACTION-CHILD] Orchestrator failed for ${entityType}, falling back to legacy: ${orchestratorError?.message || orchestratorError}`)
-        
+
         const { projectDataExtractionService } = await import('./projectDataExtractionService')
-        
+
         entities = await projectDataExtractionService.extractSingleEntityType(
           projectId,
           userId,
           entityType,
           { aiProvider, aiModel, documentIds }
         )
-        
+
         await projectDataExtractionService.saveSingleEntityType(
           projectId,
           userId,
@@ -886,9 +892,9 @@ ENTITY_TYPES.forEach((entityType) => {
           entities
         )
       }
-      
+
       return { entityType, count: entities.length }
-      
+
     } catch (error: any) {
       logger.error(`[EXTRACTION-CHILD] Failed to extract ${entityType}: ${error.message}`, {
         parentJobId,
@@ -964,7 +970,7 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResult | nul
       const status = await queueService.getJobStatus(jobId)
       return status as JobStatusResult | null
     }
-    
+
     // Fallback to direct query
     const result = await pool.query(
       "SELECT * FROM jobs WHERE id = $1",
@@ -986,9 +992,9 @@ export async function getJobStatus(jobId: string): Promise<JobStatusResult | nul
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`
 
 export async function updateJobStatus(
-  jobId: string, 
-  status: JobStatus, 
-  progress?: number, 
+  jobId: string,
+  status: JobStatus,
+  progress?: number,
   workerId?: string,
   queueName?: QueueName | string,
   errorMessage?: string
@@ -1023,12 +1029,12 @@ export async function updateJobStatus(
       paramCount++
       updateFields.push(`worker_id = $${paramCount}`)
       params.push(workerId)
-      
+
       // Add worker process ID
       paramCount++
       updateFields.push(`worker_process_id = $${paramCount}`)
       params.push(process.pid)
-      
+
       // Update data JSONB to include worker_id for backward compatibility
       paramCount++
       updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', to_jsonb($${paramCount}::text))`)
@@ -1060,7 +1066,12 @@ export async function updateJobStatus(
     if (status === "completed" || status === "failed") {
       updateFields.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
       updateFields.push(`processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP)`)
-      updateFields.push(`completed_at = CURRENT_TIMESTAMP`)
+
+      if (status === "completed") {
+        updateFields.push(`completed_at = CURRENT_TIMESTAMP`)
+      } else {
+        updateFields.push(`failed_at = CURRENT_TIMESTAMP`)
+      }
     }
 
     // Prevent long-running workers (especially extraction monitors) from
@@ -1094,7 +1105,7 @@ export async function updateJobStatus(
       LEFT JOIN users u ON j.created_by = u.id
       WHERE j.id = $1
     `, [jobId])
-    
+
     if (jobResult.rows.length > 0) {
       const job = jobResult.rows[0]
       io.emit("job:status", {
@@ -1157,7 +1168,7 @@ export async function cancelJob(jobId: string): Promise<boolean> {
         if (job) {
           // Check if job is currently processing
           const state = await job.getState()
-          
+
           if (state === 'active') {
             // Job is actively running - move to failed instead of removing
             await job.moveToFailed({ message: 'Cancelled by user' }, true)
@@ -1167,7 +1178,7 @@ export async function cancelJob(jobId: string): Promise<boolean> {
             await job.remove()
             logger.info(`Removed job ${jobId} from ${name}`)
           }
-          
+
           jobFound = true
           break // Found it, no need to check other queues
         }
@@ -1202,20 +1213,20 @@ export async function cancelJob(jobId: string): Promise<boolean> {
       const interval = (global as any).extractionIntervals.get(jobId)
       if (interval) {
         clearInterval(interval)
-        ;(global as any).extractionIntervals.delete(jobId)
+          ; (global as any).extractionIntervals.delete(jobId)
         logger.info(`Cleared monitoring interval for cancelled job: ${jobId}`)
       }
     }
 
     logger.info(`Job cancelled: ${jobId}`)
-    
+
     // Emit WebSocket event to notify UI
     io.emit("job:cancelled", {
       jobId,
       status: "cancelled",
       timestamp: new Date().toISOString()
     })
-    
+
     return true
   } catch (error) {
     logger.error(`Failed to cancel job: ${jobId}`, error)
@@ -1252,8 +1263,65 @@ pipelineQueue.on("completed", (job, result) => {
   logger.info(`Pipeline job completed: ${job.id}`, { jobId: job.data.jobId })
 })
 
-pipelineQueue.on("failed", (job, err) => {
-  logger.error(`Pipeline job failed: ${job.id}`, { jobId: job.data.jobId, error: err.message })
+// Registered Queues for Global Event Handling
+const queuesForEvents = [
+  { queue: aiQueue, name: 'ai-processing' },
+  { queue: documentQueue, name: 'document-processing' },
+  { queue: pipelineQueue, name: 'pipeline-processing' },
+  { queue: processFlowQueue, name: 'process-flow-processing' },
+  { queue: regenerationQueue, name: 'document-regeneration' },
+  { queue: qualityAuditQueue, name: 'quality-audit' },
+  { queue: extractionQueue, name: 'project-data-extraction' },
+  { queue: baselineQueue, name: 'baseline-processing' }
+]
+
+// Register global failure and stalled handlers for all queues
+// This ensures the 'jobs' table is updated even if the processor hangs or is killed by Bull
+queuesForEvents.forEach(({ queue, name }) => {
+  queue.on('failed', async (job, err) => {
+    const jobId = job.id.toString()
+    logger.error(`[QUEUE-GLOBAL] Job ${jobId} failed in ${name}:`, err)
+
+    // Check if it's an extraction job with non-jobId ID
+    const dbJobId = (name === 'project-data-extraction' && job.data?.jobId) ? job.data.jobId : jobId
+
+    try {
+      await updateJobStatus(
+        dbJobId,
+        'failed',
+        undefined,
+        undefined,
+        name,
+        `Job failed in queue: ${err?.message || 'Unknown error'}`
+      )
+    } catch (dbErr) {
+      logger.error(`[QUEUE-GLOBAL] Failed to sync failure status for job ${dbJobId}:`, dbErr)
+    }
+  })
+
+  queue.on('stalled', async (job) => {
+    const jobId = job.id.toString()
+    logger.warn(`[QUEUE-GLOBAL] Job ${jobId} STALLED in ${name}`)
+
+    const dbJobId = (name === 'project-data-extraction' && job.data?.jobId) ? job.data.jobId : jobId
+
+    try {
+      // For stalled jobs, we might not want to mark as failed immediately if maxStalledCount > 1
+      // but if we are here, Bull might be retrying it.
+      // We log it to the database for visibility
+      await pool.query(
+        `UPDATE jobs SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{stalled_at}', to_jsonb(CURRENT_TIMESTAMP::text)) WHERE id = $1`,
+        [dbJobId]
+      )
+    } catch (dbErr) {
+      logger.error(`[QUEUE-GLOBAL] Failed to log stall for job ${dbJobId}:`, dbErr)
+    }
+  })
+})
+
+// Pipeline queue event listeners
+pipelineQueue.on("completed", (job, result) => {
+  logger.info(`Pipeline job completed: ${job.id}`, { jobId: job.data.jobId })
 })
 
 pipelineQueue.on("progress", (job, progress) => {
@@ -1264,7 +1332,7 @@ pipelineQueue.on("progress", (job, progress) => {
 export async function initializeQueues() {
   try {
     await aiService.initializeProviders()
-    
+
     // Initialize extraction registry (Phase 2: modular extraction)
     try {
       const { initializeRegistry } = await import('./extraction/ExtractionRegistry')
@@ -1274,7 +1342,7 @@ export async function initializeQueues() {
       logger.warn('[QUEUE-SERVICE] Failed to initialize extraction registry:', registryError?.message || registryError)
       // Don't fail queue initialization if registry fails
     }
-    
+
     logger.info("Job queues initialized")
   } catch (error) {
     logger.error("Failed to initialize queues:", error)

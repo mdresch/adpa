@@ -414,3 +414,11 @@
 {"entityType":"phases","error":"Cannot read properties of undefined (reading 'extractSingleEntityType')","level":"error","message":"[EXTRACTION-CHILD] Failed to extract phases: Cannot read properties of undefined (reading 'extractSingleEntityType')","parentJobId":"d5484208-f1d2-4682-b180-efac954f6c4d","projectId":"45083436-7e90-4ecf-aa42-e4a73c4b64b7","service":"adpa-backend","stack":"","timestamp":"2025-12-12T04:57:53.775Z"}
 {"level":"error","message":"[EXTRACTION-JOB] Failed: 11035 Cannot read properties of undefined (reading 'extractSingleEntityType')","service":"adpa-backend","timestamp":"2025-12-12T04:57:53.802Z"}
 {"level":"error","message":"AI job failed: d2cdbf02-ae50-43ba-82f1-4cd9daa29cd4 PoolDatabaseAdapter is not a constructor","service":"adpa-backend","timestamp":"2025-12-12T05:13:26.707Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2025-12-12T07:29:43.684Z"}
+{"level":"info","message":"Set max listeners on all Bull queue Redis connections","service":"adpa-backend","timestamp":"2025-12-12T07:29:43.760Z"}
+{"level":"info","message":"[EXTRACTION-QUEUE] Registering extraction queue processor for \"extract-project-data\"","service":"adpa-backend","timestamp":"2025-12-12T07:29:43.763Z"}
+{"component":"authRoutes","level":"info","message":"🔧 Auth routes module loaded","service":"adpa-backend","timestamp":"2025-12-12T07:29:44.080Z"}
+{"level":"info","message":"AI Service initialized - will fetch AI Gateway key from database","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.220Z"}
+{"level":"info","message":"Set max listeners on all Bull queue Redis connections","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.266Z"}
+{"level":"info","message":"[EXTRACTION-QUEUE] Registering extraction queue processor for \"extract-project-data\"","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.268Z"}
+{"component":"authRoutes","level":"info","message":"🔧 Auth routes module loaded","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.554Z"}

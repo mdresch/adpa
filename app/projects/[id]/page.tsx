@@ -187,7 +187,7 @@ export default function ProjectDetail() {
       setActiveTab(tabFromQuery)
     }
   }, [searchParams])
-  
+
   // Smart Document Versioning state
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false)
   const [conflictData, setConflictData] = useState<{
@@ -226,14 +226,14 @@ export default function ProjectDetail() {
   const [editProjectDialogOpen, setEditProjectDialogOpen] = useState(false)
   const [upgradeToProgramDialogOpen, setUpgradeToProgramDialogOpen] = useState(false)
   const [upgrading, setUpgrading] = useState(false)
-  
+
   // AI Provider selection for document generation
   const [aiProviders, setAiProviders] = useState<any[]>([])
   const [selectedProvider, setSelectedProvider] = useState("Mistral AI")
   const [selectedModel, setSelectedModel] = useState("mistral-large-latest")
   const [aiTemperature, setAiTemperature] = useState(0.7)
   const [updating, setUpdating] = useState(false)
-  
+
   // Generation progress tracking
   const [generationProgress, setGenerationProgress] = useState({
     step: 0,
@@ -248,7 +248,7 @@ export default function ProjectDetail() {
   const [loadingUsers, setLoadingUsers] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string>("")
   const [linkingUser, setLinkingUser] = useState(false)
-  
+
   // Document upload state
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
   const [uploadingDocument, setUploadingDocument] = useState(false)
@@ -263,7 +263,7 @@ export default function ProjectDetail() {
     file: null,
     template_id: "",
   })
-  
+
   // Edit form state
   const [editForm, setEditForm] = useState<{
     name: string
@@ -328,13 +328,13 @@ export default function ProjectDetail() {
       setLoading(true)
       const projectData = await apiClient.getProject(projectId)
       setProject(projectData)
-      
+
       // Also fetch documents and stakeholders for this project
       await Promise.all([fetchDocuments(), fetchStakeholders()])
     } catch (error) {
       console.error("Failed to fetch project:", error)
       toast.error("Failed to load project")
-      
+
       // Fallback to mock data
       setProject({
         id: projectId,
@@ -350,7 +350,7 @@ export default function ProjectDetail() {
         created_at: "2024-01-01T00:00:00Z",
         updated_at: "2024-01-20T00:00:00Z",
       })
-      
+
       setDocuments([])
     } finally {
       setLoading(false)
@@ -374,7 +374,7 @@ export default function ProjectDetail() {
         total: 0,
         pages: 0,
       })
-      
+
       // Fetch stats for accurate counts (not affected by pagination)
       await fetchDocumentStats()
     } catch (error) {
@@ -385,7 +385,7 @@ export default function ProjectDetail() {
       setDocumentsLoading(false)
     }
   }
-  
+
   // Fetch document statistics (total counts by status)
   const fetchDocumentStats = async () => {
     try {
@@ -428,12 +428,12 @@ export default function ProjectDetail() {
   function getTemplateContent(templateId: string) {
     // Find template from the loaded templates
     const template = templates.find(t => t.id === templateId)
-    
+
     if (template) {
       // Extract detailed sections based on template name
       let sections: string[] = []
       const templateName = template.name.toLowerCase()
-      
+
       if (templateName.includes('integration management')) {
         sections = [
           'Executive Summary (200+ words): Project overview with name/manager/sponsor/dates/budget, 3-5 key measurable objectives, integration approach, expected benefits and ROI',
@@ -469,14 +469,14 @@ export default function ProjectDetail() {
       } else {
         sections = ['Overview', 'Objectives', 'Approach', 'Key Components', 'Implementation', 'Metrics']
       }
-      
-      return { 
+
+      return {
         title: template.name,
         sections: sections,
         framework: template.framework || 'General'
       }
     }
-    
+
     return { title: documentName || "Document", sections: ['Overview', 'Details'], framework: 'General' }
   }
 
@@ -484,12 +484,12 @@ export default function ProjectDetail() {
   const handleTemplateSelect = async (templateId: string) => {
     console.log('📋 [TEMPLATE-SELECT] Template selected:', templateId)
     setSelectedTemplate(templateId)
-    
+
     // If no template selected (user cleared selection), return
     if (!templateId) {
       return
     }
-    
+
     // Check for template conflict immediately
     console.log('🔍 [TEMPLATE-SELECT] Checking for conflicts...')
     try {
@@ -506,14 +506,14 @@ export default function ProjectDetail() {
           templateId
         })
       })
-      
+
       if (checkResp.status === 409) {
         // Template conflict detected!
         const conflictInfo = await checkResp.json()
         console.log('⚠️ [TEMPLATE-SELECT] Conflict detected - showing dialog')
-        
+
         const template = templates.find(t => t.id === templateId)
-        
+
         // We don't have the prompt yet, so we'll build it when needed
         setConflictData({
           existingDocument: conflictInfo.existing,
@@ -542,15 +542,15 @@ export default function ProjectDetail() {
   // Create new document
   const handleCreateDocument = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     console.log('🚀 [1/10] handleCreateDocument called')
-    
+
     // CRITICAL FIX: Prevent duplicate submissions
     if (creatingDocument) {
       console.warn('⚠️ [GUARD] Already creating document, ignoring duplicate call')
       return
     }
-    
+
     if (!documentName.trim()) {
       console.error('❌ [VALIDATION] Document name is empty')
       toast.error("Document name is required")
@@ -568,7 +568,7 @@ export default function ProjectDetail() {
     try {
       setCreatingDocument(true)
       console.log('✅ [4/10] Creating document flag set to true')
-      
+
       // Step 1: Preparing context
       setGenerationProgress({
         step: 1,
@@ -584,18 +584,18 @@ export default function ProjectDetail() {
       const projectDesc = project?.description || 'No project description available.'
       const projectName = project?.name || 'Unknown Project'
       const framework = project?.framework || 'General'
-      
+
       // Build detailed context
-      const teamContext = project?.team_members?.length 
-        ? `Team Members: ${project.team_members.join(', ')}` 
+      const teamContext = project?.team_members?.length
+        ? `Team Members: ${project.team_members.join(', ')}`
         : 'Team composition to be determined'
-      const budgetContext = project?.budget 
-        ? `Budget: $${project.budget}` 
+      const budgetContext = project?.budget
+        ? `Budget: $${project.budget}`
         : 'Budget to be determined'
       const timelineContext = project?.start_date && project?.end_date
         ? `Timeline: ${project.start_date} to ${project.end_date}`
         : 'Timeline to be determined'
-      
+
       // 🆕 SMART DOCUMENT LIBRARY CONTEXT - Prioritize relevant documents
       const getPrioritizedDocuments = (templateName: string, allDocs: Document[]) => {
         // 🆕 PROJECT LIFECYCLE ORDER - Documents in logical progression
@@ -619,7 +619,7 @@ export default function ProjectDetail() {
           'closeout': 15,
           'lessons': 16,
         }
-        
+
         const priorities: { [key: string]: string[] } = {
           'ideation': [],
           'business case': ['ideation'],
@@ -640,10 +640,10 @@ export default function ProjectDetail() {
           'closeout': ['charter', 'scope', 'schedule', 'cost', 'quality', 'risk'],
           'lessons': ['charter', 'scope', 'schedule', 'cost', 'quality', 'risk', 'stakeholder'],
         }
-        
+
         const templateLower = templateName.toLowerCase()
         let priorityKeywords: string[] = []
-        
+
         // Find matching priority list
         for (const [key, keywords] of Object.entries(priorities)) {
           if (templateLower.includes(key)) {
@@ -651,21 +651,21 @@ export default function ProjectDetail() {
             break
           }
         }
-        
+
         // If no specific priority, use general order
         if (priorityKeywords.length === 0) {
           priorityKeywords = ['charter', 'stakeholder', 'scope', 'risk', 'schedule', 'cost']
         }
-        
+
         // Score and sort documents
         const scoredDocs = allDocs
           .filter(doc => doc.status === 'final' || doc.status === 'approved' || doc.status === 'draft')
           .map(doc => {
             const docName = (doc.name || '').toLowerCase()
             const templateNameLower = (doc.template_name || '').toLowerCase()
-            
+
             let score = 0
-            
+
             // 1. Priority keyword matching (highest weight)
             priorityKeywords.forEach((keyword, index) => {
               const priority = priorityKeywords.length - index
@@ -673,7 +673,7 @@ export default function ProjectDetail() {
                 score += priority * 10
               }
             })
-            
+
             // 2. Lifecycle order bonus - favor earlier documents (foundation)
             let docLifecyclePhase = 99 // Default high number (late)
             for (const [key, phase] of Object.entries(lifecycleOrder)) {
@@ -681,16 +681,16 @@ export default function ProjectDetail() {
                 docLifecyclePhase = Math.min(docLifecyclePhase, phase)
               }
             }
-            
+
             // Earlier documents get higher bonus (inverted: 16 - phase)
             const lifecycleBonus = Math.max(0, 16 - docLifecyclePhase)
             score += lifecycleBonus * 3 // Moderate weight
-            
+
             // 3. Status boost (quality indicator)
             if (doc.status === 'approved') score += 10
             if (doc.status === 'final') score += 7
             if (doc.status === 'draft') score += 2
-            
+
             return { doc, score, lifecyclePhase: docLifecyclePhase }
           })
           .filter(item => item.score > 0) // Only include relevant documents
@@ -701,19 +701,19 @@ export default function ProjectDetail() {
             return a.lifecyclePhase - b.lifecyclePhase
           })
           .slice(0, 10) // 🆕 INCREASED LIMIT: Top 10 for complex dependencies
-          .map(item => ({ 
-            ...item.doc, 
+          .map(item => ({
+            ...item.doc,
             priority_rank: item.score,
             dependency_level: Math.ceil(item.score / 20) // Group by dependency strength
           }))
-        
+
         return scoredDocs
       }
-      
+
       // 🆕 BUILD DOCUMENT LIBRARY CONTEXT
       let documentLibraryContext = ''
       const relevantDocs = getPrioritizedDocuments(templateContent.title, documents)
-      
+
       // Get lifecycle phase for current template
       const getTemplatePhase = (name: string): { phase: number; name: string } => {
         const nameLower = name.toLowerCase()
@@ -728,9 +728,9 @@ export default function ProjectDetail() {
         }
         return { phase: 99, name: 'other' }
       }
-      
+
       const currentTemplatePhase = getTemplatePhase(templateContent.title)
-      
+
       console.log('📚 [CONTEXT-1/3] Document Library Analysis:')
       console.log('  Total documents in project:', documents.length)
       console.log('  Template being generated:', templateContent.title, `(Phase ${currentTemplatePhase.phase})`)
@@ -739,7 +739,7 @@ export default function ProjectDetail() {
         console.log('  ')
         console.log('  📊 DOCUMENT DEPENDENCY MAP:')
         console.log('  ═══════════════════════════════════════════════════════')
-        
+
         // Group by dependency level
         const dependencyGroups: { [key: number]: any[] } = {}
         relevantDocs.forEach(doc => {
@@ -747,49 +747,49 @@ export default function ProjectDetail() {
           if (!dependencyGroups[level]) dependencyGroups[level] = []
           dependencyGroups[level].push(doc)
         })
-        
+
         const maxLevel = Math.max(...Object.keys(dependencyGroups).map(Number))
-        
+
         for (let level = maxLevel; level >= 1; level--) {
           if (dependencyGroups[level]) {
-            const strength = level === maxLevel ? '🔴 CRITICAL' : 
-                           level >= maxLevel - 1 ? '🟠 HIGH' :
-                           level >= maxLevel - 2 ? '🟡 MEDIUM' : '🟢 LOW'
+            const strength = level === maxLevel ? '🔴 CRITICAL' :
+              level >= maxLevel - 1 ? '🟠 HIGH' :
+                level >= maxLevel - 2 ? '🟡 MEDIUM' : '🟢 LOW'
             console.log(`  `)
             console.log(`  ${strength} Dependency (Level ${level}):`)
-            
+
             dependencyGroups[level].forEach((doc, idx) => {
               const docPhase = getTemplatePhase(doc.name)
-              const phaseIcon = docPhase.phase < currentTemplatePhase.phase ? '⬅️' : 
-                               docPhase.phase === currentTemplatePhase.phase ? '➡️' : '⬇️'
+              const phaseIcon = docPhase.phase < currentTemplatePhase.phase ? '⬅️' :
+                docPhase.phase === currentTemplatePhase.phase ? '➡️' : '⬇️'
               const rank = (doc as any).priority_rank || 0
               console.log(`    ${phaseIcon} ${doc.name}`)
               console.log(`       Status: ${doc.status} | Phase ${docPhase.phase} | Score: ${rank}`)
             })
           }
         }
-        
+
         console.log('  ')
         console.log('  ⬅️ = Earlier phase (foundation) | ➡️ = Same phase | ⬇️ = Later phase')
         console.log('  🔴 = Must reference | 🟠 = Should reference | 🟡 = May reference | 🟢 = Optional')
       }
-      
+
       if (relevantDocs.length > 0) {
         documentLibraryContext = `\n\n**📚 Existing Project Documents (for reference and consistency):**\n`
-        
+
         relevantDocs.forEach((doc, index) => {
           // Extract key information from document content
           const contentPreview = doc.content ? doc.content.substring(0, 1500) : ''
           const hasObjectives = contentPreview.toLowerCase().includes('objective')
           const hasRisks = contentPreview.toLowerCase().includes('risk')
           const hasStakeholders = contentPreview.toLowerCase().includes('stakeholder')
-          
+
           documentLibraryContext += `\n${index + 1}. **${doc.name}** (${doc.template_name || 'Custom'}) - Status: ${doc.status}\n`
-          
+
           // Add content summary with key sections
           if (contentPreview) {
             documentLibraryContext += `   Summary: ${contentPreview.replace(/\n/g, ' ').substring(0, 800)}...\n`
-            
+
             // Highlight what's in this document
             const features = []
             if (hasObjectives) features.push('objectives')
@@ -800,7 +800,7 @@ export default function ProjectDetail() {
             }
           }
         })
-        
+
         documentLibraryContext += `\n**📋 CONSISTENCY INSTRUCTIONS:**\n`
         documentLibraryContext += `- Review the existing documents above before generating new content\n`
         documentLibraryContext += `- Reuse objectives, stakeholders, risks, and metrics where they appear in existing documents\n`
@@ -808,16 +808,16 @@ export default function ProjectDetail() {
         documentLibraryContext += `- Ensure all tables (stakeholders, risks, objectives) are consistent with data from existing documents\n`
         documentLibraryContext += `- If conflicts arise, prioritize information from approved documents over draft documents\n`
       }
-      
+
       // 🆕 BUILD STAKEHOLDER CONTEXT
       let stakeholderContext = ''
       console.log('👥 [CONTEXT-2/3] Stakeholder Analysis:')
       console.log('  Stakeholders available:', stakeholders?.length || 0)
-      
+
       if (stakeholders && stakeholders.length > 0) {
         console.log('  Stakeholder names:', stakeholders.map(s => s.name).join(', '))
         stakeholderContext = `\n\n**👥 Project Stakeholders (use these in stakeholder tables):**\n`
-        
+
         stakeholders.forEach(sh => {
           stakeholderContext += `- **${sh.name}** (${sh.role || 'Team Member'})`
           if (sh.interest_level || sh.influence_level) {
@@ -828,44 +828,44 @@ export default function ProjectDetail() {
           }
           stakeholderContext += `\n`
         })
-        
+
         stakeholderContext += `\n**📋 STAKEHOLDER INSTRUCTIONS:**\n`
         stakeholderContext += `- Use the actual stakeholders listed above in any stakeholder tables, matrices, or RACI charts\n`
         stakeholderContext += `- Include their roles, interest levels, and influence levels as specified\n`
         stakeholderContext += `- Do NOT create fictional stakeholders - use only the real stakeholders listed\n`
       }
-      
+
       // 🆕 BUILD CUSTOM VARIABLES CONTEXT
       let customVariablesContext = ''
       const hasSettings = project?.settings && Object.keys(project.settings).length > 0
       const hasMetadata = project?.metadata && Object.keys(project.metadata).length > 0
-      
+
       console.log('⚙️ [CONTEXT-3/3] Custom Variables Analysis:')
       console.log('  Settings available:', hasSettings ? Object.keys(project.settings).length : 0)
       console.log('  Metadata available:', hasMetadata ? Object.keys(project.metadata).length : 0)
-      
+
       if (hasSettings || hasMetadata) {
         customVariablesContext = `\n\n**⚙️ Custom Project Variables:**\n`
-        
+
         if (hasSettings) {
           customVariablesContext += `\nSettings:\n`
           Object.entries(project.settings).forEach(([key, value]) => {
             customVariablesContext += `- ${key}: ${value}\n`
           })
         }
-        
+
         if (hasMetadata) {
           customVariablesContext += `\nMetadata:\n`
           Object.entries(project.metadata).forEach(([key, value]) => {
             customVariablesContext += `- ${key}: ${value}\n`
           })
         }
-        
+
         customVariablesContext += `\n**📋 VARIABLE INSTRUCTIONS:**\n`
         customVariablesContext += `- Incorporate these custom variables where relevant to the document type\n`
         customVariablesContext += `- Use them to add project-specific details and context\n`
       }
-      
+
       // Enhanced prompt with detailed instructions for comprehensive generation
       const aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
 
@@ -959,19 +959,19 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         setCreatingDocument(false)
         return
       }
-      
+
       if (!aiPrompt || aiPrompt.length < 10) {
         toast.error('Prompt is too short (minimum 10 characters)')
         setCreatingDocument(false)
         return
       }
-      
+
       if (selectedTemplate && !/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/i.test(selectedTemplate)) {
         toast.error('Invalid template ID format')
         setCreatingDocument(false)
         return
       }
-      
+
       if (aiTemperature < 0 || aiTemperature > 2) {
         toast.error('Temperature must be between 0 and 2')
         setCreatingDocument(false)
@@ -991,11 +991,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           templateId: selectedTemplate,
           hasProjectId: !!projectId
         })
-        
+
         const { getApiUrl } = await import('@/lib/api-url')
         const apiUrl = getApiUrl('/ai/generate')
         console.log('📡 API URL:', apiUrl)
-        
+
         const requestBody = {
           prompt: aiPrompt,
           provider: selectedProvider,
@@ -1011,17 +1011,17 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           project_id: projectId,
           project_name: project?.name || 'Unknown Project',
         }
-        
+
         // Remove undefined values to avoid sending them
         Object.keys(requestBody).forEach(key => {
           if (requestBody[key as keyof typeof requestBody] === undefined) {
             delete requestBody[key as keyof typeof requestBody]
           }
         })
-        
+
         const resp = await fetch(apiUrl, {
           method: 'POST',
-          headers: { 
+          headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
           },
@@ -1033,20 +1033,20 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           jobId = body.jobId
           console.log('✅ Job queued successfully:', jobId)
           toast.success(`Document generation started! Job ID: ${jobId}`)
-          
+
           // SUCCESS: Close dialog and let background worker create the document
           console.log('✅ Job queued, closing dialog')
-        setDocumentName("")
-        setDocumentDescription("")
-        setSelectedTemplate("")
-        setCreateDialogOpen(false)
+          setDocumentName("")
+          setDocumentDescription("")
+          setSelectedTemplate("")
+          setCreateDialogOpen(false)
           setCreatingDocument(false)
-          
+
           // Refresh documents list after a short delay (worker needs time to process)
           setTimeout(async () => {
-        await fetchDocuments()
+            await fetchDocuments()
           }, 3000)
-          
+
           return // EXIT - document will be created by background worker
         } else {
           const errorBody = await resp.json().catch(() => ({}))
@@ -1062,7 +1062,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         setCreatingDocument(false)
         return // EXIT on error
       }
-      
+
       console.log('🔄 [8/10] Job queue unavailable, proceeding with direct generation...')
 
       // Fallback: synchronous generation via AI Gateway
@@ -1074,17 +1074,17 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         percentage: 50,
       })
       console.log('✅ [9/10] Progress indicator set to Step 2 (50%) - Starting AI generation')
-      
+
       let generatedText: string | undefined
       let genResult: any = null  // Declare outside try block for metadata access later
-      
+
       try {
         const template = templates.find(t => t.id === selectedTemplate)
         console.log('🤖 [AI-1/5] Starting AI generation...')
         console.log('📊 Provider:', selectedProvider, '| Model:', selectedModel, '| Temp:', aiTemperature)
         console.log('📋 Template:', template?.name || 'Unknown')
         console.log('🔗 Project:', project?.name || 'Unknown')
-        
+
         console.log('🌐 [AI-2/5] Calling apiClient.generateContent()...')
         genResult = await apiClient.generateContent({
           prompt: aiPrompt,
@@ -1100,9 +1100,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
             framework: project?.framework || template?.framework || 'General'
           }
         })
-        
+
         console.log('✅ [AI-3/5] API call completed. Response:', genResult)
-        
+
         // Extract content from AI response
         console.log('🔍 [AI-4/5] Extracting content from response...')
         if (genResult?.result?.content) generatedText = genResult.result.content
@@ -1111,10 +1111,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         else if (genResult?.text) generatedText = genResult.text
         else if (typeof genResult === 'string') generatedText = genResult
         else generatedText = JSON.stringify(genResult)
-        
+
         console.log('✅ [AI-5/5] Content extracted! Length:', generatedText?.length || 0, 'chars')
         console.log('📝 Content preview:', generatedText?.substring(0, 100) + '...')
-        
+
         // Log comprehensive metadata if available
         if (genResult?.metadata) {
           console.log('📊 Generation Metadata:', genResult.metadata)
@@ -1122,7 +1122,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         if (genResult?.quality) {
           console.log('✨ Quality Metrics:', genResult.quality)
         }
-        
+
         // Step 3: Content generated successfully
         console.log('✅ [10/10] Setting progress to Step 3 (75%) - Saving document...')
         setGenerationProgress({
@@ -1143,7 +1143,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       const generationMetadata = genResult?.metadata || null
       const qualityMetrics = genResult?.quality || null
       console.log('📊 [SAVE-1/6] Metadata extracted:', { hasMetadata: !!generationMetadata, hasQuality: !!qualityMetrics })
-      
+
       // 🆕 Build source documents metadata from context
       const sourceDocuments = relevantDocs.map((doc, index) => {
         // Determine lifecycle phase for this document
@@ -1155,7 +1155,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           'resource': 9, 'quality': 10, 'risk': 11, 'communication': 12,
           'procurement': 13, 'integration': 14, 'closeout': 15, 'lessons': 16
         }
-        
+
         let phase = 99
         let phaseName = 'Other'
         for (const [key, phaseNum] of Object.entries(lifecycleOrder)) {
@@ -1166,12 +1166,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
             }
           }
         }
-        
+
         // Calculate reading metrics for this document
         const charCount = doc.character_count || (typeof doc.content === 'string' ? doc.content.length : 0)
         const wordCount = doc.word_count || Math.round(charCount / 5) // Estimate if not available
         const readingTimeMinutes = Math.round((wordCount / 250) * 10) / 10 // 250 words/min
-        
+
         return {
           id: doc.id,
           title: doc.name,
@@ -1187,12 +1187,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           reading_time_minutes: readingTimeMinutes
         }
       })
-      
+
       console.log('📚 [SAVE-1.5/6] Source documents tracked:', sourceDocuments.length, 'documents')
       if (sourceDocuments.length > 0) {
         console.log('  Source document names:', sourceDocuments.map(d => d.title).join(', '))
       }
-      
+
       const documentData = {
         name: documentName,
         content: generatedText || "# Document content not generated",
@@ -1231,7 +1231,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
       })
 
       console.log('🌐 [SAVE-3/6] Calling apiClient.generateDocument() with conflict detection...')
-      
+
       try {
         // Use new endpoint that includes conflict detection
         const createResult = await apiClient.generateDocument({
@@ -1246,9 +1246,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           includeStakeholders: true,
           includeDocuments: true,
         })
-        
+
         console.log('✅ [SAVE-4/6] Document created successfully! ID:', createResult?.document?.id || 'unknown')
-        
+
         // Step 4: Complete!
         console.log('🎉 [SAVE-5/6] Setting progress to Step 4 (100%)')
         setGenerationProgress({
@@ -1276,13 +1276,13 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
         console.log('🔄 [CLEANUP-2/3] Refreshing documents list...')
         await fetchDocuments()
         console.log('✅ [CLEANUP-3/3] All done! Document generation complete!')
-        
+
       } catch (apiError: any) {
         // Check for template conflict (409 status)
         if (apiError.status === 409 && apiError.data?.code === 'TEMPLATE_ALREADY_USED') {
           console.log('⚠️ [CONFLICT] Template already used - showing conflict dialog')
           const template = templates.find(t => t.id === selectedTemplate)
-          
+
           setConflictData({
             existingDocument: apiError.data.existing,
             templateName: template?.name || 'Unknown Template',
@@ -1302,7 +1302,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
           throw apiError
         }
       }
-      
+
     } catch (error) {
       console.error("❌ [ERROR] Failed to create document:", error)
       console.error("❌ [ERROR] Error details:", {
@@ -1320,16 +1320,16 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
   // Handle template conflict resolution
   const handleConflictResolution = async (action: 'new-version' | 'separate' | 'view-existing') => {
     if (!conflictData) return
-    
+
     try {
       switch (action) {
         case 'new-version':
           console.log('🔄 [CONFLICT-RESOLUTION] Creating new version...')
           setCreatingDocument(true)
-          
+
           // Build AI prompt if not already provided
           let aiPrompt = conflictData.generationData.userPrompt
-          
+
           if (!aiPrompt) {
             console.log('🔨 [CONFLICT-RESOLUTION] Building AI prompt...')
             // Build the prompt using existing logic
@@ -1338,7 +1338,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
             const projectDesc = project?.description || 'No project description available.'
             const projectName = project?.name || 'Unknown Project'
             const framework = project?.framework || 'General'
-            
+
             aiPrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
 
 **Project Name**: ${projectName}
@@ -1347,7 +1347,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. Remember: This mus
 
 Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a production-ready, stakeholder-presentable document with comprehensive coverage of all sections.`
           }
-          
+
           // Generate as new version of existing document
           const result = await apiClient.generateDocumentNewVersion({
             existingDocumentId: conflictData.existingDocument.id,
@@ -1358,29 +1358,29 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             model: conflictData.generationData.model || selectedModel,
             temperature: conflictData.generationData.temperature || aiTemperature,
           })
-          
+
           toast.success(
             `Document updated to v${result.newVersion}`,
             {
-              description: result.driftDetected 
-                ? '⚠️ Baseline drift detected - review changes' 
+              description: result.driftDetected
+                ? '⚠️ Baseline drift detected - review changes'
                 : 'Version history preserved'
             }
           )
-          
+
           console.log('✅ [CONFLICT-RESOLUTION] New version created:', result.newVersion)
-          
+
           // Navigate to updated document in standard document editor
           router.push(`/projects/${projectId}/documents/${conflictData.existingDocument.id}/view`)
           break
-          
+
         case 'separate':
           console.log('📄 [CONFLICT-RESOLUTION] Creating separate document...')
           setCreatingDocument(true)
-          
+
           // Build AI prompt if not already provided (same logic as 'new-version')
           let separatePrompt = conflictData.generationData.userPrompt
-          
+
           if (!separatePrompt) {
             console.log('🔨 [CONFLICT-RESOLUTION] Building AI prompt for separate document...')
             // Build the prompt using existing logic
@@ -1389,7 +1389,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             const projectDesc = project?.description || 'No project description available.'
             const projectName = project?.name || 'Unknown Project'
             const framework = project?.framework || 'General'
-            
+
             separatePrompt = `You are a senior project management consultant with expertise in ${framework} methodology. Generate a comprehensive, production-ready ${templateContent.title} for the following project:
 
 **Project Name**: ${projectName}
@@ -1398,7 +1398,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
 Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a production-ready, stakeholder-presentable document with comprehensive coverage of all sections.`
           }
-          
+
           // Create new document with modified name
           const newName = `${documentName} (Alternative)`
           const separateResult = await apiClient.generateDocument({
@@ -1413,18 +1413,18 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             includeStakeholders: true,
             includeDocuments: true,
           })
-          
+
           toast.success("Separate document created successfully!")
           console.log('✅ [CONFLICT-RESOLUTION] Separate document created')
           break
-          
+
         case 'view-existing':
           console.log('👁️ [CONFLICT-RESOLUTION] Navigating to existing document...')
           // Navigate to existing document in standard document editor
           router.push(`/projects/${projectId}/documents/${conflictData.existingDocument.id}/view`)
           break
       }
-      
+
       // Clean up
       setConflictDialogOpen(false)
       setConflictData(null)
@@ -1432,10 +1432,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       setDocumentName("")
       setDocumentDescription("")
       setSelectedTemplate("")
-      
+
       // Refresh documents list
       await fetchDocuments()
-      
+
     } catch (error) {
       console.error("❌ [CONFLICT-RESOLUTION] Failed:", error)
       toast.error("Failed to resolve conflict")
@@ -1449,7 +1449,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     if (!confirm("Are you sure you want to delete this document? This action cannot be undone.")) {
       return
     }
-    
+
     try {
       await apiClient.deleteDocument(documentId)
       toast.success("Document deleted successfully!")
@@ -1466,7 +1466,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     try {
       setLoadingTemplates(true)
       console.log('🔵 Calling apiClient.getTemplates with limit=100')
-      const response = await apiClient.getTemplates({ 
+      const response = await apiClient.getTemplates({
         limit: 100  // Increased limit to get more templates
       })
       console.log('📊 Templates API response:', response)
@@ -1512,7 +1512,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Upload document handler
   const handleUploadDocumentSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!uploadForm.name || !uploadForm.file || !uploadForm.template_id) {
       toast.error("Please fill in all required fields including template selection")
       return
@@ -1520,7 +1520,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
     try {
       setUploadingDocument(true)
-      
+
       // CRITICAL: Validate file object is actually a File, not a metadata object
       if (!(uploadForm.file instanceof File)) {
         console.error('❌ Invalid file object:', uploadForm.file)
@@ -1532,25 +1532,25 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       // Use case-insensitive file extension checks as primary detection method
       const fileName = uploadForm.file.name.toLowerCase()
       const fileType = uploadForm.file.type?.toLowerCase() || ''
-      
+
       // Check file extension first (more reliable than MIME type)
       const isPDF = fileName.endsWith('.pdf')
       const isDOCX = fileName.endsWith('.docx') || fileName.endsWith('.doc')
       const isTXT = fileName.endsWith('.txt')
       const isMD = fileName.endsWith('.md') || fileName.endsWith('.markdown')
-      
+
       // Also check MIME types as secondary check
       const isPDFMime = fileType === 'application/pdf'
-      const isDOCXMime = fileType.includes('wordprocessingml') || 
-                         fileType.includes('msword') ||
-                         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                         fileType === 'application/msword'
+      const isDOCXMime = fileType.includes('wordprocessingml') ||
+        fileType.includes('msword') ||
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        fileType === 'application/msword'
       const isTextMime = fileType === 'text/plain' || fileType === 'text/markdown'
-      
+
       // Determine file category (prioritize extension over MIME type)
       const isBinaryFile = isPDF || isDOCX || isPDFMime || isDOCXMime
       const isTextFile = isTXT || isMD || isTextMime
-      
+
       console.log('📄 File upload detection:', {
         fileName: uploadForm.file.name,
         fileType: uploadForm.file.type,
@@ -1561,7 +1561,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         isBinaryFile,
         isTextFile
       })
-      
+
       if (isBinaryFile) {
         // CRITICAL: Binary files MUST use the upload endpoint - never createDocument
         console.log('📤 Uploading binary file via file upload endpoint:', {
@@ -1575,7 +1575,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         formData.append('files', uploadForm.file)
         formData.append('projectId', projectId)
         formData.append('assessmentName', uploadForm.name)
-        
+
         // Get token from API client to ensure consistency
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
         if (!token) {
@@ -1603,7 +1603,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
           const result = await response.json()
           console.log('✅ Upload endpoint success:', result)
-          
+
           toast.success("Document uploaded successfully! Processing will begin shortly.")
           setUploadDialogOpen(false)
           setUploadForm({
@@ -1611,7 +1611,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
             file: null,
             template_id: "",
           })
-          
+
           // Wait a moment for processing, then refresh documents
           setTimeout(() => {
             fetchDocuments()
@@ -1637,12 +1637,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
         // For text files, read content and create document directly with Markdown
         const textContent = await uploadForm.file.text()
-        
+
         // CRITICAL: Ensure content is a string, never an object
         if (typeof textContent !== 'string') {
           throw new Error("Failed to read file content as text. Please ensure the file is a valid text or Markdown file.")
         }
-        
+
         // CRITICAL: Double-check that we're not accidentally sending a file metadata object
         // This should never happen for text files, but add defensive check
         if (typeof textContent !== 'string' || textContent.trim() === '') {
@@ -1658,9 +1658,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         }
 
         // Final validation: ensure content is not a file metadata object
-        if (typeof documentData.content === 'object' || 
-            (typeof documentData.content === 'string' && 
-             (documentData.content.includes('"fileName"') || 
+        if (typeof documentData.content === 'object' ||
+          (typeof documentData.content === 'string' &&
+            (documentData.content.includes('"fileName"') ||
               documentData.content.includes('"fileSize"') ||
               documentData.content.includes('"fileType"')))) {
           console.error('❌ Attempted to send file metadata as content:', documentData)
@@ -1675,7 +1675,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         })
 
         await apiClient.createDocument(projectId, documentData)
-        
+
         toast.success("Document uploaded successfully!")
         setUploadDialogOpen(false)
         setUploadForm({
@@ -1730,15 +1730,15 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   const handleDownloadDocument = async (documentId: string) => {
     try {
       const docData = await apiClient.getDocument(documentId)
-      
+
       // Create a blob with the document content
-      const content = typeof docData.content === 'string' 
-        ? docData.content 
+      const content = typeof docData.content === 'string'
+        ? docData.content
         : docData.content ? JSON.stringify(docData.content) : 'No content available'
-      
+
       const blob = new Blob([content], { type: 'text/plain' })
       const url = URL.createObjectURL(blob)
-      
+
       // Create a temporary link and trigger download
       const link = window.document.createElement('a')
       link.href = url
@@ -1746,7 +1746,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       window.document.body.appendChild(link)
       link.click()
       window.document.body.removeChild(link)
-      
+
       URL.revokeObjectURL(url)
       toast.success("Document downloaded successfully!")
     } catch (error) {
@@ -1772,7 +1772,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
     try {
       setUpgrading(true)
-      
+
       const response = await apiClient.post<{
         success: boolean
         data: {
@@ -1783,11 +1783,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
       if (response.success && response.data) {
         const { program } = response.data
-        
+
         toast.success(`Project upgraded to program: ${program.name}`)
         setUpgradeToProgramDialogOpen(false)
         setEditProjectDialogOpen(false)
-        
+
         // Navigate to the new program
         router.push(`/programs/${program.id}`)
       } else {
@@ -1795,7 +1795,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       }
     } catch (error: any) {
       console.error("Failed to upgrade project to program:", error)
-      
+
       if (error.response?.data?.error === "Project is already assigned to a program") {
         toast.error("This project is already assigned to a program")
       } else {
@@ -1809,7 +1809,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Handle opening edit dialog
   const handleEditProject = () => {
     if (!project) return
-    
+
     // Format dates for input fields (YYYY-MM-DD)
     const formatDateForInput = (dateString?: string | null) => {
       if (!dateString) return ""
@@ -1817,7 +1817,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         // Handle different date formats that might come from the database
         const date = new Date(dateString)
         if (isNaN(date.getTime())) return ""
-        
+
         // Ensure we get the date in local timezone for the input
         const year = date.getFullYear()
         const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -1828,11 +1828,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         return ""
       }
     }
-    
+
     // Note: Manager and team members are now managed through stakeholders
     // Extract manager name from project owner if available
     const manager = (project as any).owner_name || ""
-    
+
     setEditForm({
       name: project.name || "",
       description: project.description || "",
@@ -1845,14 +1845,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       manager: manager,
       team_members: [] // Team members are now managed through stakeholders
     })
-    
+
     setEditProjectDialogOpen(true)
   }
 
   // Update project
   const handleUpdateProject = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!editForm.name || !editForm.framework) {
       toast.error("Please fill in required fields (Name and Framework)")
       return
@@ -1876,7 +1876,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
     try {
       setUpdating(true)
-      
+
       const updateData = {
         name: editForm.name,
         description: editForm.description,
@@ -1888,9 +1888,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         budget: editForm.budget ? parseFloat(editForm.budget) : undefined
         // Note: team_members are now managed through stakeholders (is_team_member flag)
       }
-      
+
       await apiClient.updateProject(projectId, updateData)
-      
+
       toast.success("Project updated successfully!")
       setEditProjectDialogOpen(false)
       await fetchProject()
@@ -1911,9 +1911,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       setLoadingUsers(true)
       const usersList = await apiClient.getUsers()
       // Handle different response formats
-      const usersArray = Array.isArray(usersList) ? usersList : 
-                        Array.isArray(usersList?.users) ? usersList.users :
-                        Array.isArray(usersList?.data) ? usersList.data : []
+      const usersArray = Array.isArray(usersList) ? usersList :
+        Array.isArray(usersList?.users) ? usersList.users :
+          Array.isArray(usersList?.data) ? usersList.data : []
       setUsers(usersArray)
     } catch (error) {
       console.error("Failed to fetch users:", error)
@@ -2001,7 +2001,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Save stakeholder (create or update)
   const handleSaveStakeholder = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!stakeholderForm.role || !stakeholderForm.email) {
       toast.error("Please fill in required fields (Role, Email)")
       return
@@ -2015,9 +2015,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
     try {
       setSavingStakeholder(true)
-      
+
       let savedStakeholder: Stakeholder
-      
+
       if (editingStakeholder) {
         // Update existing stakeholder
         const response = await apiClient.updateStakeholder(editingStakeholder.id, stakeholderForm)
@@ -2032,21 +2032,21 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
         savedStakeholder = response.stakeholder
         toast.success("Stakeholder added successfully!")
       }
-      
+
       // If marked as team member, ensure they have a user account linked
       if (stakeholderForm.is_team_member) {
         // Check if stakeholder has user_id (from the saved response or existing stakeholder)
         const stakeholderId = savedStakeholder.id || editingStakeholder?.id
         const hasUserId = (savedStakeholder as any).user_id || (editingStakeholder as any)?.user_id
-        
+
         if (!hasUserId) {
           // Try to find a user by email
           try {
             const users = await apiClient.getUsers()
-            const matchingUser = users.find((u: any) => 
+            const matchingUser = users.find((u: any) =>
               u.email?.toLowerCase() === stakeholderForm.email.toLowerCase()
             )
-            
+
             if (matchingUser) {
               // Link stakeholder to user
               await apiClient.linkStakeholderToUser(stakeholderId, matchingUser.id)
@@ -2066,7 +2066,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
           }
         }
       }
-      
+
       handleCloseStakeholderDialog(false)
       // Refresh stakeholders list
       await fetchStakeholders()
@@ -2114,7 +2114,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     if (!confirm("Are you sure you want to delete this stakeholder? This action cannot be undone.")) {
       return
     }
-    
+
     try {
       await apiClient.deleteStakeholder(stakeholderId)
       toast.success("Stakeholder deleted successfully!")
@@ -2139,13 +2139,13 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     }
   }, [documentsPagination.page, searchTerm])
 
-  // Listen for document creation events via WebSocket and refresh documents for this project
+  // Listen for document events via WebSocket and refresh documents for this project
   const { on, off } = useWebSocket()
   useEffect(() => {
     // Join the project room to receive events
     const room = `project:${projectId}`
     joinRoom(room)
-    
+
     const handleDocumentCreated = (data: { document?: { project_id: string; name: string } }) => {
       try {
         const doc = data?.document
@@ -2168,16 +2168,75 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       }
     }
 
-    on("document:created", handleDocumentCreated)
-    on("drift:detected", handleDriftDetected)
+    // Conflict detection and resolution event handlers
+    const handleConflictDetected = (data: {
+      jobId: string;
+      conflictId: string;
+      conflictDetails: any;
+      resolutionOptions: string[];
+    }) => {
+      try {
+        const template = templates.find(t => t.id === data.conflictDetails.template?.id);
+        setConflictData({
+          existingDocument: data.conflictDetails.existingDocuments?.[0],
+          templateName: template?.name || data.conflictDetails.template?.name || 'Unknown Template',
+          generationData: {
+            projectId,
+            templateId: data.conflictDetails.template?.id,
+            jobId: data.jobId,
+            conflictId: data.conflictId,
+          }
+        });
+        setConflictDialogOpen(true);
+      } catch (err) {
+        console.warn('Error handling document:regeneration:conflict_detected event', err);
+      }
+    };
+
+    const handleConflictResolved = (data: {
+      conflictId: string;
+      resolutionMethod: string;
+      documentId: string;
+      newVersionId?: string;
+    }) => {
+      try {
+        toast.success(`Conflict resolved using ${data.resolutionMethod}`);
+        fetchDocuments(); // Refresh documents to show updates
+      } catch (err) {
+        console.warn('Error handling document:conflict_resolved event', err);
+      }
+    };
+
+    const handleRegenerationCompleted = (data: {
+      jobId: string;
+      versionId: string;
+      versionNumber: string;
+      documentName?: string;
+    }) => {
+      try {
+        toast.success(`Document "${data.documentName}" regeneration completed (v${data.versionNumber})`);
+        fetchDocuments(); // Refresh documents to show updates
+      } catch (err) {
+        console.warn('Error handling document:regeneration:completed event', err);
+      }
+    };
+
+    on("document:created", handleDocumentCreated);
+    on("drift:detected", handleDriftDetected);
+    on("document:regeneration:conflict_detected", handleConflictDetected);
+    on("document:conflict_resolved", handleConflictResolved);
+    on("document:regeneration:completed", handleRegenerationCompleted);
 
     return () => {
-      off("document:created", handleDocumentCreated)
-      off("drift:detected", handleDriftDetected)
-      leaveRoom(room)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]) // Only rejoin when projectId changes, not when WebSocket functions change
+      off("document:created", handleDocumentCreated);
+      off("drift:detected", handleDriftDetected);
+      off("document:regeneration:conflict_detected", handleConflictDetected);
+      off("document:conflict_resolved", handleConflictResolved);
+      off("document:regeneration:completed", handleRegenerationCompleted);
+      leaveRoom(room);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId, templates]) // Rejoin when projectId or templates change
 
   // Documents are now filtered server-side, so we use them directly
   const displayDocuments = documents
@@ -2285,14 +2344,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
   // Calculate progress based on project timeline
   const getProjectProgress = () => {
     if (!project?.start_date || !project?.end_date) return 0
-    
+
     const startDate = new Date(project.start_date)
     const endDate = new Date(project.end_date)
     const now = new Date()
-    
+
     if (now < startDate) return 0
     if (now > endDate) return 100
-    
+
     const totalDays = endDate.getTime() - startDate.getTime()
     const elapsedDays = now.getTime() - startDate.getTime()
     return Math.round((elapsedDays / totalDays) * 100)
@@ -2443,8 +2502,8 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             ) : (
                               templates.map((template) => (
                                 <option key={template.id} value={template.id}>
-                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
-                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
+                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig]
+                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' '
                                     : ''}
                                   {template.name} ({template.framework})
                                   {template.development_status === 'production' ? ' ✓' : ''}
@@ -2452,34 +2511,34 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               ))
                             )}
                           </select>
-                          
+
                           {/* Template Status Information Panel */}
                           {selectedTemplate && templates.find(t => t.id === selectedTemplate) && (() => {
                             const template = templates.find(t => t.id === selectedTemplate)!
                             return (
                               <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium">Template Status:</span>
-                                      {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
-                                        <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant}>
-                                          <>{statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}</>
-                                        </Badge>
-                                      )}
-                                    </div>
-                                    {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
-                                      <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
-                                        <>{healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}</>
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">Template Status:</span>
+                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] && (
+                                      <Badge variant={statusConfig[template.development_status as keyof typeof statusConfig].variant}>
+                                        <>{statusConfig[template.development_status as keyof typeof statusConfig].emoji} {statusConfig[template.development_status as keyof typeof statusConfig].label}</>
                                       </Badge>
                                     )}
                                   </div>
-                                
+                                  {template.health_rating && healthConfig[template.health_rating as keyof typeof healthConfig] && (
+                                    <Badge variant="outline" className={`text-xs ${healthConfig[template.health_rating as keyof typeof healthConfig].color}`}>
+                                      <>{healthConfig[template.health_rating as keyof typeof healthConfig].icon} {template.health_rating}</>
+                                    </Badge>
+                                  )}
+                                </div>
+
                                 {template.validation_count !== undefined && template.validation_count > 0 && (
                                   <div className="grid grid-cols-2 gap-3 text-sm">
                                     <div className="flex flex-col">
                                       <span className="text-muted-foreground text-xs">Success Rate</span>
                                       <span className="font-semibold">
-                                        {template.success_rate !== undefined 
+                                        {template.success_rate !== undefined
                                           ? `${Number(template.success_rate).toFixed(1)}%`
                                           : template.success_count && template.validation_count
                                             ? `${Math.round((template.success_count / template.validation_count) * 100)}%`
@@ -2492,7 +2551,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {/* Warning for non-production templates */}
                                 {template.development_status && template.development_status !== 'production' && (
                                   <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
@@ -2510,7 +2569,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                     </div>
                                   </div>
                                 )}
-                                
+
                                 {/* Success indicator for production templates */}
                                 {template.development_status === 'production' && (
                                   <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
@@ -2531,9 +2590,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                         </div>
                         <div>
                           <Label htmlFor="doc-name">Document Name</Label>
-                          <Input 
-                            id="doc-name" 
-                            placeholder="Enter document name" 
+                          <Input
+                            id="doc-name"
+                            placeholder="Enter document name"
                             className="mt-1"
                             value={documentName}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentName(e.target.value)}
@@ -2542,9 +2601,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                         </div>
                         <div>
                           <Label htmlFor="doc-description">Description (Optional)</Label>
-                          <Input 
-                            id="doc-description" 
-                            placeholder="Brief description of the document" 
+                          <Input
+                            id="doc-description"
+                            placeholder="Brief description of the document"
                             className="mt-1"
                             value={documentDescription}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDocumentDescription(e.target.value)}
@@ -2605,7 +2664,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             Lower = more focused, Higher = more creative
                           </p>
                         </div>
-                        
+
                         {/* Progress Indicator */}
                         {creatingDocument && generationProgress.step > 0 && (
                           <div className="space-y-3 p-4 bg-muted/50 rounded-lg border">
@@ -2652,12 +2711,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             <Label htmlFor="edit-project-name" className="text-sm font-semibold">
                               Project Name *
                             </Label>
-                            <Input 
-                              id="edit-project-name" 
-                              placeholder="Enter project name" 
+                            <Input
+                              id="edit-project-name"
+                              placeholder="Enter project name"
                               className="mt-2"
                               value={editForm.name}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, name: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
                               required
                             />
                           </div>
@@ -2670,7 +2729,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               aria-label="Priority"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.priority}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({...prev, priority: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({ ...prev, priority: e.target.value }))}
                             >
                               <option value="low">Low</option>
                               <option value="medium">Medium</option>
@@ -2689,7 +2748,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               aria-label="Framework"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.framework}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({...prev, framework: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({ ...prev, framework: e.target.value }))}
                               required
                             >
                               <option value="">Select framework</option>
@@ -2707,7 +2766,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               aria-label="Status"
                               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                               value={editForm.status}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({...prev, status: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditForm(prev => ({ ...prev, status: e.target.value }))}
                             >
                               <option value="planning">Planning</option>
                               <option value="active">Active</option>
@@ -2727,7 +2786,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             placeholder="Describe the project objectives and scope"
                             className="mt-2"
                             value={editForm.description}
-                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditForm(prev => ({...prev, description: e.target.value}))}
+                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
                             rows={3}
                           />
                         </div>
@@ -2743,7 +2802,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               type="date"
                               className="mt-2"
                               value={editForm.start_date}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, start_date: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, start_date: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -2755,7 +2814,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               type="date"
                               className="mt-2"
                               value={editForm.end_date}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, end_date: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, end_date: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -2768,7 +2827,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               placeholder="0"
                               className="mt-2"
                               value={editForm.budget}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, budget: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, budget: e.target.value }))}
                             />
                           </div>
                         </div>
@@ -2783,7 +2842,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             placeholder="Enter project manager name"
                             className="mt-2"
                             value={editForm.manager}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({...prev, manager: e.target.value}))}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditForm(prev => ({ ...prev, manager: e.target.value }))}
                           />
                         </div>
 
@@ -2798,9 +2857,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                       <DialogFooter className="flex flex-col sm:flex-row gap-2">
                         <div className="flex-1">
                           {(project as Project & { program_id?: string })?.program_id ? (
-                            <Button 
-                              type="button" 
-                              variant="outline" 
+                            <Button
+                              type="button"
+                              variant="outline"
                               onClick={() => {
                                 setEditProjectDialogOpen(false)
                                 router.push(`/programs/${(project as Project & { program_id?: string }).program_id}`)
@@ -2811,9 +2870,9 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               Go to Program
                             </Button>
                           ) : (
-                            <Button 
-                              type="button" 
-                              variant="outline" 
+                            <Button
+                              type="button"
+                              variant="outline"
                               onClick={() => {
                                 setEditProjectDialogOpen(false)
                                 setUpgradeToProgramDialogOpen(true)
@@ -2845,7 +2904,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                     <DialogHeader>
                       <DialogTitle>Upgrade Project to Program</DialogTitle>
                       <DialogDescription>
-                        This will create a new program from this project and link the project to it. 
+                        This will create a new program from this project and link the project to it.
                         The program will be pre-populated with the project's details.
                       </DialogDescription>
                     </DialogHeader>
@@ -2861,29 +2920,29 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                           <strong>Budget:</strong> {project?.budget ? `$${project.budget.toLocaleString()}` : 'Not set'}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          <strong>Timeline:</strong> {project?.start_date && project?.end_date 
+                          <strong>Timeline:</strong> {project?.start_date && project?.end_date
                             ? `${new Date(project.start_date).toLocaleDateString()} - ${new Date(project.end_date).toLocaleDateString()}`
                             : 'Not set'}
                         </p>
                       </div>
                       <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
                         <p className="text-sm text-blue-800 dark:text-blue-200">
-                          <strong>Note:</strong> After upgrading, you'll be redirected to the new program page. 
+                          <strong>Note:</strong> After upgrading, you'll be redirected to the new program page.
                           The project will remain accessible and will be linked to the program.
                         </p>
                       </div>
                     </div>
                     <DialogFooter>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
+                      <Button
+                        type="button"
+                        variant="outline"
                         onClick={() => setUpgradeToProgramDialogOpen(false)}
                         disabled={upgrading}
                       >
                         Cancel
                       </Button>
-                      <Button 
-                        type="button" 
+                      <Button
+                        type="button"
                         onClick={handleUpgradeToProgram}
                         disabled={upgrading}
                         className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
@@ -2904,7 +2963,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                           {editingStakeholder ? 'Edit Stakeholder' : 'Add New Stakeholder'}
                         </DialogTitle>
                         <DialogDescription>
-                          {editingStakeholder 
+                          {editingStakeholder
                             ? 'Update stakeholder information and PMBOK parameters.'
                             : 'Add a new stakeholder with their PMBOK management parameters. You can create placeholders for roles that need to be recruited by leaving the name field blank.'
                           }
@@ -2917,12 +2976,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             <Label htmlFor="stakeholder-role" className="text-sm font-semibold">
                               Role *
                             </Label>
-                            <Input 
-                              id="stakeholder-role" 
-                              placeholder="Enter role/title (e.g., Project Manager, Business Analyst)" 
+                            <Input
+                              id="stakeholder-role"
+                              placeholder="Enter role/title (e.g., Project Manager, Business Analyst)"
                               className="mt-2"
                               value={stakeholderForm.role}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, role: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, role: e.target.value }))}
                               required
                             />
                           </div>
@@ -2930,12 +2989,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             <Label htmlFor="stakeholder-name" className="text-sm font-semibold">
                               Name (Optional)
                             </Label>
-                            <Input 
-                              id="stakeholder-name" 
-                              placeholder="Enter stakeholder name (leave blank if to be recruited)" 
+                            <Input
+                              id="stakeholder-name"
+                              placeholder="Enter stakeholder name (leave blank if to be recruited)"
                               className="mt-2"
                               value={stakeholderForm.name ?? ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, name: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, name: e.target.value }))}
                             />
                           </div>
                         </div>
@@ -2945,25 +3004,25 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             <Label htmlFor="stakeholder-department" className="text-sm font-semibold">
                               Department
                             </Label>
-                            <Input 
-                              id="stakeholder-department" 
-                              placeholder="Enter department" 
+                            <Input
+                              id="stakeholder-department"
+                              placeholder="Enter department"
                               className="mt-2"
                               value={stakeholderForm.department ?? ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, department: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, department: e.target.value }))}
                             />
                           </div>
                           <div>
                             <Label htmlFor="stakeholder-email" className="text-sm font-semibold">
                               Email *
                             </Label>
-                            <Input 
-                              id="stakeholder-email" 
+                            <Input
+                              id="stakeholder-email"
                               type="email"
-                              placeholder="Enter email address" 
+                              placeholder="Enter email address"
                               className="mt-2"
                               value={stakeholderForm.email}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, email: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, email: e.target.value }))}
                               required
                             />
                           </div>
@@ -2974,12 +3033,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             <Label htmlFor="stakeholder-phone" className="text-sm font-semibold">
                               Phone
                             </Label>
-                            <Input 
-                              id="stakeholder-phone" 
-                              placeholder="Enter phone number" 
+                            <Input
+                              id="stakeholder-phone"
+                              placeholder="Enter phone number"
                               className="mt-2"
                               value={stakeholderForm.phone ?? ""}
-                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, phone: e.target.value}))}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, phone: e.target.value }))}
                             />
                           </div>
                           <div>
@@ -2993,7 +3052,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                               onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                                 const newType = e.target.value as 'internal' | 'external'
                                 setStakeholderForm(prev => ({
-                                  ...prev, 
+                                  ...prev,
                                   stakeholder_type: newType,
                                   // Reset is_team_member if switching to external
                                   is_team_member: newType === 'external' ? false : prev.is_team_member
@@ -3014,7 +3073,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 type="checkbox"
                                 id="is-team-member"
                                 checked={stakeholderForm.is_team_member}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({...prev, is_team_member: e.target.checked}))}
+                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setStakeholderForm(prev => ({ ...prev, is_team_member: e.target.checked }))}
                                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                               />
                               <Label htmlFor="is-team-member" className="text-sm font-medium cursor-pointer">
@@ -3029,7 +3088,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 <div>
                                   <p className="font-medium mb-1">⚠️ User Account Required</p>
                                   <p className="mb-2">
-                                    Team members must have a user account to be assigned to tasks. 
+                                    Team members must have a user account to be assigned to tasks.
                                     {stakeholderForm.email && (
                                       <> The system will attempt to automatically link a user account with email <strong>{stakeholderForm.email}</strong> when you save.</>
                                     )}
@@ -3081,7 +3140,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                         {/* PMBOK Parameters */}
                         <div className="border-t pt-4">
                           <h3 className="text-lg font-semibold mb-4">PMBOK Stakeholder Parameters</h3>
-                          
+
                           <div className="grid grid-cols-2 gap-4">
                             <div>
                               <Label htmlFor="interest-level" className="text-sm font-semibold">
@@ -3091,7 +3150,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="interest-level"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.interest_level}
-                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, interest_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({ ...prev, interest_level: e.target.value as 'high' | 'medium' | 'low' }))}
                               >
                                 <option value="high">High</option>
                                 <option value="medium">Medium</option>
@@ -3106,7 +3165,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="influence-level"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.influence_level}
-                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, influence_level: e.target.value as 'high' | 'medium' | 'low'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({ ...prev, influence_level: e.target.value as 'high' | 'medium' | 'low' }))}
                               >
                                 <option value="high">High</option>
                                 <option value="medium">Medium</option>
@@ -3124,7 +3183,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="engagement-approach"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.engagement_approach}
-                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, engagement_approach: e.target.value as 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({ ...prev, engagement_approach: e.target.value as 'manage_closely' | 'keep_satisfied' | 'keep_informed' | 'monitor' }))}
                               >
                                 <option value="manage_closely">Manage Closely</option>
                                 <option value="keep_satisfied">Keep Satisfied</option>
@@ -3140,7 +3199,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="communication-frequency"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.communication_frequency}
-                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, communication_frequency: e.target.value as 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({ ...prev, communication_frequency: e.target.value as 'daily' | 'weekly' | 'bi_weekly' | 'monthly' | 'as_needed' }))}
                               >
                                 <option value="daily">Daily</option>
                                 <option value="weekly">Weekly</option>
@@ -3160,7 +3219,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 id="stakeholder-category"
                                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                                 value={stakeholderForm.stakeholder_category}
-                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({...prev, stakeholder_category: e.target.value as 'primary' | 'secondary'}))}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStakeholderForm(prev => ({ ...prev, stakeholder_category: e.target.value as 'primary' | 'secondary' }))}
                               >
                                 <option value="primary">Primary</option>
                                 <option value="secondary">Secondary</option>
@@ -3172,7 +3231,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                         {/* Expectations and Impact */}
                         <div className="border-t pt-4">
                           <h3 className="text-lg font-semibold mb-4">Stakeholder Analysis</h3>
-                          
+
                           <div className="space-y-4">
                             <div>
                               <Label htmlFor="expectations" className="text-sm font-semibold">
@@ -3183,7 +3242,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 placeholder="Describe what this stakeholder expects from the project"
                                 className="mt-2"
                                 value={stakeholderForm.expectations ?? ""}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({...prev, expectations: e.target.value}))}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({ ...prev, expectations: e.target.value }))}
                                 rows={3}
                               />
                             </div>
@@ -3196,7 +3255,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                                 placeholder="Describe how this stakeholder can impact the project"
                                 className="mt-2"
                                 value={stakeholderForm.potential_impact ?? ""}
-                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({...prev, potential_impact: e.target.value}))}
+                                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setStakeholderForm(prev => ({ ...prev, potential_impact: e.target.value }))}
                                 rows={3}
                               />
                             </div>
@@ -3235,7 +3294,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             id="upload-doc-name"
                             placeholder="Enter document name"
                             value={uploadForm.name}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({...uploadForm, name: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({ ...uploadForm, name: e.target.value })}
                             className="mt-2"
                             required
                           />
@@ -3244,12 +3303,12 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                           <Label htmlFor="upload-template-select" className="text-sm font-semibold">
                             Template *
                           </Label>
-                          <select 
+                          <select
                             id="upload-template-select"
                             title="Select a template for metadata tagging"
                             className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
                             value={uploadForm.template_id}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUploadForm({...uploadForm, template_id: e.target.value})}
+                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUploadForm({ ...uploadForm, template_id: e.target.value })}
                             required
                           >
                             <option value="">Select a template (required)</option>
@@ -3277,7 +3336,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             accept=".pdf,.doc,.docx,.txt,.md"
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                               const file = e.target.files?.[0] || null
-                              setUploadForm({...uploadForm, file})
+                              setUploadForm({ ...uploadForm, file })
                             }}
                             className="mt-2"
                             required
@@ -3352,7 +3411,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
-                <DocumentsTab 
+                <DocumentsTab
                   projectId={projectId}
                   documentStats={documentStats}
                   searchTerm={searchTerm}
@@ -3372,11 +3431,11 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               </TabsContent>
 
               <TabsContent value="overview" className="space-y-4">
-                <OverviewTab 
-                  project={project} 
-                  progress={progress} 
-                  managerName={managerName} 
-                  documentStats={documentStats} 
+                <OverviewTab
+                  project={project}
+                  progress={progress}
+                  managerName={managerName}
+                  documentStats={documentStats}
                   stakeholders={stakeholders}
                   projectId={projectId}
                 />
@@ -3422,10 +3481,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
               </TabsContent>
 
               <TabsContent value="variables" className="space-y-4">
-                <VariablesTab 
-                  project={project} 
-                  documents={documents} 
-                  stakeholders={stakeholders} 
+                <VariablesTab
+                  project={project}
+                  documents={documents}
+                  stakeholders={stakeholders}
                 />
               </TabsContent>
 
