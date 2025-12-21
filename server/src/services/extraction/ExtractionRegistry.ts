@@ -117,7 +117,7 @@ export class ExtractionRegistry {
   setFeatureFlagFromEnv(entityType: string): void {
     const envKey = `EXTRACTION_USE_NEW_${entityType.toUpperCase().replace(/-/g, '_')}`
     const envValue = process.env[envKey]
-    
+
     if (envValue !== undefined) {
       this.featureFlags[entityType] = envValue === 'true' || envValue === '1'
       logger.info(`[EXTRACTION-REGISTRY] Feature flag for ${entityType} set from ${envKey}=${envValue}`)
@@ -316,6 +316,279 @@ export async function initializeRegistry(): Promise<void> {
     save: saveDevelopmentApproaches
   })
 
+  // Register governance_decisions module (Phase 1 - Governance)
+  const { extractGovernanceDecisions, saveGovernanceDecisions } = await import('./entities/governance_decisions')
+  extractionRegistry.register('governance_decisions', {
+    extract: extractGovernanceDecisions,
+    save: saveGovernanceDecisions
+  })
+
+  // Register approval_workflows module (Phase 1 - Governance)
+  const { extractApprovalWorkflows, saveApprovalWorkflows } = await import('./entities/approval_workflows')
+  extractionRegistry.register('approval_workflows', {
+    extract: extractApprovalWorkflows,
+    save: saveApprovalWorkflows
+  })
+
+  // Register steering_committees module (Phase 1 - Governance)
+  const { extractSteeringCommittees, saveSteeringCommittees } = await import('./entities/steering_committees')
+  extractionRegistry.register('steering_committees', {
+    extract: extractSteeringCommittees,
+    save: saveSteeringCommittees
+  })
+
+  // Register change_control_boards module (Phase 1 - Governance)
+  const { extractChangeControlBoards, saveChangeControlBoards } = await import('./entities/change_control_boards')
+  extractionRegistry.register('change_control_boards', {
+    extract: extractChangeControlBoards,
+    save: saveChangeControlBoards
+  })
+
+  // Register policy_compliance module (Phase 1 - Governance)
+  const { extractPolicyCompliance, savePolicyCompliance } = await import('./entities/policy_compliance')
+  extractionRegistry.register('policy_compliance', {
+    extract: extractPolicyCompliance,
+    save: savePolicyCompliance
+  })
+
+  // Register scope_baseline module (Phase 1 - Scope)
+  const { extractScopeBaseline, saveScopeBaseline } = await import('./entities/scope_baseline')
+  extractionRegistry.register('scope_baseline', {
+    extract: extractScopeBaseline,
+    save: saveScopeBaseline
+  })
+
+  // Register wbs_nodes module (Phase 1 - Scope)
+  const { extractWBSNodes, saveWBSNodes } = await import('./entities/wbs_nodes')
+  extractionRegistry.register('wbs_nodes', {
+    extract: extractWBSNodes,
+    save: saveWBSNodes
+  })
+
+  // Register scope_change_requests module (Phase 1 - Scope)
+  const { extractScopeChangeRequests, saveScopeChangeRequests } = await import('./entities/scope_change_requests')
+  extractionRegistry.register('scope_change_requests', {
+    extract: extractScopeChangeRequests,
+    save: saveScopeChangeRequests
+  })
+
+  // Register requirements_traceability module (Phase 1 - Scope)
+  const { extractRequirementsTraceability, saveRequirementsTraceability } = await import('./entities/requirements_traceability')
+  extractionRegistry.register('requirements_traceability', {
+    extract: extractRequirementsTraceability,
+    save: saveRequirementsTraceability
+  })
+
+  // Register scope_verification module (Phase 1 - Scope)
+  const { extractScopeVerification, saveScopeVerification } = await import('./entities/scope_verification')
+  extractionRegistry.register('scope_verification', {
+    extract: extractScopeVerification,
+    save: saveScopeVerification
+  })
+
+  // Register schedule_baseline module (Phase 2 - Schedule)
+  const { extractScheduleBaseline, saveScheduleBaseline } = await import('./entities/schedule_baseline')
+  extractionRegistry.register('schedule_baseline', {
+    extract: extractScheduleBaseline,
+    save: saveScheduleBaseline
+  })
+
+  // Register schedule_activities module (Phase 2 - Schedule)
+  const { extractScheduleActivities, saveScheduleActivities } = await import('./entities/schedule_activities')
+  extractionRegistry.register('schedule_activities', {
+    extract: extractScheduleActivities,
+    save: saveScheduleActivities
+  })
+
+  // Register critical_path module (Phase 2 - Schedule)
+  const { extractCriticalPath, saveCriticalPath } = await import('./entities/critical_path')
+  extractionRegistry.register('critical_path', {
+    extract: extractCriticalPath,
+    save: saveCriticalPath
+  })
+
+  // Register schedule_variances module (Phase 2 - Schedule)
+  const { extractScheduleVariances, saveScheduleVariances } = await import('./entities/schedule_variances')
+  extractionRegistry.register('schedule_variances', {
+    extract: extractScheduleVariances,
+    save: saveScheduleVariances
+  })
+
+  // Register schedule_forecasts module (Phase 2 - Schedule)
+  const { extractScheduleForecasts, saveScheduleForecasts } = await import('./entities/schedule_forecasts')
+  extractionRegistry.register('schedule_forecasts', {
+    extract: extractScheduleForecasts,
+    save: saveScheduleForecasts
+  })
+
+  // Register budget_baseline module (Phase 2 - Finance)
+  const { extractBudgetBaseline, saveBudgetBaseline } = await import('./entities/budget_baseline')
+  extractionRegistry.register('budget_baseline', {
+    extract: extractBudgetBaseline,
+    save: saveBudgetBaseline
+  })
+
+  // Register cost_estimates module (Phase 2 - Finance)
+  const { extractCostEstimates, saveCostEstimates } = await import('./entities/cost_estimates')
+  extractionRegistry.register('cost_estimates', {
+    extract: extractCostEstimates,
+    save: saveCostEstimates
+  })
+
+  // Register funding_tranches module (Phase 2 - Finance)
+  const { extractFundingTranches, saveFundingTranches } = await import('./entities/funding_tranches')
+  extractionRegistry.register('funding_tranches', {
+    extract: extractFundingTranches,
+    save: saveFundingTranches
+  })
+
+  // Register financial_variances module (Phase 2 - Finance)
+  const { extractFinancialVariances, saveFinancialVariances } = await import('./entities/financial_variances')
+  extractionRegistry.register('financial_variances', {
+    extract: extractFinancialVariances,
+    save: saveFinancialVariances
+  })
+
+  // Register procurement_costs module (Phase 2 - Finance)
+  const { extractProcurementCosts, saveProcurementCosts } = await import('./entities/procurement_costs')
+  extractionRegistry.register('procurement_costs', {
+    extract: extractProcurementCosts,
+    save: saveProcurementCosts
+  })
+
+  // Register resource_plans module (Phase 3 - Resources)
+  const { extractResourcePlans, saveResourcePlans } = await import('./entities/resource_plans')
+  extractionRegistry.register('resource_plans', {
+    extract: extractResourcePlans,
+    save: saveResourcePlans
+  })
+
+  // Register roles_and_responsibilities module (Phase 3 - Resources)
+  const { extractRolesAndResponsibilities, saveRolesAndResponsibilities } = await import('./entities/roles_and_responsibilities')
+  extractionRegistry.register('roles_and_responsibilities', {
+    extract: extractRolesAndResponsibilities,
+    save: saveRolesAndResponsibilities
+  })
+
+  // Register team_availability module (Phase 3 - Resources)
+  const { extractTeamAvailability, saveTeamAvailability } = await import('./entities/team_availability')
+  extractionRegistry.register('team_availability', {
+    extract: extractTeamAvailability,
+    save: saveTeamAvailability
+  })
+
+  // Register labor_rates module (Phase 3 - Resources)
+  const { extractLaborRates, saveLaborRates } = await import('./entities/labor_rates')
+  extractionRegistry.register('labor_rates', {
+    extract: extractLaborRates,
+    save: saveLaborRates
+  })
+
+  // Register project_org_chart module (Phase 3 - Resources)
+  const { extractProjectOrgChart, saveProjectOrgChart } = await import('./entities/project_org_chart')
+  extractionRegistry.register('project_org_chart', {
+    extract: extractProjectOrgChart,
+    save: saveProjectOrgChart
+  })
+
+  // Register risk_appetite module (Phase 3 - Risk Extensions)
+  const { extractRiskAppetite, saveRiskAppetite } = await import('./entities/risk_appetite')
+  extractionRegistry.register('risk_appetite', {
+    extract: extractRiskAppetite,
+    save: saveRiskAppetite
+  })
+
+  // Register risk_checklists module (Phase 3 - Risk Extensions)
+  const { extractRiskChecklists, saveRiskChecklists } = await import('./entities/risk_checklists')
+  extractionRegistry.register('risk_checklists', {
+    extract: extractRiskChecklists,
+    save: saveRiskChecklists
+  })
+
+  // Register probability_impact_matrix module (Phase 3 - Risk Extensions)
+  const { extractProbabilityImpactMatrix, saveProbabilityImpactMatrix } = await import('./entities/probability_impact_matrix')
+  extractionRegistry.register('probability_impact_matrix', {
+    extract: extractProbabilityImpactMatrix,
+    save: saveProbabilityImpactMatrix
+  })
+
+  // Register issue_log module (Phase 3 - Issues)
+  const { extractIssueLog, saveIssueLog } = await import('./entities/issue_log')
+  extractionRegistry.register('issue_log', {
+    extract: extractIssueLog,
+    save: saveIssueLog
+  })
+
+  // Register lessons_learned module (Phase 3 - Knowledge)
+  const { extractLessonsLearned, saveLessonsLearned } = await import('./entities/lessons_learned')
+  extractionRegistry.register('lessons_learned', {
+    extract: extractLessonsLearned,
+    save: saveLessonsLearned
+  })
+
+  // Register stakeholder_engagements module (Phase 4 - Stakeholder Ops)
+  const { extractStakeholderEngagements, saveStakeholderEngagements } = await import('./entities/stakeholder_engagements')
+  extractionRegistry.register('stakeholder_engagements', {
+    extract: extractStakeholderEngagements,
+    save: saveStakeholderEngagements
+  })
+
+  // Register communication_logs module (Phase 4 - Stakeholder Ops)
+  const { extractCommunicationLogs, saveCommunicationLogs } = await import('./entities/communication_logs')
+  extractionRegistry.register('communication_logs', {
+    extract: extractCommunicationLogs,
+    save: saveCommunicationLogs
+  })
+
+  // Register action_items module (Phase 4 - Stakeholder Ops)
+  const { extractActionItems, saveActionItems } = await import('./entities/action_items')
+  extractionRegistry.register('action_items', {
+    extract: extractActionItems,
+    save: saveActionItems
+  })
+
+  // Register meeting_minutes module (Phase 4 - Stakeholder Ops)
+  const { extractMeetingMinutes, saveMeetingMinutes } = await import('./entities/meeting_minutes')
+  extractionRegistry.register('meeting_minutes', {
+    extract: extractMeetingMinutes,
+    save: saveMeetingMinutes
+  })
+
+  // Register project_charter_details module (Phase 4 - Strategy)
+  const { extractProjectCharterDetails, saveProjectCharterDetails } = await import('./entities/project_charter_details')
+  extractionRegistry.register('project_charter_details', {
+    extract: extractProjectCharterDetails,
+    save: saveProjectCharterDetails
+  })
+
+  // Register business_case_details module (Phase 4 - Strategy)
+  const { extractBusinessCaseDetails, saveBusinessCaseDetails } = await import('./entities/business_case_details')
+  extractionRegistry.register('business_case_details', {
+    extract: extractBusinessCaseDetails,
+    save: saveBusinessCaseDetails
+  })
+
+  // Register benefit_realization_plan module (Phase 4 - Strategy)
+  const { extractBenefitRealizationPlan, saveBenefitRealizationPlan } = await import('./entities/benefit_realization_plan')
+  extractionRegistry.register('benefit_realization_plan', {
+    extract: extractBenefitRealizationPlan,
+    save: saveBenefitRealizationPlan
+  })
+
+  // Register general_change_requests module (Phase 4 - Strategy)
+  const { extractGeneralChangeRequests, saveGeneralChangeRequests } = await import('./entities/general_change_requests')
+  extractionRegistry.register('general_change_requests', {
+    extract: extractGeneralChangeRequests,
+    save: saveGeneralChangeRequests
+  })
+
+  // Register project_team_evaluations module (Phase 4 - Strategy)
+  const { extractProjectTeamEvaluations, saveProjectTeamEvaluations } = await import('./entities/project_team_evaluations')
+  extractionRegistry.register('project_team_evaluations', {
+    extract: extractProjectTeamEvaluations,
+    save: saveProjectTeamEvaluations
+  })
+
   // Load feature flags from environment
   extractionRegistry.setFeatureFlagFromEnv('work_items')
   extractionRegistry.setFeatureFlagFromEnv('capacity_plans')
@@ -341,6 +614,45 @@ export async function initializeRegistry(): Promise<void> {
   extractionRegistry.setFeatureFlagFromEnv('quality_standards')
   extractionRegistry.setFeatureFlagFromEnv('team_agreements')
   extractionRegistry.setFeatureFlagFromEnv('development_approaches')
+  extractionRegistry.setFeatureFlagFromEnv('governance_decisions')
+  extractionRegistry.setFeatureFlagFromEnv('approval_workflows')
+  extractionRegistry.setFeatureFlagFromEnv('steering_committees')
+  extractionRegistry.setFeatureFlagFromEnv('change_control_boards')
+  extractionRegistry.setFeatureFlagFromEnv('policy_compliance')
+  extractionRegistry.setFeatureFlagFromEnv('scope_baseline')
+  extractionRegistry.setFeatureFlagFromEnv('wbs_nodes')
+  extractionRegistry.setFeatureFlagFromEnv('scope_change_requests')
+  extractionRegistry.setFeatureFlagFromEnv('requirements_traceability')
+  extractionRegistry.setFeatureFlagFromEnv('scope_verification')
+  extractionRegistry.setFeatureFlagFromEnv('schedule_baseline')
+  extractionRegistry.setFeatureFlagFromEnv('schedule_activities')
+  extractionRegistry.setFeatureFlagFromEnv('critical_path')
+  extractionRegistry.setFeatureFlagFromEnv('schedule_variances')
+  extractionRegistry.setFeatureFlagFromEnv('schedule_forecasts')
+  extractionRegistry.setFeatureFlagFromEnv('budget_baseline')
+  extractionRegistry.setFeatureFlagFromEnv('cost_estimates')
+  extractionRegistry.setFeatureFlagFromEnv('funding_tranches')
+  extractionRegistry.setFeatureFlagFromEnv('financial_variances')
+  extractionRegistry.setFeatureFlagFromEnv('procurement_costs')
+  extractionRegistry.setFeatureFlagFromEnv('resource_plans')
+  extractionRegistry.setFeatureFlagFromEnv('roles_and_responsibilities')
+  extractionRegistry.setFeatureFlagFromEnv('team_availability')
+  extractionRegistry.setFeatureFlagFromEnv('labor_rates')
+  extractionRegistry.setFeatureFlagFromEnv('project_org_chart')
+  extractionRegistry.setFeatureFlagFromEnv('risk_appetite')
+  extractionRegistry.setFeatureFlagFromEnv('risk_checklists')
+  extractionRegistry.setFeatureFlagFromEnv('probability_impact_matrix')
+  extractionRegistry.setFeatureFlagFromEnv('issue_log')
+  extractionRegistry.setFeatureFlagFromEnv('lessons_learned')
+  extractionRegistry.setFeatureFlagFromEnv('stakeholder_engagements')
+  extractionRegistry.setFeatureFlagFromEnv('communication_logs')
+  extractionRegistry.setFeatureFlagFromEnv('action_items')
+  extractionRegistry.setFeatureFlagFromEnv('meeting_minutes')
+  extractionRegistry.setFeatureFlagFromEnv('project_charter_details')
+  extractionRegistry.setFeatureFlagFromEnv('business_case_details')
+  extractionRegistry.setFeatureFlagFromEnv('benefit_realization_plan')
+  extractionRegistry.setFeatureFlagFromEnv('general_change_requests')
+  extractionRegistry.setFeatureFlagFromEnv('project_team_evaluations')
 
   logger.info('[EXTRACTION-REGISTRY] Registry initialized', {
     registeredEntities: extractionRegistry.getRegisteredEntities(),

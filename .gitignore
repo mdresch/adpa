@@ -128,7 +128,7 @@ server/src/utils/error.ts
 # Backups and large files
 /backups/
 *.sql
-!server/src/database/migrations/add_template_purpose_analytics.sql
+!server/src/database/migrations/*.sql
 *.bak
 *.backup
 acli.exe

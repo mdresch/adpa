@@ -12,7 +12,7 @@ import DocumentPurposeService from "./documentPurposeService"
 import TemplateAnalyticsService from "./templateAnalyticsService"
 import { EventEmitter } from "events"
 // Phase 3: Type Safety and Validation
-import type { JobType, JobData, JobOptions, QueueName } from "./jobs/types"
+import type { JobType, JobData, JobOptions, QueueName, JobStatus } from "./jobs/types"
 import { validateJobData, validateJobType } from "./jobs/validation"
 // Phase 5: Queue Service Dependencies
 import type { QueueServiceDependencies } from "./jobs/queue/QueueDependencies"
@@ -27,6 +27,22 @@ import {
 import { cache } from "../utils/redis"
 // Phase 5: Performance monitoring utilities
 import { PerformanceMonitor } from "../utils/performanceMonitor"
+import { WorkerMonitoring } from "../utils/workerMonitoring"
+
+// Forward declarations for functions used before their definition
+declare function updateJobStatus(
+  jobId: string,
+  status: JobStatus,
+  progress?: number,
+  workerId?: string,
+  queueName?: QueueName | string,
+  errorMessage?: string
+): Promise<void>;
+
+declare function getQueueServiceDependencies(): Promise<QueueServiceDependencies>;
+
+// Generate unique worker ID for this process - moved to top to avoid hoisting issues
+const WORKER_ID = `worker-${process.pid}-${Date.now()}`
 
 // Set global max listeners for all EventEmitters to prevent MaxListenersExceededWarning
 // Bull queues create multiple Redis connections (Commander instances) with many event listeners
@@ -760,16 +776,17 @@ const ENTITY_TYPES = [
   'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
   'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
   'performance_actuals',
+  'schedule_baselines', // Added missing entity type
 
   // PMBOK 8 Knowledge Area Domain entities (Tier 2)
   // Governance Domain
   'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
   // Scope Domain
-  'scope_baselines', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+  'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
   // Schedule Domain
-  'schedule_baselines', 'schedule_activities', 'critical_path_activities', 'schedule_variances', 'schedule_forecasts',
+  'schedule_baseline', 'schedule_activities', 'critical_path_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
   // Finance Domain
-  'budget_baselines', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
+  'budget_baselines', 'budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
   // Resources Domain
   'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
   // Risk Domain
@@ -787,7 +804,7 @@ type EntityType = typeof ENTITY_TYPES[number]
  * Parent Job: Orchestrate extraction by creating child jobs for each entity type
  */
 logger.info('[EXTRACTION-QUEUE] Registering extraction queue processor for "extract-project-data"')
-extractionQueue.process("extract-project-data", 1, async (job) => {
+extractionQueue.process("extract-project-data", 3, async (job) => {
   // Delegate to ExtractionOrchestrationService (extracted in Phase 2 refactoring)
   // Phase 5: Pass dependencies to job service
   const { ExtractionOrchestrationService } = await import('./jobs/ExtractionOrchestrationService')
@@ -795,7 +812,6 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
   return await ExtractionOrchestrationService.processJob(job, {
     workerId: WORKER_ID,
     updateJobStatus,
-    dependencies: deps
   }, deps)
 })
 
@@ -806,8 +822,169 @@ extractionQueue.process("extract-project-data", 1, async (job) => {
  * Note: Child processors remain in queueService.ts as they're straightforward
  * and don't require extraction into a separate service.
  */
+// Register processors for specific missing entity types
+if (true) {
+  extractionQueue.process(`extract-entity-schedule_baselines`, 10, async (job) => {
+    const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+    try {
+      logger.info(`[EXTRACTION-CHILD] Extracting schedule_baselines for job ${parentJobId}`)
+      const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+      const { extractSingleEntityType, saveSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
+
+      let entities: any[] = []
+      if (extractionRegistry.hasEntity('schedule_baselines') && extractionRegistry.isEnabled('schedule_baselines')) {
+        entities = await extractSingleEntityType(
+          projectId,
+          userId,
+          'schedule_baselines',
+          { aiProvider, aiModel, documentIds }
+        )
+        if (entities.length > 0) {
+          await saveSingleEntityType(
+            projectId,
+            userId,
+            'schedule_baselines',
+            entities
+          )
+        }
+      } else {
+        const { projectDataExtractionService } = await import('./projectDataExtractionService')
+        entities = await projectDataExtractionService.extractSingleEntityType(
+          projectId,
+          userId,
+          'schedule_baselines',
+          { aiProvider, aiModel, documentIds }
+        )
+        await projectDataExtractionService.saveSingleEntityType(
+          projectId,
+          userId,
+          'schedule_baselines',
+          entities
+        )
+      }
+      return { entityType: 'schedule_baselines', count: entities.length }
+    } catch (error: any) {
+      logger.error(`[EXTRACTION-CHILD] Failed to extract schedule_baselines: ${error.message}`, {
+        parentJobId,
+        entityType: 'schedule_baselines',
+        projectId,
+        error: error.message
+      })
+      throw error
+    }
+  })
+}
+
+extractionQueue.process(`extract-entity-critical_path_activities`, 10, async (job) => {
+  const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+  try {
+    logger.info(`[EXTRACTION-CHILD] Extracting critical_path_activities for job ${parentJobId}`)
+    const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+    const { extractSingleEntityType, saveSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
+
+    let entities: any[] = []
+    if (extractionRegistry.hasEntity('critical_path_activities') && extractionRegistry.isEnabled('critical_path_activities')) {
+      entities = await extractSingleEntityType(
+        projectId,
+        userId,
+        'critical_path_activities',
+        { aiProvider, aiModel, documentIds }
+      )
+      if (entities.length > 0) {
+        await saveSingleEntityType(
+          projectId,
+          userId,
+          'critical_path_activities',
+          entities
+        )
+      }
+    } else {
+      const { projectDataExtractionService } = await import('./projectDataExtractionService')
+      entities = await projectDataExtractionService.extractSingleEntityType(
+        projectId,
+        userId,
+        'critical_path_activities',
+        { aiProvider, aiModel, documentIds }
+      )
+      await projectDataExtractionService.saveSingleEntityType(
+        projectId,
+        userId,
+        'critical_path_activities',
+        entities
+      )
+    }
+    return { entityType: 'critical_path_activities', count: entities.length }
+  } catch (error: any) {
+    logger.error(`[EXTRACTION-CHILD] Failed to extract critical_path_activities: ${error.message}`, {
+      parentJobId,
+      entityType: 'critical_path_activities',
+      projectId,
+      error: error.message
+    })
+    throw error
+  }
+})
+
+if (true) {
+  extractionQueue.process(`extract-entity-budget_baselines`, 10, async (job) => {
+    const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
+    try {
+      logger.info(`[EXTRACTION-CHILD] Extracting budget_baselines for job ${parentJobId}`)
+      const { extractionRegistry } = await import('./extraction/ExtractionRegistry')
+      const { extractSingleEntityType, saveSingleEntityType } = await import('./extraction/ExtractionOrchestrator')
+
+      let entities: any[] = []
+      if (extractionRegistry.hasEntity('budget_baselines') && extractionRegistry.isEnabled('budget_baselines')) {
+        entities = await extractSingleEntityType(
+          projectId,
+          userId,
+          'budget_baselines',
+          { aiProvider, aiModel, documentIds }
+        )
+        if (entities.length > 0) {
+          await saveSingleEntityType(
+            projectId,
+            userId,
+            'budget_baselines',
+            entities
+          )
+        }
+      } else {
+        const { projectDataExtractionService } = await import('./projectDataExtractionService')
+        entities = await projectDataExtractionService.extractSingleEntityType(
+          projectId,
+          userId,
+          'budget_baselines',
+          { aiProvider, aiModel, documentIds }
+        )
+        await projectDataExtractionService.saveSingleEntityType(
+          projectId,
+          userId,
+          'budget_baselines',
+          entities
+        )
+      }
+      return { entityType: 'budget_baselines', count: entities.length }
+    } catch (error: any) {
+      logger.error(`[EXTRACTION-CHILD] Failed to extract budget_baselines: ${error.message}`, {
+        parentJobId,
+        entityType: 'budget_baselines',
+        projectId,
+        error: error.message
+      })
+      throw error
+    }
+  })
+}
+
+// Keep existing processors for other entity types
 ENTITY_TYPES.forEach((entityType) => {
-  extractionQueue.process(`extract-entity-${entityType}`, 5, async (job) => {
+  // Skip the ones we've already registered explicitly
+  if (['schedule_baselines', 'critical_path_activities', 'budget_baselines'].includes(entityType)) {
+    return;
+  }
+
+  extractionQueue.process(`extract-entity-${entityType}`, 10, async (job) => {
     const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
 
     try {
@@ -909,540 +1086,3 @@ ENTITY_TYPES.forEach((entityType) => {
     }
   })
 })
-
-// Extraction queue event listeners
-extractionQueue.on("completed", (job, result) => {
-  logger.info(`[EXTRACTION-JOB] Completed: ${job.id}`, { totalEntities: result.totalEntities })
-})
-
-extractionQueue.on("failed", (job, err) => {
-  logger.error(`[EXTRACTION-JOB] Failed: ${job.id}`, err)
-})
-
-// Job management functions
-// Phase 5: Migrated to use QueueService.addJob() with full stuck job checking and caching
-export async function addJob(
-  type: string,
-  data: unknown,
-  options?: JobOptions
-): Promise<string> {
-  try {
-    // Phase 5: Use QueueService for all job creation logic
-    const queueService = await getQueueServiceInstance()
-    return await queueService.addJob(type as JobType, data, options)
-  } catch (error) {
-    // Re-throw JobError instances as-is
-    if (error instanceof JobValidationError || error instanceof JobTypeError || error instanceof StuckJobsError || error instanceof JobQueueError || error instanceof JobDatabaseError) {
-      throw error
-    }
-    // Wrap unexpected errors
-    logger.error("Failed to add job:", error)
-    throw error
-  }
-}
-
-export interface JobStatusResult {
-  id: string
-  type: JobType
-  status: JobStatus
-  progress: number | null
-  data: JobData
-  created_by: string | null
-  project_id: string | null
-  project_name: string | null
-  template_name: string | null
-  document_name: string | null
-  queue_name: QueueName | null
-  error_message: string | null
-  result: unknown
-  created_at: Date
-  started_at: Date | null
-  completed_at: Date | null
-  processing_started_at: Date | null
-  queued_at: Date | null
-}
-
-export async function getJobStatus(jobId: string): Promise<JobStatusResult | null> {
-  try {
-    // Phase 5: Use QueueService if available, fallback to direct query
-    const queueService = await getQueueServiceInstance()
-    if (queueService) {
-      const status = await queueService.getJobStatus(jobId)
-      return status as JobStatusResult | null
-    }
-
-    // Fallback to direct query
-    const result = await pool.query(
-      "SELECT * FROM jobs WHERE id = $1",
-      [jobId]
-    )
-
-    if (result.rows.length === 0) {
-      return null
-    }
-
-    return result.rows[0] as JobStatusResult
-  } catch (error) {
-    logger.error(`Failed to get job status: ${jobId}`, error)
-    return null
-  }
-}
-
-// Generate unique worker ID for this process
-const WORKER_ID = `worker-${process.pid}-${Date.now()}`
-
-export async function updateJobStatus(
-  jobId: string,
-  status: JobStatus,
-  progress?: number,
-  workerId?: string,
-  queueName?: QueueName | string,
-  errorMessage?: string
-): Promise<void> {
-  try {
-    // Phase 5: Use QueueService for basic update, then add additional features
-    const queueService = await getQueueServiceInstance()
-    if (queueService) {
-      // Use QueueService for the basic database update
-      await queueService.updateJobStatus(jobId, status, progress, workerId, queueName)
-    } else {
-      // Fallback to direct query (shouldn't happen, but safety first)
-      await pool.query(
-        `UPDATE jobs SET status = $1 WHERE id = $2`,
-        [status, jobId]
-      )
-    }
-
-    // Additional features beyond QueueService (worker process ID, data JSONB update, etc.)
-    const updateFields = ["status = $2"]
-    const params: any[] = [jobId, status]
-    let paramCount = 2
-
-    if (progress !== undefined) {
-      paramCount++
-      updateFields.push(`progress = $${paramCount}`)
-      params.push(progress.toString())
-    }
-
-    // Add worker ID and process ID when job starts processing
-    if (workerId) {
-      paramCount++
-      updateFields.push(`worker_id = $${paramCount}`)
-      params.push(workerId)
-
-      // Add worker process ID
-      paramCount++
-      updateFields.push(`worker_process_id = $${paramCount}`)
-      params.push(process.pid)
-
-      // Update data JSONB to include worker_id for backward compatibility
-      paramCount++
-      updateFields.push(`data = jsonb_set(COALESCE(data, '{}'::jsonb), '{worker_id}', to_jsonb($${paramCount}::text))`)
-      params.push(workerId)
-    }
-
-    // Add error message if provided
-    if (errorMessage) {
-      paramCount++
-      updateFields.push(`error_message = $${paramCount}`)
-      params.push(errorMessage)
-    }
-
-    // Add queue name
-    if (queueName) {
-      paramCount++
-      updateFields.push(`queue_name = $${paramCount}`)
-      params.push(queueName)
-    }
-
-    // Set started_at when job transitions to processing (any progress, not just 10)
-    if (status === "processing") {
-      // Use COALESCE to only set if not already set
-      updateFields.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
-      updateFields.push(`processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP)`)
-    }
-
-    // Set started_at when job completes if it wasn't set during processing
-    if (status === "completed" || status === "failed") {
-      updateFields.push(`started_at = COALESCE(started_at, CURRENT_TIMESTAMP)`)
-      updateFields.push(`processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP)`)
-
-      if (status === "completed") {
-        updateFields.push(`completed_at = CURRENT_TIMESTAMP`)
-      } else {
-        updateFields.push(`failed_at = CURRENT_TIMESTAMP`)
-      }
-    }
-
-    // Prevent long-running workers (especially extraction monitors) from
-    // resurrecting jobs that have already been marked as failed/cancelled.
-    // When transitioning *to* "processing", only update rows that are still
-    // in a "pending" or "processing" state AND don't have error messages.
-    const whereClauses = ['id = $1']
-    if (status === "processing") {
-      whereClauses.push(`status IN ('pending','processing')`)
-      whereClauses.push(`error_message IS NULL`) // Don't reset jobs with errors back to processing
-    }
-
-    // Apply additional updates
-    if (updateFields.length > 1 || whereClauses.length > 1) {
-      await pool.query(
-        `UPDATE jobs SET ${updateFields.join(", ")} WHERE ${whereClauses.join(" AND ")}`,
-        params
-      )
-    }
-
-    // Emit real-time update with enriched data
-    const jobResult = await pool.query(`
-      SELECT j.*, 
-             p.name as project_name, 
-             t.name as template_name, 
-             u.name as user_name,
-             u.email as user_email
-      FROM jobs j
-      LEFT JOIN projects p ON j.project_id = p.id
-      LEFT JOIN templates t ON (j.data->>'template_id')::uuid = t.id
-      LEFT JOIN users u ON j.created_by = u.id
-      WHERE j.id = $1
-    `, [jobId])
-
-    if (jobResult.rows.length > 0) {
-      const job = jobResult.rows[0]
-      io.emit("job:status", {
-        jobId,
-        userId: job.created_by,
-        status,
-        progress,
-        workerId,
-        queueName,
-        projectName: job.project_name,
-        templateName: job.template_name,
-        userName: job.user_name,
-      })
-    }
-  } catch (error) {
-    logger.error(`Failed to update job status: ${jobId}`, error)
-  }
-}
-
-export async function cancelJob(jobId: string): Promise<boolean> {
-  try {
-    // Phase 5: Use QueueService for basic cancellation, then add special handling
-    const queueService = await getQueueServiceInstance()
-    if (queueService) {
-      try {
-        await queueService.cancelJob(jobId)
-      } catch (error) {
-        // QueueService might not find the job, continue with special handling
-        logger.debug(`QueueService cancelJob didn't find job ${jobId}, trying special handling`)
-      }
-    }
-
-    // Special handling for extraction jobs and active jobs
-    // Try to remove from ALL queues with special logic
-    const queues = [
-      { queue: aiQueue, name: 'aiQueue' },
-      { queue: documentQueue, name: 'documentQueue' },
-      { queue: pipelineQueue, name: 'pipelineQueue' },
-      { queue: processFlowQueue, name: 'processFlowQueue' },
-      { queue: regenerationQueue, name: 'regenerationQueue' },
-      { queue: qualityAuditQueue, name: 'qualityAuditQueue' },
-      { queue: extractionQueue, name: 'extractionQueue' },
-      { queue: baselineQueue, name: 'baselineQueue' }
-    ]
-
-    let jobFound = false
-
-    for (const { queue, name } of queues) {
-      try {
-        let job = await queue.getJob(jobId)
-
-        // Special handling for extraction jobs:
-        // project-data-extraction parents are enqueued without using jobId as the Bull ID,
-        // so we need to locate them by payload.jobId instead.
-        if (!job && name === 'extractionQueue') {
-          const candidateJobs = await queue.getJobs(['active', 'waiting', 'delayed'])
-          job = candidateJobs.find((j: any) => j.data?.jobId === jobId) || null
-        }
-
-        if (job) {
-          // Check if job is currently processing
-          const state = await job.getState()
-
-          if (state === 'active') {
-            // Job is actively running - move to failed instead of removing
-            await job.moveToFailed({ message: 'Cancelled by user' }, true)
-            logger.info(`Moved active job ${jobId} from ${name} to failed (was processing)`)
-          } else {
-            // Job is waiting/delayed - safe to remove
-            await job.remove()
-            logger.info(`Removed job ${jobId} from ${name}`)
-          }
-
-          jobFound = true
-          break // Found it, no need to check other queues
-        }
-      } catch (queueError: any) {
-        // Queue doesn't have this job, continue to next
-        logger.debug(`Job ${jobId} not in ${name}`)
-      }
-    }
-
-    if (!jobFound) {
-      logger.warn(`Job ${jobId} not found in any queue`)
-    }
-
-    // Update database
-    await pool.query(
-      `
-      UPDATE jobs 
-      SET status = 'cancelled', 
-          completed_at = CURRENT_TIMESTAMP,
-          data = jsonb_set(
-            COALESCE(data, '{}'::jsonb),
-            '{currentStep}',
-            to_jsonb('Cancelled by user'::text)
-          )
-      WHERE id = $1 AND status IN ('pending', 'processing')
-    `,
-      [jobId]
-    )
-
-    // Clear any monitoring intervals for extraction jobs
-    if ((global as any).extractionIntervals) {
-      const interval = (global as any).extractionIntervals.get(jobId)
-      if (interval) {
-        clearInterval(interval)
-          ; (global as any).extractionIntervals.delete(jobId)
-        logger.info(`Cleared monitoring interval for cancelled job: ${jobId}`)
-      }
-    }
-
-    logger.info(`Job cancelled: ${jobId}`)
-
-    // Emit WebSocket event to notify UI
-    io.emit("job:cancelled", {
-      jobId,
-      status: "cancelled",
-      timestamp: new Date().toISOString()
-    })
-
-    return true
-  } catch (error) {
-    logger.error(`Failed to cancel job: ${jobId}`, error)
-    return false
-  }
-}
-
-// Placeholder document conversion function
-// Queue event handlers
-aiQueue.on("completed", (job, result) => {
-  logger.info(`AI job completed: ${job.id}`)
-})
-
-aiQueue.on("failed", (job, err) => {
-  logger.error(`AI job failed: ${job.id}`, err)
-})
-
-documentQueue.on("completed", (job, result) => {
-  logger.info(`Document job completed: ${job.id}`)
-})
-
-documentQueue.on("failed", (job, err) => {
-  logger.error(`Document job failed: ${job.id}`, err)
-})
-
-// Pipeline queue processor
-pipelineQueue.process("pipeline-processing", async (job) => {
-  const { processPipelineJob } = await import("../workers/pipelineWorker")
-  return await processPipelineJob(job)
-})
-
-// Pipeline queue event listeners
-pipelineQueue.on("completed", (job, result) => {
-  logger.info(`Pipeline job completed: ${job.id}`, { jobId: job.data.jobId })
-})
-
-// Registered Queues for Global Event Handling
-const queuesForEvents = [
-  { queue: aiQueue, name: 'ai-processing' },
-  { queue: documentQueue, name: 'document-processing' },
-  { queue: pipelineQueue, name: 'pipeline-processing' },
-  { queue: processFlowQueue, name: 'process-flow-processing' },
-  { queue: regenerationQueue, name: 'document-regeneration' },
-  { queue: qualityAuditQueue, name: 'quality-audit' },
-  { queue: extractionQueue, name: 'project-data-extraction' },
-  { queue: baselineQueue, name: 'baseline-processing' }
-]
-
-// Register global failure and stalled handlers for all queues
-// This ensures the 'jobs' table is updated even if the processor hangs or is killed by Bull
-queuesForEvents.forEach(({ queue, name }) => {
-  queue.on('failed', async (job, err) => {
-    const jobId = job.id.toString()
-    logger.error(`[QUEUE-GLOBAL] Job ${jobId} failed in ${name}:`, err)
-
-    // Check if it's an extraction job with non-jobId ID
-    const dbJobId = (name === 'project-data-extraction' && job.data?.jobId) ? job.data.jobId : jobId
-
-    try {
-      await updateJobStatus(
-        dbJobId,
-        'failed',
-        undefined,
-        undefined,
-        name,
-        `Job failed in queue: ${err?.message || 'Unknown error'}`
-      )
-    } catch (dbErr) {
-      logger.error(`[QUEUE-GLOBAL] Failed to sync failure status for job ${dbJobId}:`, dbErr)
-    }
-  })
-
-  queue.on('stalled', async (job) => {
-    const jobId = job.id.toString()
-    logger.warn(`[QUEUE-GLOBAL] Job ${jobId} STALLED in ${name}`)
-
-    const dbJobId = (name === 'project-data-extraction' && job.data?.jobId) ? job.data.jobId : jobId
-
-    try {
-      // For stalled jobs, we might not want to mark as failed immediately if maxStalledCount > 1
-      // but if we are here, Bull might be retrying it.
-      // We log it to the database for visibility
-      await pool.query(
-        `UPDATE jobs SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{stalled_at}', to_jsonb(CURRENT_TIMESTAMP::text)) WHERE id = $1`,
-        [dbJobId]
-      )
-    } catch (dbErr) {
-      logger.error(`[QUEUE-GLOBAL] Failed to log stall for job ${dbJobId}:`, dbErr)
-    }
-  })
-})
-
-// Pipeline queue event listeners
-pipelineQueue.on("completed", (job, result) => {
-  logger.info(`Pipeline job completed: ${job.id}`, { jobId: job.data.jobId })
-})
-
-pipelineQueue.on("progress", (job, progress) => {
-  logger.debug(`Pipeline job progress: ${job.id} - ${progress}%`)
-})
-
-// Initialize queues
-export async function initializeQueues() {
-  try {
-    await aiService.initializeProviders()
-
-    // Initialize extraction registry (Phase 2: modular extraction)
-    try {
-      const { initializeRegistry } = await import('./extraction/ExtractionRegistry')
-      await initializeRegistry()
-      logger.info('[QUEUE-SERVICE] Extraction registry initialized')
-    } catch (registryError: any) {
-      logger.warn('[QUEUE-SERVICE] Failed to initialize extraction registry:', registryError?.message || registryError)
-      // Don't fail queue initialization if registry fails
-    }
-
-    logger.info("Job queues initialized")
-  } catch (error) {
-    logger.error("Failed to initialize queues:", error)
-  }
-}
-
-// Export queue service object
-export const queueService = {
-  addJob,
-  getJobStatus,
-  updateJobStatus,
-  cancelJob,
-  initializeQueues,
-  aiQueue,
-  documentQueue,
-  pipelineQueue,
-  baselineQueue,
-  processFlowQueue,
-  regenerationQueue,
-  qualityAuditQueue,
-  extractionQueue, // Add extraction queue to exports
-}
-
-// Phase 5: Helper function to get QueueServiceDependencies for job processors
-// This allows processors to pass dependencies to job services
-async function getQueueServiceDependencies() {
-  const endTiming = PerformanceMonitor.start('getQueueServiceDependencies')
-  try {
-    const {
-      PoolDatabaseAdapter,
-      SocketIOWebSocketAdapter,
-      RedisCacheAdapter,
-      WinstonLoggerAdapter,
-    } = await import('./jobs/queue/QueueDependencies')
-    const { logger: winstonLogger } = await import('../utils/logger')
-    const DocumentPurposeService = (await import('./documentPurposeService')).default
-    const TemplateAnalyticsService = (await import('./templateAnalyticsService')).default
-
-    // Note: AI services are passed directly (they don't need adapters as they're already interfaces)
-    const dependencies: QueueServiceDependencies = {
-      database: new PoolDatabaseAdapter(pool),
-      websocket: new SocketIOWebSocketAdapter(io),
-      cache: new RedisCacheAdapter(cache),
-      aiService: aiService as any, // AI service is already compatible
-      contextAwareAIService: ContextAwareAIService as any, // Context-aware AI service is already compatible
-      logger: new WinstonLoggerAdapter(winstonLogger),
-      documentPurposeService: DocumentPurposeService,
-      templateAnalyticsService: TemplateAnalyticsService,
-    }
-
-    return dependencies
-  } finally {
-    endTiming()
-  }
-}
-
-// Phase 5: Create QueueService instance with dependency injection
-// This provides the new abstraction layer while maintaining backward compatibility
-let queueServiceInstance: any = null
-
-export async function getQueueServiceInstance() {
-  if (queueServiceInstance) {
-    return queueServiceInstance
-  }
-
-  // Lazy initialization to avoid circular dependencies
-  const { createQueueService } = await import('./jobs/queue/QueueServiceFactory')
-  const { logger: winstonLogger } = await import('../utils/logger')
-  const DocumentPurposeService = (await import('./documentPurposeService')).default
-  const TemplateAnalyticsService = (await import('./templateAnalyticsService')).default
-
-  // Create map of queues
-  const queuesMap = new Map([
-    ['ai-processing', aiQueue],
-    ['document-processing', documentQueue],
-    ['pipeline-processing', pipelineQueue],
-    ['baseline-processing', baselineQueue],
-    ['process-flow-processing', processFlowQueue],
-    ['document-regeneration', regenerationQueue],
-    ['quality-audit', qualityAuditQueue],
-    ['project-data-extraction', extractionQueue],
-  ])
-
-  queueServiceInstance = createQueueService(
-    queuesMap,
-    pool,
-    io,
-    cache,
-    aiService,
-    ContextAwareAIService,
-    winstonLogger,
-    DocumentPurposeService,
-    TemplateAnalyticsService
-  )
-
-  return queueServiceInstance
-}
-
-// Export the new QueueService class and factory for advanced use cases
-export { QueueService } from './jobs/queue/QueueService'
-export { createQueueService, createMockQueueService } from './jobs/queue/QueueServiceFactory'
-export type { IQueue, IQueueJob, IQueueOptions } from './jobs/queue/IQueue'
-export type { QueueServiceDependencies } from './jobs/queue/QueueDependencies'

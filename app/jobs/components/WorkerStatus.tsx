@@ -5,7 +5,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
 import { Progress } from "@/components/ui/progress"
-import { Server, Cpu, MemoryStickIcon as Memory, RefreshCw, Activity, Clock } from "lucide-react"
+import { Server, Cpu, MemoryStickIcon as Memory, RefreshCw, Activity, Clock } from "@/components/ui/icons-shim"
 import { apiClient } from "@/lib/api"
 import { AnimatedGridItem } from "@/components/animated-layout"
 
@@ -94,7 +94,7 @@ export function WorkerStatus() {
                 {queueName.replace(/-/g, ' ')} Workers ({queueWorkers.length} total)
               </CardTitle>
             </CardHeader>
-            
+
             <CardContent>
               <div className="overflow-x-auto">
                 <Table>
@@ -123,7 +123,7 @@ export function WorkerStatus() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant={worker.status === 'active' ? 'default' : 'secondary'}
                             className="text-xs"
                           >
@@ -145,11 +145,11 @@ export function WorkerStatus() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Badge 
+                          <Badge
                             variant={
-                              worker.successRate >= 90 ? 'default' : 
-                              worker.successRate >= 70 ? 'secondary' : 
-                              'destructive'
+                              worker.successRate >= 90 ? 'default' :
+                                worker.successRate >= 70 ? 'secondary' :
+                                  'destructive'
                             }
                             className="text-xs"
                           >
@@ -158,13 +158,13 @@ export function WorkerStatus() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-3 text-xs">
-                            <div className="flex items-center gap-1" title={`CPU: ${worker.cpu}%`}>
+                            <div className="flex items-center gap-1" title={`CPU Usage: ${worker.cpu}%`}>
                               <Cpu className="h-3 w-3 text-blue-500" />
                               <span>{worker.cpu}%</span>
                             </div>
-                            <div className="flex items-center gap-1" title={`Memory: ${worker.memory}%`}>
+                            <div className="flex items-center gap-1" title={`Memory Usage: ${worker.memory} MB`}>
                               <Memory className="h-3 w-3 text-purple-500" />
-                              <span>{worker.memory}%</span>
+                              <span>{worker.memory} MB</span>
                             </div>
                           </div>
                         </TableCell>

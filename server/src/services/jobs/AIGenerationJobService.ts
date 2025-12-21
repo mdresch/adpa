@@ -9,8 +9,8 @@
  * backward compatibility with static methods.
  */
 
-import { pool } from '@/database/connection'
-import { logger } from '@/utils/logger'
+import { pool } from '../../database/connection'
+import { logger } from '../../utils/logger'
 import { aiService } from '../aiService'
 import { ContextAwareAIService } from '../../modules/context/integration'
 import { io } from '../../server'

@@ -7,10 +7,10 @@
 import express from "express"
 import { authenticateToken } from "../middleware/auth"
 import { pool } from "../database/connection"
-import { 
-  aiQueue, 
-  documentQueue, 
-  pipelineQueue, 
+import {
+  aiQueue,
+  documentQueue,
+  pipelineQueue,
   processFlowQueue,
   baselineQueue,
   regenerationQueue,
@@ -26,7 +26,7 @@ const router = express.Router()
  */
 router.get("/overview", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
-  
+
   try {
     const queues = [
       { name: "ai-processing", queue: aiQueue },
@@ -80,8 +80,8 @@ router.get("/overview", authenticateToken, async (req, res) => {
           // Determine health based on failure rate and waiting jobs
           const totalRecent = active + completed + failed
           const failureRate = totalRecent > 0 ? (failed / totalRecent) * 100 : 0
-          const health = failed > 10 || failureRate > 15 ? 'degraded' : 
-                        waiting > 50 ? 'degraded' : 'healthy'
+          const health = failed > 10 || failureRate > 15 ? 'degraded' :
+            waiting > 50 ? 'degraded' : 'healthy'
 
           return {
             name,
@@ -124,7 +124,7 @@ router.get("/overview", authenticateToken, async (req, res) => {
  */
 router.get("/workers", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
-  
+
   try {
     // Get active workers from database using new columns
     // Exclude jobs with error_message (they're actually failed, not processing)
@@ -162,19 +162,19 @@ router.get("/workers", authenticateToken, async (req, res) => {
     )
 
     const workers = activeWorkersResult.rows.map(row => {
-      const completed = completedJobsMap.get(row.worker_id) || { 
-        jobs_completed: 0, 
+      const completed = completedJobsMap.get(row.worker_id) || {
+        jobs_completed: 0,
         jobs_failed: 0,
         avg_duration: 0
       }
-      
-      const uptimeSeconds = row.first_job_start 
+
+      const uptimeSeconds = row.first_job_start
         ? Math.floor((Date.now() - new Date(row.first_job_start).getTime()) / 1000)
         : 0
 
       const jobsCompleted = parseInt(completed.jobs_completed) || 0
       const jobsFailed = parseInt(completed.jobs_failed) || 0
-      const successRate = jobsCompleted > 0 
+      const successRate = jobsCompleted > 0
         ? Math.round(((jobsCompleted - jobsFailed) / jobsCompleted) * 100)
         : 100
 
@@ -191,9 +191,9 @@ router.get("/workers", authenticateToken, async (req, res) => {
         jobsFailed,
         successRate,
         avgDuration: formatDuration(Number(completed.avg_duration) || 0),
-        // Placeholder for CPU/Memory - would need actual process monitoring
-        cpu: Math.floor(Math.random() * 30 + 20), // 20-50%
-        memory: Math.floor(Math.random() * 40 + 30), // 30-70%
+        // Use real metrics if available from heartbeats
+        cpu: 0, // Will be merged below
+        memory: 0, // Will be merged below
         health: successRate >= 90 ? 'healthy' : successRate >= 70 ? 'degraded' : 'unhealthy',
         currentTasks: row.job_ids ? row.job_ids.split(',').slice(0, 5).map((id: string) => ({
           jobId: id,
@@ -203,59 +203,70 @@ router.get("/workers", authenticateToken, async (req, res) => {
       }
     })
 
-    // Also include recently idle workers
-    const idleWorkersResult = await pool.query(
-      `SELECT DISTINCT 
-        worker_id,
-        worker_process_id,
-        queue_name,
-        MAX(completed_at) as last_seen
-       FROM jobs
-       WHERE worker_id IS NOT NULL 
-         AND status IN ('completed', 'failed')
-         AND completed_at > NOW() - INTERVAL '1 hour'
-         AND worker_id NOT IN (
-           SELECT DISTINCT worker_id 
-           FROM jobs 
-           WHERE status = 'processing' 
-             AND worker_id IS NOT NULL
-             AND error_message IS NULL
-         )
-       GROUP BY worker_id, worker_process_id, queue_name
-       LIMIT 10`
+    // Fetch actual heartbeats to overlay real metrics
+    const heartbeatsResult = await pool.query(
+      `SELECT worker_id, worker_process_id, queue_name, cpu_usage_percent, memory_usage_mb, last_heartbeat
+       FROM worker_heartbeats
+       WHERE last_heartbeat > NOW() - INTERVAL '1 minute'`
     )
+    const heartbeatsMap = new Map(heartbeatsResult.rows.map(h => [h.worker_id, h]))
 
-    const idleWorkers = idleWorkersResult.rows.map(row => {
-      const completed = completedJobsMap.get(row.worker_id) || { 
-        jobs_completed: 0, 
-        jobs_failed: 0 
-      }
-      
-      const jobsCompleted = parseInt(completed.jobs_completed) || 0
-      const jobsFailed = parseInt(completed.jobs_failed) || 0
-      const successRate = jobsCompleted > 0 
-        ? Math.round(((jobsCompleted - jobsFailed) / jobsCompleted) * 100)
-        : 100
-
-      return {
-        id: row.worker_id,
-        name: row.worker_id,
-        processId: row.worker_process_id,
-        status: 'idle',
-        queue: row.queue_name,
-        currentJob: null,
-        uptime: 'Recently active',
-        uptimeSeconds: 0,
-        jobsCompleted,
-        jobsFailed,
-        successRate,
-        cpu: 5,
-        memory: 20,
-        health: 'healthy',
-        currentTasks: [],
-        lastSeen: row.last_seen
+    // Merge heartbeat data into active workers
+    workers.forEach(w => {
+      const hb = heartbeatsMap.get(w.id)
+      if (hb) {
+        w.cpu = Math.round(hb.cpu_usage_percent)
+        w.memory = Math.round(hb.memory_usage_mb)
+        // If it hasn't beaten in 30 seconds, mark as degraded
+        const heartbeatAge = (Date.now() - new Date(hb.last_heartbeat).getTime()) / 1000
+        if (heartbeatAge > 30) {
+          w.health = 'degraded'
+          w.status = 'stale'
+        }
+      } else {
+        // Fallback for workers without recent heartbeat
+        w.cpu = 0
+        w.memory = 0
+        w.status = 'stale'
+        w.health = 'unhealthy'
       }
     })
+
+    // Also include recently idle workers from heartbeats that aren't in the active list
+    const activeWorkerIds = new Set(workers.map(w => w.id))
+    const idleWorkers = heartbeatsResult.rows
+      .filter(hb => !activeWorkerIds.has(hb.worker_id))
+      .map(hb => {
+        const completed = completedJobsMap.get(hb.worker_id) || {
+          jobs_completed: 0,
+          jobs_failed: 0
+        }
+
+        const jobsCompleted = parseInt(completed.jobs_completed) || 0
+        const jobsFailed = parseInt(completed.jobs_failed) || 0
+        const successRate = jobsCompleted > 0
+          ? Math.round(((jobsCompleted - jobsFailed) / jobsCompleted) * 100)
+          : 100
+
+        return {
+          id: hb.worker_id,
+          name: hb.worker_id,
+          processId: hb.worker_process_id, // This column is missing in my manual select, but in my heartbeat table it exists
+          status: 'idle',
+          queue: hb.queue_name || 'unknown',
+          currentJob: null,
+          uptime: 'Recently active',
+          uptimeSeconds: 0,
+          jobsCompleted,
+          jobsFailed,
+          successRate,
+          cpu: Math.round(hb.cpu_usage_percent),
+          memory: Math.round(hb.memory_usage_mb),
+          health: 'healthy',
+          currentTasks: [],
+          lastSeen: hb.last_heartbeat
+        }
+      })
 
     res.json({ workers: [...workers, ...idleWorkers] })
   } catch (error) {
@@ -270,7 +281,7 @@ router.get("/workers", authenticateToken, async (req, res) => {
  */
 router.get("/metrics", authenticateToken, async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
-  
+
   try {
     const metricsResult = await pool.query(`
       SELECT 
@@ -287,7 +298,7 @@ router.get("/metrics", authenticateToken, async (req, res) => {
     `)
 
     const metrics = metricsResult.rows[0]
-    
+
     // Calculate success rate
     const totalCompleted = parseInt(metrics.total_completed) || 0
     const totalFailed = parseInt(metrics.total_failed) || 0
@@ -296,8 +307,8 @@ router.get("/metrics", authenticateToken, async (req, res) => {
       : 0
 
     // Determine queue health
-    const failureRate = (totalCompleted + totalFailed) > 0 
-      ? (totalFailed / (totalCompleted + totalFailed)) * 100 
+    const failureRate = (totalCompleted + totalFailed) > 0
+      ? (totalFailed / (totalCompleted + totalFailed)) * 100
       : 0
     const queueHealth = totalFailed > 10 || failureRate > 15 ? 'degraded' : 'healthy'
 
@@ -349,7 +360,7 @@ router.get("/health", authenticateToken, async (req, res) => {
     })
   } catch (error) {
     logger.error("Failed to get health status:", error)
-    res.status(500).json({ 
+    res.status(500).json({
       status: 'unhealthy',
       error: 'Failed to check health'
     })
@@ -359,18 +370,18 @@ router.get("/health", authenticateToken, async (req, res) => {
 // Helper function to format duration
 function formatDuration(seconds: number): string {
   if (!seconds || seconds < 0) return '0s'
-  
+
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)
   const minutes = Math.floor((seconds % 3600) / 60)
   const secs = Math.floor(seconds % 60)
-  
+
   const parts = []
   if (days > 0) parts.push(`${days}d`)
   if (hours > 0) parts.push(`${hours}h`)
   if (minutes > 0) parts.push(`${minutes}m`)
   if (secs > 0 || parts.length === 0) parts.push(`${secs}s`)
-  
+
   return parts.join(' ')
 }
 

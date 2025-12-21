@@ -114,6 +114,13 @@ export default function AnalyticsPage() {
     avg_session_time?: string
     system_uptime?: string
     api_calls?: number
+    system_performance?: Array<{
+      name: string
+      cpu: number
+      memory: number
+      disk: number
+      network: number
+    }>
   } | null>(null)
   const [searchAnalytics, setSearchAnalytics] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -122,14 +129,14 @@ export default function AnalyticsPage() {
   const fetchAnalytics = async () => {
     try {
       setLoading(true)
-      
+
       // Only attempt to fetch system analytics if user is admin
       if (!hasPermission('analytics.system')) {
         console.log('User does not have analytics.system permission, using mock data')
         setAnalyticsData(null) // Will fall back to mock data
         return
       }
-      
+
       const data = await apiClient.getSystemAnalytics(timeRange)
       setAnalyticsData(data)
     } catch (error) {
@@ -168,8 +175,11 @@ export default function AnalyticsPage() {
     documentsToday: analyticsData?.documents_today || 0,
     totalSessions: analyticsData?.total_sessions || 0,
     avgSessionTime: analyticsData?.avg_session_time || "0m 0s", // TODO: Calculate from user_activity_logs
-    systemUptime: analyticsData?.system_uptime || "N/A", // TODO: Calculate from system metrics
+    systemUptime: analyticsData?.system_uptime || "N/A",
     apiCalls: analyticsData?.api_calls || 0,
+    currentResources: analyticsData?.system_performance?.length
+      ? analyticsData.system_performance[analyticsData.system_performance.length - 1]
+      : { cpu: 0, memory: 0, disk: 0, network: 0 }
   }
 
   const growth = {
@@ -638,7 +648,7 @@ export default function AnalyticsPage() {
                             </CardHeader>
                             <CardContent>
                               <ResponsiveContainer width="100%" height={400}>
-                                <LineChart data={systemPerformanceData}>
+                                <LineChart data={analyticsData?.system_performance || systemPerformanceData}>
                                   <CartesianGrid strokeDasharray="3 3" />
                                   <XAxis dataKey="name" />
                                   <YAxis />
@@ -673,7 +683,7 @@ export default function AnalyticsPage() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <p className="text-sm font-medium text-muted-foreground">CPU Usage</p>
-                                    <p className="text-2xl font-bold">72%</p>
+                                    <p className="text-2xl font-bold">{stats.currentResources.cpu}%</p>
                                   </div>
                                   <div className="h-8 w-8 rounded-full bg-red-100 flex items-center justify-center">
                                     <div className="h-4 w-4 rounded-full bg-red-500" />
@@ -689,7 +699,7 @@ export default function AnalyticsPage() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <p className="text-sm font-medium text-muted-foreground">Memory</p>
-                                    <p className="text-2xl font-bold">84%</p>
+                                    <p className="text-2xl font-bold">{stats.currentResources.memory}%</p>
                                   </div>
                                   <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center">
                                     <div className="h-4 w-4 rounded-full bg-blue-500" />
@@ -705,7 +715,7 @@ export default function AnalyticsPage() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <p className="text-sm font-medium text-muted-foreground">Disk I/O</p>
-                                    <p className="text-2xl font-bold">45%</p>
+                                    <p className="text-2xl font-bold">{stats.currentResources.disk}%</p>
                                   </div>
                                   <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center">
                                     <div className="h-4 w-4 rounded-full bg-green-500" />
@@ -721,7 +731,7 @@ export default function AnalyticsPage() {
                                 <div className="flex items-center justify-between">
                                   <div>
                                     <p className="text-sm font-medium text-muted-foreground">Network</p>
-                                    <p className="text-2xl font-bold">23%</p>
+                                    <p className="text-2xl font-bold">{stats.currentResources.network}%</p>
                                   </div>
                                   <div className="h-8 w-8 rounded-full bg-yellow-100 flex items-center justify-center">
                                     <div className="h-4 w-4 rounded-full bg-yellow-500" />
@@ -970,13 +980,13 @@ export default function AnalyticsPage() {
                                             <Cell key={`cell-${index}`} fill={['#3b82f6', '#8b5cf6', '#06b6d4'][index % 3]} />
                                           ))}
                                         </Pie>
-                                        <Tooltip 
+                                        <Tooltip
                                           formatter={(value: any, name: any) => [
                                             `${value} searches`,
                                             name
                                           ]}
                                         />
-                                        <Legend 
+                                        <Legend
                                           formatter={(value: any) => {
                                             const item = searchAnalytics.modeUsage.find((m: any) => m.search_mode === value)
                                             return item ? `${value}: ${Number(item.usage_count) || 0} searches` : value

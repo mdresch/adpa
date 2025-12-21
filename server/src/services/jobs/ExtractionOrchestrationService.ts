@@ -42,11 +42,11 @@ const ENTITY_TYPES = [
   // Governance Domain
   'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
   // Scope Domain
-  'scope_baselines', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+  'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
   // Schedule Domain
-  'schedule_baselines', 'schedule_activities', 'critical_path_activities', 'schedule_variances', 'schedule_forecasts',
+  'schedule_baseline', 'schedule_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
   // Finance Domain
-  'budget_baselines', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
+  'budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
   // Resources Domain
   'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
   // Risk Domain
@@ -92,7 +92,7 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
 
   // Scope Domain - Scope definition, WBS, requirements, and deliverables
   scope: [
-    'scope_baselines',
+    'scope_baseline',
     'wbs_nodes',
     'scope_change_requests',
     'requirements_traceability',
@@ -106,9 +106,9 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
 
   // Schedule Domain - Timeline, milestones, activities, and schedule control
   schedule: [
-    'schedule_baselines',
+    'schedule_baseline',
     'schedule_activities',
-    'critical_path_activities',
+    'critical_path',
     'schedule_variances',
     'schedule_forecasts',
     // ADDED: Timing entities
@@ -120,7 +120,7 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
 
   // Finance Domain - Budget, costs, funding, and financial control
   finance: [
-    'budget_baselines',
+    'budget_baseline',
     'cost_actuals',
     'cost_estimates',
     'funding_tranches',
@@ -274,19 +274,19 @@ const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
   change_control_boards: 'changeControlBoards',
   policy_compliance: 'policyCompliance',
   // Scope Domain
-  scope_baselines: 'scopeBaselines',
+  scope_baseline: 'scopeBaselines',
   wbs_nodes: 'wbsNodes',
   scope_change_requests: 'scopeChangeRequests',
   requirements_traceability: 'requirementsTraceability',
   scope_verification: 'scopeVerification',
   // Schedule Domain
-  schedule_baselines: 'scheduleBaselines',
+  schedule_baseline: 'scheduleBaselines',
   schedule_activities: 'scheduleActivities',
-  critical_path_activities: 'criticalPathActivities',
+  critical_path: 'criticalPathActivities',
   schedule_variances: 'scheduleVariances',
   schedule_forecasts: 'scheduleForecasts',
   // Finance Domain
-  budget_baselines: 'budgetBaselines',
+  budget_baseline: 'budgetBaselines',
   cost_actuals: 'costActuals',
   cost_estimates: 'costEstimates',
   funding_tranches: 'fundingTranches',
@@ -769,7 +769,7 @@ export class ExtractionOrchestrationService {
               })
               .map(({ job }) => {
                 const entityType = (job.data as any)?.entityType || 'unknown'
-                const startTime = jobStartTimes.get(job.id)
+                const startTime = jobStartTimes.get(job.id.toString())
                 const stuckDuration = startTime ? Math.floor((now - startTime) / 1000 / 60) : 0
                 return `${entityType} (${stuckDuration}m)`
               })
