@@ -31,3 +31,5 @@ Thumbs.db
 
 # Uploads
 uploads/
+
+.roo/mcp.json

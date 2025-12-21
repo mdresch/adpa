@@ -16,7 +16,7 @@ import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
 import { SystemMonitoring } from "./utils/systemMonitoring"
-import { initializeQueues } from "./services/queueService"
+import { addJob, getJobStatus, cancelJob, updateJobStatus } from "./services/queueService"
 import { aiService } from "./services/aiService"
 import jwt from "jsonwebtoken"
 import { pool } from "./database/connection"
@@ -110,6 +110,7 @@ import riskReportingRoutes from "./routes/riskReportingRoutes"
 import portfolioFinancialRoutes from "./routes/portfolioFinancial"
 import taskCostRoutes from "./routes/taskCosts"
 import developmentApproachRoutes from "./routes/developmentApproachRoutes"
+import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -308,6 +309,7 @@ app.use("/api/portfolios", require("./routes/portfolioRoutes").default)
 app.use("/api/portfolio", portfolioFinancialRoutes)
 app.use("/api/tasks", taskCostRoutes)
 app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
+app.use("/api/lessons", lessonsLearnedRoutes)
 console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, and review scheduling)")
 
 // WebSocket connection handling
@@ -506,11 +508,9 @@ async function startServer() {
       )
     }
 
-    // Try to initialize job queues, but don't fail if it's not available
+    // Job queues are now initialized automatically when the queueService module is imported
     try {
-      console.log("🔄 Initializing job queues...")
-      await initializeQueues()
-      console.log("✅ Job queues initialized successfully")
+      console.log("🔄 Job queues are initialized automatically...")
 
       // Start system resource monitoring
       SystemMonitoring.start()

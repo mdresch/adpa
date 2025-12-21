@@ -24,11 +24,11 @@ const router = express.Router()
 router.post("/generate", async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
   try {
-    const { 
-      prompt, 
-      provider, 
-      model, 
-      temperature, 
+    const {
+      prompt,
+      provider,
+      model,
+      temperature,
       max_tokens,
       user_id,
       project_id,
@@ -85,8 +85,8 @@ router.post("/generate", async (req, res) => {
 
     // Generate response with context
     const startTime = Date.now()
-    
-  const response = await ContextAwareAIService.generateWithContext({
+
+    const response = await ContextAwareAIService.generateWithContext({
       prompt,
       provider,
       model,
@@ -104,7 +104,7 @@ router.post("/generate", async (req, res) => {
 
     const duration = Date.now() - startTime
 
-  // Update job with success
+    // Update job with success
     await pool.query(`
       UPDATE jobs 
       SET status = $1, result = $2, completed_at = CURRENT_TIMESTAMP, progress = 100
@@ -352,7 +352,7 @@ router.get("/providers", async (req, res) => {
  * POST /api/context-ai/providers/:id/configure
  * Update an existing AI provider configuration
  */
-router.post("/providers/:id/configure", 
+router.post("/providers/:id/configure",
   authenticateToken,
   requirePermission("ai.configure"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
@@ -370,12 +370,12 @@ router.post("/providers/:id/configure",
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    
+
     try {
       const { id } = req.params
-      const { 
-        api_key, 
-        configuration, 
+      const {
+        api_key,
+        configuration,
         is_active,
         contextWindow,
         maxTokens,
@@ -415,8 +415,8 @@ router.post("/providers/:id/configure",
           "SELECT configuration FROM ai_providers WHERE id = $1",
           [id]
         )
-        
-        let existingConfigObj = {}
+
+        let existingConfigObj: Record<string, any> = {}
         if (existingConfig.rows.length > 0 && existingConfig.rows[0].configuration) {
           const config = existingConfig.rows[0].configuration
           // Check if configuration is already an object or needs to be parsed
@@ -428,7 +428,7 @@ router.post("/providers/:id/configure",
           ...existingConfigObj,
           ...configuration,
           modelParameters: {
-            ...existingConfigObj.modelParameters,
+            ...(existingConfigObj.modelParameters || {}),
             ...(contextWindow && { contextWindow }),
             ...(maxTokens && { maxTokens }),
             ...(temperature && { temperature }),
@@ -531,11 +531,11 @@ router.post("/providers", async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING id, name, provider_type, is_active, created_at, updated_at
     `, [
-      id, 
-      name, 
-      provider_type, 
-      encryptedApiKey, 
-      JSON.stringify(configuration || {}), 
+      id,
+      name,
+      provider_type,
+      encryptedApiKey,
+      JSON.stringify(configuration || {}),
       true // Set as active by default
     ])
 

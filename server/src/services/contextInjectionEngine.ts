@@ -216,7 +216,7 @@ export interface InjectedContent {
   content_id: string
   content_type: ContentType
   content: string
-  injection_point: InjectionPoint
+  injection_point: InsertionPoint
   context_source: ContextSource
   quality_score: number
   relevance_score: number
@@ -268,7 +268,7 @@ export interface Recommendation {
   cost_estimate: number
 }
 
-export type StrategyType = 
+export type StrategyType =
   | 'prepend'
   | 'append'
   | 'interleave'
@@ -278,7 +278,7 @@ export type StrategyType =
   | 'methodology_aligned'
   | 'business_context_integrated'
 
-export type PatternType = 
+export type PatternType =
   | 'linear'
   | 'hierarchical'
   | 'networked'
@@ -286,23 +286,24 @@ export type PatternType =
   | 'stakeholder_specific'
   | 'methodology_driven'
 
-export type BlendingStrategy = 
+export type BlendingStrategy =
   | 'seamless'
   | 'highlighted'
   | 'structured'
   | 'adaptive'
   | 'stakeholder_optimized'
 
-export type LocationType = 
+export type LocationType =
   | 'section_start'
   | 'section_end'
   | 'paragraph_start'
   | 'paragraph_end'
+  | 'paragraph_middle'
   | 'sentence_level'
   | 'word_level'
   | 'adaptive'
 
-export type TriggerType = 
+export type TriggerType =
   | 'keyword'
   | 'topic'
   | 'stakeholder'
@@ -310,14 +311,14 @@ export type TriggerType =
   | 'business_value'
   | 'quality_threshold'
 
-export type TriggerAction = 
+export type TriggerAction =
   | 'inject'
   | 'enhance'
   | 'clarify'
   | 'expand'
   | 'personalize'
 
-export type RequirementType = 
+export type RequirementType =
   | 'user_profile'
   | 'project_context'
   | 'business_context'
@@ -325,14 +326,14 @@ export type RequirementType =
   | 'methodology_standard'
   | 'historical_data'
 
-export type FormattingRuleType = 
+export type FormattingRuleType =
   | 'font_style'
   | 'color'
   | 'emphasis'
   | 'structure'
   | 'layout'
 
-export type ConditionOperator = 
+export type ConditionOperator =
   | 'equals'
   | 'contains'
   | 'greater_than'
@@ -340,7 +341,7 @@ export type ConditionOperator =
   | 'matches'
   | 'exists'
 
-export type ContentType = 
+export type ContentType =
   | 'text'
   | 'structured_data'
   | 'reference'
@@ -348,7 +349,7 @@ export type ContentType =
   | 'explanation'
   | 'summary'
 
-export type Priority = 
+export type Priority =
   | 'low'
   | 'medium'
   | 'high'
@@ -378,10 +379,10 @@ export class ContextInjectionEngine {
     try {
       // Step 1: Select appropriate injection strategy
       const selectedStrategy = await this.selectInjectionStrategy(request)
-      
+
       // Step 2: Prepare context data for injection
       const preparedContext = await this.prepareContextData(request.context_data, request.injection_requirements)
-      
+
       // Step 3: Execute injection strategy
       const injectionResult = await this.executeInjectionStrategy(
         request.document_content,
@@ -389,16 +390,16 @@ export class ContextInjectionEngine {
         selectedStrategy,
         request
       )
-      
+
       // Step 4: Validate injection results
       const validationResults = await this.validateInjectionResults(injectionResult, request)
-      
+
       // Step 5: Calculate quality metrics
       const qualityMetrics = await this.calculateQualityMetrics(injectionResult, request)
-      
+
       // Step 6: Generate recommendations
       const recommendations = await this.generateRecommendations(injectionResult, validationResults, qualityMetrics)
-      
+
       const processingTime = Date.now() - startTime
 
       const result: ContextInjectionResult = {
@@ -445,8 +446,8 @@ export class ContextInjectionEngine {
 
   private async selectInjectionStrategy(request: ContextInjectionRequest): Promise<InjectionStrategy> {
     const availableStrategies = this.strategyCache.values()
-    const applicableStrategies = Array.from(availableStrategies).filter(strategy => 
-      strategy.enabled && 
+    const applicableStrategies = Array.from(availableStrategies).filter(strategy =>
+      strategy.enabled &&
       strategy.strategy_type === request.injection_requirements.injection_type &&
       strategy.applicable_sections.includes(request.section_type)
     )
@@ -526,7 +527,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildPrependInjectionPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -585,7 +586,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildAppendInjectionPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -644,7 +645,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildInterleaveInjectionPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -659,7 +660,7 @@ export class ContextInjectionEngine {
         content_type: 'text',
         content: response.content || '',
         injection_point: {
-          location_type: 'paragraph_middle',
+          location_type: 'paragraph_end',
           section_types: [request.section_type],
           context_triggers: [],
           priority: 1,
@@ -703,7 +704,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildStructuredInjectionPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -763,10 +764,10 @@ export class ContextInjectionEngine {
   ): Promise<InjectionExecutionResult> {
     // Analyze content to determine best injection approach
     const contentAnalysis = await this.analyzeContentForAdaptiveInjection(documentContent, preparedContext)
-    
+
     // Select sub-strategy based on analysis
     const subStrategy = this.selectAdaptiveSubStrategy(contentAnalysis, strategy)
-    
+
     // Execute the selected sub-strategy
     return await this.executeAdaptiveSubStrategy(documentContent, preparedContext, subStrategy, request)
   }
@@ -778,7 +779,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildStakeholderTargetedPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -838,7 +839,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildMethodologyAlignedPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -898,7 +899,7 @@ export class ContextInjectionEngine {
     request: ContextInjectionRequest
   ): Promise<InjectionExecutionResult> {
     const prompt = this.buildBusinessContextIntegratedPrompt(documentContent, preparedContext, strategy, request)
-    
+
     const response = await this.aiService.generate({
       prompt: prompt,
       provider: 'openai',
@@ -1123,19 +1124,19 @@ export class ContextInjectionEngine {
 
   private calculateStrategyScore(strategy: InjectionStrategy, request: ContextInjectionRequest): number {
     let score = 0
-    
+
     // Base priority score
     score += strategy.priority * 0.2
-    
+
     // Quality impact score
     score += strategy.quality_impact * 0.3
-    
+
     // Success rate score
     score += strategy.success_rate * 0.2
-    
+
     // Cost efficiency score (lower cost = higher score)
     score += (1 - strategy.processing_cost) * 0.1
-    
+
     // Performance history score
     const performance = this.performanceTracker.get(strategy.strategy_id)
     if (performance) {
@@ -1143,7 +1144,7 @@ export class ContextInjectionEngine {
     } else {
       score += 0.1 // Default score for new strategies
     }
-    
+
     return score
   }
 
@@ -1201,7 +1202,7 @@ export class ContextInjectionEngine {
 
   private async calculateQualityMetrics(result: InjectionExecutionResult, request: ContextInjectionRequest): Promise<InjectionQualityMetrics> {
     const contents = result.injected_content
-    
+
     return {
       overall_score: contents.reduce((sum, content) => sum + content.quality_score, 0) / contents.length,
       relevance_score: contents.reduce((sum, content) => sum + content.relevance_score, 0) / contents.length,
@@ -1247,10 +1248,10 @@ export class ContextInjectionEngine {
   }
 
   private calculateCostMetrics(result: InjectionExecutionResult, processingTime: number): CostMetrics {
-    const totalTokens = result.injected_content.reduce((sum, content) => 
+    const totalTokens = result.injected_content.reduce((sum, content) =>
       sum + (content.metadata.tokens_used || 0), 0
     )
-    
+
     return {
       total_cost: totalTokens * 0.0001, // Simplified cost calculation
       cost_per_token: 0.0001,
@@ -1280,9 +1281,9 @@ export class ContextInjectionEngine {
       performance.successful_uses++
     }
     performance.success_rate = performance.successful_uses / performance.total_uses
-    performance.average_quality_improvement = 
+    performance.average_quality_improvement =
       (performance.average_quality_improvement + result.quality_metrics.overall_score) / 2
-    performance.average_processing_time = 
+    performance.average_processing_time =
       (performance.average_processing_time + result.processing_metrics.processing_time_ms) / 2
     performance.last_updated = new Date()
 

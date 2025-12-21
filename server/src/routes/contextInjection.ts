@@ -1,6 +1,6 @@
 /**
- * Context Injection API Routes
- * REST API endpoints for context injection operations
+ * Context Injection Engine API Routes
+ * REST API endpoints for advanced context injection operations with strategic injection capabilities
  */
 
 import { Router } from 'express'
@@ -197,7 +197,7 @@ router.post('/test-source', async (req, res) => {
 
     if (response.success && response.bundle.results.length > 0) {
       const result = response.bundle.results[0]
-      
+
       res.json({
         success: true,
         data: {

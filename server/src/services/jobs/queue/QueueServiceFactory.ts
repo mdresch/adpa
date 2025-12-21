@@ -21,6 +21,9 @@ import type { Server as SocketIOServer } from 'socket.io'
 import type { Logger } from 'winston'
 import type { QueueName } from '../types'
 
+// Import logger utilities with correct path
+const { logger } = require('../../../utils/logger')
+
 /**
  * Create QueueService with real dependencies
  * 
@@ -38,17 +41,26 @@ export function createQueueService(
   documentPurposeService?: any,
   templateAnalyticsService?: any
 ): QueueService {
-  // Import logger if not provided
-  if (!logger) {
-    const { logger: defaultLogger } = require('../../utils/logger')
-    logger = defaultLogger
+  // Import logger utilities with fallback
+  let effectiveLogger;
+  try {
+    effectiveLogger = require('../../../utils/logger').logger;
+  } catch (error) {
+    console.warn('⚠️ Logger module import failed, using console fallback:', error.message);
+    // Fallback to console logger if the module import fails
+    effectiveLogger = {
+      info: console.info,
+      error: console.error,
+      warn: console.warn,
+      debug: console.debug
+    };
   }
 
   // Create adapters
   const databaseAdapter = new PoolDatabaseAdapter(pool)
   const websocketAdapter = new SocketIOWebSocketAdapter(io)
   const cacheAdapter = new RedisCacheAdapter(cache)
-  const loggerAdapter = new WinstonLoggerAdapter(logger)
+  const loggerAdapter = new WinstonLoggerAdapter(effectiveLogger)
 
   // Create dependencies object
   const dependencies: QueueServiceDependencies = {
@@ -85,27 +97,27 @@ export function createMockQueueService(
     database: mockDependencies.database || {
       query: async () => ({ rows: [] }),
       connect: async () => ({}),
-      end: async () => {},
+      end: async () => { },
     },
     websocket: mockDependencies.websocket || {
       emit: () => true,
       to: () => ({ emit: () => true }),
-      on: () => {},
-      off: () => {},
+      on: () => { },
+      off: () => { },
     },
     cache: mockDependencies.cache || {
       get: async () => null,
-      set: async () => {},
-      del: async () => {},
+      set: async () => { },
+      del: async () => { },
       exists: async () => false,
     },
     aiService: mockDependencies.aiService || {},
     contextAwareAIService: mockDependencies.contextAwareAIService,
     logger: mockDependencies.logger || {
-      info: () => {},
-      error: () => {},
-      warn: () => {},
-      debug: () => {},
+      info: () => { },
+      error: () => { },
+      warn: () => { },
+      debug: () => { },
     },
     documentPurposeService: mockDependencies.documentPurposeService,
     templateAnalyticsService: mockDependencies.templateAnalyticsService,

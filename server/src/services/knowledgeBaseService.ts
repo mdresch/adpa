@@ -13,9 +13,9 @@ import { v4 as uuidv4 } from 'uuid'
 
 export interface KnowledgeBaseEntry {
   id?: string
-  entry_type: 'efficiency_improvement' | 'cost_saving' | 'timeline_acceleration' | 
-               'innovation' | 'risk_mitigation' | 'quality_improvement' | 
-               'process_improvement' | 'technical_solution' | 'lesson_learned'
+  entry_type: 'efficiency_improvement' | 'cost_saving' | 'timeline_acceleration' |
+  'innovation' | 'risk_mitigation' | 'quality_improvement' |
+  'process_improvement' | 'technical_solution' | 'lesson_learned'
   category: 'positive_drift' | 'negative_drift' | 'innovation' | 'best_practice' | 'anti_pattern'
   title: string
   description: string
@@ -151,7 +151,7 @@ export class KnowledgeBaseService {
 
       const result = await this.createEntry(entry)
 
-      logger.info('[KNOWLEDGE-BASE] Entry created from drift', { 
+      logger.info('[KNOWLEDGE-BASE] Entry created from drift', {
         entryId: result.id,
         driftId,
         category,
@@ -308,7 +308,7 @@ export class KnowledgeBaseService {
           AND table_name = 'knowledge_base_recommendations'
         ) as recs_exist
       `)
-      
+
       if (!tableCheck.rows[0]?.entries_exist || !tableCheck.rows[0]?.recs_exist) {
         logger.info('[KNOWLEDGE-BASE] Knowledge base tables do not exist yet, returning empty recommendations')
         return []
@@ -386,7 +386,7 @@ export class KnowledgeBaseService {
         )
       }
 
-      logger.info('[KNOWLEDGE-BASE] Generated recommendations', { 
+      logger.info('[KNOWLEDGE-BASE] Generated recommendations', {
         projectId,
         count: recommendations.length
       })
@@ -530,8 +530,8 @@ export class KnowledgeBaseService {
   private categorizeDrift(drift: any): KnowledgeBaseEntry['category'] {
     // Positive drift indicators
     if (drift.drift_description?.toLowerCase().includes('efficiency') ||
-        drift.drift_description?.toLowerCase().includes('improvement') ||
-        drift.drift_description?.toLowerCase().includes('cost saving')) {
+      drift.drift_description?.toLowerCase().includes('improvement') ||
+      drift.drift_description?.toLowerCase().includes('cost saving')) {
       return 'positive_drift'
     }
 
@@ -613,20 +613,21 @@ Format as JSON with these exact fields:
   "confidence": 0.0-1.0
 }`
 
-      const response = await aiService.generateText({
+      const response = await aiService.generate({
         prompt,
-        systemPrompt: 'You are a project management knowledge extraction expert. Generate structured, actionable knowledge base entries.',
-        maxTokens: 2000
+        system_prompt: 'You are a project management knowledge extraction expert. Generate structured, actionable knowledge base entries.',
+        max_tokens: 2000,
+        provider: 'google'
       })
 
-      const parsed = JSON.parse(response)
+      const parsed = JSON.parse(response.content)
       return {
         ...parsed,
         model: 'ai-service'
       }
     } catch (error) {
       logger.warn('[KNOWLEDGE-BASE] Error generating AI content, using defaults', { error })
-      
+
       // Fallback to basic extraction
       return {
         title: `${category}: ${drift.detection_type}`,
@@ -689,13 +690,14 @@ Return JSON array (limit to top ${limit}):
   }
 ]`
 
-      const response = await aiService.generateText({
+      const response = await aiService.generate({
         prompt,
-        systemPrompt: 'You are a project management AI that recommends relevant knowledge base entries.',
-        maxTokens: 2000
+        system_prompt: 'You are a project management AI that recommends relevant knowledge base entries.',
+        max_tokens: 2000,
+        provider: 'google'
       })
 
-      const recommendations = JSON.parse(response)
+      const recommendations = JSON.parse(response.content)
 
       return recommendations
         .filter((r: any) => r.relevance_score >= 0.5)
@@ -712,7 +714,7 @@ Return JSON array (limit to top ${limit}):
         .filter((r: any) => r.knowledge_entry_id) // Remove invalid entries
     } catch (error) {
       logger.warn('[KNOWLEDGE-BASE] Error generating AI recommendations, using simple ranking', { error })
-      
+
       // Fallback to simple business value ranking
       return entries
         .slice(0, limit)

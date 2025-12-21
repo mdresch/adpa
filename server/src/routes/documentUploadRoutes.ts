@@ -10,9 +10,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import multer from 'multer';
 import { logger } from '../utils/logger';
-import { 
+import {
   documentUploadService,
-  UploadBatchOptions 
+  UploadBatchOptions
 } from '../services/documentUploadService';
 import { authenticateToken as authenticate } from '../middleware/auth';
 import { connectDatabase, getDatabasePool } from '../database/connection';
@@ -92,7 +92,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const files = req.files as Express.Multer.File[];
-      
+
       if (!files || files.length === 0) {
         return res.status(400).json({
           success: false,
@@ -103,20 +103,20 @@ router.post(
         });
       }
 
-      const { 
-        projectId, 
-        assessmentName, 
-        clientName, 
-        organizationName, 
+      const {
+        projectId,
+        assessmentName,
+        clientName,
+        organizationName,
         assessmentPurpose,
-        industryVertical 
+        industryVertical
       } = req.body;
-      
+
       const userId = (req as any).user.id;
-      
+
       // For onboarding assessments, auto-create project if needed
       let actualProjectId = projectId;
-      
+
       if (!actualProjectId && assessmentName) {
         // Create onboarding project automatically
         const { v4: uuidv4 } = require('uuid');
@@ -141,7 +141,7 @@ router.post(
             throw err;
           }
         }
-        
+
         const onboardingProjectId = uuidv4();
 
         // Prefer inserting with company_id when the column exists; fall back
@@ -193,10 +193,10 @@ router.post(
           // No company context available, use legacy insert
           await pool.query(projectQuery, baseParams);
         }
-        
+
         actualProjectId = onboardingProjectId;
-        logger.info('Auto-created onboarding project', { 
-          projectId: onboardingProjectId, 
+        logger.info('Auto-created onboarding project', {
+          projectId: onboardingProjectId,
           assessmentName,
           clientName,
           userCompanyId
@@ -470,79 +470,8 @@ router.delete(
 // HELPER FUNCTIONS
 // ============================================================================
 
-/**
- * Verify user has access to project
- */
-async function verifyProjectAccess(user: any, projectId: string): Promise<boolean> {
-  await connectDatabase();
-  const sharedPool = getDatabasePool();
-  const client = await sharedPool.connect();
-
-  try {
-    const userId = user?.id;
-    const userRole = user?.role?.toLowerCase();
-    const userCompanyId = user?.company_id;
-    const isSuperAdmin = userRole === 'super_admin';
-    const isAdmin = userRole === 'admin';
-
-    // Super admin can access any project - just verify project exists
-    if (isSuperAdmin) {
-      const projectExists = await client.query(
-        'SELECT id FROM projects WHERE id = $1',
-        [projectId]
-      );
-      return projectExists.rows.length > 0;
-    }
-
-    // Admin can access projects from their company
-    if (isAdmin) {
-      if (userCompanyId) {
-        const projectCheck = await client.query(
-          'SELECT id FROM projects WHERE id = $1 AND company_id = $2',
-          [projectId, userCompanyId]
-        );
-        return projectCheck.rows.length > 0;
-      } else {
-        // Admin with no company_id - fall back to ownership check
-        const projectCheck = await client.query(
-          'SELECT id FROM projects WHERE id = $1 AND (owner_id = $2 OR created_by = $2)',
-          [projectId, userId]
-        );
-        return projectCheck.rows.length > 0;
-      }
-    }
-
-    // Regular users: check ownership, created_by, or team_members
-    const query = `
-      SELECT id, owner_id, created_by, team_members
-      FROM projects
-      WHERE id = $1
-    `;
-
-    const result = await client.query(query, [projectId]);
-    
-    if (result.rows.length === 0) {
-      return false; // Project doesn't exist
-    }
-
-    const project = result.rows[0];
-    const isOwner = project.owner_id === userId || project.created_by === userId;
-    const teamMembers = project.team_members || [];
-    const isInTeam = Array.isArray(teamMembers) && teamMembers.includes(userId);
-
-    return isOwner || isInTeam;
-
-  } catch (error: any) {
-    logger.error('Project access verification failed', {
-      userId: user?.id,
-      projectId,
-      error: error.message
-    });
-    return false;
-  } finally {
-    client.release();
-  }
-}
+// Import the centralized project access verification function
+import { verifyProjectAccess } from '../lib/projectAccess'
 
 /**
  * Cancel upload batch
@@ -562,7 +491,7 @@ async function cancelUploadBatch(batchId: string): Promise<void> {
     // Remove pending jobs from queue
     const { documentUploadQueue } = require('../services/documentUploadService');
     const jobs = await documentUploadQueue.getJobs(['waiting', 'delayed']);
-    
+
     for (const job of jobs) {
       if (job.data.batchId === batchId) {
         await job.remove();
@@ -634,7 +563,7 @@ router.post(
     try {
       const { batchId } = req.params;
       const files = req.files as Express.Multer.File[];
-      
+
       if (!files || files.length === 0) {
         return res.status(400).json({
           success: false,

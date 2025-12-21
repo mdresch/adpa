@@ -29,6 +29,14 @@ export interface DocumentGenerationForm {
   provider: string
   model: string
   temperature: number
+  max_tokens: number
+  user_id: string
+  project_id: string
+  document_ids: string[]
+  include_integrations: boolean
+  max_context_tokens: number
+  context_priority: string
+  custom_context: string
 }
 
 /**

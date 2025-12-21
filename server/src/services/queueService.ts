@@ -6,6 +6,7 @@ import { aiService } from "./aiService"
 import { ContextAwareAIService } from "../modules/context/integration"
 import { io } from "../server"
 import { v4 as uuidv4 } from "uuid"
+import { createQueueService } from "./jobs/queue/QueueServiceFactory"
 import { PMBOK_DOMAINS } from "@/types/pmbok"
 import type { PmbokDomain } from "@/types/pmbok"
 import DocumentPurposeService from "./documentPurposeService"
@@ -30,16 +31,7 @@ import { PerformanceMonitor } from "../utils/performanceMonitor"
 import { WorkerMonitoring } from "../utils/workerMonitoring"
 
 // Forward declarations for functions used before their definition
-declare function updateJobStatus(
-  jobId: string,
-  status: JobStatus,
-  progress?: number,
-  workerId?: string,
-  queueName?: QueueName | string,
-  errorMessage?: string
-): Promise<void>;
-
-declare function getQueueServiceDependencies(): Promise<QueueServiceDependencies>;
+// These will be implemented by the QueueService instance below
 
 // Generate unique worker ID for this process - moved to top to avoid hoisting issues
 const WORKER_ID = `worker-${process.pid}-${Date.now()}`
@@ -381,6 +373,54 @@ queuesForListeners.forEach((queue) => {
     }
   })
 })
+
+// Create QueueService instance with all dependencies
+const queueServiceInstance = createQueueService(
+  new Map<QueueName, Bull.Queue>([
+    ['ai-processing', aiQueue],
+    ['document-processing', documentQueue],
+    ['pipeline-processing', pipelineQueue],
+    ['baseline-processing', baselineQueue],
+    ['process-flow-processing', processFlowQueue],
+    ['document-regeneration', regenerationQueue],
+    ['quality-audit', qualityAuditQueue],
+    ['project-data-extraction', extractionQueue],
+  ]),
+  pool,
+  io,
+  cache,
+  aiService,
+  ContextAwareAIService
+);
+
+// Export the queue service functions
+export const addJob = queueServiceInstance.addJob.bind(queueServiceInstance);
+export const getJobStatus = queueServiceInstance.getJobStatus.bind(queueServiceInstance);
+export const cancelJob = queueServiceInstance.cancelJob.bind(queueServiceInstance);
+export const updateJobStatus = async (
+  jobId: string,
+  status: string,
+  progress?: number,
+  workerId?: string,
+  queueName?: string,
+  errorMessage?: string
+): Promise<void> => {
+  await queueServiceInstance.updateJobStatus(jobId, status, progress, workerId, queueName);
+};
+
+// Export the queue service instance for internal use
+export { queueServiceInstance as queueService };
+
+// Initialize queues function for backward compatibility (deprecated)
+export async function initializeQueues(): Promise<void> {
+  // This function is now a no-op as queues are initialized automatically
+  // when the module is imported. It's kept for backward compatibility.
+  console.warn("⚠️ initializeQueues() is deprecated and no longer needed. Queues are initialized automatically.");
+}
+
+export async function getQueueServiceDependencies(): Promise<QueueServiceDependencies> {
+  return queueServiceInstance.getDependencies();
+}
 
 // Job processors
 // Phase 5: Updated to pass dependencies to job services

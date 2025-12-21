@@ -1,9 +1,15 @@
-import { Router } from 'express'
-import { contextInjectionService } from '../services/contextInjectionService'
-import { authMiddleware } from '../middleware/auth'
-import { validate } from '../middleware/validation'
-import { logger } from '../utils/logger'
-import { pool } from '../database/connection'
+import { Router } from 'express';
+import Joi from "joi";
+import { contextInjectionService } from '../services/contextInjectionService';
+import { authMiddleware } from '../middleware/auth';
+import { validate } from '../middleware/validation';
+import { logger } from '../utils/logger';
+import { pool } from '../database/connection';
+
+/**
+ * Context Injection API Routes
+ * REST API endpoints for context injection operations
+ */
 
 const router = Router()
 
@@ -14,13 +20,11 @@ router.use(authMiddleware)
  * POST /api/context-injection/inject
  * Inject context into template content
  */
-router.post('/inject', validate({
-  body: {
-    templateContent: { type: 'string', required: true },
-    projectId: { type: 'string', required: true },
-    config: { type: 'object', required: true }
-  }
-}), async (req, res) => {
+router.post('/inject', validate(Joi.object({
+  templateContent: Joi.string().required(),
+  projectId: Joi.string().required(),
+  config: Joi.object().required()
+})), async (req, res) => {
   try {
     const { templateContent, projectId, config } = req.body
     const userId = req.user?.id
@@ -66,11 +70,9 @@ router.post('/inject', validate({
  * POST /api/context-injection/parse-variables
  * Parse template variables from content
  */
-router.post('/parse-variables', validate({
-  body: {
-    content: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/parse-variables', validate(Joi.object({
+  content: Joi.string().required()
+})), async (req, res) => {
   try {
     const { content } = req.body
 
@@ -93,12 +95,10 @@ router.post('/parse-variables', validate({
  * POST /api/context-injection/resolve-variables
  * Resolve template variables with project context
  */
-router.post('/resolve-variables', validate({
-  body: {
-    variables: { type: 'array', required: true },
-    projectId: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/resolve-variables', validate(Joi.object({
+  variables: Joi.array().required(),
+  projectId: Joi.string().required()
+})), async (req, res) => {
   try {
     const { variables, projectId } = req.body
 
@@ -133,11 +133,9 @@ router.post('/resolve-variables', validate({
  * POST /api/context-injection/generate-toc
  * Generate table of contents from content
  */
-router.post('/generate-toc', validate({
-  body: {
-    content: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/generate-toc', validate(Joi.object({
+  content: Joi.string().required()
+})), async (req, res) => {
   try {
     const { content } = req.body
 
@@ -163,12 +161,10 @@ router.post('/generate-toc', validate({
  * POST /api/context-injection/add-cross-references
  * Add cross-references to content
  */
-router.post('/add-cross-references', validate({
-  body: {
-    content: { type: 'string', required: true },
-    projectId: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/add-cross-references', validate(Joi.object({
+  content: Joi.string().required(),
+  projectId: Joi.string().required()
+})), async (req, res) => {
   try {
     const { content, projectId } = req.body
 
@@ -207,12 +203,10 @@ router.post('/add-cross-references', validate({
  * POST /api/context-injection/add-citations
  * Add citations to content
  */
-router.post('/add-citations', validate({
-  body: {
-    content: { type: 'string', required: true },
-    projectId: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/add-citations', validate(Joi.object({
+  content: Joi.string().required(),
+  projectId: Joi.string().required()
+})), async (req, res) => {
   try {
     const { content, projectId } = req.body
 
@@ -251,12 +245,10 @@ router.post('/add-citations', validate({
  * POST /api/context-injection/structure-content
  * Structure content based on project context
  */
-router.post('/structure-content', validate({
-  body: {
-    content: { type: 'string', required: true },
-    projectId: { type: 'string', required: true }
-  }
-}), async (req, res) => {
+router.post('/structure-content', validate(Joi.object({
+  content: Joi.string().required(),
+  projectId: Joi.string().required()
+})), async (req, res) => {
   try {
     const { content, projectId } = req.body
 
@@ -302,7 +294,7 @@ async function getProjectContext(projectId: string) {
       WHERE id = $1
     `
     const projectResult = await pool.query(projectQuery, [projectId])
-    
+
     if (projectResult.rows.length === 0) {
       return null
     }

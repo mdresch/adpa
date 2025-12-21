@@ -1,132 +1,219 @@
+#!/usr/bin/env ts-node
 /**
- * Diagnostic Script: Check Extraction Jobs
- * Verifies if automatic extraction jobs are being created and processed
+ * Diagnostic script to check extraction job status and identify incomplete jobs
+ * 
+ * This script:
+ * 1. Verifies the queue service is working correctly
+ * 2. Checks for incomplete extraction jobs (failed, stuck, pending)
+ * 3. Identifies parent extraction jobs with missing child jobs
+ * 4. Provides detailed status of all extraction jobs
  */
 
-import { Pool } from 'pg'
-import * as dotenv from 'dotenv'
+import { pool } from '../database/connection';
+import { addJob, getJobStatus } from '../services/queueService';
+import { logger } from '../utils/logger';
+import { v4 as uuidv4 } from 'uuid';
 
-dotenv.config()
+// Test the queue service functionality
+async function testQueueService() {
+  console.log('\n=== Testing Queue Service ===');
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: (process.env.DATABASE_URL?.includes('supabase.co') || process.env.DB_SSL === 'true')
-    ? { rejectUnauthorized: false }
-    : false
-})
-
-async function checkExtractionJobs() {
   try {
-    console.log('🔍 Checking extraction jobs...\n')
+    // Test addJob function
+    const testJobId = uuidv4();
+    await addJob('ai-generate', {
+      jobId: testJobId,
+      userId: 'diagnostic-script',
+      projectId: 'diagnostic-project',
+      prompt: 'Test job for queue service verification',
+      provider: 'openai',
+      model: 'gpt-3.5-turbo'
+    });
 
-    // Check recent extraction jobs
-    const jobsResult = await pool.query(`
-      SELECT 
-        id,
-        type,
-        status,
-        progress,
-        created_at,
-        started_at,
-        completed_at,
-        error_message,
-        data->>'autoTriggered' as auto_triggered,
-        data->>'sourceDocumentId' as source_document_id,
-        data->>'sourceDocumentName' as source_document_name,
-        data->>'projectId' as project_id,
-        data->>'documentIds' as document_ids
-      FROM jobs
-      WHERE type = 'project-data-extraction'
-      ORDER BY created_at DESC
-      LIMIT 10
-    `)
+    console.log('✅ addJob function is working correctly');
 
-    console.log(`📊 Found ${jobsResult.rows.length} extraction job(s):\n`)
-
-    if (jobsResult.rows.length === 0) {
-      console.log('❌ No extraction jobs found!')
-      console.log('   This means automatic extraction is NOT being triggered.\n')
-      console.log('   Possible causes:')
-      console.log('   1. Documents were created before automatic extraction was implemented')
-      console.log('   2. Extraction trigger code has an error')
-      console.log('   3. Content check is failing (empty content)')
-      return
+    // Test getJobStatus function
+    const status = await getJobStatus(testJobId);
+    if (status) {
+      console.log(`✅ getJobStatus function is working: Job status = ${status.status}`);
+    } else {
+      console.log('⚠️  getJobStatus returned null, job may not be in database yet');
     }
 
-    jobsResult.rows.forEach((job, i) => {
-      console.log(`${i + 1}. Job ID: ${job.id}`)
-      console.log(`   Status: ${job.status}`)
-      console.log(`   Progress: ${job.progress || 0}%`)
-      console.log(`   Auto-triggered: ${job.auto_triggered || 'false'}`)
-      console.log(`   Document ID: ${job.source_document_id || 'N/A'}`)
-      console.log(`   Document Name: ${job.source_document_name || 'N/A'}`)
-      console.log(`   Project ID: ${job.project_id || 'N/A'}`)
-      console.log(`   Created: ${job.created_at}`)
-      if (job.started_at) {
-        console.log(`   Started: ${job.started_at}`)
+  } catch (error) {
+    console.error('❌ Queue service test failed:', error instanceof Error ? error.message : error);
+    if (error instanceof Error && error.stack) {
+      console.error('Stack trace:', error.stack);
+    }
+    return false;
+  }
+
+  return true;
+}
+
+// Check for incomplete extraction jobs
+async function checkIncompleteExtractionJobs() {
+  console.log('\n=== Checking for Incomplete Extraction Jobs ===');
+
+  try {
+    // Get all extraction jobs that are not completed
+    const incompleteJobs = await pool.query(
+      `SELECT 
+                id, type, status, created_by, created_at, 
+                started_at, completed_at, error_message, 
+                data->>'projectId' as project_id,
+                data->>'retryOf' as retry_of
+            FROM jobs
+            WHERE type LIKE '%extract%'
+            AND status NOT IN ('completed', 'cancelled')
+            ORDER BY created_at DESC`
+    );
+
+    if (incompleteJobs.rows.length === 0) {
+      console.log('✅ No incomplete extraction jobs found');
+      return;
+    }
+
+    console.log(`📊 Found ${incompleteJobs.rows.length} incomplete extraction job(s):`);
+
+    for (const job of incompleteJobs.rows) {
+      const duration = job.started_at ?
+        `${Math.floor((Date.now() - new Date(job.started_at).getTime()) / 1000 / 60)} minutes` :
+        'not started';
+
+      console.log(`\n🔍 Job ID: ${job.id}`);
+      console.log(`   Type: ${job.type}`);
+      console.log(`   Status: ${job.status}`);
+      console.log(`   Project ID: ${job.project_id || 'N/A'}`);
+      console.log(`   Created: ${job.created_at}`);
+      console.log(`   Duration: ${duration}`);
+      console.log(`   Error: ${job.error_message || 'None'}`);
+      console.log(`   Retry of: ${job.retry_of || 'Original job'}`);
+    }
+
+    // Check for stuck jobs (processing for too long)
+    const stuckJobs = await pool.query(
+      `SELECT 
+                id, type, status, created_at, started_at,
+                data->>'projectId' as project_id
+            FROM jobs
+            WHERE type LIKE '%extract%'
+            AND status = 'processing'
+            AND started_at < NOW() - INTERVAL '30 minutes'
+            ORDER BY started_at ASC`
+    );
+
+    if (stuckJobs.rows.length > 0) {
+      console.log(`\n⚠️  Found ${stuckJobs.rows.length} stuck extraction job(s):`);
+      for (const job of stuckJobs.rows) {
+        const duration = `${Math.floor((Date.now() - new Date(job.started_at).getTime()) / 1000 / 60)} minutes`;
+        console.log(`\n⏳ Stuck Job: ${job.id}`);
+        console.log(`   Type: ${job.type}`);
+        console.log(`   Project ID: ${job.project_id || 'N/A'}`);
+        console.log(`   Started: ${job.started_at}`);
+        console.log(`   Duration: ${duration}`);
       }
-      if (job.completed_at) {
-        console.log(`   Completed: ${job.completed_at}`)
-      }
-      if (job.error_message) {
-        console.log(`   ❌ Error: ${job.error_message}`)
-      }
-      console.log('')
-    })
-
-    // Check for pending jobs
-    const pendingJobs = jobsResult.rows.filter(j => j.status === 'pending')
-    if (pendingJobs.length > 0) {
-      console.log(`⚠️  ${pendingJobs.length} job(s) are still pending - they may not be processed yet\n`)
     }
 
-    // Check for failed jobs
-    const failedJobs = jobsResult.rows.filter(j => j.status === 'failed')
-    if (failedJobs.length > 0) {
-      console.log(`❌ ${failedJobs.length} job(s) failed:\n`)
-      failedJobs.forEach(job => {
-        console.log(`   - ${job.id}: ${job.error_message || 'Unknown error'}`)
-      })
-      console.log('')
-    }
-
-    // Check for completed jobs
-    const completedJobs = jobsResult.rows.filter(j => j.status === 'completed')
-    if (completedJobs.length > 0) {
-      console.log(`✅ ${completedJobs.length} job(s) completed successfully\n`)
-    }
-
-    // Check if entities were actually extracted
-    const projectId = jobsResult.rows[0]?.project_id
-    if (projectId) {
-      console.log(`\n📈 Checking extracted entities for project ${projectId}...\n`)
-      
-      const entityCounts = await pool.query(`
-        SELECT 
-          'stakeholders' as entity_type, COUNT(*) as count FROM stakeholders WHERE project_id = $1
-        UNION ALL
-        SELECT 'risks', COUNT(*) FROM risks WHERE project_id = $1
-        UNION ALL
-        SELECT 'requirements', COUNT(*) FROM requirements WHERE project_id = $1
-        UNION ALL
-        SELECT 'milestones', COUNT(*) FROM milestones WHERE project_id = $1
-        UNION ALL
-        SELECT 'deliverables', COUNT(*) FROM deliverables WHERE project_id = $1
-      `, [projectId])
-
-      console.log('Extracted Entities:')
-      entityCounts.rows.forEach(row => {
-        console.log(`   ${row.entity_type}: ${row.count}`)
-      })
-    }
-
-  } catch (error: any) {
-    console.error('❌ Error checking extraction jobs:', error.message)
-    console.error(error.stack)
-  } finally {
-    await pool.end()
+  } catch (error) {
+    console.error('❌ Error checking incomplete extraction jobs:', error);
   }
 }
 
-checkExtractionJobs()
+// Check for parent extraction jobs with missing child jobs
+async function checkParentChildExtractionJobs() {
+  console.log('\n=== Checking Parent-Child Extraction Job Relationships ===');
 
+  try {
+    // Find parent extraction jobs
+    const parentJobs = await pool.query(
+      `SELECT 
+                id, status, created_at, completed_at,
+                data->>'projectId' as project_id
+            FROM jobs
+            WHERE type = 'extract-project-data'
+            ORDER BY created_at DESC
+            LIMIT 20`
+    );
+
+    if (parentJobs.rows.length === 0) {
+      console.log('✅ No parent extraction jobs found');
+      return;
+    }
+
+    console.log(`📊 Checking ${parentJobs.rows.length} parent extraction job(s)...`);
+
+    for (const parentJob of parentJobs.rows) {
+      // Count child jobs for this parent
+      const childJobs = await pool.query(
+        `SELECT 
+                    id, type, status, created_at, completed_at
+                FROM jobs
+                WHERE data->>'parentJobId' = $1
+                ORDER BY created_at ASC`,
+        [parentJob.id]
+      );
+
+      const expectedChildCount = 40; // Approximate number of entity types
+      const missingChildJobs = expectedChildCount - childJobs.rows.length;
+
+      console.log(`\n🔍 Parent Job: ${parentJob.id}`);
+      console.log(`   Status: ${parentJob.status}`);
+      console.log(`   Project ID: ${parentJob.project_id || 'N/A'}`);
+      console.log(`   Child Jobs: ${childJobs.rows.length}/${expectedChildCount}`);
+
+      if (missingChildJobs > 0) {
+        console.log(`   ⚠️  Missing child jobs: ~${missingChildJobs}`);
+      }
+
+      if (childJobs.rows.length > 0) {
+        const completedChildJobs = childJobs.rows.filter(row => row.status === 'completed').length;
+        const failedChildJobs = childJobs.rows.filter(row => row.status === 'failed').length;
+
+        console.log(`   Child Job Status: ${completedChildJobs} completed, ${failedChildJobs} failed, ${childJobs.rows.length - completedChildJobs - failedChildJobs} pending`);
+
+        if (failedChildJobs > 0) {
+          const failedTypes = childJobs.rows
+            .filter(row => row.status === 'failed')
+            .map(row => row.type.replace('extract-entity-', ''));
+          console.log(`   Failed Entity Types: ${failedTypes.join(', ')}`);
+        }
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ Error checking parent-child extraction jobs:', error);
+  }
+}
+
+// Main function
+async function main() {
+  console.log('🔍 Extraction Job Diagnostic Script');
+  console.log('====================================');
+
+  // Test queue service
+  const queueServiceWorking = await testQueueService();
+
+  // Check incomplete jobs
+  await checkIncompleteExtractionJobs();
+
+  // Check parent-child relationships
+  await checkParentChildExtractionJobs();
+
+  console.log('\n=== Summary ===');
+  if (queueServiceWorking) {
+    console.log('✅ Queue service is operational');
+  } else {
+    console.log('❌ Queue service has issues');
+  }
+
+  console.log('\n📋 Diagnostic complete. Check the output above for any issues.');
+}
+
+// Run the script
+main().catch(error => {
+  console.error('Script failed:', error);
+  process.exit(1);
+}).finally(() => {
+  pool.end();
+});

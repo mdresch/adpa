@@ -116,12 +116,12 @@ export async function generateRecommendations(
     const low_priority_actions = recommendations.filter(r => r.priority === 'low');
 
     // Identify quick wins (high impact, low effort)
-    const quick_wins = recommendations.filter(r => 
+    const quick_wins = recommendations.filter(r =>
       r.impact_score >= 7 && r.effort_level === 'low'
     );
 
     // Identify long-term initiatives (high effort, high impact)
-    const long_term_initiatives = recommendations.filter(r => 
+    const long_term_initiatives = recommendations.filter(r =>
       r.impact_score >= 8 && r.effort_level === 'high'
     );
 
@@ -157,16 +157,16 @@ async function generateSingleRecommendation(
 ): Promise<AIRecommendation | null> {
   try {
     const prompt = buildRecommendationPrompt(context, severity);
-    
-    const response = await aiService.generateText({
+
+    const response = await aiService.generate({
       provider: 'openai',
       model: 'gpt-4o',
       prompt,
       temperature: 0.7,
-      maxTokens: 2000
+      max_tokens: 2000
     });
 
-    const parsed = parseAIRecommendation(response, context, severity);
+    const parsed = parseAIRecommendation(response.content, context, severity);
     return parsed;
 
   } catch (error: any) {
@@ -174,7 +174,7 @@ async function generateSingleRecommendation(
       document_type: context.document_type,
       error: error.message
     });
-    
+
     // Return fallback recommendation
     return generateFallbackRecommendation(context, severity);
   }
@@ -288,7 +288,7 @@ function generateFallbackRecommendation(
 ): AIRecommendation {
   const gapPoints = context.target_score - context.current_score;
   const priority = mapSeverityToPriority(severity);
-  
+
   return {
     id: generateRecommendationId(context.document_type),
     title: `Enhance ${context.document_type} Documentation Quality`,
@@ -564,7 +564,7 @@ function estimateTimeFromEffort(effortLevel: string): number {
 }
 
 function extractIssuesForDocType(auditData: any[], documentType: string): any[] {
-  const relevantAudits = auditData.filter(audit => 
+  const relevantAudits = auditData.filter(audit =>
     (audit.document_type || audit.framework_used || 'General') === documentType
   );
 
