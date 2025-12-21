@@ -132,13 +132,13 @@ export function ProgramRisksTab({ programId }: ProgramRisksTabProps) {
       } else {
         const errorText = await response.text();
         console.error('[RISKS] API Error:', response.status, errorText);
-        // For now, use mock data if endpoint doesn't exist
-        setRisks(generateMockRisks());
+        // Show empty state on error - API endpoint exists but may have no data
+        setRisks([]);
       }
     } catch (error) {
       console.error('Failed to fetch risks:', error);
-      // Use mock data on error
-      setRisks(generateMockRisks());
+      // Show empty state on network error
+      setRisks([]);
     } finally {
       setLoading(false);
     }

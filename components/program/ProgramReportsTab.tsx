@@ -145,12 +145,14 @@ export function ProgramReportsTab({ programId }: ProgramReportsTabProps) {
         const data = await response.json();
         setReports(data.data || []);
       } else {
-        // Use mock data if endpoint doesn't exist
-        setReports(generateMockReports());
+        // Show empty state on error - API endpoint exists but may have no data
+        console.error('[REPORTS] API Error:', response.status);
+        setReports([]);
       }
     } catch (error) {
       console.error('Failed to fetch reports:', error);
-      setReports(generateMockReports());
+      // Show empty state on network error
+      setReports([]);
     } finally {
       setLoading(false);
     }
