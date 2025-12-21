@@ -2,7 +2,9 @@
   "compilerOptions": {
     "target": "ES2020",
     "module": "commonjs",
-    "lib": ["ES2020"],
+    "lib": [
+      "ES2020"
+    ],
     "outDir": "./dist",
     "rootDir": "./src",
     "strict": false,
@@ -29,17 +31,38 @@
     "moduleResolution": "node",
     "baseUrl": "./src",
     "paths": {
-      "@/*": ["*"],
-      "@/database/*": ["database/*"],
-      "@/middleware/*": ["middleware/*"],
-      "@/routes/*": ["routes/*"],
-      "@/services/*": ["services/*"],
-      "@/utils/*": ["utils/*"],
-      "@/types/*": ["types/*"],
-      "@root-types/*": ["../../types/*"]
+      "@/*": [
+        "*"
+      ],
+      "@/database/*": [
+        "database/*"
+      ],
+      "@/middleware/*": [
+        "middleware/*"
+      ],
+      "@/routes/*": [
+        "routes/*"
+      ],
+      "@/services/*": [
+        "services/*"
+      ],
+      "@/utils/*": [
+        "utils/*"
+      ],
+      "@/types/*": [
+        "types/*"
+      ],
+      "@root-types/*": [
+        "../../types/*"
+      ]
     },
-    "typeRoots": ["./node_modules/@types"],
-    "types": ["node", "jest"]
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
+    "types": [
+      "node",
+      "jest"
+    ]
   },
   "include": [
     "src/**/*"
@@ -51,8 +74,6 @@
     "**/*.spec.ts"
   ],
   "ts-node": {
-    "esm": true,
-    "experimentalSpecifierResolution": "node",
     "transpileOnly": true
   }
 }

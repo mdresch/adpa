@@ -1348,7 +1348,7 @@ router.post("/project/:projectId",
       if (template_id) {
         try {
           const templateResult = await pool.query(`
-            SELECT 
+            SELECT
               t.*,
               u.name as author_name,
               (t.content::jsonb -> 'metadata' ->> 'version') as version,
@@ -1385,6 +1385,53 @@ router.post("/project/:projectId",
           log.warn('Failed to fetch template metadata:', error)
         }
       }
+
+      // 🔍 Check for template conflicts and handle versioning
+      if (template_id) {
+        const { VersioningService } = await import('../services/document/VersioningService');
+        const versioningService = new VersioningService();
+
+        const creationResult = await versioningService.createDocumentFromTemplate(
+          template_id,
+          projectId,
+          {
+            userId: req.user?.id || '',
+            content: contentString,
+            documentName: name,
+            metadata: templateMetadata
+          }
+        );
+
+        if (creationResult.conflict) {
+          // Conflict detected - return conflict information to frontend
+          return res.status(409).json({
+            conflict: true,
+            conflictId: creationResult.conflictId,
+            conflictResult: creationResult.conflictResult,
+            message: 'Template conflict detected',
+            options: creationResult.conflictResult.resolutionOptions
+          });
+        } else if (creationResult.success && creationResult.documentId) {
+          // If document was created or updated, return the result
+          // Skip the rest of the document creation logic since it's already handled
+          if (creationResult.document) {
+            return res.status(201).json({
+              message: "Document created successfully",
+              document: creationResult.document,
+            });
+          } else {
+            // Document was updated, return the version info
+            return res.status(200).json({
+              message: "Document updated to new version due to template conflict resolution",
+              documentId: creationResult.documentId,
+              versionId: creationResult.versionId,
+              semanticVersion: creationResult.semanticVersion
+            });
+          }
+        }
+      }
+
+      // Proceed with original document creation logic if no template or no conflict
 
       // Extract generation metadata from request if provided
       const generationMetadata = req.body.generation_metadata || null

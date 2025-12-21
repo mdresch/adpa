@@ -12,7 +12,7 @@ import TemplateAnalyticsService from "../services/templateAnalyticsService"
 const router = express.Router()
 
 // Get templates
-router.get("/", 
+router.get("/",
   authenticateToken,
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
@@ -28,7 +28,7 @@ router.get("/",
     try {
       const { page = 1, limit = 100, framework, category, search, is_public, template_scope } = req.query
       const offset = (Number(page) - 1) * Number(limit)
-      
+
       log.info(`Fetching templates: page=${page}, limit=${limit}, framework=${framework || 'all'}, scope=${template_scope || 'all'}`)
 
       // Check if user is super_admin
@@ -334,7 +334,7 @@ router.delete("/:id/hard",
 )
 
 // Get template by ID
-router.get("/:id", 
+router.get("/:id",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -345,7 +345,7 @@ router.get("/:id",
       // Check cache first (but always fetch recent usage as it changes frequently)
       const cacheKey = `template:${id}`
       const cached = await cache.get(cacheKey)
-      
+
       // Get recent template usage (always fetch fresh, not cached)
       const usageResult = await pool.query(
         `
@@ -486,8 +486,8 @@ router.get("/:id",
 )
 
 // Create template
-router.post("/", 
-  authenticateToken, 
+router.post("/",
+  authenticateToken,
   requirePermission("templates.create"),
   validate(schemas.createTemplate),
   async (req, res) => {
@@ -551,7 +551,7 @@ router.post("/",
         ]
       )
 
-  log.info(`Template created: ${name} by ${req.user?.email}`)
+      log.info(`Template created: ${name} by ${req.user?.email}`)
 
       // Track template creation
       if (req.user?.id) {
@@ -593,8 +593,8 @@ router.post("/",
 )
 
 // Update template
-router.put("/:id", 
-  authenticateToken, 
+router.put("/:id",
+  authenticateToken,
   requirePermission("templates.update"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   validate(Joi.object({
@@ -709,7 +709,7 @@ router.put("/:id",
       // Clear cache
       await cache.del(`template:${id}`)
 
-  log.info(`Template updated: ${id} by ${req.user?.email}`)
+      log.info(`Template updated: ${id} by ${req.user?.email}`)
 
       // Track template update
       if (req.user?.id && result.rows[0]) {
@@ -731,7 +731,7 @@ router.put("/:id",
             const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
             const currentVersion = versions[0]?.version_number || '1.0.0'
             const [major, minor, patch] = currentVersion.split('.').map(Number)
-            
+
             // Increment patch version for updates
             const newVersion = `${major}.${minor}.${patch + 1}`
 
@@ -765,8 +765,8 @@ router.put("/:id",
 )
 
 // Delete template
-router.delete("/:id", 
-  authenticateToken, 
+router.delete("/:id",
+  authenticateToken,
   requirePermission("templates.delete"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -831,26 +831,26 @@ router.delete("/:id",
 
       const usageCount = Number.parseInt(usageCheck.rows[0].count)
       if (usageCount > 0) {
-        return res.status(400).json({ 
+        return res.status(400).json({
           error: "Template is being used by documents and cannot be deleted",
           usage_count: usageCount,
         })
       }
 
-  // Soft-delete: set deleted_at timestamp and who deleted it so content is preserved for some time
-  await pool.query("UPDATE templates SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $2 WHERE id = $1", [id, req.user?.id])
+      // Soft-delete: set deleted_at timestamp and who deleted it so content is preserved for some time
+      await pool.query("UPDATE templates SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $2 WHERE id = $1", [id, req.user?.id])
 
-  // Clear cache
-  await cache.del(`template:${id}`)
+      // Clear cache
+      await cache.del(`template:${id}`)
 
-  log.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
+      log.info(`Template soft-deleted: ${id} by ${req.user?.email}`)
 
       // Track template deletion
       if (req.user?.id) {
         trackActivity.deleteTemplate(req.user.id, id)
       }
 
-  res.json({ message: "Template deleted (soft) successfully" })
+      res.json({ message: "Template deleted (soft) successfully" })
     } catch (error) {
       log.error("Delete template error:", error)
       res.status(500).json({ error: "Internal server error" })
@@ -952,7 +952,7 @@ router.post("/:id/promote-to-company",
           const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
           const currentVersion = versions[0]?.version_number || '1.0.0'
           const [major, minor] = currentVersion.split('.').map(Number)
-          
+
           // Increment minor version for promotion (e.g., 1.0.0 -> 1.1.0)
           const newVersion = `${major}.${minor + 1}.0`
 
@@ -1068,7 +1068,7 @@ router.post("/:id/promote-to-standard",
           const versions = await TemplateAnalyticsService.getVersionHistory(id, 1)
           const currentVersion = versions[0]?.version_number || '1.0.0'
           const [major, minor] = currentVersion.split('.').map(Number)
-          
+
           // Increment minor version for promotion (e.g., 1.0.0 -> 1.1.0)
           const newVersion = `${major}.${minor + 1}.0`
 
@@ -1109,8 +1109,8 @@ router.post("/:id/promote-to-standard",
 )
 
 // Clone template
-router.post("/:id/clone", 
-  authenticateToken, 
+router.post("/:id/clone",
+  authenticateToken,
   requirePermission("templates.create"),
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   validate(Joi.object({
@@ -1159,7 +1159,7 @@ router.post("/:id/clone",
         ]
       )
 
-  log.info(`Template cloned: ${id} -> ${newId} by ${req.user?.email}`)
+      log.info(`Template cloned: ${id} -> ${newId} by ${req.user?.email}`)
 
       res.status(201).json({
         message: "Template cloned successfully",
@@ -1173,7 +1173,7 @@ router.post("/:id/clone",
 )
 
 // Increment template usage
-router.post("/:id/use", 
+router.post("/:id/use",
   authenticateToken,
   validateParams(Joi.object({ id: Joi.string().uuid().required() })),
   async (req, res) => {
@@ -1219,32 +1219,32 @@ router.post("/:id/promote",
     try {
       const { id } = req.params
       const { reason } = req.body
-      
+
       log.info('Template promotion requested', { template_id: id, reason })
-      
+
       // Check if user owns template or is admin
       const ownerCheck = await pool.query(
         "SELECT created_by FROM templates WHERE id = $1 AND deleted_at IS NULL",
         [id]
       )
-      
+
       if (ownerCheck.rows.length === 0) {
         return res.status(404).json({ error: "Template not found" })
       }
-      
+
       const isOwner = ownerCheck.rows[0].created_by === req.user?.id
-      const isAdmin = req.user?.role === 'admin'
-      
+      const isAdmin = req.user?.role === 'admin' || req.user?.role === 'super_admin'
+
       if (!isOwner && !isAdmin) {
         return res.status(403).json({ error: "Only template owner or admin can promote" })
       }
-      
+
       // Call promotion function
       const result = await pool.query(
         'SELECT * FROM promote_template_status($1, $2, $3)',
         [id, req.user?.id, reason || null]
       )
-      
+
       if (result.rows.length === 0 || !result.rows[0].success) {
         return res.status(400).json({
           success: false,
@@ -1252,22 +1252,22 @@ router.post("/:id/promote",
           new_status: result.rows[0]?.new_status
         })
       }
-      
+
       log.info('Template promoted successfully', {
         template_id: id,
         new_status: result.rows[0].new_status,
         message: result.rows[0].message
       })
-      
+
       // Clear cache
       await cache.del(`template:${id}`)
-      
+
       res.json({
         success: true,
         new_status: result.rows[0].new_status,
         message: result.rows[0].message
       })
-      
+
     } catch (error) {
       log.error("Promote template error:", error)
       res.status(500).json({ error: "Internal server error" })
@@ -1344,8 +1344,8 @@ router.post("/:id/archive",
 router.post("/:id/compliance/approve",
   authenticateToken,
   requirePermission("templates.update"),
-  validateParams(Joi.object({ 
-    id: Joi.string().uuid().required() 
+  validateParams(Joi.object({
+    id: Joi.string().uuid().required()
   })),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -1353,15 +1353,15 @@ router.post("/:id/compliance/approve",
       const { id } = req.params
       const { compliance_score, notes } = req.body
 
-      log.info('Template compliance approval requested', { 
-        template_id: id, 
-        compliance_score 
+      log.info('Template compliance approval requested', {
+        template_id: id,
+        compliance_score
       })
 
       // Validate compliance score
       if (!compliance_score || compliance_score < 0 || compliance_score > 100) {
-        return res.status(400).json({ 
-          error: "Compliance score must be between 0 and 100" 
+        return res.status(400).json({
+          error: "Compliance score must be between 0 and 100"
         })
       }
 

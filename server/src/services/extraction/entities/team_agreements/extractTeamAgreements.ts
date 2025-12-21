@@ -72,7 +72,7 @@ export async function extractTeamAgreements(
     if (cached && cached.length > 0) {
       logger.info(`[EXTRACTION-TEAM-AGREEMENTS] ✅ Using cached result (${cached.length} entities)`)
       cacheHit = true
-      
+
       // Resolve source documents for cached entities
       const validAgreements: TeamAgreement[] = []
       cached.forEach((agreement: any) => {
@@ -82,7 +82,7 @@ export async function extractTeamAgreements(
           'TEAM-AGREEMENTS',
           agreement.title || 'Unnamed Team Agreement'
         )
-        
+
         if (resolution.resolved) {
           validAgreements.push(agreement as TeamAgreement)
         } else {
@@ -119,7 +119,7 @@ export async function extractTeamAgreements(
     // Build detailed prompt for team agreements
     const documentContext = context.documentContext
     const documentList = context.documents.map(d => `- ${d.title}`).join('\n')
-    
+
     const prompt = `You are analyzing project documentation to extract **Team Agreements** aligned with the PMBOK 8 **Team Performance Domain**.
 
 SOURCE DOCUMENTS:
@@ -135,8 +135,8 @@ Use the following JSON schema exactly:
       "title": "Agreement title",
       "description": "Summary of the agreement in Markdown",
       "category": "working_hours|communication|decision_making|conflict_resolution|quality_standards|meeting_norms|code_of_conduct|collaboration_tools|response_times|knowledge_sharing|other",
-      "agreed_by": ["Name or role"],
-      "facilitated_by": "Name or role",
+      "agreed_by": ["Role or name of team member"],
+      "facilitated_by": "Role or name of facilitator",
       "effective_date": "YYYY-MM-DD or null",
       "review_frequency": "weekly|monthly|quarterly|annually|as_needed|null",
       "next_review_date": "YYYY-MM-DD or null",
@@ -152,7 +152,8 @@ Use the following JSON schema exactly:
 
 Rules:
 - Capture explicit or implied team working agreements, norms, or ground rules.
-- Use arrays for agreed_by even if a single name is mentioned.
+- Extract role names or team member names for agreed_by and facilitated_by fields
+- Use arrays for agreed_by even if a single name is mentioned
 - If information is missing, use null or an empty array instead of inventing data.
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
@@ -182,7 +183,7 @@ Rules:
 
     // Resolve source_document_id for each team agreement (STRICT: reject if missing)
     const validAgreements: TeamAgreement[] = []
-    
+
     deduplicatedAgreements.forEach((agreement) => {
       const resolution = resolveSourceDocumentIdStrict(
         agreement,
@@ -190,7 +191,7 @@ Rules:
         'TEAM-AGREEMENTS',
         agreement.title || 'Unnamed Team Agreement'
       )
-      
+
       if (resolution.resolved) {
         validAgreements.push(agreement)
       } else {
@@ -203,7 +204,7 @@ Rules:
     if (rejectedCount > 0) {
       logger.warn(`[EXTRACTION-TEAM-AGREEMENTS] REJECTED ${rejectedCount} team agreements without valid source_document_id (out of ${deduplicatedAgreements.length} total)`)
     }
-    
+
     logger.info(`[EXTRACTION-TEAM-AGREEMENTS] Extracted ${validAgreements.length} team agreements with valid source_document_id (${rejectedCount} rejected)`)
 
     // Cache the result
@@ -238,7 +239,7 @@ Rules:
       projectId: context.projectId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     return {
       entities: [],
       rejectedCount: 0,
@@ -262,15 +263,15 @@ Rules:
  */
 function deduplicateTeamAgreementsBatch(agreements: TeamAgreement[]): TeamAgreement[] {
   const deduplicatedMap = new Map<string, TeamAgreement>()
-  
+
   agreements.forEach(agreement => {
     const normalizedTitle = (agreement.title || '').trim().toLowerCase()
-    
+
     if (!normalizedTitle) {
       // Skip agreements without titles
       return
     }
-    
+
     if (!deduplicatedMap.has(normalizedTitle)) {
       deduplicatedMap.set(normalizedTitle, agreement)
     } else {
@@ -295,7 +296,7 @@ function deduplicateTeamAgreementsBatch(agreements: TeamAgreement[]): TeamAgreem
       logger.debug(`[EXTRACTION-TEAM-AGREEMENTS] Merged duplicate agreement: "${agreement.title}"`)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 

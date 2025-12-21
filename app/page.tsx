@@ -12,7 +12,7 @@ import { PageTransition } from "@/components/page-transition"
 import { AnimatedLayout, AnimatedCard, AnimatedGrid, AnimatedGridItem } from "@/components/animated-layout"
 import { motion } from "framer-motion"
 import {
-  Activity,
+  Activity as ActivityIcon,
   FileText,
   Users,
   Zap,
@@ -82,7 +82,7 @@ export default function Dashboard() {
         setDashboardData(analytics)
         setAiProviders(providers)
         setRecentJobs(jobs.jobs)
-        
+
         // Update analytics with correct project count from projects endpoint
         const updatedAnalytics = {
           ...analytics,
@@ -169,42 +169,42 @@ export default function Dashboard() {
     details: `${activity.resource_type} ${activity.resource_id.slice(0, 8)}...`,
     time: new Date(activity.created_at).toLocaleString(),
     color: activity.action.includes('create') ? 'emerald' :
-           activity.action.includes('update') ? 'blue' :
-           activity.action.includes('delete') ? 'red' : 'purple',
+      activity.action.includes('update') ? 'blue' :
+        activity.action.includes('delete') ? 'red' : 'purple',
   })) || [
-    {
-      action: "Welcome to ADPA",
-      details: "System initialized",
-      time: "Just now",
-      color: "blue",
-    },
-  ]
+      {
+        action: "Welcome to ADPA",
+        details: "System initialized",
+        time: "Just now",
+        color: "blue",
+      },
+    ]
 
   const quickActions = [
-    { 
-      icon: FileText, 
-      label: "Generate Document", 
+    {
+      icon: FileText,
+      label: "Generate Document",
       color: "from-blue-600 to-blue-800",
       onClick: () => router.push("/projects"),
       description: "Create new documents"
     },
-    { 
-      icon: Zap, 
-      label: "Configure AI", 
+    {
+      icon: Zap,
+      label: "Configure AI",
       color: "from-blue-700 to-blue-900",
       onClick: () => router.push("/ai-providers"),
       description: "Manage AI providers"
     },
-    { 
-      icon: Users, 
-      label: "Manage Users", 
+    {
+      icon: Users,
+      label: "Manage Users",
       color: "from-blue-500 to-blue-700",
       onClick: () => router.push("/admin"),
       description: "User administration"
     },
-    { 
-      icon: TrendingUp, 
-      label: "View Analytics", 
+    {
+      icon: TrendingUp,
+      label: "View Analytics",
       color: "from-blue-800 to-slate-900",
       onClick: () => router.push("/ai-analytics"),
       description: "AI usage insights"
@@ -361,12 +361,12 @@ export default function Dashboard() {
                 <CardContent>
                   <div className="space-y-6">
                     <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-                      ADPA's intelligent compression engine analyzes documents across multiple knowledge domains, 
-                      extracting key topics and building contextualized summaries primed with domain expertise. 
-                      Each knowledge area maintains its own compression matrix, ensuring critical information is preserved 
+                      ADPA's intelligent compression engine analyzes documents across multiple knowledge domains,
+                      extracting key topics and building contextualized summaries primed with domain expertise.
+                      Each knowledge area maintains its own compression matrix, ensuring critical information is preserved
                       while achieving up to 80% token reduction.
                     </p>
-                    
+
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {[
                         {
@@ -428,9 +428,9 @@ export default function Dashboard() {
                         Context Building Intelligence
                       </h4>
                       <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
-                        Our AI analyzes each document through domain-specific lenses, identifying key concepts, 
-                        relationships, and dependencies. The system builds rich contextual summaries that maintain 
-                        semantic accuracy while dramatically reducing token consumption. Each summary is tagged with 
+                        Our AI analyzes each document through domain-specific lenses, identifying key concepts,
+                        relationships, and dependencies. The system builds rich contextual summaries that maintain
+                        semantic accuracy while dramatically reducing token consumption. Each summary is tagged with
                         relevance scores, confidence metrics, and cross-domain linkages for optimal reuse.
                       </p>
                     </div>
@@ -582,7 +582,7 @@ export default function Dashboard() {
                       whileHover={{ scale: 1.1 }}
                       className="p-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg"
                     >
-                      <Activity className="h-6 w-6 text-white" />
+                      <ActivityIcon className="h-6 w-6 text-white" />
                     </motion.div>
                     <div>
                       <CardTitle className="text-xl">10-Stage Enterprise Document Processing Pipeline</CardTitle>
@@ -886,8 +886,8 @@ export default function Dashboard() {
                         <div className="flex-1">
                           <h4 className="font-bold text-lg mb-2">Proactive Intelligence, Not Reactive Management</h4>
                           <p className="text-sm text-blue-100 leading-relaxed">
-                            ADPA's advanced features transform traditional project management from reactive firefighting to proactive intelligence. 
-                            Detect issues before they become problems, optimize resource allocation in real-time, and maintain perfect alignment 
+                            ADPA's advanced features transform traditional project management from reactive firefighting to proactive intelligence.
+                            Detect issues before they become problems, optimize resource allocation in real-time, and maintain perfect alignment
                             from portfolio strategy down to individual tasks. Estimated ROI: <strong>300-500% over 18 months</strong>.
                           </p>
                         </div>
@@ -929,12 +929,12 @@ export default function Dashboard() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
-                    >
-                      <Activity className="h-6 w-6 text-white" />
-                    </motion.div>
+                      <motion.div
+                        whileHover={{ scale: 1.1 }}
+                        className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
+                      >
+                        <ActivityIcon className="h-6 w-6 text-white" />
+                      </motion.div>
                       <div>
                         <CardTitle>System Performance</CardTitle>
                         <CardDescription>Real-time metrics and health indicators</CardDescription>
@@ -989,7 +989,7 @@ export default function Dashboard() {
                         transition={{ delay: 0.6 + index * 0.1, duration: 0.5 }}
                         className="text-center p-4 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all duration-200"
                       >
-                        <motion.div 
+                        <motion.div
                           whileHover={{ scale: 1.1 }}
                           className={`inline-flex p-2 rounded-lg ${metric.bgColor} mb-2`}
                         >
@@ -1015,12 +1015,12 @@ export default function Dashboard() {
                 >
                   <CardHeader>
                     <div className="flex items-center space-x-3">
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      className="p-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg"
-                    >
-                      <CheckCircle className="h-6 w-6 text-white" />
-                    </motion.div>
+                      <motion.div
+                        whileHover={{ scale: 1.1 }}
+                        className="p-2 bg-gradient-to-br from-blue-600 to-blue-800 rounded-lg"
+                      >
+                        <CheckCircle className="h-6 w-6 text-white" />
+                      </motion.div>
                       <div>
                         <CardTitle>Integration Health</CardTitle>
                         <CardDescription>Status of external system integrations</CardDescription>
@@ -1077,12 +1077,12 @@ export default function Dashboard() {
                 >
                   <CardHeader>
                     <div className="flex items-center space-x-3">
-                    <motion.div
-                      whileHover={{ scale: 1.1 }}
-                      className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
-                    >
-                      <Activity className="h-6 w-6 text-white" />
-                    </motion.div>
+                      <motion.div
+                        whileHover={{ scale: 1.1 }}
+                        className="p-2 bg-gradient-to-br from-blue-700 to-blue-900 rounded-lg"
+                      >
+                        <ActivityIcon className="h-6 w-6 text-white" />
+                      </motion.div>
                       <div>
                         <CardTitle>Recent Activity</CardTitle>
                         <CardDescription>Latest system events and operations</CardDescription>
@@ -1202,7 +1202,7 @@ export default function Dashboard() {
 // Landing Page Component
 function LandingPage() {
   const router = useRouter()
-  
+
   const features = [
     {
       icon: Brain,
@@ -1307,7 +1307,7 @@ function LandingPage() {
               </span>
             </h1>
             <p className="text-xl md:text-2xl text-slate-600 dark:text-slate-300 max-w-4xl mx-auto leading-relaxed mb-6">
-              Enterprise-grade document intelligence for project managers, business analysts, and process improvement professionals. 
+              Enterprise-grade document intelligence for project managers, business analysts, and process improvement professionals.
               Leverage compounding AI to transform requirements gathering, stakeholder analysis, and strategic documentation.
             </p>
             <p className="text-lg text-slate-500 dark:text-slate-400 max-w-3xl mx-auto font-medium">
@@ -1341,27 +1341,27 @@ function LandingPage() {
               {/* Four Segments in Grid Layout */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
                 {[
-                  { 
-                    icon: "🔍", 
-                    title: "Gather", 
+                  {
+                    icon: "🔍",
+                    title: "Gather",
                     description: "Collect project documents\nExtract stakeholder context\nBuild knowledge foundation",
                     color: "from-blue-500 to-blue-600"
                   },
-                  { 
-                    icon: "🧠", 
-                    title: "Process", 
+                  {
+                    icon: "🧠",
+                    title: "Process",
                     description: "6-stage intelligent pipeline\nContext compression & injection\nMulti-provider AI generation",
                     color: "from-blue-600 to-blue-700"
                   },
-                  { 
-                    icon: "📊", 
-                    title: "Analyze", 
+                  {
+                    icon: "📊",
+                    title: "Analyze",
                     description: "Real-time analytics & insights\nToken usage optimization\nQuality metrics tracking",
                     color: "from-blue-700 to-blue-800"
                   },
-                  { 
-                    icon: "🔄", 
-                    title: "Evolve", 
+                  {
+                    icon: "🔄",
+                    title: "Evolve",
                     description: "Compounding intelligence\nKnowledge graph growth\nContinuous improvement",
                     color: "from-blue-800 to-blue-900"
                   }
@@ -1448,7 +1448,7 @@ function LandingPage() {
               variant="outline"
               className="border-2 border-blue-700 dark:border-blue-600 text-blue-800 dark:text-blue-400 px-8 py-4 text-lg hover:bg-blue-50 dark:hover:bg-blue-900/20"
             >
-              <Activity className="mr-2 h-5 w-5" />
+              <ActivityIcon className="mr-2 h-5 w-5" />
               View Case Studies
             </Button>
           </motion.div>
@@ -1545,12 +1545,12 @@ function LandingPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-center text-slate-600 dark:text-slate-300 mb-8 max-w-4xl mx-auto leading-relaxed">
-                  ADPA's intelligent compression engine analyzes documents across multiple knowledge domains, 
-                  extracting key topics and building contextualized summaries primed with domain expertise. 
-                  Each knowledge area maintains its own compression matrix, ensuring critical information is preserved 
+                  ADPA's intelligent compression engine analyzes documents across multiple knowledge domains,
+                  extracting key topics and building contextualized summaries primed with domain expertise.
+                  Each knowledge area maintains its own compression matrix, ensuring critical information is preserved
                   while achieving up to 80% token reduction.
                 </p>
-                
+
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                   {[
                     {
@@ -1570,7 +1570,7 @@ function LandingPage() {
                     {
                       domain: "Data Management",
                       primer: "DMBOK Framework",
-                      icon: Activity,
+                      icon: ActivityIcon,
                       topics: "Data Governance, Quality, Architecture, Security",
                       color: "from-blue-700 to-blue-800"
                     },
@@ -1614,9 +1614,9 @@ function LandingPage() {
                     Context Building Intelligence
                   </h4>
                   <p className="text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Our AI analyzes each document through domain-specific lenses, identifying key concepts, 
-                    relationships, and dependencies. The system builds rich contextual summaries that maintain 
-                    semantic accuracy while dramatically reducing token consumption. Each summary is tagged with 
+                    Our AI analyzes each document through domain-specific lenses, identifying key concepts,
+                    relationships, and dependencies. The system builds rich contextual summaries that maintain
+                    semantic accuracy while dramatically reducing token consumption. Each summary is tagged with
                     relevance scores, confidence metrics, and cross-domain linkages for optimal reuse.
                   </p>
                 </div>
@@ -1652,7 +1652,7 @@ function LandingPage() {
                     {
                       stage: "2. Context Gathering",
                       description: "Collects relevant project documents, stakeholder information, and historical context",
-                      icon: Activity,
+                      icon: ActivityIcon,
                       color: "from-blue-450 to-blue-550"
                     },
                     {
@@ -1670,7 +1670,7 @@ function LandingPage() {
                     {
                       stage: "5. Smart Compression",
                       description: "Topic-centric compression with domain primers, achieving 80% token reduction",
-                      icon: Activity,
+                      icon: ActivityIcon,
                       color: "from-blue-600 to-blue-700"
                     },
                     {
@@ -1700,7 +1700,7 @@ function LandingPage() {
                     {
                       stage: "10. Enterprise Integration",
                       description: "Seamless export to SharePoint, Confluence, Jira, and enterprise document systems",
-                      icon: Activity,
+                      icon: ActivityIcon,
                       color: "from-blue-900 to-slate-900"
                     }
                   ].map((stage, index) => (
@@ -1846,7 +1846,7 @@ function LandingPage() {
                   >
                     <div className="flex items-start space-x-4 mb-4">
                       <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center shadow-lg flex-shrink-0">
-                        <Activity className="h-8 w-8 text-white" />
+                        <ActivityIcon className="h-8 w-8 text-white" />
                       </div>
                       <div>
                         <h4 className="font-bold text-slate-800 dark:text-slate-100 text-lg mb-1">
@@ -1935,8 +1935,8 @@ function LandingPage() {
                     <div className="flex-1">
                       <h4 className="font-bold text-2xl mb-3">Proactive Intelligence, Not Reactive Management</h4>
                       <p className="text-blue-100 leading-relaxed text-base">
-                        ADPA's advanced features transform traditional project management from reactive firefighting to proactive intelligence. 
-                        Detect issues before they become problems, optimize resource allocation in real-time, and maintain perfect alignment 
+                        ADPA's advanced features transform traditional project management from reactive firefighting to proactive intelligence.
+                        Detect issues before they become problems, optimize resource allocation in real-time, and maintain perfect alignment
                         from portfolio strategy down to individual tasks. Estimated ROI: <strong className="text-white">300-500% over 18 months</strong>.
                       </p>
                     </div>
@@ -2001,7 +2001,7 @@ function LandingPage() {
               Turn Insight Into Action
             </h2>
             <p className="text-xl text-blue-100 mb-8 max-w-2xl mx-auto">
-              Discover how ADPA's compounding intelligence platform helps Fortune 500 organizations 
+              Discover how ADPA's compounding intelligence platform helps Fortune 500 organizations
               accelerate project delivery, reduce costs by 80%, and maintain enterprise-grade compliance.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">

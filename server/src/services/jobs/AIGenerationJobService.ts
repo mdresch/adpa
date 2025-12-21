@@ -9,8 +9,8 @@
  * backward compatibility with static methods.
  */
 
-import { pool } from '@/database/connection'
-import { logger } from '@/utils/logger'
+import { pool } from '../../database/connection'
+import { logger } from '../../utils/logger'
 import { aiService } from '../aiService'
 import { ContextAwareAIService } from '../../modules/context/integration'
 import { io } from '../../server'
@@ -152,7 +152,7 @@ export class AIGenerationJobService {
    */
   private static async generateContent(jobData: AIGenerationJobData, deps?: QueueServiceDependencies): Promise<any> {
     const { prompt, provider, model, temperature, max_tokens, template_id, variables, userId, projectId, documentIds, use_context, include_integrations, custom_context } = jobData
-    
+
     const useContext = !!use_context || !!projectId || !!documentIds || !!template_id
     const contextAI = deps?.contextAwareAIService || ContextAwareAIService
     const ai = deps?.aiService || aiService
@@ -202,7 +202,7 @@ export class AIGenerationJobService {
       const docNameProvided = name && name.trim() ? name.trim() : null
       const templateName = variables?.template_name || jobData.template_name || null
       const docName = docNameProvided || templateName || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
-      
+
       const rawContent = result?.content ? result.content : result
       const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
       const projectIdForDoc = projectId || variables?.project_id || null
@@ -310,7 +310,7 @@ export class AIGenerationJobService {
    */
   private static async calculateQualityMetrics(content: string, metadata: any): Promise<any> {
     const { analyzeDocumentQuality } = await import('../../utils/documentMetadata')
-    
+
     const tempMetadata = {
       wordCount: metadata.wordCount,
       characterCount: metadata.characterCount,
@@ -556,7 +556,7 @@ export class AIGenerationJobService {
       const docName = (jobData.name && jobData.name.trim()) ? jobData.name.trim() : 'Generated Document'
 
       log.info(`[Baseline Validation] Checking document ${documentId} against project ${projectIdForValidation} baseline`)
-      
+
       const drifts = await baselineService.validateDocumentAgainstBaseline(
         projectIdForValidation,
         documentId,
@@ -599,7 +599,7 @@ export class AIGenerationJobService {
     const log = deps?.logger || logger
     try {
       const provider = jobData.provider || 'openai'
-      
+
       // Get provider ID for audit log
       const providerResult = await db.query(
         'SELECT id FROM ai_providers WHERE name = $1 LIMIT 1',
@@ -673,7 +673,7 @@ export class AIGenerationJobService {
         // Fetch document row for complete event data
         const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [createdDocumentId])
         const createdDocumentRow = docResult.rows[0] || null
-        
+
         ws.to(`project:${projectIdForNotification}`).emit("document:created", {
           document: createdDocumentRow,
           documentId: createdDocumentId,
@@ -714,7 +714,7 @@ export class AIGenerationJobService {
       SET status = 'failed', error_message = $1, 
           started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
           processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
-          completed_at = CURRENT_TIMESTAMP
+          failed_at = CURRENT_TIMESTAMP
       WHERE id = $2
     `,
       [errorMessage, jobId]

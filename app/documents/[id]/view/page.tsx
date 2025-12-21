@@ -29,10 +29,11 @@ import {
   Settings,
   History,
   Star,
-  Sparkles,
+  Sparkles
 } from "@/components/ui/icons-shim"
 import { useAuth } from "@/contexts/AuthContext"
 import { apiClient } from "@/lib/api"
+import { useWebSocket } from "@/contexts/WebSocketContext"
 import { toast } from "sonner"
 import ReactMarkdown from "react-markdown"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
@@ -90,7 +91,7 @@ export default function DocumentViewerPage() {
   const params = useParams()
   const router = useRouter()
   const documentId = params.id as string
-  
+
   const [document, setDocument] = useState<DocumentData | null>(null)
   const [versions, setVersions] = useState<DocumentVersion[]>([])
   const [loading, setLoading] = useState(true)
@@ -101,12 +102,12 @@ export default function DocumentViewerPage() {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [showTableOfContents, setShowTableOfContents] = useState(false)
-  const [tableOfContents, setTableOfContents] = useState<Array<{id: string, title: string, level: number}>>([])
+  const [tableOfContents, setTableOfContents] = useState<Array<{ id: string, title: string, level: number }>>([])
   const [readingMode, setReadingMode] = useState<'normal' | 'focus' | 'print'>('normal')
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base')
   const [lineHeight, setLineHeight] = useState<'tight' | 'normal' | 'relaxed'>('normal')
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
-  
+
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
 
@@ -120,6 +121,69 @@ export default function DocumentViewerPage() {
     handleApplyResolution,
     dismissDriftAlert
   } = useDriftDetection(documentId, document?.project_id)
+
+  // WebSocket event handlers for conflict and regeneration events
+  const { on, off, joinRoom, leaveRoom } = useWebSocket()
+  useEffect(() => {
+    // Join the document room to receive events
+    const documentRoom = `document:${documentId}`
+    joinRoom(documentRoom)
+
+    const handleConflictDetected = (data: {
+      jobId: string;
+      conflictId: string;
+      conflictDetails: any;
+      resolutionOptions: string[];
+    }) => {
+      try {
+        toast.warning(`Template conflict detected during regeneration: ${data.conflictDetails.template?.name || 'Unknown Template'}`)
+        // The conflict dialog will be shown by the project page
+      } catch (err) {
+        console.warn('Error handling document:regeneration:conflict_detected event', err)
+      }
+    }
+
+    const handleConflictResolved = (data: {
+      conflictId: string;
+      resolutionMethod: string;
+      documentId: string;
+      newVersionId?: string;
+    }) => {
+      try {
+        if (data.documentId === documentId) {
+          toast.success(`Conflict resolved using ${data.resolutionMethod}`)
+          fetchDocument() // Refresh document to show updates
+        }
+      } catch (err) {
+        console.warn('Error handling document:conflict_resolved event', err)
+      }
+    }
+
+    const handleRegenerationCompleted = (data: {
+      jobId: string;
+      versionId: string;
+      versionNumber: string;
+      documentName?: string;
+    }) => {
+      try {
+        toast.success(`Document regeneration completed (v${data.versionNumber})`)
+        fetchDocument() // Refresh document to show the new version
+      } catch (err) {
+        console.warn('Error handling document:regeneration:completed event', err)
+      }
+    }
+
+    on("document:regeneration:conflict_detected", handleConflictDetected)
+    on("document:conflict_resolved", handleConflictResolved)
+    on("document:regeneration:completed", handleRegenerationCompleted)
+
+    return () => {
+      off("document:regeneration:conflict_detected", handleConflictDetected)
+      off("document:conflict_resolved", handleConflictResolved)
+      off("document:regeneration:completed", handleRegenerationCompleted)
+      leaveRoom(documentRoom)
+    }
+  }, [documentId, fetchDocument, joinRoom, leaveRoom, on, off])
 
   const [showResolutionDialog, setShowResolutionDialog] = useState(false)
   const [selectedStrategy, setSelectedStrategy] = useState<'conservative' | 'balanced' | 'permissive'>('balanced')
@@ -143,7 +207,7 @@ export default function DocumentViewerPage() {
       const response = await apiClient.request<{
         document: DocumentData
       }>(`/documents/${documentId}`)
-      
+
       if (response.document) {
         setDocument(response.document)
         setEditedContent(response.document.content)
@@ -254,10 +318,10 @@ This security architecture provides a comprehensive framework for protecting our
 
   const fetchVersions = async (projectId?: string) => {
     if (!projectId) return
-    
+
     try {
       const response = await apiClient.request<DocumentVersion[]>(`/projects/${projectId}/documents/${documentId}/versions`)
-      
+
       if (response && Array.isArray(response)) {
         setVersions(response)
       } else {
@@ -289,7 +353,7 @@ This security architecture provides a comprehensive framework for protecting our
 
   const handleSave = async () => {
     if (!document || !documentId || !editedContent) return
-    
+
     try {
       const response = await apiClient.request(`/documents/${documentId}`, {
         method: 'PUT',
@@ -298,7 +362,7 @@ This security architecture provides a comprehensive framework for protecting our
           changes_summary: "Updated document content"
         })
       })
-      
+
       if ((response as any).message) {
         setDocument(prev => prev ? { ...prev, content: editedContent, updated_at: new Date().toISOString() } : null)
         setIsEditing(false)
@@ -341,22 +405,22 @@ This security architecture provides a comprehensive framework for protecting our
     }
 
     const pdf = new jsPDF()
-    
+
     // Add title
     pdf.setFontSize(20)
     pdf.text(doc.title || 'Untitled Document', 20, 30)
-    
+
     // Add metadata
     pdf.setFontSize(12)
     pdf.text(`Author: ${doc.author || 'Unknown'}`, 20, 50)
     pdf.text(`Created: ${new Date(doc.created_at).toLocaleDateString()}`, 20, 60)
     pdf.text(`Updated: ${new Date(doc.updated_at).toLocaleDateString()}`, 20, 70)
-    
+
     // Add content (simplified - in production, you'd want proper markdown to PDF conversion)
     pdf.setFontSize(10)
     const lines = doc.content.split('\n')
     let yPosition = 90
-    
+
     lines.forEach(line => {
       if (yPosition > 280) {
         pdf.addPage()
@@ -365,7 +429,7 @@ This security architecture provides a comprehensive framework for protecting our
       pdf.text(line.substring(0, 80), 20, yPosition)
       yPosition += 10
     })
-    
+
     pdf.save(`${doc.title || 'document'}.pdf`)
   }
 
@@ -414,7 +478,7 @@ This security architecture provides a comprehensive framework for protecting our
         ],
       }],
     })
-    
+
     const buffer = await Packer.toBuffer(docxDoc)
     saveAs(new Blob([buffer as any]), `${doc.title || 'document'}.docx`)
   }
@@ -435,7 +499,7 @@ This security architecture provides a comprehensive framework for protecting our
 
 ${doc.content}
 `
-    
+
     const blob = new Blob([markdownContent], { type: 'text/markdown' })
     saveAs(blob, `${doc.title || 'document'}.md`)
   }
@@ -487,8 +551,8 @@ ${doc.content}
 
     try {
       const lines = content.split('\n')
-      const toc: Array<{id: string, title: string, level: number}> = []
-      
+      const toc: Array<{ id: string, title: string, level: number }> = []
+
       lines.forEach((line, index) => {
         const match = line.match(/^(#{1,6})\s+(.+)$/)
         if (match) {
@@ -498,7 +562,7 @@ ${doc.content}
           toc.push({ id, title, level })
         }
       })
-      
+
       setTableOfContents(toc)
     } catch (error) {
       console.error('Error generating table of contents:', error)
@@ -541,7 +605,7 @@ ${doc.content}
 
   const handleAutoSave = async () => {
     if (!document || !documentId || isSaving || !editedContent) return
-    
+
     setIsSaving(true)
     try {
       const response = await apiClient.request(`/documents/${documentId}`, {
@@ -551,7 +615,7 @@ ${doc.content}
           changes_summary: "Auto-saved changes"
         })
       })
-      
+
       if ((response as any).message) {
         setLastSaved(new Date())
         setDocument(prev => prev ? { ...prev, content: editedContent, updated_at: new Date().toISOString() } : null)
@@ -572,7 +636,7 @@ ${doc.content}
     max_tokens?: number
   }) => {
     if (!documentId) return
-    
+
     try {
       await regenerate({
         documentId,
@@ -633,7 +697,7 @@ ${doc.content}
       <Sidebar />
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
-        
+
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-7xl mx-auto p-6">
             <PageTransition>
@@ -671,7 +735,7 @@ ${doc.content}
                       </div>
                     </div>
                   </div>
-                  
+
                   <div className="flex items-center space-x-2">
                     {/* Reading Mode Controls */}
                     <div className="flex items-center space-x-1 border rounded-md p-1">
@@ -859,14 +923,12 @@ ${doc.content}
                       </div>
                     </div>
                     <div className="h-full overflow-y-auto p-8">
-                      <div className={`prose max-w-4xl mx-auto ${
-                        fontSize === 'sm' ? 'prose-sm' : 
-                        fontSize === 'lg' ? 'prose-lg' : 
-                        fontSize === 'xl' ? 'prose-xl' : 'prose-base'
-                      } ${
-                        lineHeight === 'tight' ? 'prose-tight' : 
-                        lineHeight === 'relaxed' ? 'prose-relaxed' : ''
-                      }`}>
+                      <div className={`prose max-w-4xl mx-auto ${fontSize === 'sm' ? 'prose-sm' :
+                        fontSize === 'lg' ? 'prose-lg' :
+                          fontSize === 'xl' ? 'prose-xl' : 'prose-base'
+                        } ${lineHeight === 'tight' ? 'prose-tight' :
+                          lineHeight === 'relaxed' ? 'prose-relaxed' : ''
+                        }`}>
                         <ReactMarkdown
                           components={{
                             code({ node, inline, className, children, ...props }: any) {
@@ -970,17 +1032,14 @@ ${doc.content}
                               placeholder="Edit document content..."
                             />
                           ) : (
-                            <div className={`prose max-w-none ${
-                              readingMode === 'focus' ? 'prose-lg max-w-3xl mx-auto' :
+                            <div className={`prose max-w-none ${readingMode === 'focus' ? 'prose-lg max-w-3xl mx-auto' :
                               readingMode === 'print' ? 'prose-print' : 'prose-base'
-                            } ${
-                              fontSize === 'sm' ? 'prose-sm' : 
-                              fontSize === 'lg' ? 'prose-lg' : 
-                              fontSize === 'xl' ? 'prose-xl' : 'prose-base'
-                            } ${
-                              lineHeight === 'tight' ? 'prose-tight' : 
-                              lineHeight === 'relaxed' ? 'prose-relaxed' : ''
-                            }`}>
+                              } ${fontSize === 'sm' ? 'prose-sm' :
+                                fontSize === 'lg' ? 'prose-lg' :
+                                  fontSize === 'xl' ? 'prose-xl' : 'prose-base'
+                              } ${lineHeight === 'tight' ? 'prose-tight' :
+                                lineHeight === 'relaxed' ? 'prose-relaxed' : ''
+                              }`}>
                               <ReactMarkdown
                                 components={{
                                   code({ node, inline, className, children, ...props }: any) {
@@ -1050,12 +1109,11 @@ ${doc.content}
                               {tableOfContents.map((item) => (
                                 <div
                                   key={item.id}
-                                  className={`cursor-pointer hover:text-primary transition-colors ${
-                                    item.level === 1 ? 'font-medium text-sm' :
+                                  className={`cursor-pointer hover:text-primary transition-colors ${item.level === 1 ? 'font-medium text-sm' :
                                     item.level === 2 ? 'text-sm ml-4' :
-                                    item.level === 3 ? 'text-xs ml-8' :
-                                    'text-xs ml-12'
-                                  }`}
+                                      item.level === 3 ? 'text-xs ml-8' :
+                                        'text-xs ml-12'
+                                    }`}
                                   onClick={() => {
                                     const element = window.document.querySelector(`#${item.id}`)
                                     if (element) {
@@ -1205,7 +1263,7 @@ ${doc.content}
         documentId={documentId}
         currentTemplate={document?.template_id}
         currentTemplateName={
-          document?.metadata?.templateId || 
+          document?.metadata?.templateId ||
           (document && 'template_name' in document ? (document as { template_name?: string }).template_name : undefined)
         }
         currentVersion={document ? String(document.version) : '1.0'}

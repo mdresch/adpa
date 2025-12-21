@@ -46,7 +46,7 @@ export function incrementVersion(
   incrementType: VersionIncrementType
 ): string {
   const version = parseSemanticVersion(currentVersion)
-  
+
   switch (incrementType) {
     case 'major':
       return `${version.major + 1}.0.0`
@@ -68,7 +68,7 @@ export function incrementVersion(
 export function compareVersions(v1: string, v2: string): number {
   const version1 = parseSemanticVersion(v1)
   const version2 = parseSemanticVersion(v2)
-  
+
   if (version1.major !== version2.major) {
     return version1.major - version2.major
   }
@@ -100,6 +100,13 @@ export function getNextManualVersion(currentVersion: string): string {
   return incrementVersion(currentVersion, 'patch')
 }
 
+/**
+ * Get next version for template change (defaults to major increment)
+ */
+export function getNextTemplateVersion(currentVersion: string): string {
+  return incrementVersion(currentVersion, 'major')
+}
+
 export const semanticVersionService = {
   parse: parseSemanticVersion,
   format: formatSemanticVersion,
@@ -107,6 +114,7 @@ export const semanticVersionService = {
   compare: compareVersions,
   isValid: isValidVersion,
   getNextAIVersion,
-  getNextManualVersion
+  getNextManualVersion,
+  getNextTemplateVersion
 }
 

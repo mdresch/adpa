@@ -1,14 +1,14 @@
 import OpenAI from "openai"
-import { logger } from "../../utils/logger"
+import { createOpenAI } from '@ai-sdk/openai'
+import { generateText } from 'ai'
 import { pool } from "../../database/connection"
+import { logger } from "../../utils/logger"
 
+// Types for internal use
 export interface OpenAIConfig {
   apiKey: string
   organization?: string
   baseURL?: string
-  timeout?: number
-  maxRetries?: number
-  defaultHeaders?: Record<string, string>
 }
 
 export interface OpenAIProvider {
@@ -32,10 +32,7 @@ export interface OpenAIProvider {
 
 export interface OpenAIRequest {
   model: string
-  messages: Array<{
-    role: "system" | "user" | "assistant"
-    content: string
-  }>
+  messages: Array<{ role: 'system' | 'user' | 'assistant', content: string }>
   temperature?: number
   max_tokens?: number
   top_p?: number
@@ -53,140 +50,141 @@ export interface OpenAIResponse {
   choices: Array<{
     index: number
     message: {
-      role: string
-      content: string
+      role: 'assistant'
+      content: string | null
     }
     finish_reason: string
+    delta?: {
+      content?: string
+    }
   }>
-  usage: {
+  usage?: {
     prompt_tokens: number
     completion_tokens: number
     total_tokens: number
   }
-  provider: string
-  metadata?: any
+  provider?: string
 }
 
-export interface OpenAIError {
-  type: "rate_limit" | "authentication" | "api_error" | "network_error" | "timeout"
+interface OpenAIError {
   message: string
+  type: string
   code?: string
-  statusCode?: number
-  retryAfter?: number
+  param?: string
 }
 
-class OpenAIConnector {
+export class OpenAIConnector {
   private providers: Map<string, OpenAIProvider> = new Map()
-  private clients: Map<string, OpenAI> = new Map()
+  private clients: Map<string, OpenAI> = new Map() // Keep native clients for management/listing
   private failoverQueue: string[] = []
+  private readonly RATE_LIMIT_RESET_INTERVAL = 60 * 1000 // 1 minute
 
   constructor() {
-    // Don't initialize providers in constructor to avoid startup crashes
-    // Providers will be initialized when needed
+    this.startRateLimitResetTimer()
   }
 
   /**
-   * Initialize OpenAI providers from database
+   * Initialize providers from database
    */
   async initializeProviders(): Promise<void> {
     try {
-      logger.info("Initializing OpenAI providers from database...")
-      const result = await pool.query(`
-        SELECT 
-          id, name, api_key_encrypted, configuration, is_active,
-          COALESCE(priority, 1) as priority,
-          COALESCE(rate_limits, '{}') as rate_limits,
-          COALESCE(usage_stats, '{}') as usage_stats
-        FROM ai_providers 
-        WHERE provider_type IN ('openai', 'azure') 
-        ORDER BY priority ASC, name ASC
-      `)
+      const result = await pool.query(
+        "SELECT * FROM ai_providers WHERE provider_type = 'openai' AND is_active = true ORDER BY priority ASC"
+      )
 
-      logger.info(`Found ${result.rows.length} OpenAI/Azure providers in database`)
-      
-  for (const row of result.rows) {
-        logger.info(`Processing OpenAI provider: ${row.name} (${row.id})`)
-        const config: OpenAIConfig = {
-          apiKey: this.decryptApiKey(row.api_key_encrypted),
-          ...row.configuration
+      for (const row of result.rows) {
+        // Decrypt API key (assuming it's stored encrypted, for now just using raw or base64)
+        // In a real app, use proper encryption/decryption
+        let apiKey = row.api_key_encrypted
+        try {
+          // If it looks like base64, try decoding
+          if (!apiKey.startsWith('sk-')) {
+            apiKey = Buffer.from(apiKey, 'base64').toString('utf-8')
+          }
+        } catch (e) {
+          // Keep as is if decode fails
         }
 
-        const rateLimits = row.rate_limits || {}
-        const usageStats = row.usage_stats || {}
+        const config: OpenAIConfig = {
+          apiKey,
+          organization: row.configuration?.organization,
+          baseURL: row.configuration?.baseURL
+        }
 
-  const provider: OpenAIProvider = {
+        const provider: OpenAIProvider = {
           id: row.id,
           name: row.name,
           config,
           isActive: row.is_active,
           priority: row.priority,
           rateLimits: {
-            requestsPerMinute: rateLimits.requestsPerMinute || 3500,
-            tokensPerMinute: rateLimits.tokensPerMinute || 90000,
-            requestsPerDay: rateLimits.requestsPerDay || 10000,
+            requestsPerMinute: row.rate_limits?.requestsPerMinute || 3500,
+            tokensPerMinute: row.rate_limits?.tokensPerMinute || 90000,
+            requestsPerDay: row.rate_limits?.requestsPerDay || 10000
           },
           currentUsage: {
-            requestsThisMinute: usageStats.requestsThisMinute || 0,
-            tokensThisMinute: usageStats.tokensThisMinute || 0,
-            requestsToday: usageStats.requestsToday || 0,
-            lastReset: new Date(usageStats.lastReset || Date.now()),
+            requestsThisMinute: 0,
+            tokensThisMinute: 0,
+            requestsToday: 0,
+            lastReset: new Date()
           }
         }
 
-        try {
-          await this.addProvider(provider)
-          logger.info(`Successfully added OpenAI provider: ${provider.name}`)
-        } catch (err) {
-          // Don't fail startup for a single bad/missing provider; log and continue
-          logger.warn(`Skipping OpenAI provider '${provider.name}' during initialization:`, err)
-          continue
-        }
+        this.addProvider(provider)
       }
 
       logger.info(`Initialized ${this.providers.size} OpenAI providers`)
     } catch (error) {
       logger.error("Failed to initialize OpenAI providers:", error)
-      // Don't throw error to prevent server crash - just log and continue
+      throw error // Re-throw to handle initialization failure
     }
   }
 
   /**
-   * Add a new OpenAI provider
+   * Add a provider to the pool
    */
-  async addProvider(provider: OpenAIProvider): Promise<void> {
-    try {
-      // Validate API key
-      await this.validateApiKey(provider.config.apiKey)
+  addProvider(provider: OpenAIProvider): void {
+    // Validate config
+    if (!provider.config.apiKey) {
+      logger.warn(`Skipping provider ${provider.name}: No API key provided`)
+      return
+    }
 
-      // Create OpenAI client
+    try {
+      // Initialize native client for management tasks
       const client = new OpenAI({
         apiKey: provider.config.apiKey,
         organization: provider.config.organization,
         baseURL: provider.config.baseURL,
-        timeout: provider.config.timeout || 60000,
-        maxRetries: provider.config.maxRetries || 3,
-        defaultHeaders: provider.config.defaultHeaders,
+        timeout: 30000,
+        maxRetries: 1 // We handle retries manually for better failover control
       })
 
       this.providers.set(provider.name, provider)
       this.clients.set(provider.name, client)
-
-      // Update failover queue based on priority
       this.updateFailoverQueue()
 
       logger.info(`Added OpenAI provider: ${provider.name}`)
     } catch (error) {
-      logger.error(`Failed to add OpenAI provider ${provider.name}:`, error)
-      throw error
+      logger.error(`Failed to initialize client for provider ${provider.name}:`, error)
     }
   }
 
   /**
-   * Generate completion using OpenAI API with failover logic
+   * Update the failover queue based on priority
+   */
+  private updateFailoverQueue(): void {
+    this.failoverQueue = Array.from(this.providers.values())
+      .sort((a, b) => a.priority - b.priority)
+      .map(p => p.name)
+  }
+
+  /**
+   * Generate completion with failover support
    */
   async generateCompletion(request: OpenAIRequest, preferredProvider?: string): Promise<OpenAIResponse> {
-    const providers = this.getAvailableProviders(preferredProvider)
-    
+    const providers = this.getAvailableProvidersList(preferredProvider)
+
     if (providers.length === 0) {
       throw new Error("No available OpenAI providers")
     }
@@ -196,7 +194,6 @@ class OpenAIConnector {
     for (const providerName of providers) {
       try {
         const provider = this.providers.get(providerName)!
-        const client = this.clients.get(providerName)!
 
         // Check rate limits
         if (!this.checkRateLimits(provider)) {
@@ -204,18 +201,20 @@ class OpenAIConnector {
           continue
         }
 
-        // Make API call
-        const response = await this.makeApiCall(client, request, provider)
-        
+        // Make API call using Vercel AI SDK
+        const response = await this.makeApiCall(provider, request)
+
         // Update usage statistics
-        await this.updateUsageStats(provider, response.usage)
+        if (response.usage) {
+          await this.updateUsageStats(provider, response.usage)
+        }
 
         return {
           ...response,
           provider: providerName,
         }
 
-      } catch (error) {
+      } catch (error: any) {
         lastError = this.parseError(error)
         logger.warn(`Provider ${providerName} failed: ${lastError.message}`)
 
@@ -239,320 +238,241 @@ class OpenAIConnector {
   }
 
   /**
-   * Get available models for OpenAI
+   * Get list of available providers sorted by priority
    */
-  async getAvailableModels(providerName?: string): Promise<any[]> {
-    const defaultModels = [
-      { id: 'gpt-4o', name: 'GPT-4o', description: 'Most capable multimodal model', context_window: 128000, capabilities: ['text', 'vision', 'function-calling'] },
-      { id: 'gpt-4o-mini', name: 'GPT-4o Mini', description: 'Fast and affordable', context_window: 128000, capabilities: ['text', 'vision', 'function-calling'] },
-      { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Previous flagship model', context_window: 128000, capabilities: ['text', 'vision', 'function-calling'] },
-      { id: 'gpt-4', name: 'GPT-4', description: 'Original GPT-4', context_window: 8192, capabilities: ['text', 'function-calling'] },
-      { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Fast and cost-effective', context_window: 16385, capabilities: ['text', 'function-calling'] },
-    ]
+  private getAvailableProvidersList(preferred?: string): string[] {
+    let queue = [...this.failoverQueue]
 
-    if (!providerName) {
-      logger.info(`getAvailableModels called without providerName, returning defaults`)
-      return defaultModels
+    // If preferred provider is available and active, move to front
+    if (preferred && this.providers.has(preferred) && this.providers.get(preferred)!.isActive) {
+      queue = [preferred, ...queue.filter(p => p !== preferred)]
     }
 
-    try {
-      logger.info(`getAvailableModels called for provider: ${providerName}`)
-      logger.info(`Available clients: ${Array.from(this.clients.keys()).join(', ')}`)
-      logger.info(`Available providers: ${Array.from(this.providers.keys()).join(', ')}`)
-      
-      const client = this.clients.get(providerName)
-      if (!client) {
-        logger.warn(`No client found for provider: ${providerName}`)
-        return defaultModels
-      }
-
-      logger.info(`Found client for provider: ${providerName}, fetching models...`)
-      const response = await client.models.list()
-      
-      const models = response.data
-        .filter(model => model.id.startsWith("gpt-") || model.id.startsWith("o1-"))
-        .map(model => ({
-          id: model.id,
-          name: model.id.toUpperCase().replace(/-/g, ' '),
-          description: '',
-          context_window: (model as any).context_window || 128000,
-          capabilities: ['text']
-        }))
-        .sort((a, b) => a.id.localeCompare(b.id))
-      
-      logger.info(`✅ Discovered ${models.length} OpenAI models via API: ${models.map(m => m.id).join(', ')}`)
-      return models.length > 0 ? models : defaultModels
-    } catch (error) {
-      logger.warn(`Failed to fetch models for ${providerName}, using defaults:`, error)
-      return defaultModels
-    }
+    // Filter out inactive providers
+    return queue.filter(name => this.providers.get(name)!.isActive)
   }
 
   /**
-   * Test connection to OpenAI API
+   * Check if request is within rate limits
    */
-  async testConnection(providerName: string): Promise<boolean> {
-    try {
-      const client = this.clients.get(providerName)
-      if (!client) {
-        throw new Error(`Provider ${providerName} not found`)
-      }
+  public checkRateLimits(provider: OpenAIProvider): boolean {
+    const now = Date.now()
+    const { rateLimits, currentUsage } = provider
 
-      // Make a simple API call to test connection
-      await client.models.list()
-      return true
-    } catch (error) {
-      logger.error(`Connection test failed for ${providerName}:`, error)
-      return false
-    }
-  }
-
-  /**
-   * Get provider statistics
-   */
-  getProviderStats(providerName: string): OpenAIProvider | null {
-    return this.providers.get(providerName) || null
-  }
-
-  /**
-   * Get all provider statistics
-   */
-  getAllProviderStats(): OpenAIProvider[] {
-    return Array.from(this.providers.values())
-  }
-
-  // Private helper methods
-
-  private async validateApiKey(apiKey: string): Promise<void> {
-    if (!apiKey) {
-      throw new Error("API key is required")
-    }
-
-    // Accept both OpenAI format (sk-*) and Azure format (any string)
-    if (!apiKey.startsWith("sk-") && !apiKey.match(/^[A-Za-z0-9+/=]{20,}$/)) {
-      throw new Error("Invalid API key format")
-    }
-
-    try {
-      const testClient = new OpenAI({ apiKey })
-      await testClient.models.list()
-    } catch (error) {
-      throw new Error(`API key validation failed: ${error}`)
-    }
-  }
-
-  private decryptApiKey(encryptedKey: string): string {
-    // TODO: Implement proper encryption/decryption
-    try {
-      return Buffer.from(encryptedKey, "base64").toString("utf-8")
-    } catch {
-      return encryptedKey // Fallback to plain text
-    }
-  }
-
-  private updateFailoverQueue(): void {
-    logger.info(`updateFailoverQueue called - providers map size: ${this.providers.size}`)
-    const activeProviders = Array.from(this.providers.values()).filter(provider => provider.isActive)
-    logger.info(`Active providers: [${activeProviders.map(p => `${p.name} (priority: ${p.priority})`).join(', ')}]`)
-    
-    this.failoverQueue = activeProviders
-      .sort((a, b) => a.priority - b.priority)
-      .map(provider => provider.name)
-    
-    logger.info(`Updated failoverQueue: [${this.failoverQueue.join(', ')}]`)
-  }
-
-  private getAvailableProviders(preferredProvider?: string): string[] {
-    logger.info(`getAvailableProviders called - preferredProvider: ${preferredProvider}`)
-    logger.info(`failoverQueue: [${this.failoverQueue.join(', ')}]`)
-    logger.info(`providers map size: ${this.providers.size}`)
-    logger.info(`providers map keys: [${Array.from(this.providers.keys()).join(', ')}]`)
-    
-    const available = this.failoverQueue.filter(name => {
-      const provider = this.providers.get(name)
-      const isActive = provider?.isActive
-      const rateLimitOk = provider ? this.checkRateLimits(provider) : false
-      logger.info(`Provider ${name}: isActive=${isActive}, rateLimitOk=${rateLimitOk}`)
-      return isActive && rateLimitOk
-    })
-
-    logger.info(`Available providers after filtering: [${available.join(', ')}]`)
-
-    if (preferredProvider && available.includes(preferredProvider)) {
-      // Move preferred provider to front
-      const result = [preferredProvider, ...available.filter(name => name !== preferredProvider)]
-      logger.info(`Returning providers with preferred first: [${result.join(', ')}]`)
-      return result
-    }
-
-    logger.info(`Returning available providers: [${available.join(', ')}]`)
-    return available
-  }
-
-  private checkRateLimits(provider: OpenAIProvider): boolean {
-    const now = new Date()
-    const minutesSinceReset = (now.getTime() - provider.currentUsage.lastReset.getTime()) / (1000 * 60)
-
-    // Reset counters if a minute has passed
-    if (minutesSinceReset >= 1) {
-      provider.currentUsage.requestsThisMinute = 0
-      provider.currentUsage.tokensThisMinute = 0
-      provider.currentUsage.lastReset = now
-    }
-
-    // Reset daily counter if a day has passed
-    const daysSinceReset = minutesSinceReset / (60 * 24)
-    if (daysSinceReset >= 1) {
-      provider.currentUsage.requestsToday = 0
+    // Check reset timer
+    if (now - currentUsage.lastReset.getTime() > this.RATE_LIMIT_RESET_INTERVAL) {
+      this.resetRateLimits(provider)
     }
 
     // Check limits
-    return (
-      provider.currentUsage.requestsThisMinute < provider.rateLimits.requestsPerMinute &&
-      provider.currentUsage.tokensThisMinute < provider.rateLimits.tokensPerMinute &&
-      provider.currentUsage.requestsToday < provider.rateLimits.requestsPerDay
-    )
+    if (currentUsage.requestsThisMinute >= rateLimits.requestsPerMinute) {
+      return false
+    }
+
+    // Note: To verify tokens strictly, we'd need to estimate token count before request
+    // For now we check based on accumulated usage
+    if (currentUsage.tokensThisMinute >= rateLimits.tokensPerMinute) {
+      return false
+    }
+
+    // Check daily limit (approximate reset check)
+    if (currentUsage.requestsToday >= rateLimits.requestsPerDay) {
+      // Reset daily at midnight (simplified logic)
+      const today = new Date().setHours(0, 0, 0, 0)
+      const lastResetDay = new Date(currentUsage.lastReset).setHours(0, 0, 0, 0)
+
+      if (today > lastResetDay) {
+        currentUsage.requestsToday = 0
+      } else {
+        return false
+      }
+    }
+
+    return true
   }
 
-  private async makeApiCall(client: OpenAI, request: OpenAIRequest, provider: OpenAIProvider): Promise<any> {
-    const startTime = Date.now()
+  /**
+   * Execute API call using Vercel AI SDK
+   */
+  private async makeApiCall(provider: OpenAIProvider, request: OpenAIRequest): Promise<OpenAIResponse> {
+    const openai = createOpenAI({
+      apiKey: provider.config.apiKey,
+      organization: provider.config.organization,
+      baseURL: provider.config.baseURL,
+    })
 
-    try {
-      const response = await client.chat.completions.create({
-        model: request.model,
-        messages: request.messages,
-        temperature: request.temperature,
-        max_tokens: request.max_tokens,
-        top_p: request.top_p,
-        frequency_penalty: request.frequency_penalty,
-        presence_penalty: request.presence_penalty,
-        stop: request.stop,
-        stream: request.stream || false,
-      })
+    // Map legacy prompt/messages format if needed
+    // The request.messages is already in the correct format for AI SDK
 
-      const duration = Date.now() - startTime
-      logger.info(`OpenAI API call completed in ${duration}ms for provider ${provider.name}`)
+    const result = await generateText({
+      model: openai(request.model),
+      messages: request.messages as any, // Cast to any to avoid strict type checks on role
+      temperature: request.temperature,
+      maxTokens: request.max_tokens,
+      topP: request.top_p,
+      frequencyPenalty: request.frequency_penalty,
+      presencePenalty: request.presence_penalty,
+      stopSequences: typeof request.stop === 'string' ? [request.stop] : request.stop,
+    })
 
-      return response
-    } catch (error) {
-      const duration = Date.now() - startTime
-      logger.error(`OpenAI API call failed after ${duration}ms for provider ${provider.name}:`, error)
-      throw error
-    }
-  }
-
-  private async updateUsageStats(provider: OpenAIProvider, usage: any): Promise<void> {
-    try {
-      // Update in-memory stats
-      provider.currentUsage.requestsThisMinute += 1
-      provider.currentUsage.tokensThisMinute += usage.total_tokens || 0
-      provider.currentUsage.requestsToday += 1
-
-      // Update database stats
-      await pool.query(`
-        UPDATE ai_providers 
-        SET 
-          usage_stats = jsonb_set(
-            jsonb_set(
-              jsonb_set(
-                COALESCE(usage_stats, '{}'),
-                '{total_requests}',
-                (COALESCE((usage_stats->>'total_requests')::int, 0) + 1)::text::jsonb
-              ),
-              '{total_tokens}',
-              (COALESCE((usage_stats->>'total_tokens')::int, 0) + $2)::text::jsonb
-            ),
-            '{last_used}',
-            to_jsonb(CURRENT_TIMESTAMP)
-          ),
-          updated_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-      `, [provider.id, usage.total_tokens || 0])
-
-    } catch (error) {
-      logger.error(`Failed to update usage stats for provider ${provider.name}:`, error)
-    }
-  }
-
-  private parseError(error: any): OpenAIError {
-    if (error.status === 429) {
-      return {
-        type: "rate_limit",
-        message: "Rate limit exceeded",
-        statusCode: 429,
-        retryAfter: error.headers?.["retry-after"] ? parseInt(error.headers["retry-after"]) : 60
-      }
-    }
-
-    if (error.status === 401 || error.status === 403) {
-      return {
-        type: "authentication",
-        message: "Authentication failed",
-        statusCode: error.status
-      }
-    }
-
-    if (error.status >= 500) {
-      return {
-        type: "api_error",
-        message: "OpenAI API error",
-        statusCode: error.status
-      }
-    }
-
-    if (error.code === "ECONNRESET" || error.code === "ETIMEDOUT") {
-      return {
-        type: "network_error",
-        message: "Network error",
-        code: error.code
-      }
-    }
-
-    if (error.name === "TimeoutError") {
-      return {
-        type: "timeout",
-        message: "Request timeout"
-      }
+    // Normalize usage
+    const usage = {
+      prompt_tokens: result.usage.promptTokens,
+      completion_tokens: result.usage.completionTokens,
+      total_tokens: result.usage.totalTokens
     }
 
     return {
-      type: "api_error",
-      message: error.message || "Unknown error"
+      id: `chatcmpl-${Date.now()}`, // AI SDK doesn't always perform exposed ID in same way
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model: request.model,
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: result.text
+          },
+          finish_reason: result.finishReason
+        }
+      ],
+      usage
     }
   }
 
-  private isRetryableError(error: OpenAIError): boolean {
-    return ["rate_limit", "api_error", "network_error", "timeout"].includes(error.type)
+  private async updateUsageStats(provider: OpenAIProvider, usage: NonNullable<OpenAIResponse['usage']>) {
+    provider.currentUsage.requestsThisMinute++
+    provider.currentUsage.tokensThisMinute += usage.total_tokens
+    provider.currentUsage.requestsToday++
+
+    // Update DB asynchronously
+    try {
+      await pool.query(
+        `UPDATE ai_providers 
+         SET usage_stats = jsonb_set(
+           jsonb_set(
+             COALESCE(usage_stats, '{}'), 
+             '{requestsToday}', 
+             $2::text::jsonb
+           ),
+           '{tokensToday}',
+           (COALESCE((usage_stats->>'tokensToday')::int, 0) + $3)::text::jsonb
+         )
+         WHERE id = $1`,
+        [provider.id, provider.currentUsage.requestsToday, usage.total_tokens]
+      )
+    } catch (error) {
+      logger.error(`Failed to update usage stats for provider ${provider.name}`, error)
+    }
   }
 
+  /**
+   * Handle rate limit errors
+   */
   private async handleRateLimitError(providerName: string, error: OpenAIError): Promise<void> {
     const provider = this.providers.get(providerName)
     if (!provider) return
 
-    // Temporarily disable provider
+    logger.warn(`Rate limit hit for ${providerName}. Pausing provider for 1 minute.`)
+
+    // Deactivate temporarily
     provider.isActive = false
 
-    // Re-enable after retry period
-    const retryAfter = (error.retryAfter || 60) * 1000
+    // Schedule reactivation
     setTimeout(() => {
       provider.isActive = true
-      this.updateFailoverQueue()
-      logger.info(`Re-enabled provider ${providerName} after rate limit cooldown`)
-    }, retryAfter)
+      this.resetRateLimits(provider)
+      logger.info(`Reactivated provider ${providerName} after rate limit cooldown`)
+    }, 60000)
+  }
 
-    this.updateFailoverQueue()
-    logger.warn(`Temporarily disabled provider ${providerName} due to rate limit`)
+  private resetRateLimits(provider: OpenAIProvider) {
+    provider.currentUsage.requestsThisMinute = 0
+    provider.currentUsage.tokensThisMinute = 0
+    provider.currentUsage.lastReset = new Date()
+  }
+
+  private startRateLimitResetTimer() {
+    setInterval(() => {
+      for (const provider of this.providers.values()) {
+        if (Date.now() - provider.currentUsage.lastReset.getTime() > this.RATE_LIMIT_RESET_INTERVAL) {
+          this.resetRateLimits(provider)
+        }
+      }
+    }, 10000) // Check every 10 seconds
+  }
+
+  private parseError(error: any): OpenAIError {
+    if (error.response?.data?.error) {
+      return error.response.data.error
+    }
+    return {
+      message: error.message || "Unknown error",
+      type: error.type || "unknown",
+      code: error.code
+    }
+  }
+
+  private isRetryableError(error: OpenAIError): boolean {
+    const retryableCodes = [
+      'rate_limit_exceeded',
+      'insufficient_quota',
+      'server_error',
+      'timeout'
+    ]
+    return retryableCodes.includes(error.code || '') || error.type === 'server_error'
+  }
+
+  /**
+   * Get available models from providers
+   * Uses the native OpenAI client for this management task as AI SDK doesn't support listing models yet
+   */
+  async getAvailableModels(preferredProvider?: string): Promise<string[]> {
+    const providers = this.getAvailableProvidersList(preferredProvider)
+
+    // Default models if we can't fetch any
+    const defaultModels = ["gpt-4", "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-turbo"]
+
+    for (const providerName of providers) {
+      try {
+        const client = this.clients.get(providerName)
+        if (!client) continue
+
+        const response = await client.models.list()
+        const models = response.data
+          .filter(model => model.id.startsWith('gpt')) // Filter for GPT models
+          .map(model => model.id)
+
+        if (models.length > 0) {
+          return models
+        }
+      } catch (error) {
+        logger.warn(`Failed to fetch models from ${providerName}`, error)
+        continue
+      }
+    }
+
+    return defaultModels
+  }
+
+  /**
+   * Test connection to specific provider
+   * Keeping native client check for connection verification
+   */
+  async testConnection(providerName: string): Promise<boolean> {
+    try {
+      const client = this.clients.get(providerName)
+      if (!client) return false
+
+      await client.models.list()
+      return true
+    } catch (error) {
+      logger.error(`Connection test failed for provider ${providerName}`, error)
+      return false
+    }
   }
 }
 
 // Export singleton instance
 export const openaiConnector = new OpenAIConnector()
-
-// Export types and interfaces
-export type {
-  OpenAIConfig,
-  OpenAIProvider,
-  OpenAIRequest,
-  OpenAIResponse,
-  OpenAIError
-}

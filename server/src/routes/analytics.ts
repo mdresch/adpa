@@ -1,4 +1,5 @@
 import express from "express"
+import os from "os"
 import Joi from "joi"
 import { pool } from "../database/connection"
 import { authenticateToken, requirePermission } from "../middleware/auth"
@@ -18,11 +19,11 @@ interface AuthRequest extends express.Request {
 const router = express.Router()
 
 // Get dashboard analytics
-router.get("/dashboard", 
+router.get("/dashboard",
   authenticateToken,
   async (req: AuthRequest, res: express.Response) => {
-  const log = childLogger({ requestId: (req as any).requestId })
-  try {
+    const log = childLogger({ requestId: (req as any).requestId })
+    try {
       const userId = req.user?.id
 
       // Check cache first
@@ -76,7 +77,7 @@ router.get("/dashboard",
         LIMIT 10
       `, [userId])
 
-  const analytics = {
+      const analytics = {
         projects: projectStats.rows[0],
         documents: documentStats.rows[0],
         ai: aiStats.rows[0],
@@ -87,16 +88,16 @@ router.get("/dashboard",
       // Cache for 5 minutes
       await cache.set(cacheKey, analytics, 300)
 
-  res.json(analytics)
+      res.json(analytics)
     } catch (error) {
-  log.error("Get dashboard analytics error:", error)
-  res.status(500).json({ error: "Internal server error" })
+      log.error("Get dashboard analytics error:", error)
+      res.status(500).json({ error: "Internal server error" })
     }
   }
 )
 
 // Get system analytics (admin only)
-router.get("/system", 
+router.get("/system",
   authenticateToken,
   requirePermission("analytics.system"),
   validateQuery(Joi.object({
@@ -110,7 +111,7 @@ router.get("/system",
       // Convert period to interval
       const intervalMap = {
         "7d": "7 days",
-        "30d": "30 days", 
+        "30d": "30 days",
         "90d": "90 days",
         "1y": "1 year",
       }
@@ -228,6 +229,26 @@ router.get("/system",
         ORDER BY project_count DESC
       `)
 
+      // System resource usage (Phase 5)
+      const systemResourceUsage = await pool.query(`
+        SELECT 
+          TO_CHAR(recorded_at, 'HH24:MI') as name,
+          cpu_usage_percent as cpu,
+          memory_usage_percent as memory,
+          disk_usage_percent as disk,
+          network_usage_percent as network
+        FROM system_metrics
+        WHERE recorded_at >= NOW() - INTERVAL '${interval}'
+        ORDER BY recorded_at ASC
+      `)
+
+      // Calculate uptime
+      const uptimeSeconds = os.uptime()
+      const days = Math.floor(uptimeSeconds / (24 * 3600))
+      const hours = Math.floor((uptimeSeconds % (24 * 3600)) / 3600)
+      const minutes = Math.floor((uptimeSeconds % 3600) / 60)
+      const uptimeString = days > 0 ? `${days}d ${hours}h ${minutes}m` : `${hours}h ${minutes}m`
+
       const analytics = {
         // Phase 1: Key Metrics (for frontend stat cards)
         total_users: parseInt(systemStats.rows[0]?.total_users || '0', 10),
@@ -248,6 +269,8 @@ router.get("/system",
         ai_usage_by_provider: aiUsageByProvider.rows,
         active_users_list: activeUsers.rows, // Renamed to avoid conflict
         framework_usage: frameworkUsage.rows,
+        system_performance: systemResourceUsage.rows,
+        system_uptime: uptimeString,
         period,
         generated_at: new Date().toISOString(),
       }
@@ -255,16 +278,16 @@ router.get("/system",
       // Cache for 10 minutes
       await cache.set(cacheKey, analytics, 600)
 
-  res.json(analytics)
+      res.json(analytics)
     } catch (error) {
-  log.error("Get system analytics error:", error)
-  res.status(500).json({ error: "Internal server error" })
+      log.error("Get system analytics error:", error)
+      res.status(500).json({ error: "Internal server error" })
     }
   }
 )
 
 // Track custom event
-router.post("/events", 
+router.post("/events",
   authenticateToken,
   async (req: AuthRequest, res: express.Response) => {
     const log = childLogger({ requestId: (req as any).requestId })
@@ -280,16 +303,16 @@ router.post("/events",
         VALUES ($1, $2, $3)
       `, [req.user?.id, event_type, JSON.stringify(properties)])
 
-  res.json({ message: "Event tracked successfully" })
+      res.json({ message: "Event tracked successfully" })
     } catch (error) {
-  log.error("Track event error:", error)
-  res.status(500).json({ error: "Internal server error" })
+      log.error("Track event error:", error)
+      res.status(500).json({ error: "Internal server error" })
     }
   }
 )
 
 // Get user activity timeline
-router.get("/activity/:userId", 
+router.get("/activity/:userId",
   authenticateToken,
   validateQuery(Joi.object({
     page: Joi.number().integer().min(1).default(1),
@@ -367,7 +390,7 @@ router.get("/activity/:userId",
 )
 
 // Get performance metrics
-router.get("/performance", 
+router.get("/performance",
   authenticateToken,
   requirePermission("analytics.system"),
   async (req: AuthRequest, res: express.Response) => {
@@ -417,10 +440,10 @@ router.get("/performance",
       // Cache for 2 minutes
       await cache.set(cacheKey, metrics, 120)
 
-  res.json(metrics)
+      res.json(metrics)
     } catch (error) {
-  log.error("Get performance metrics error:", error)
-  res.status(500).json({ error: "Internal server error" })
+      log.error("Get performance metrics error:", error)
+      res.status(500).json({ error: "Internal server error" })
     }
   }
 )
@@ -650,19 +673,19 @@ router.get(
 
       const domainHealth = {
         team: {
-          score: teamMetrics.rows[0]?.avg_adherence_score 
+          score: teamMetrics.rows[0]?.avg_adherence_score
             ? Math.min(100, Math.max(0, (teamMetrics.rows[0].avg_adherence_score / 10) * 100))
             : null,
           status: teamMetrics.rows[0]?.total_violations > 0 ? 'needs_attention' : 'healthy'
         },
         developmentApproach: {
-          score: developmentMetrics.rows[0]?.avg_velocity 
+          score: developmentMetrics.rows[0]?.avg_velocity
             ? Math.min(100, Math.max(0, (developmentMetrics.rows[0].avg_velocity / 50) * 100))
             : (parseInt(developmentMetrics.rows[0]?.total_approaches || '0') > 0 ? 50 : null), // Default score if approach exists but no velocity data
           status: parseInt(developmentMetrics.rows[0]?.total_approaches || '0') > 0 ? 'active' : 'inactive'
         },
         projectWork: {
-          score: workMetrics.rows[0]?.total_work_items > 0 
+          score: workMetrics.rows[0]?.total_work_items > 0
             ? ((workMetrics.rows[0]?.completed_items || 0) / workMetrics.rows[0].total_work_items) * 100
             : null,
           status: (workMetrics.rows[0]?.total_work_items || 0) > 0
@@ -674,7 +697,7 @@ router.get(
           status: measurementStatus
         },
         uncertainty: {
-          score: uncertaintyMetrics.rows[0]?.effective_responses 
+          score: uncertaintyMetrics.rows[0]?.effective_responses
             ? (uncertaintyMetrics.rows[0].effective_responses / uncertaintyMetrics.rows[0].total_risk_responses) * 100
             : null,
           status: uncertaintyMetrics.rows[0]?.ineffective_responses > 0 ? 'needs_attention' : 'managed'
@@ -881,7 +904,7 @@ router.get(
       // Calculate date range
       let startDate: Date
       let endDate: Date = new Date()
-      
+
       if (req.query.timeRange) {
         const days = req.query.timeRange === "7d" ? 7 : req.query.timeRange === "30d" ? 30 : req.query.timeRange === "90d" ? 90 : 365
         startDate = new Date()

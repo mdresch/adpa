@@ -10,6 +10,7 @@ import { logger, childLogger } from '../utils/logger'
 import { ContextAwareAIService, EnhancedAIRequest } from '../modules/context/integration'
 import { io } from '../server'
 import { v4 as uuidv4 } from 'uuid'
+import { ConflictDetectionService, ConflictResolutionMethod } from './document/ConflictDetectionService'
 
 interface RegenerationJobParams {
   documentId: string
@@ -32,25 +33,33 @@ interface RegenerationProgress {
 
 export class DocumentRegenerationService {
   /**
-   * Execute document regeneration job
+   * Execute document regeneration job with versioning, conflict detection, and approval workflow integration
    */
   static async executeRegenerationJob(params: RegenerationJobParams): Promise<void> {
-    const log = childLogger({ 
+    const log = childLogger({
       jobId: params.jobId,
-      documentId: params.documentId 
+      documentId: params.documentId
     })
-    
+
     try {
       log.info('Starting document regeneration job')
-      
+
       // Update job status to processing
-      await this.updateJobStatus(params.jobId, 'processing', 0, 'Starting regeneration...')
+      await this.updateJobStatus(params.jobId, 'processing', 0, 'Starting regeneration...');
       this.emitProgress({
         jobId: params.jobId,
         progress: 0,
         message: 'Starting regeneration...',
         userId: params.userId
-      })
+      });
+
+      // Step 0: Check for template conflicts before proceeding
+      const conflictResult = await this.detectTemplateConflicts(params);
+      if (conflictResult.conflict) {
+        log.info('Template conflict detected, requiring resolution', { conflictResult });
+        await this.handleTemplateConflict(params, conflictResult);
+        return; // Exit after conflict handling
+      }
 
       // Step 1: Fetch document and project information (10%)
       log.info('Fetching document metadata')
@@ -81,21 +90,21 @@ export class DocumentRegenerationService {
 
       const document = documentResult.rows[0]
       const projectId = document.project_id
-      
+
       // Check if template version changed → force major version bump
       let actualVersionType = params.versionType
       const currentTemplateVersion = document.current_template_version
       const documentTemplateVersion = document.template_version
-      
-      if (currentTemplateVersion && documentTemplateVersion && 
-          parseInt(currentTemplateVersion) !== parseInt(documentTemplateVersion)) {
+
+      if (currentTemplateVersion && documentTemplateVersion &&
+        parseInt(currentTemplateVersion) !== parseInt(documentTemplateVersion)) {
         log.info(`Template version changed: v${documentTemplateVersion} → v${currentTemplateVersion}, forcing MAJOR version bump`)
         actualVersionType = 'major'
-        
+
         await this.updateJobStatus(
-          params.jobId, 
-          'processing', 
-          15, 
+          params.jobId,
+          'processing',
+          15,
           `Template version changed (v${documentTemplateVersion} → v${currentTemplateVersion}), upgrading to major version...`
         )
         this.emitProgress({
@@ -118,7 +127,7 @@ export class DocumentRegenerationService {
 
       // Get document count for context summary
       let stats = { doc_count: 0, stakeholder_count: 0, baseline_count: 0 }
-      
+
       try {
         const contextStats = await pool.query(
           `SELECT 
@@ -132,7 +141,7 @@ export class DocumentRegenerationService {
         // Handle missing tables gracefully
         const errorMessage = error instanceof Error ? error.message : 'Unknown error'
         log.warn('Could not fetch all context stats, fetching available data', { error: errorMessage })
-        
+
         try {
           // Try without baselines table
           const contextStats = await pool.query(
@@ -162,17 +171,17 @@ export class DocumentRegenerationService {
 
       // Prepare AI request with context
       const templateId = params.templateId || document.template_id
-      
+
       // Build context description based on what's available
       const contextParts = []
       if (stats.doc_count > 0) contextParts.push(`${stats.doc_count} related document(s)`)
       if (stats.stakeholder_count > 0) contextParts.push(`${stats.stakeholder_count} stakeholder(s)`)
       if (stats.baseline_count > 0) contextParts.push(`${stats.baseline_count} baseline(s)`)
-      
-      const contextDescription = contextParts.length > 0 
+
+      const contextDescription = contextParts.length > 0
         ? `Available context: ${contextParts.join(', ')}.`
         : 'Generating with available project information.'
-      
+
       const userPrompt = `Regenerate this ${document.name || 'document'} with updated project context. 
 Original document type: ${document.template_name || 'General Document'}
 Project: ${document.project_name}
@@ -206,14 +215,36 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         userId: params.userId
       })
 
-      // Calculate next version using the new function for documents
+      // Calculate next version using the VersioningService
       // Use actualVersionType (may be upgraded to 'major' if template changed)
-      const versionResult = await pool.query(
-        `SELECT calculate_next_document_version($1::UUID, $2::VARCHAR(10)) as next_version`,
-        [params.documentId, actualVersionType]
-      )
-      const nextVersion = versionResult.rows[0].next_version
-      
+      const { VersioningService } = await import('./document/VersioningService');
+      const versioningService = new VersioningService();
+
+      const currentVersion = await versioningService.getCurrentVersion(params.documentId);
+
+      // Create new version using the proper method
+      const newVersion = await versioningService.createVersion(
+        params.documentId,
+        actualVersionType === 'major' ? 'template_update' : 'ai_regeneration',
+        {
+          content: aiResponse.content,
+          userId: params.userId,
+          changeDescription: `AI regeneration (${actualVersionType}) - previous version v${document.semantic_version}`,
+          metadata: {
+            provider: params.provider,
+            model: params.model || 'default',
+            temperature: params.temperature || 0.7,
+            regeneration_type: actualVersionType,
+            template_changed: actualVersionType === 'major',
+            context_summary: aiResponse.context_summary,
+            context_token_usage: aiResponse.context_token_usage
+          }
+        }
+      );
+
+      const nextVersion = newVersion.semantic_version;
+      const nextIntegerVersion = newVersion.version_number;
+
       log.info(`Version calculation: ${actualVersionType} → ${nextVersion}`, {
         requestedType: params.versionType,
         actualType: actualVersionType,
@@ -234,9 +265,8 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       const wordCount = aiResponse.content.trim().split(/\s+/).length
       const characterCount = aiResponse.content.length
 
-      // Parse semantic version parts for integer increment
+      // Use the version number from the newly created version
       const versionParts = nextVersion.split('.').map(v => parseInt(v) || 0)
-      const nextIntegerVersion = document.version + 1
 
       // 📸 STEP 5A: Save current document state to document_versions table
       log.info(`Saving current version ${document.semantic_version} to history`)
@@ -325,19 +355,20 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       // Step 6: Complete job (100%)
       log.info('Regeneration completed successfully')
       await this.updateJobStatus(
-        params.jobId, 
-        'completed', 
-        100, 
+        params.jobId,
+        'completed',
+        100,
         'Regeneration completed successfully',
         newDocumentId
       )
-      
-      // Update job with context summary and version info
+
+      // Update job with context summary, version info, and conflict status
       await pool.query(
-        `UPDATE regeneration_jobs 
-         SET context_summary = $1,
-             metadata = $2
-         WHERE id = $3`,
+        `UPDATE regeneration_jobs
+          SET context_summary = $1,
+              metadata = $2,
+              conflict_id = NULL
+          WHERE id = $3`,
         [
           JSON.stringify({
             documents: stats.doc_count,
@@ -360,7 +391,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       // 🔥 Trigger quality audit after AI regeneration
       try {
         const { qualityAuditService } = await import('./qualityAuditService')
-        
+
         log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
           documentId: newDocumentId,
           documentName: updatedDocument.name,
@@ -370,18 +401,18 @@ Please generate a comprehensive, updated version that incorporates all recent pr
           provider: params.provider,
           model: params.model
         })
-        
+
         // Get project context for audit
         const projectQuery = await pool.query(
           'SELECT id, name, framework, description FROM projects WHERE id = $1',
           [projectId]
         )
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
-        
+
         // Enqueue quality audit job (async, non-blocking)
         const { queueService } = await import('./queueService')
         const auditJobId = uuidv4()
-        
+
         queueService.addJob('quality-audit', {
           jobId: auditJobId,
           documentId: newDocumentId,
@@ -395,7 +426,7 @@ Please generate a comprehensive, updated version that incorporates all recent pr
             error: auditError.message
           })
         })
-        
+
         log.info('[AI-REGENERATION] Quality audit job enqueued', { auditJobId })
       } catch (error: any) {
         log.warn('[AI-REGENERATION] Failed to trigger quality audit', {
@@ -413,26 +444,301 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       })
 
       log.info('Document regeneration job completed successfully')
-      
+
     } catch (error: unknown) {
       log.error('Document regeneration failed:', error)
-      
+
       const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-      
+
       await this.updateJobStatus(
         params.jobId,
         'failed',
         0,
         errorMessage
-      )
+      );
+
+      // Check if there's an active conflict and update it
+      const activeConflict = await pool.query(
+        `SELECT conflict_id FROM regeneration_jobs WHERE id = $1 AND conflict_id IS NOT NULL`,
+        [params.jobId]
+      );
+
+      if (activeConflict.rows.length > 0 && activeConflict.rows[0].conflict_id) {
+        const conflictService = new ConflictDetectionService();
+        await conflictService.resolveConflict(
+          activeConflict.rows[0].conflict_id,
+          'cancel',
+          {
+            userId: params.userId,
+            notes: 'Regeneration failed, automatically cancelling conflict'
+          }
+        );
+      }
 
       this.emitFailed({
         jobId: params.jobId,
         userId: params.userId,
         error: errorMessage
-      })
+      });
 
-      throw error
+      throw error;
+    }
+
+  /**
+  /**
+   * Detect template conflicts before regeneration
+   */
+  private static async detectTemplateConflicts(params: RegenerationJobParams): Promise<any> {
+    const log = childLogger({
+      jobId: params.jobId,
+      documentId: params.documentId
+    });
+
+    try {
+      const conflictService = new ConflictDetectionService();
+
+      // Get document and template information
+      const documentResult = await pool.query(
+        `SELECT d.project_id, d.template_id
+         FROM documents d
+         WHERE d.id = $1`,
+        [params.documentId]
+      );
+
+      if (documentResult.rows.length === 0) {
+        log.warn('Document not found for conflict detection');
+        return { conflict: false };
+      }
+
+      const document = documentResult.rows[0];
+      const templateId = params.templateId || document.template_id;
+      const projectId = document.project_id;
+
+      if (!templateId) {
+        log.warn('No template associated with document, skipping conflict detection');
+        return { conflict: false };
+      }
+
+      // Detect conflicts using the conflict detection service
+      const conflictResult = await conflictService.detectTemplateConflicts(
+        templateId,
+        projectId,
+        { userId: params.userId }
+      );
+
+      return conflictResult;
+    } catch (error) {
+      log.error('Failed to detect template conflicts', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+      // If conflict detection fails, assume no conflict to avoid blocking regeneration
+      return { conflict: false };
+    }
+  }
+
+  /**
+   * Handle template conflicts by prompting user for resolution
+   */
+  private static async handleTemplateConflict(
+    params: RegenerationJobParams,
+    conflictResult: any
+  ): Promise<void> {
+    const log = childLogger({
+      jobId: params.jobId,
+      documentId: params.documentId
+    });
+
+    try {
+      // Create conflict record
+      const conflictService = new ConflictDetectionService();
+      const conflictId = await conflictService.createConflictRecord(
+        params.templateId || conflictResult.template.id,
+        conflictResult.existingDocuments[0]?.projectId,
+        params.userId,
+        conflictResult
+      );
+
+      // Add audit trail entry for conflict detection
+      await pool.query(
+        `INSERT INTO document_audit_trail
+         (id, document_id, event_type, event_data, user_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [
+          uuidv4(),
+          params.documentId,
+          'conflict_detected',
+          JSON.stringify({
+            conflictId,
+            conflictDetails: conflictResult,
+            jobId: params.jobId,
+            templateId: params.templateId || conflictResult.template.id,
+            projectId: conflictResult.existingDocuments[0]?.projectId
+          }),
+          params.userId
+        ]
+      );
+
+      // Update job status to indicate conflict
+      await this.updateJobStatus(
+        params.jobId,
+        'conflict_detected',
+        0,
+        `Template conflict detected: ${conflictResult.template.name} already exists in this project`,
+        undefined,
+        conflictId
+      );
+
+      // Emit conflict event to client
+      this.emitConflictDetected({
+        jobId: params.jobId,
+        userId: params.userId,
+        conflictId,
+        conflictResult
+      });
+
+      log.info('Template conflict detected and recorded', { conflictId });
+    } catch (error) {
+      log.error('Failed to handle template conflict', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      // Update job status to failed if conflict handling fails
+      await this.updateJobStatus(
+        params.jobId,
+        'failed',
+        0,
+        'Failed to handle template conflict'
+      );
+
+      this.emitFailed({
+        jobId: params.jobId,
+        userId: params.userId,
+        error: 'Failed to handle template conflict'
+      });
+    }
+  }
+
+  /**
+   * Emit conflict detected event via WebSocket
+   */
+  private static emitConflictDetected(data: {
+    jobId: string
+    userId: string
+    conflictId: string
+    conflictResult: any
+  }): void {
+    if (io) {
+      io.to(`user:${data.userId}`).emit('document:regeneration:conflict_detected', {
+        jobId: data.jobId,
+        conflictId: data.conflictId,
+        conflictDetails: data.conflictResult,
+        resolutionOptions: data.conflictResult.resolutionOptions
+      });
+    }
+  }
+
+  /**
+   * Resolve conflict and continue regeneration
+   */
+  static async resolveConflictAndRegenerate(
+    jobId: string,
+    resolutionMethod: ConflictResolutionMethod,
+    options: {
+      userId: string
+      notes?: string
+      newContent?: string
+    }
+  ): Promise<void> {
+    const log = childLogger({ jobId });
+
+    try {
+      // Get job details
+      const jobResult = await pool.query(
+        `SELECT * FROM regeneration_jobs WHERE id = $1`,
+        [jobId]
+      );
+
+      if (jobResult.rows.length === 0) {
+        throw new Error(`Regeneration job ${jobId} not found`);
+      }
+
+      const job = jobResult.rows[0];
+      const jobParams = {
+        documentId: job.document_id,
+        templateId: job.template_id,
+        provider: job.provider,
+        model: job.model,
+        versionType: job.version_type,
+        temperature: job.temperature,
+        userId: job.user_id,
+        jobId: job.id
+      };
+
+      // Resolve the conflict
+      const conflictService = new ConflictDetectionService();
+      const resolutionResult = await conflictService.resolveConflict(
+        job.conflict_id,
+        resolutionMethod,
+        {
+          userId: options.userId,
+          notes: options.notes,
+          newContent: options.newContent
+        }
+      );
+
+      if (!resolutionResult.success) {
+        throw new Error(`Conflict resolution failed: ${resolutionResult.message}`);
+      }
+
+      // Add audit trail entry for conflict resolution
+      await pool.query(
+        `INSERT INTO document_audit_trail
+          (id, document_id, event_type, event_data, user_id, created_at)
+          VALUES ($1, $2, $3, $4, $5, NOW())`,
+        [
+          uuidv4(),
+          job.document_id,
+          'conflict_resolved',
+          JSON.stringify({
+            conflictId: job.conflict_id,
+            resolutionMethod,
+            resolutionDetails: resolutionResult,
+            jobId: job.id
+          }),
+          options.userId
+        ]
+      );
+
+      // Update job to remove conflict reference
+      await pool.query(
+        `UPDATE regeneration_jobs SET conflict_id = NULL WHERE id = $1`,
+        [jobId]
+      );
+
+      log.info('Conflict resolved successfully, continuing regeneration', {
+        resolutionMethod,
+        resolutionResult
+      });
+
+      // Continue with regeneration
+      await this.executeRegenerationJob(jobParams);
+    } catch (error) {
+      log.error('Failed to resolve conflict and regenerate', {
+        error: error instanceof Error ? error.message : String(error)
+      });
+
+      await this.updateJobStatus(
+        jobId,
+        'failed',
+        0,
+        'Failed to resolve conflict and regenerate document'
+      );
+
+      this.emitFailed({
+        jobId,
+        userId: options.userId,
+        error: 'Failed to resolve conflict and regenerate document'
+      });
     }
   }
 
@@ -444,39 +750,50 @@ Please generate a comprehensive, updated version that incorporates all recent pr
     status: string,
     progress: number,
     progressMessage: string,
-    newVersionId?: string
+    newVersionId?: string,
+    conflictId?: string
   ): Promise<void> {
     const updateFields: string[] = [
       'status = $2',
       'progress = $3',
       'progress_message = $4'
-    ]
-    const values: any[] = [jobId, status, progress, progressMessage]
+    ];
+    const values: any[] = [jobId, status, progress, progressMessage];
 
     if (status === 'processing' && progress === 0) {
-      updateFields.push('started_at = NOW()')
+      updateFields.push('started_at = NOW()');
     }
 
     if (status === 'completed' || status === 'failed') {
-      updateFields.push('completed_at = NOW()')
+      updateFields.push('completed_at = NOW()');
     }
 
     if (status === 'failed') {
-      updateFields.push('error_message = $4')
+      updateFields.push('error_message = $4');
     }
 
     if (newVersionId) {
-      updateFields.push(`new_version_id = $${values.length + 1}`)
-      values.push(newVersionId)
+      updateFields.push(`new_version_id = $${values.length + 1}`);
+      values.push(newVersionId);
     }
 
-    const query = `
-      UPDATE regeneration_jobs 
-      SET ${updateFields.join(', ')}
-      WHERE id = $1
-    `
+    let query = `UPDATE regeneration_jobs
+      SET ${updateFields.join(', ')}`;
 
-    await pool.query(query, values)
+    // Add conflict_id for conflict_detected status
+    if (status === 'conflict_detected' && conflictId) {
+      query += `, conflict_id = $${values.length + 1}`;
+      values.push(conflictId);
+    }
+
+    // Clear conflict_id for non-conflict states
+    if (status !== 'conflict_detected') {
+      query += `, conflict_id = NULL`;
+    }
+
+    query += ' WHERE id = $1';
+
+    await pool.query(query, values);
   }
 
   /**
