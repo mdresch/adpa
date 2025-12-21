@@ -8,7 +8,7 @@
 import Joi from 'joi'
 import { JobType, JobData } from './types'
 import { JobValidationError } from './errors'
-import { PMBOK_DOMAINS } from '@/types/pmbok'
+import { PMBOK_DOMAINS } from '../../types/pmbok'
 
 /**
  * Base job data schema (common fields)
@@ -145,9 +145,9 @@ export function getSchemaForJobType(type: JobType): Joi.ObjectSchema {
  */
 function normalizeProviderName(provider: string | undefined | null): string | undefined {
   if (!provider) return undefined
-  
+
   const normalized = provider.toLowerCase().trim()
-  
+
   // Map common display names to schema values
   const providerMap: Record<string, string> = {
     'mistral ai': 'mistral',
@@ -169,7 +169,7 @@ function normalizeProviderName(provider: string | undefined | null): string | un
     'groq ai': 'groq',
     'ollama': 'ollama',
   }
-  
+
   return providerMap[normalized] || normalized
 }
 
@@ -178,24 +178,24 @@ function normalizeProviderName(provider: string | undefined | null): string | un
  */
 function normalizeJobData(type: JobType, data: any): any {
   const normalized = { ...data }
-  
+
   // Normalize provider fields based on job type
   if (type === 'ai-generate' && normalized.provider) {
     normalized.provider = normalizeProviderName(normalized.provider)
   }
-  
+
   if (type === 'baseline-extract' && normalized.ai_provider) {
     normalized.ai_provider = normalizeProviderName(normalized.ai_provider)
   }
-  
+
   if (type === 'extract-project-data' && normalized.aiProvider) {
     normalized.aiProvider = normalizeProviderName(normalized.aiProvider)
   }
-  
+
   if (type === 'document-regeneration' && normalized.provider) {
     normalized.provider = normalizeProviderName(normalized.provider)
   }
-  
+
   return normalized
 }
 
@@ -205,10 +205,10 @@ function normalizeJobData(type: JobType, data: any): any {
  */
 export function validateJobData(type: JobType, data: unknown): JobData {
   const schema = getSchemaForJobType(type)
-  
+
   // Normalize provider names before validation
   const normalizedData = normalizeJobData(type, data)
-  
+
   const { error, value } = schema.validate(normalizedData, {
     abortEarly: false, // Return all validation errors, not just the first
     stripUnknown: true, // Remove unknown fields
@@ -238,7 +238,7 @@ function normalizeJobTypeName(type: string): string {
   const typeMap: Record<string, JobType> = {
     'project-data-extraction': 'extract-project-data', // Legacy name
   }
-  
+
   return typeMap[type.toLowerCase()] || type
 }
 
@@ -249,7 +249,7 @@ function normalizeJobTypeName(type: string): string {
 export function validateJobType(type: string): JobType {
   // Normalize the type name first (handles legacy names)
   const normalizedType = normalizeJobTypeName(type)
-  
+
   const validTypes: JobType[] = [
     'ai-generate',
     'document-convert',

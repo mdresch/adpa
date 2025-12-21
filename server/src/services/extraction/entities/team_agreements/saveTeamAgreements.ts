@@ -44,7 +44,7 @@ function ensureStringArray(value: unknown): string[] {
  */
 function normalizeReviewFrequency(value: unknown): 'weekly' | 'monthly' | 'quarterly' | 'annually' | 'as_needed' | null {
   if (!value) return null
-  
+
   const raw = String(value).toLowerCase()
   if (raw.includes('week')) return 'weekly'
   if (raw.includes('month')) return 'monthly'
@@ -55,19 +55,52 @@ function normalizeReviewFrequency(value: unknown): 'weekly' | 'monthly' | 'quart
 }
 
 /**
+ * Map role/name strings to user UUIDs using stakeholders table
+ * @param projectId - Project ID to scope stakeholder lookup
+ * @param roleNames - Array of role or name strings to map
+ * @param client - Database client
+ * @returns Array of user UUIDs that were successfully mapped
+ */
+async function mapRolesToUserIds(
+  projectId: string,
+  roleNames: string[],
+  client: PoolClient
+): Promise<string[]> {
+  if (!roleNames || roleNames.length === 0) return []
+
+  try {
+    // Query stakeholders for this project where user_id is not null
+    // Match on role OR name (case-insensitive)
+    const result = await client.query(
+      `SELECT DISTINCT user_id, role, name
+       FROM stakeholders
+       WHERE project_id = $1 
+         AND user_id IS NOT NULL
+         AND (LOWER(role) = ANY($2::text[]) OR LOWER(name) = ANY($2::text[]))`,
+      [projectId, roleNames.map(r => r.toLowerCase())]
+    )
+
+    return result.rows.map(row => row.user_id).filter((id): id is string => !!id)
+  } catch (error) {
+    logger.warn('[EXTRACTION-TEAM_AGREEMENTS] Failed to map roles to user IDs:', error)
+    return []
+  }
+}
+
+/**
  * Deduplicate team agreements by title
  */
 function deduplicateTeamAgreements(teamAgreements: TeamAgreement[]): TeamAgreement[] {
   const deduplicatedMap = new Map<string, TeamAgreement>()
-  
+
   teamAgreements.forEach(agreement => {
     const normalizedTitle = (agreement.title || '').trim().toLowerCase()
-    
+
     if (!normalizedTitle) {
       // Skip agreements without titles
       return
     }
-    
+
     if (!deduplicatedMap.has(normalizedTitle)) {
       deduplicatedMap.set(normalizedTitle, agreement)
     } else {
@@ -92,7 +125,7 @@ function deduplicateTeamAgreements(teamAgreements: TeamAgreement[]): TeamAgreeme
       logger.debug(`[EXTRACTION-TEAM_AGREEMENTS] Merged duplicate agreement: "${agreement.title}"`)
     }
   })
-  
+
   return Array.from(deduplicatedMap.values())
 }
 
@@ -139,7 +172,8 @@ export async function saveTeamAgreements(
     const values: any[] = []
     const placeholders: string[] = []
 
-    uniqueTeamAgreements.forEach((agreement, index) => {
+    for (let index = 0; index < uniqueTeamAgreements.length; index++) {
+      const agreement = uniqueTeamAgreements[index]
       const offset = index * 17
       placeholders.push(
         `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7}, $${offset + 8}, $${offset + 9}, $${offset + 10}, $${offset + 11}, $${offset + 12}, $${offset + 13}, $${offset + 14}, $${offset + 15}, $${offset + 16}, $${offset + 17})`
@@ -183,40 +217,51 @@ export async function saveTeamAgreements(
         ? agreement.source_document_id
         : null
 
-      // Validate and normalize agreed_by (must be array of UUIDs)
+      // Validate and normalize agreed_by (map role names to UUIDs via stakeholders)
       const rawAgreedBy = ensureStringArray(agreement.agreed_by || [])
-      const agreedByArray = rawAgreedBy
-        .map(item => {
-          const trimmed = item.trim()
-          // Only keep valid UUIDs
-          if (isValidUUID(trimmed)) {
-            return trimmed
-          } else {
-            logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] Filtered out non-UUID value from agreed_by: "${item}" (agreement: "${agreement.title}")`)
-            return null
-          }
-        })
-        .filter((item): item is string => item !== null) // Remove nulls
 
-      if (rawAgreedBy.length > 0 && agreedByArray.length === 0) {
-        logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] All agreed_by values were filtered out (no valid UUIDs found) for agreement: "${agreement.title}"`)
+      // Attempt to map role names to user UUIDs
+      const mappedUserIds = await mapRolesToUserIds(projectId, rawAgreedBy, client)
+
+      // Also check if any raw values are already valid UUIDs
+      const directUUIDs = rawAgreedBy
+        .filter(item => isValidUUID(item.trim()))
+
+      // Combine mapped UUIDs and direct UUIDs, deduplicate
+      const allUserIds = [...new Set([...mappedUserIds, ...directUUIDs])]
+
+      if (rawAgreedBy.length > 0 && allUserIds.length === 0) {
+        logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] Could not map any agreed_by values to user IDs for agreement: "${agreement.title}" (roles: ${rawAgreedBy.join(', ')})`)
+      } else if (allUserIds.length < rawAgreedBy.length) {
+        const unmapped = rawAgreedBy.filter(role =>
+          !allUserIds.some(uuid => uuid) && !isValidUUID(role)
+        )
+        logger.info(`[EXTRACTION-TEAM_AGREEMENTS] Partially mapped agreed_by for "${agreement.title}": ${allUserIds.length}/${rawAgreedBy.length} (unmapped: ${unmapped.join(', ')})`)
       }
 
-      // Pass as array, not stringified - pg library will convert to JSONB
-      const agreedByJson = agreedByArray.length > 0 ? agreedByArray : []
+      const agreedByJson = allUserIds.length > 0 ? allUserIds : []
 
       // effective_date is NOT NULL, so provide default (current date) if not provided
       const effectiveDate = normalizeDate(agreement.effective_date) || new Date().toISOString().split('T')[0]
 
-      // facilitated_by must be a UUID (references users.id), not a name string
-      // If it's not a valid UUID, set to NULL
+      // facilitated_by: Try to map role name to user_id via stakeholders
       const rawFacilitatedBy = agreement.facilitated_by
-      const facilitatedBy = rawFacilitatedBy && isValidUUID(rawFacilitatedBy)
-        ? rawFacilitatedBy
-        : null
+      let facilitatedBy: string | null = null
 
-      if (rawFacilitatedBy && !facilitatedBy) {
-        logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] facilitated_by "${rawFacilitatedBy}" is not a valid UUID, setting to NULL`)
+      if (rawFacilitatedBy) {
+        if (isValidUUID(rawFacilitatedBy)) {
+          // Already a UUID
+          facilitatedBy = rawFacilitatedBy
+        } else {
+          // Try to map via stakeholders
+          const mapped = await mapRolesToUserIds(projectId, [rawFacilitatedBy], client)
+          if (mapped.length > 0) {
+            facilitatedBy = mapped[0]
+            logger.info(`[EXTRACTION-TEAM_AGREEMENTS] Mapped facilitated_by "${rawFacilitatedBy}" -> ${facilitatedBy}`)
+          } else {
+            logger.warn(`[EXTRACTION-TEAM_AGREEMENTS] Could not map facilitated_by "${rawFacilitatedBy}" to user_id, setting to NULL`)
+          }
+        }
       }
 
       values.push(
@@ -238,7 +283,7 @@ export async function saveTeamAgreements(
         userId,
         userId // updated_by
       )
-    })
+    }
 
     // Execute bulk insert
     await client.query(
@@ -280,7 +325,7 @@ export async function saveTeamAgreements(
       projectId,
       error: error instanceof Error ? error.message : String(error)
     })
-    
+
     return {
       saved: 0,
       skipped: 0,

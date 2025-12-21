@@ -133,7 +133,7 @@ export class DocumentConversionJobService {
             worker_id = COALESCE(worker_id, $3),
             started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
             processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
-            completed_at = CURRENT_TIMESTAMP
+            failed_at = CURRENT_TIMESTAMP
         WHERE id = $2
       `,
         [error instanceof Error ? error.message : "Unknown error", jobId, workerId]
@@ -158,7 +158,7 @@ export class DocumentConversionJobService {
   private static async getDocument(documentId: string, deps?: QueueServiceDependencies): Promise<any> {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const docResult = await db.query("SELECT * FROM documents WHERE id = $1", [documentId])
-    
+
     if (docResult.rows.length === 0) {
       throw new Error("Document not found")
     }

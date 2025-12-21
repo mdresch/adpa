@@ -12,6 +12,7 @@ import type { ExtractionDocument, ExtractionOptions } from './base/ExtractionRes
 import { ExtractionContext } from './base/ExtractionContext'
 import { extractionRegistry } from './ExtractionRegistry'
 import type { EntityExtractor, EntitySaver } from './ExtractionRegistry'
+import type { PersistenceResult } from './base/Persistence'
 
 /**
  * Get project documents for extraction
@@ -25,7 +26,7 @@ async function getProjectDocuments(
       const { connectDatabase } = await import('../../database/connection')
       await connectDatabase()
     }
-    
+
     let query = `
       SELECT 
         d.id,
@@ -87,7 +88,7 @@ export async function extractSingleEntityType(
 
     // Get documents
     const documents = await getProjectDocuments(projectId, options.documentIds)
-    
+
     if (documents.length === 0) {
       logger.warn(`[EXTRACTION-${entityType.toUpperCase()}] No documents found - cannot extract entities`)
       return []
@@ -142,13 +143,13 @@ export async function saveSingleEntityType(
   userId: string,
   entityType: string,
   entities: any[]
-): Promise<void> {
+): Promise<PersistenceResult> {
   if (!pool) {
     throw new Error('Database pool not initialized')
   }
 
   const client = await pool.connect()
-  
+
   try {
     await client.query('BEGIN')
 
@@ -156,7 +157,7 @@ export async function saveSingleEntityType(
     if (!extractionRegistry.hasEntity(entityType)) {
       logger.warn(`[EXTRACTION-ORCHESTRATOR] Entity type not registered: ${entityType}`)
       await client.query('ROLLBACK')
-      return
+      return { saved: 0, skipped: 0, failed: 0 }
     }
 
     // Get saver
@@ -164,7 +165,7 @@ export async function saveSingleEntityType(
     if (!saver) {
       logger.error(`[EXTRACTION-ORCHESTRATOR] No saver found for: ${entityType}`)
       await client.query('ROLLBACK')
-      return
+      return { saved: 0, skipped: 0, failed: 0 }
     }
 
     // Save entities
@@ -186,6 +187,7 @@ export async function saveSingleEntityType(
     }
 
     await client.query('COMMIT')
+    return result
   } catch (error: unknown) {
     await client.query('ROLLBACK')
     logger.error(`[EXTRACTION-${entityType.toUpperCase()}] Save failed`, {
@@ -208,7 +210,7 @@ export async function extractAndSaveEntityType(
   options: ExtractionOptions = {}
 ): Promise<{ extracted: number; saved: number; rejected: number }> {
   const entities = await extractSingleEntityType(projectId, userId, entityType, options)
-  
+
   if (entities.length > 0) {
     await saveSingleEntityType(projectId, userId, entityType, entities)
   }

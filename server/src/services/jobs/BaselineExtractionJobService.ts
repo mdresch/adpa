@@ -77,19 +77,19 @@ export class BaselineExtractionJobService {
     try {
       // Update job status to processing and assign worker
       await updateJobStatus(jobId, "processing", 10, workerId, "baseline-processing")
-      
+
       // Look up project name if not provided
       if (!project_name && project_id) {
         project_name = await this.getProjectName(project_id, deps)
       }
-      
+
       log.info(`Starting baseline extraction for project ${project_id} (${project_name || 'Unknown'})`)
-      
+
       // Extract baseline using AI (this takes 3-10 seconds)
       const { baselineService } = await import('../baselineService')
-      
+
       await updateJobStatus(jobId, "processing", 30, workerId, "baseline-processing")
-      
+
       const extractionResult = await baselineService.extractBaselineFromCorpus(
         project_id,
         userId,
@@ -99,9 +99,9 @@ export class BaselineExtractionJobService {
           aiModel: ai_model
         }
       )
-      
+
       await updateJobStatus(jobId, "processing", 70, workerId, "baseline-processing")
-      
+
       // Create baseline in database
       const corpus = document_ids || (await baselineService.getProjectDocumentCorpus(project_id)).map((d: any) => d.id)
       const baseline = await baselineService.createBaseline(
@@ -110,9 +110,9 @@ export class BaselineExtractionJobService {
         extractionResult,
         corpus
       )
-      
+
       await updateJobStatus(jobId, "processing", 90, workerId, "baseline-processing")
-      
+
       // Update job to completed
       await db.query(
         `UPDATE jobs 
@@ -143,11 +143,11 @@ export class BaselineExtractionJobService {
       })
 
       log.info(`Baseline extraction job completed: ${jobId}`)
-      
+
       return { baseline_id: baseline.id, baseline }
     } catch (error) {
       log.error(`Baseline extraction job failed: ${jobId}`, error)
-      
+
       // Update job with error
       await db.query(
         `UPDATE jobs 
@@ -155,7 +155,7 @@ export class BaselineExtractionJobService {
              worker_id = COALESCE(worker_id, $3),
              started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
              processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
-             completed_at = CURRENT_TIMESTAMP
+             failed_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
         [error instanceof Error ? error.message : "Unknown error", jobId, workerId]
       )

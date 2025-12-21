@@ -15,6 +15,7 @@ import requestIdMiddleware from "./middleware/requestId"
 import { logger } from "./utils/logger"
 import { connectDatabase } from "./database/connection"
 import { connectRedis } from "./utils/redis"
+import { SystemMonitoring } from "./utils/systemMonitoring"
 import { initializeQueues } from "./services/queueService"
 import { aiService } from "./services/aiService"
 import jwt from "jsonwebtoken"
@@ -116,7 +117,7 @@ const io = new SocketIOServer(server, {
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true)
-      
+
       // Check if origin matches any allowed pattern
       const isAllowed = allowedOrigins.some(allowed => {
         if (typeof allowed === 'string') {
@@ -127,7 +128,7 @@ const io = new SocketIOServer(server, {
         }
         return false
       })
-      
+
       if (isAllowed) {
         callback(null, true)
       } else {
@@ -161,7 +162,7 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (mobile apps, Postman, etc.)
       if (!origin) return callback(null, true)
-      
+
       // Check if origin matches any allowed pattern
       const isAllowed = allowedOrigins.some(allowed => {
         if (typeof allowed === 'string') {
@@ -172,7 +173,7 @@ app.use(
         }
         return false
       })
-      
+
       if (isAllowed) {
         callback(null, true)
       } else {
@@ -336,8 +337,8 @@ io.on("connection", (socket) => {
               error: jwtError.message,
               room
             })
-            socket.emit('join:error', { 
-              room, 
+            socket.emit('join:error', {
+              room,
               message: 'Invalid or expired token. Please log out and log back in.',
               code: 'JWT_INVALID'
             })
@@ -423,13 +424,13 @@ app.use(errorHandler)
 async function startServer() {
   try {
     console.log("🚀 Starting server initialization...")
-    
+
     // Try to connect to database, but don't fail if it's not available
     try {
       console.log("📊 Connecting to database...")
       await connectDatabase()
       console.log("✅ Database connected successfully")
-      
+
       // Auto-create document_summaries table if it doesn't exist
       try {
         await pool.query(`
@@ -508,6 +509,10 @@ async function startServer() {
       console.log("🔄 Initializing job queues...")
       await initializeQueues()
       console.log("✅ Job queues initialized successfully")
+
+      // Start system resource monitoring
+      SystemMonitoring.start()
+      console.log("✅ System resource monitoring started")
     } catch (queueError) {
       console.warn(
         "⚠️  Job queue initialization failed:",
@@ -551,7 +556,7 @@ async function startServer() {
       console.log(`✅ Server running on port ${PORT}`)
       console.log(`📍 Environment: ${process.env.NODE_ENV || "development"}`)
       console.log("🔗 SharePoint test endpoint available at /api/integrations/sharepoint/test")
-      
+
       // Initialize weekly template analysis job
       const { initializeTemplateAnalysisJob } = require('./jobs/templateAnalysisJob')
       initializeTemplateAnalysisJob()
@@ -566,7 +571,7 @@ async function startServer() {
 
 // Only start server if this file is run directly
 // if (import.meta.url === `file://${process.argv[1]}`) {
-  startServer()
+startServer()
 // }
 
 export { app, io }

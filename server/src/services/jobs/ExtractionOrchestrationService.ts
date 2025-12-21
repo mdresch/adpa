@@ -32,21 +32,21 @@ const ENTITY_TYPES = [
   'stakeholders', 'requirements', 'risks', 'milestones', 'constraints',
   'success_criteria', 'best_practices', 'phases', 'resources',
   'technologies', 'quality_standards', 'compliance_security', 'deliverables', 'scope_items', 'activities',
-  
+
   // PMBOK 8 Performance Domain entities
   'team_agreements', 'development_approaches', 'project_iterations', 'work_items',
   'capacity_plans', 'performance_measurements', 'earned_value_metrics', 'opportunities', 'risk_responses',
   'performance_actuals',
-  
+
   // PMBOK 8 Knowledge Area Domain entities (Tier 2)
   // Governance Domain
   'governance_decisions', 'approval_workflows', 'steering_committees', 'change_control_boards', 'policy_compliance',
   // Scope Domain
-  'scope_baselines', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
+  'scope_baseline', 'wbs_nodes', 'scope_change_requests', 'requirements_traceability', 'scope_verification',
   // Schedule Domain
-  'schedule_baselines', 'schedule_activities', 'critical_path_activities', 'schedule_variances', 'schedule_forecasts',
+  'schedule_baseline', 'schedule_activities', 'critical_path', 'schedule_variances', 'schedule_forecasts',
   // Finance Domain
-  'budget_baselines', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
+  'budget_baseline', 'cost_actuals', 'cost_estimates', 'funding_tranches', 'financial_variances', 'procurement_costs',
   // Resources Domain
   'resource_assignments', 'resource_pool', 'capacity_forecasts', 'utilization_records', 'resource_conflicts', 'onboarding_offboarding',
   // Risk Domain
@@ -71,17 +71,17 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
   delivery: ['deliverables', 'scope_items', 'best_practices'],
   measurement: ['success_criteria', 'performance_measurements', 'earned_value_metrics'],
   uncertainty: ['risks', 'opportunities', 'risk_responses', 'constraints'],
-  
+
   // =========================================================================
   // TIER 2: Knowledge Area Domains (PMBOK 8 Supplementary)
   // =========================================================================
-  
+
   // Governance Domain - Decision-making, approvals, oversight, and governance structures
   governance: [
-    'governance_decisions', 
-    'approval_workflows', 
-    'steering_committees', 
-    'change_control_boards', 
+    'governance_decisions',
+    'approval_workflows',
+    'steering_committees',
+    'change_control_boards',
     'policy_compliance',
     // ADDED: Entities containing governance data
     'development_approaches',   // Contains governance_approach, review_gates
@@ -89,13 +89,13 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
     'milestones',               // Key decision/approval points
     'team_agreements'           // Governance of team behavior
   ],
-  
+
   // Scope Domain - Scope definition, WBS, requirements, and deliverables
   scope: [
-    'scope_baselines', 
-    'wbs_nodes', 
-    'scope_change_requests', 
-    'requirements_traceability', 
+    'scope_baseline',
+    'wbs_nodes',
+    'scope_change_requests',
+    'requirements_traceability',
     'scope_verification',
     // ADDED: Core scope entities
     'scope_items',      // Direct scope definition
@@ -103,13 +103,13 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
     'deliverables',     // Scope deliverables
     'phases'            // Deliverables per phase
   ],
-  
+
   // Schedule Domain - Timeline, milestones, activities, and schedule control
   schedule: [
-    'schedule_baselines', 
-    'schedule_activities', 
-    'critical_path_activities', 
-    'schedule_variances', 
+    'schedule_baseline',
+    'schedule_activities',
+    'critical_path',
+    'schedule_variances',
     'schedule_forecasts',
     // ADDED: Timing entities
     'milestones',           // Schedule milestones
@@ -117,39 +117,39 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
     'phases',               // Schedule phases
     'project_iterations'    // Iteration schedule
   ],
-  
+
   // Finance Domain - Budget, costs, funding, and financial control
   finance: [
-    'budget_baselines', 
-    'cost_actuals', 
-    'cost_estimates', 
-    'funding_tranches', 
-    'financial_variances', 
+    'budget_baseline',
+    'cost_actuals',
+    'cost_estimates',
+    'funding_tranches',
+    'financial_variances',
     'procurement_costs'
     // NOTE: Consider adding 'resources' (cost field) in future
   ],
-  
+
   // Resources Domain - Resource allocation, capacity, and utilization
   resources: [
-    'resource_assignments', 
-    'resource_pool', 
-    'capacity_forecasts', 
-    'utilization_records', 
-    'resource_conflicts', 
+    'resource_assignments',
+    'resource_pool',
+    'capacity_forecasts',
+    'utilization_records',
+    'resource_conflicts',
     'onboarding_offboarding',
     // ADDED: Core resource entities
     'resources',        // Core resource data (skills, allocation, availability)
     'team_agreements',  // Team resource agreements
     'capacity_plans'    // Capacity planning
   ],
-  
+
   // Risk Domain - Risk identification, assessment, response, and monitoring
   risk: [
-    'risk_assessments', 
-    'risk_response_plans', 
-    'risk_triggers', 
-    'risk_reviews', 
-    'contingency_reserves', 
+    'risk_assessments',
+    'risk_response_plans',
+    'risk_triggers',
+    'risk_reviews',
+    'contingency_reserves',
     'risk_metrics',
     // ADDED: Core risk entities
     'risks',            // Core risk entity (probability, impact, mitigation)
@@ -157,13 +157,13 @@ const DOMAIN_ENTITY_MAP: Record<PmbokDomain, EntityType[]> = {
     'risk_responses',   // Response actions
     'constraints'       // Risk-related constraints
   ],
-  
+
   // Stakeholders Operations Domain - Engagement, communication, and relationship management
   stakeholders_ops: [
-    'engagement_actions', 
-    'communication_logs', 
-    'satisfaction_surveys', 
-    'stakeholder_issues', 
+    'engagement_actions',
+    'communication_logs',
+    'satisfaction_surveys',
+    'stakeholder_issues',
     'relationship_health',
     // ADDED: Core stakeholder entity
     'stakeholders'      // Core stakeholder data (interest, influence, expectations)
@@ -274,19 +274,19 @@ const ENTITY_COUNT_KEY_MAP: Record<EntityType, keyof DomainCountSummary> = {
   change_control_boards: 'changeControlBoards',
   policy_compliance: 'policyCompliance',
   // Scope Domain
-  scope_baselines: 'scopeBaselines',
+  scope_baseline: 'scopeBaselines',
   wbs_nodes: 'wbsNodes',
   scope_change_requests: 'scopeChangeRequests',
   requirements_traceability: 'requirementsTraceability',
   scope_verification: 'scopeVerification',
   // Schedule Domain
-  schedule_baselines: 'scheduleBaselines',
+  schedule_baseline: 'scheduleBaselines',
   schedule_activities: 'scheduleActivities',
-  critical_path_activities: 'criticalPathActivities',
+  critical_path: 'criticalPathActivities',
   schedule_variances: 'scheduleVariances',
   schedule_forecasts: 'scheduleForecasts',
   // Finance Domain
-  budget_baselines: 'budgetBaselines',
+  budget_baseline: 'budgetBaselines',
   cost_actuals: 'costActuals',
   cost_estimates: 'costEstimates',
   funding_tranches: 'fundingTranches',
@@ -552,7 +552,7 @@ export class ExtractionOrchestrationService {
         'SELECT status, error_message FROM jobs WHERE id = $1',
         [jobId]
       )
-      
+
       if (jobCheck.rows.length > 0) {
         const dbJob = jobCheck.rows[0]
         // Skip processing if job is already failed, cancelled, or has an error message
@@ -577,15 +577,15 @@ export class ExtractionOrchestrationService {
         return
       }
 
-      log.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, { 
-        projectId, 
+      log.info(`[EXTRACTION-PARENT] 🚀 Starting orchestration: ${jobId}`, {
+        projectId,
         userId,
         documentIds,
         domains: selectedDomains,
         autoTriggered: (job.data as ExtendedExtractionJobData).autoTriggered || false,
         sourceDocumentId: (job.data as ExtendedExtractionJobData).sourceDocumentId
       })
-      
+
       // Mark job as processing and set started_at/processing_started_at for stall detection
       await updateJobStatus(jobId, "processing", 10, workerId, "project-data-extraction")
 
@@ -599,13 +599,13 @@ export class ExtractionOrchestrationService {
         domains: selectedDomains
       }, deps)
 
-      // ensure job data reflects selected domains for downstream processing
-      ;(job.data as ExtendedExtractionJobData).domains = selectedDomains
-      ;(job.data as ExtendedExtractionJobData).domainRunIds = domainRunIds
-      
+        // ensure job data reflects selected domains for downstream processing
+        ; (job.data as ExtendedExtractionJobData).domains = selectedDomains
+        ; (job.data as ExtendedExtractionJobData).domainRunIds = domainRunIds
+
       // Dynamically import extractionQueue to avoid circular dependency
       const { extractionQueue } = await import('../queueService')
-      
+
       // Create child jobs for each entity type (resilient, independent extraction)
       const childJobPromises = entityTypesForRun.map((entityType, index) => {
         return extractionQueue.add(`extract-entity-${entityType}`, {
@@ -626,14 +626,14 @@ export class ExtractionOrchestrationService {
           }
         })
       })
-      
+
       // Wait for all child jobs to be created
       const childJobs = await Promise.all(childJobPromises)
-      
+
       log.info(`[EXTRACTION-PARENT] Created ${childJobs.length} child extraction jobs`, { jobId })
-      
+
       await updateJobStatus(jobId, "processing", 10, workerId)
-      
+
       // Store child job IDs in parent job data
       await db.query(
         `UPDATE jobs SET data = data || $1 WHERE id = $2`,
@@ -646,7 +646,7 @@ export class ExtractionOrchestrationService {
           jobId
         ]
       )
-      
+
       // Monitor child job completion using a Promise that resolves when all children complete
       // This ensures Bull doesn't mark the parent job as complete prematurely
       const monitoringResult = await new Promise<{ success: boolean; error?: string }>((resolve, reject) => {
@@ -655,10 +655,10 @@ export class ExtractionOrchestrationService {
         let isResolved = false // Prevent multiple resolutions
         const jobStartTimes = new Map<string, number>() // Track when each child job started processing
         const STUCK_JOB_TIMEOUT = 10 * 60 * 1000 // 10 minutes - consider a job stuck if active this long
-        
+
         let partialSuccessTimeout: NodeJS.Timeout | null = null
         let fullTimeout: NodeJS.Timeout | null = null
-        
+
         const cleanup = () => {
           if (checkInterval) {
             clearInterval(checkInterval)
@@ -677,10 +677,10 @@ export class ExtractionOrchestrationService {
             (global as any).extractionIntervals.delete(jobId)
           }
         }
-        
+
         const performCheck = async (): Promise<void> => {
           if (isResolved) return // Skip if already resolved
-          
+
           try {
             // Check if job was cancelled
             const statusCheck = await db.query(
@@ -694,78 +694,86 @@ export class ExtractionOrchestrationService {
               resolve({ success: false, error: 'Job was cancelled' })
               return
             }
-            
+
             const now = Date.now()
             const states = await Promise.all(
               childJobs.map(async (j) => {
                 try {
                   const state = await j.getState()
-                  
+
+                  const jobIdStr = j.id.toString()
+
                   // Track when jobs start processing
-                  if (state === 'active' && !jobStartTimes.has(j.id)) {
-                    jobStartTimes.set(j.id, now)
+                  if (state === 'active' && !jobStartTimes.has(jobIdStr)) {
+                    jobStartTimes.set(jobIdStr, now)
                     const entityType = (j.data as any)?.entityType || 'unknown'
                     log.debug(`[EXTRACTION-PARENT] Child job ${j.id} (${entityType}) started processing`)
                   }
-                  
+
+                  const STUCK_JOB_TIMEOUT = 10 * 60 * 1000 // 10 minutes - consider a job stuck if active this long
+                  const CRITICAL_JOB_TIMEOUT = 20 * 60 * 1000 // 20 minutes - definitely stuck, force fail in monitor
+
                   // Check for stuck jobs (active for too long)
                   if (state === 'active') {
-                    const startTime = jobStartTimes.get(j.id)
-                    if (startTime && (now - startTime) > STUCK_JOB_TIMEOUT) {
+                    const startTime = jobStartTimes.get(jobIdStr)
+                    if (startTime) {
+                      const activeDuration = now - startTime
                       const entityType = (j.data as any)?.entityType || 'unknown'
-                      const stuckDuration = Math.floor((now - startTime) / 1000 / 60) // minutes
-                      log.warn(`[EXTRACTION-PARENT] ⚠️  Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`, {
-                        jobId: j.id,
-                        entityType,
-                        stuckDurationMinutes: stuckDuration,
-                        parentJobId: jobId
-                      })
+
+                      if (activeDuration > CRITICAL_JOB_TIMEOUT) {
+                        log.error(`[EXTRACTION-PARENT] 🛑 Child job ${j.id} (${entityType}) is CRITICALLY stuck (>20m active). Treating as failed.`)
+                        return 'failed'
+                      } else if (activeDuration > STUCK_JOB_TIMEOUT) {
+                        const stuckDuration = Math.floor(activeDuration / 1000 / 60)
+                        log.warn(`[EXTRACTION-PARENT] ⚠️ Child job ${j.id} (${entityType}) appears stuck - active for ${stuckDuration} minutes`)
+                      }
                     }
                   }
-                  
+
                   // Treat 'unknown' (job removed from queue) as completed
                   // This happens when jobs are auto-cleaned after completion
-                  if (state === 'unknown') {
+                  if ((state as string) === 'unknown') {
                     log.debug(`[EXTRACTION-PARENT] Child job ${j.id} state is 'unknown' (removed from queue), treating as completed`)
-                    jobStartTimes.delete(j.id)
+                    jobStartTimes.delete(jobIdStr)
                     return 'completed'
                   }
-                  
+
                   // Clear start time when job completes or fails
                   if (state === 'completed' || state === 'failed') {
-                    jobStartTimes.delete(j.id)
+                    jobStartTimes.delete(jobIdStr)
                   }
-                  
+
                   return state
                 } catch (err) {
                   // If we can't get state, assume completed (job was cleaned up)
                   log.warn(`[EXTRACTION-PARENT] Could not get state for child job ${j.id}, assuming completed: ${err}`)
-                  jobStartTimes.delete(j.id)
+                  const jobIdStr = j.id.toString()
+                  jobStartTimes.delete(jobIdStr)
                   return 'completed'
                 }
               })
             )
-            
+
             const completed = states.filter(s => s === 'completed').length
             const failed = states.filter(s => s === 'failed').length
             const active = states.filter(s => s === 'active').length
             const waiting = states.filter(s => s === 'waiting' || s === 'delayed').length
-            
+
             // Log detailed progress including stuck jobs
             const stuckJobs = childJobs
               .map((j, i) => ({ job: j, state: states[i], index: i }))
               .filter(({ state }) => state === 'active')
               .filter(({ job }) => {
-                const startTime = jobStartTimes.get(job.id)
+                const startTime = jobStartTimes.get(job.id.toString())
                 return startTime && (now - startTime) > STUCK_JOB_TIMEOUT
               })
               .map(({ job }) => {
                 const entityType = (job.data as any)?.entityType || 'unknown'
-                const startTime = jobStartTimes.get(job.id)
+                const startTime = jobStartTimes.get(job.id.toString())
                 const stuckDuration = startTime ? Math.floor((now - startTime) / 1000 / 60) : 0
                 return `${entityType} (${stuckDuration}m)`
               })
-            
+
             if (stuckJobs.length > 0) {
               log.warn(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed, ${active} active (${stuckJobs.length} stuck: ${stuckJobs.join(', ')}), ${waiting} waiting out of ${childJobs.length}`)
             } else if (active > 0 || waiting > 0) {
@@ -773,12 +781,12 @@ export class ExtractionOrchestrationService {
             } else {
               log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
             }
-            
+
             if (completed + failed === childJobs.length) {
               // All children done - clean up and finalize
               cleanup()
               isResolved = true
-              
+
               // Get details about failed jobs for better error reporting
               const failedJobs: Array<{ entityType: string; error: string }> = []
               if (failed > 0) {
@@ -787,7 +795,7 @@ export class ExtractionOrchestrationService {
                     try {
                       const childJob = childJobs[i]
                       const entityType = (childJob.data as any)?.entityType || 'unknown'
-                      
+
                       // Try to get error from job's failedReason or returnvalue
                       let errorMessage = 'Unknown error'
                       try {
@@ -804,7 +812,7 @@ export class ExtractionOrchestrationService {
                       } catch (err) {
                         errorMessage = 'Failed after retries'
                       }
-                      
+
                       failedJobs.push({ entityType, error: errorMessage })
                       log.error(`[EXTRACTION-PARENT] Failed entity type: ${entityType}`, {
                         jobId: childJob.id,
@@ -822,14 +830,14 @@ export class ExtractionOrchestrationService {
                     }
                   }
                 }
-                
+
                 const failedTypes = failedJobs.map(f => f.entityType).join(', ')
                 log.warn(`[EXTRACTION-PARENT] ${failed} entity extraction(s) failed: ${failedTypes}`, {
                   failedJobs,
                   completed,
                   total: childJobs.length
                 })
-                
+
                 // Allow partial success if at least 50% succeeded
                 const successRate = completed / childJobs.length
                 if (successRate >= 0.5) {
@@ -853,10 +861,10 @@ export class ExtractionOrchestrationService {
             }
           } catch (error: any) {
             if (isResolved) return
-            
+
             cleanup()
             isResolved = true
-            
+
             const errorMessage = error?.message || 'Unknown extraction monitoring error'
             log.error(`[EXTRACTION-PARENT] Monitoring loop failed for job ${jobId}: ${errorMessage}`, {
               projectId,
@@ -881,29 +889,29 @@ export class ExtractionOrchestrationService {
                 { projectId }
               )
             }
-            
+
             reject(error)
           }
         }
-        
+
         // Start monitoring interval
         checkInterval = setInterval(() => {
           performCheck().catch(err => {
             log.error(`[EXTRACTION-PARENT] Unhandled error in check for job ${jobId}:`, err)
           })
         }, 3000) // Check every 3 seconds
-        
+
         // Store interval reference for cleanup on cancellation
         if (!(global as any).extractionIntervals) {
           (global as any).extractionIntervals = new Map<string, NodeJS.Timeout>()
         }
         (global as any).extractionIntervals.set(jobId, checkInterval)
-        
+
         // Run first check immediately
         performCheck().catch(err => {
           log.error(`[EXTRACTION-PARENT] Initial check failed for job ${jobId}:`, err)
         })
-        
+
         // Add a timeout to prevent jobs from hanging forever (30 minutes max)
         // But allow partial success if most jobs completed (after 20 minutes)
         partialSuccessTimeout = setTimeout(async () => {
@@ -914,18 +922,18 @@ export class ExtractionOrchestrationService {
                 childJobs.map(async (j) => {
                   try {
                     const state = await j.getState()
-                    if (state === 'unknown') return 'completed'
+                    if ((state as string) === 'unknown') return 'completed'
                     return state
                   } catch {
                     return 'completed'
                   }
                 })
               )
-              
+
               const completed = states.filter(s => s === 'completed').length
               const failed = states.filter(s => s === 'failed').length
               const successRate = (completed + failed) / childJobs.length
-              
+
               // If at least 80% of jobs are done (completed or failed), allow partial success
               if (successRate >= 0.8) {
                 log.warn(`[EXTRACTION-PARENT] Job ${jobId} reached 20-minute timeout but ${(successRate * 100).toFixed(1)}% complete - allowing partial success`, {
@@ -934,7 +942,7 @@ export class ExtractionOrchestrationService {
                   total: childJobs.length,
                   successRate
                 })
-                
+
                 const failedJobs: Array<{ entityType: string; error: string }> = []
                 // Collect failed job details
                 for (let i = 0; i < childJobs.length; i++) {
@@ -946,7 +954,7 @@ export class ExtractionOrchestrationService {
                     failedJobs.push({ entityType, error: 'Job timed out after 20 minutes' })
                   }
                 }
-                
+
                 cleanup()
                 isResolved = true
                 await this.finalizeExtractionJob(jobId, projectId, failedJobs, workerId, updateJobStatus, domainRunIds, deps)
@@ -958,41 +966,41 @@ export class ExtractionOrchestrationService {
             }
           }
         }, 20 * 60 * 1000) // 20 minutes - check for partial success
-        
+
         fullTimeout = setTimeout(() => {
           if (!isResolved) {
             clearTimeout(partialSuccessTimeout)
             cleanup()
             isResolved = true
-            const timeoutError = 'Extraction job timed out after 30 minutes'
+            const timeoutError = 'Extraction job timed out after 45 minutes'
             log.error(`[EXTRACTION-PARENT] ${timeoutError}: ${jobId}`)
             reject(new Error(timeoutError))
           }
-        }, 30 * 60 * 1000) // 30 minute timeout
+        }, 45 * 60 * 1000) // 45 minute timeout
       })
-      
+
       log.info(`[EXTRACTION-PARENT] Monitoring completed for job ${jobId}`, { result: monitoringResult })
       return monitoringResult
-      
+
     } catch (error: any) {
       log.error(`[EXTRACTION-PARENT] Failed: ${jobId} ${error.message}`, { stack: error.stack })
-      
+
       // Clear monitoring interval if it exists (prevent memory leak)
       if ((global as any).extractionIntervals) {
         const interval = (global as any).extractionIntervals.get(jobId)
         if (interval) {
           clearInterval(interval)
-          ;(global as any).extractionIntervals.delete(jobId)
+            ; (global as any).extractionIntervals.delete(jobId)
           log.info(`Cleared monitoring interval for failed job: ${jobId}`)
         }
       }
-      
+
       await updateJobStatus(jobId, "failed", undefined, workerId, "project-data-extraction")
       await db.query(
         `UPDATE jobs SET status = 'failed', error_message = $1, 
              started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
              processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
-             completed_at = CURRENT_TIMESTAMP WHERE id = $2`,
+             failed_at = CURRENT_TIMESTAMP WHERE id = $2`,
         [error.message, jobId]
       )
       await failDomainRuns((job.data as ExtendedExtractionJobData).domainRunIds, error.message, deps)
@@ -1019,26 +1027,26 @@ export class ExtractionOrchestrationService {
     const log = deps?.logger || logger
     try {
       log.info(`[EXTRACTION-PARENT] Finalizing job ${jobId}`)
-      
+
       await updateJobStatus(jobId, "processing", 95, workerId, "project-data-extraction")
-      
+
       // Phase 4: Optimize count queries - use PostgreSQL function for single optimized query
       // This replaces 63 separate queries with one function call that handles missing tables gracefully
       const startTime = Date.now()
       let countResult
       let countsJson: Record<string, number>
-      
+
       try {
         // Use the optimized PostgreSQL function that handles missing tables gracefully
         const functionResult = await db.query(
           'SELECT get_all_entity_counts($1) as counts',
           [projectId]
         )
-        
+
         countsJson = functionResult.rows[0].counts as Record<string, number>
         const queryTime = Date.now() - startTime
         log.debug(`[EXTRACTION-PARENT] Optimized count query completed in ${queryTime}ms`, { projectId })
-        
+
         // Convert JSONB result to row format for compatibility with existing code
         countResult = {
           rows: [{
@@ -1111,7 +1119,7 @@ export class ExtractionOrchestrationService {
         // Fallback to individual queries if function doesn't exist or fails
         const errorMessage = error instanceof Error ? error.message : String(error)
         log.warn(`[EXTRACTION-PARENT] Optimized count function failed, falling back to individual queries: ${errorMessage}`)
-        
+
         const safeCount = async (table: string): Promise<number> => {
           try {
             const result = await db.query(`SELECT COUNT(*) as count FROM ${table} WHERE project_id = $1`, [projectId])
@@ -1120,7 +1128,7 @@ export class ExtractionOrchestrationService {
             return 0
           }
         }
-        
+
         const fallbackStartTime = Date.now()
         const countQueries = await Promise.all([
           safeCount('stakeholders'), safeCount('requirements'), safeCount('risks'), safeCount('milestones'),
@@ -1146,7 +1154,7 @@ export class ExtractionOrchestrationService {
         ])
         const fallbackTime = Date.now() - fallbackStartTime
         log.warn(`[EXTRACTION-PARENT] Fallback queries completed in ${fallbackTime}ms (63 queries)`, { projectId })
-        
+
         // Convert to object format for compatibility
         countResult = {
           rows: [{
@@ -1174,9 +1182,9 @@ export class ExtractionOrchestrationService {
           }]
         }
       }
-      
+
       const row = countResult.rows[0]
-      
+
       // Phase 4: Use optimized query result (single row with all counts)
       const counts: DomainCountSummary = {
         // Core entities
@@ -1253,7 +1261,7 @@ export class ExtractionOrchestrationService {
         stakeholderIssues: parseInt(row.stakeholder_issues) || 0,
         relationshipHealth: parseInt(row.relationship_health) || 0
       }
-      
+
       const entityCountLookup = Object.entries(ENTITY_COUNT_KEY_MAP).reduce(
         (acc, [entityType, key]) => {
           acc[entityType as EntityType] = counts[key]
@@ -1282,9 +1290,9 @@ export class ExtractionOrchestrationService {
       }, deps)
 
       const totalEntities = Object.values(counts).reduce((sum, count) => sum + count, 0)
-      
+
       log.info(`[EXTRACTION-PARENT] Total entities extracted: ${totalEntities}`)
-      
+
       // After we know project-level entity tables are populated, rebuild
       // per-document entity_counts and inferred_*_domain, then refresh
       // template_entity_profile using the helper views.
@@ -1302,16 +1310,16 @@ export class ExtractionOrchestrationService {
           `[EXTRACTION-PARENT] Failed to update document purposes / template profiles for project ${projectId}: ${hookError?.message || hookError}`
         )
       }
-      
+
       const userId = jobRow?.created_by
-      
+
       // Prepare result with optional failed entity info
       const result: any = {
         totalEntities,
         entityCounts: counts,
         success: true
       }
-      
+
       if (failedJobs && failedJobs.length > 0) {
         result.partialSuccess = true
         result.failedEntityTypes = failedJobs.map(f => f.entityType)
@@ -1321,13 +1329,13 @@ export class ExtractionOrchestrationService {
           failedTypes: result.failedEntityTypes
         })
       }
-      
+
       // After counts are refreshed, rebuild per-document purpose and template profiles.
       // This runs best-effort; failures here should not break the main extraction job.
       try {
         const { default: DocumentPurposeService } = await import('../documentPurposeService')
         const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
-        
+
         await DocumentPurposeService.rebuildForProject(projectId)
 
         // Recompute template_entity_profile rows only for templates used in this project
@@ -1364,13 +1372,13 @@ export class ExtractionOrchestrationService {
          WHERE id = $2`,
         [JSON.stringify(result), jobId]
       )
-      
+
       // Emit success notification (or warning if partial success)
       if (userId) {
         const message = failedJobs && failedJobs.length > 0
           ? `Extracted ${totalEntities} entities (${failedJobs.length} entity types failed: ${failedJobs.map(f => f.entityType).join(', ')})`
           : `Successfully extracted ${totalEntities} entities from project documents`
-        
+
         // Emit job completion event (status is always 'completed', warnings are in the event data)
         ws.emit("job:completed", {
           jobId,
@@ -1383,22 +1391,22 @@ export class ExtractionOrchestrationService {
           warnings: failedJobs && failedJobs.length > 0 ? failedJobs : undefined
         })
       }
-      
+
       // Emit project:entities-extracted event
       ws.to(`project:${projectId}`).emit("project:entities-extracted", {
         projectId,
         totalEntities,
         entityCounts: counts
       })
-      
-      log.info(`[EXTRACTION-PARENT] Extraction completed: ${jobId}`, { 
-        projectId, 
-        totalEntities 
+
+      log.info(`[EXTRACTION-PARENT] Extraction completed: ${jobId}`, {
+        projectId,
+        totalEntities
       })
-      
+
     } catch (error: any) {
       log.error(`[EXTRACTION-PARENT] Failed to finalize: ${jobId} ${error.message}`)
-      
+
       // Update job with error
       await db.query(
         `UPDATE jobs 

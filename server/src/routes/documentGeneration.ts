@@ -24,12 +24,12 @@ router.post("/check-template",
   validate(checkTemplateSchema),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    
+
     try {
       const { projectId, templateId } = req.body
-      
+
       log.info(`Checking template conflict for project ${projectId}, template ${templateId}`)
-      
+
       // Check if document from this template already exists
       const existingCheck = await pool.query(
         `SELECT 
@@ -58,7 +58,7 @@ router.post("/check-template",
         // Document from this template already exists - return conflict
         const existing = existingCheck.rows[0]
         log.info(`Template conflict detected: existing document ${existing.id}`)
-        
+
         return res.status(409).json({
           code: 'TEMPLATE_ALREADY_USED',
           message: 'A document from this template already exists in this project',
@@ -79,17 +79,17 @@ router.post("/check-template",
           }
         })
       }
-      
+
       // No conflict
       log.info(`No template conflict - safe to proceed`)
       return res.status(200).json({
         conflict: false,
         message: 'Template is available for use'
       })
-      
+
     } catch (error) {
       log.error("Template check error:", error)
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to check template",
         details: error instanceof Error ? error.message : "Unknown error"
       })
@@ -119,7 +119,7 @@ router.post("/generate",
   validate(generateDocumentSchema),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    
+
     try {
       const {
         projectId,
@@ -148,55 +148,34 @@ router.post("/generate",
         return res.status(403).json({ error: "Access denied to project" })
       }
 
-      // Check if document from this template already exists
+      // 🔍 Check for template conflicts using the new versioning service
       if (templateId) {
-        const existingCheck = await pool.query(
-          `SELECT 
-            d.id,
-            d.name,
-            d.version,
-            d.semantic_version,
-            d.updated_at,
-            b.id as baseline_id,
-            b.version as baseline_version,
-            b.approved_at as baseline_date
-           FROM documents d
-           LEFT JOIN project_baselines b ON b.project_id = d.project_id 
-             AND b.status = 'approved'
-             AND b.document_corpus @> jsonb_build_array(d.id::text)
-           WHERE d.project_id = $1 
-             AND d.template_id = $2 
-             AND d.deleted_at IS NULL
-             AND d.parent_document_id IS NULL
-           ORDER BY d.updated_at DESC
-           LIMIT 1`,
-          [projectId, templateId]
-        )
+        const { VersioningService } = await import('../services/document/VersioningService');
+        const versioningService = new VersioningService();
 
-        if (existingCheck.rows.length > 0) {
-          // Document from this template already exists - return conflict
-          const existing = existingCheck.rows[0]
-          log.info(`Template conflict detected: existing document ${existing.id}`)
-          
+        // Create a temporary document name - this will be updated later
+        const tempDocumentName = name || `Generated Document - ${new Date().toISOString()}`;
+
+        const creationResult = await versioningService.createDocumentFromTemplate(
+          templateId,
+          projectId,
+          {
+            userId: req.user?.id || '',
+            content: '', // Empty content for now, we'll generate it below
+            documentName: tempDocumentName
+          }
+        );
+
+        if (creationResult.conflict) {
+          // Conflict detected - return conflict information to frontend
           return res.status(409).json({
-            code: 'TEMPLATE_ALREADY_USED',
-            message: 'A document from this template already exists in this project',
-            existing: {
-              id: existing.id,
-              name: existing.name,
-              version: existing.version,
-              semantic_version: existing.semantic_version,
-              updated_at: existing.updated_at,
-              baseline_id: existing.baseline_id,
-              baseline_version: existing.baseline_version,
-              baseline_date: existing.baseline_date
-            },
-            options: {
-              createNewVersion: true,    // Update existing (recommended)
-              createSeparate: true,       // Create new document
-              viewExisting: true          // Open existing
-            }
-          })
+            code: 'TEMPLATE_CONFLICT',
+            message: 'Template conflict detected',
+            conflict: true,
+            conflictId: creationResult.conflictId,
+            conflictResult: creationResult.conflictResult,
+            options: creationResult.conflictResult.resolutionOptions
+          });
         }
       }
 
@@ -331,7 +310,7 @@ router.post("/generate",
       })
     } catch (error) {
       log.error("Document generation error:", error)
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Document generation failed",
         details: error instanceof Error ? error.message : "Unknown error"
       })
@@ -357,7 +336,7 @@ router.post("/generate-new-version",
   validate(generateAsNewVersionSchema),
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
-    
+
     try {
       const {
         existingDocumentId,
@@ -387,7 +366,7 @@ router.post("/generate-new-version",
       }
 
       const document = documentCheck.rows[0]
-      const hasAccess = 
+      const hasAccess =
         document.owner_id === req.user?.id ||
         (document.team_members && document.team_members.includes(req.user?.id))
 
@@ -413,7 +392,7 @@ router.post("/generate-new-version",
       // Check if template has changed (for MAJOR version increment)
       let templateChanged = false
       let changeType = 'ai_regeneration'
-      
+
       if (templateId && document.template_id) {
         // Different template = MAJOR version
         if (templateId !== document.template_id) {
@@ -441,7 +420,7 @@ router.post("/generate-new-version",
       // Increment version based on change type
       const currentVersion = document.semantic_version || '1.0.0'
       let newVersion: string
-      
+
       if (templateChanged) {
         // MAJOR version: Template or template version changed
         newVersion = semanticVersionService.getNextTemplateVersion(currentVersion)
@@ -451,7 +430,7 @@ router.post("/generate-new-version",
         newVersion = semanticVersionService.getNextAIVersion(currentVersion)
         log.info(`🔄 MINOR version increment (AI regeneration): ${currentVersion} → ${newVersion}`)
       }
-      
+
       const newVersionNumber = document.version + 1
 
       // Save current version to history (if not already saved)
@@ -471,7 +450,7 @@ router.post("/generate-new-version",
           JSON.stringify({ provider, model, temperature, templateChanged })
         ]
       )
-      
+
       log.info(`Version ${currentVersion} saved to history (or already exists)`)
 
       log.info(`Updating document ${existingDocumentId} from ${currentVersion} to ${newVersion}`)
@@ -511,17 +490,17 @@ router.post("/generate-new-version",
           existingDocumentId
         ]
       )
-      
+
       if (updateResult.rows.length === 0) {
         throw new Error(`Failed to update document ${existingDocumentId} - document not found or no changes made`)
       }
-      
+
       log.info(`Document updated successfully to version ${newVersion}. Rows affected: ${updateResult.rowCount}`)
 
       // 🔥 Trigger quality audit after AI regeneration (MINOR version increment)
       try {
         const { qualityAuditService } = await import('../services/qualityAuditService')
-        
+
         log.info('[AI-REGENERATION] Triggering quality audit after version increment', {
           documentId: existingDocumentId,
           documentName: updateResult.rows[0].name,
@@ -530,14 +509,14 @@ router.post("/generate-new-version",
           provider,
           model
         })
-        
+
         // Get project context for audit
         const projectQuery = await pool.query(
           'SELECT id, name, framework, description FROM projects WHERE id = $1',
           [projectId]
         )
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
-        
+
         // Enqueue quality audit job (async, non-blocking)
         const auditJobId = require('uuid').v4()
         queueService.addJob('quality-audit', {
@@ -553,7 +532,7 @@ router.post("/generate-new-version",
             error: auditError.message
           })
         })
-        
+
         log.info('[AI-REGENERATION] Quality audit job enqueued', { auditJobId })
       } catch (error: any) {
         // Don't fail document generation if audit fails
@@ -616,7 +595,7 @@ router.post("/generate-new-version",
       })
     } catch (error) {
       log.error("Generate new version error:", error)
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to generate new version",
         details: error instanceof Error ? error.message : "Unknown error"
       })
@@ -642,7 +621,7 @@ router.post("/regenerate/:documentId",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     const { documentId } = req.params
-    
+
     try {
       const {
         templateId,
@@ -775,7 +754,7 @@ router.post("/regenerate/:documentId",
       })
     } catch (error) {
       log.error("Document regeneration error:", error)
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to start document regeneration",
         details: error instanceof Error ? error.message : "Unknown error"
       })
@@ -789,7 +768,7 @@ router.get("/regenerate/job/:jobId",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     const { jobId } = req.params
-    
+
     try {
       const jobResult = await pool.query(
         `SELECT id, document_id, status, progress, progress_message, created_at, 
@@ -808,7 +787,7 @@ router.get("/regenerate/job/:jobId",
       })
     } catch (error) {
       log.error("Failed to fetch job status:", error)
-      res.status(500).json({ 
+      res.status(500).json({
         error: "Failed to fetch job status",
         details: error instanceof Error ? error.message : "Unknown error"
       })
