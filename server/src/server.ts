@@ -109,6 +109,7 @@ import issueRoutes from "./routes/issueRoutes"
 import riskReportingRoutes from "./routes/riskReportingRoutes"
 import portfolioFinancialRoutes from "./routes/portfolioFinancial"
 import taskCostRoutes from "./routes/taskCosts"
+import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -286,6 +287,7 @@ app.use("/api/assessment", assessmentExportRoutes)
 app.use("/api/portfolio-assessment", portfolioAssessmentRoutes)
 app.use("/api/executive-dashboard", executiveDashboardRoutes)
 app.use("/api/projects", projectSimilarityRoutes)
+app.use("/api/projects", developmentApproachRoutes)
 console.log("✅ All API routes registered")
 app.use("/api/notifications", notificationsRoutes)
 app.use("/api/email-notifications", emailNotificationsRoutes)

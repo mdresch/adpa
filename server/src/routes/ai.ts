@@ -124,8 +124,9 @@ router.post("/generate",
       }
       
       try {
-        await queueService.addJob('ai-generate', jobData)
-        log.info('✅ [BACKEND-8/10] Job added to queue')
+        const { aiQueue } = await import('../services/queueService')
+        const job = await aiQueue.add('ai-generate', jobData)
+        log.info('✅ [BACKEND-8/10] Job added to queue', { jobId: job.id })
       } catch (queueError: unknown) {
         log.error('❌ [QUEUE] Failed to add job to queue:', queueError)
         return res.status(500).json({ 

@@ -18,6 +18,7 @@ import { ProjectDataExtraction } from "./components/ProjectDataExtraction"
 import { PerformanceDashboard } from "@/components/project/PerformanceDashboard"
 import { StakeholdersTab } from "./components/StakeholdersTab"
 import { TeamAgreementsTab } from "./components/TeamAgreementsTab"
+import { DevelopmentApproachTab } from "./components/DevelopmentApproachTab"
 import LessonsTab from "./components/LessonsTab"
 import { VariablesTab } from "./components/VariablesTab"
 import { TimelineTab } from "./components/TimelineTab"
@@ -78,7 +79,7 @@ import {
   Shield,
   ExternalLink,
 } from "@/components/ui/icons-shim"
-import { Users2 } from "lucide-react"
+import { Users2, Code } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -3389,6 +3390,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Users2 className="h-4 w-4 mr-2" />
                   Team Agreements
                 </TabsTrigger>
+                <TabsTrigger value="development-approach">
+                  <Code className="h-4 w-4 mr-2" />
+                  Development Approach
+                </TabsTrigger>
                 <TabsTrigger value="baseline">Baseline</TabsTrigger>
                 <TabsTrigger value="financials">
                   <DollarSign className="h-4 w-4 mr-2" />
@@ -3468,6 +3473,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
               <TabsContent value="team-agreements" className="space-y-4">
                 <TeamAgreementsTab projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="development-approach" className="space-y-4">
+                <DevelopmentApproachTab projectId={projectId} />
               </TabsContent>
 
               <TabsContent value="baseline" className="space-y-4">
