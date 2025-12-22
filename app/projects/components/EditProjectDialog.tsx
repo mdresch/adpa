@@ -50,9 +50,6 @@ export function EditProjectDialog({
                 </a>
               )}
             </div>
-            <DialogTitle className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-              Edit Project
-            </DialogTitle>
             <DialogDescription className="text-slate-600 dark:text-slate-300">
               Update project details and settings.
             </DialogDescription>

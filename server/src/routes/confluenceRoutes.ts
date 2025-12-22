@@ -274,7 +274,6 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
       id: document.id,
       title: document.name,
       content: document.content,
-      project_id: document.project_id, 
       project_id: document.project_id,
       framework: document.framework,
       status: document.status,
@@ -379,6 +378,7 @@ async function getIntegrationConfig(integrationId: string): Promise<{
     }
 
     return {
+      id: result.rows[0].id,
       config: {
         baseUrl: config.base_url,
         username: credentials.username,
@@ -416,6 +416,7 @@ async function getLatestActiveIntegrationConfig(): Promise<{ id: string, config:
     }
 
     return {
+      id: result.rows[0].id,
       config: {
         baseUrl: config.base_url,
         username: credentials.username,

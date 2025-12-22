@@ -115,7 +115,6 @@ export default function ProjectDocumentViewer() {
   const documentId = params.docId as string
 
   const [document, setDocument] = useState<DocumentData | null>(null)
-  const [confluenceUrl, setConfluenceUrl] = useState<string | null>(null)
   const [versions, setVersions] = useState<VersionData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -756,7 +755,6 @@ The ADPA system represents a significant advancement in document processing auto
         return
       }
       if (url) {
-        setConfluenceUrl(url)
         setDocument(prev => prev ? ({ ...(prev as any), confluence_page_url: url }) as any : prev)
       } else {
         toast.info('Export completed, but URL not returned. Check Confluence.')

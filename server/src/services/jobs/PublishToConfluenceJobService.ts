@@ -45,7 +45,9 @@ export class PublishToConfluenceJobService {
         const search = await client.searchContent(title, spaceKey)
         const existing = search.results?.find(r => r.title === title)
         if (existing) {
-          page = await client.updatePage(existing.id, existing.version + 1, title, storage)
+          // Get full page to access version.number
+          const fullPage = await client.getPage(existing.id)
+          page = await client.updatePage(existing.id, title, storage, fullPage.version.number + 1)
         } else {
           page = await client.createPage(spaceKey, title, storage, parentId)
         }

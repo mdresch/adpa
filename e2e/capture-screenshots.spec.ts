@@ -3,9 +3,9 @@ import fs from 'fs';
 import path from 'path';
 
 // Config via env or defaults
-const BASE_URL = process.env.ADPА_URL || process.env.ADPA_URL || 'https://adpa.vercel.app';
-const EMAIL = process.env.ADPA_EMAIL || 'admin@adpa.com';
-const PASSWORD = process.env.ADPA_PASSWORD || 'admin123';
+const BASE_URL = process.env.ADPA_URL || '';
+const EMAIL = process.env.ADPA_EMAIL || 'test@example.com';
+const PASSWORD = process.env.ADPA_PASSWORD || 'test123';
 const OUT_DIR = path.resolve('screenshots');
 
 async function ensureDir(dir: string) {

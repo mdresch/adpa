@@ -423,10 +423,10 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
           } catch (e) {
             // ignore
           }
-          // Redirect to login after a short delay
-          setTimeout(() => {
-            window.location.href = '/auth/login'
-          }, 2000)
+            // Redirect to login after a short delay (use replace to prevent open redirect vulnerability)
+            setTimeout(() => {
+              window.location.replace('/auth/login')
+            }, 2000)
         } else {
           // Only show error toast if not already failed (prevent duplicate toasts)
           const currentStatus = roomStatuses[room]
