@@ -1,7 +1,7 @@
 -- Create table for storing document-Jira issue linkages
 CREATE TABLE IF NOT EXISTS document_jira_links (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id UUID NOT NULL,
+    document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
     jira_issue_key VARCHAR(255) NOT NULL,
     jira_issue_url TEXT NOT NULL,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,

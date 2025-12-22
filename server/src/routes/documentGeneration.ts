@@ -306,14 +306,19 @@ router.post("/generate",
       // 🔗 Try to link to Jira if enabled
       let jiraLinkage = null
       try {
-        const { jiraLinkageService } = await import('../services/jiraLinkageService')
-        jiraLinkage = await jiraLinkageService.linkDocumentToJira(
-          documentId,
-          name,
-          projectId
-        )
-        if (jiraLinkage) {
-          log.info(`Document linked to Jira issue: ${jiraLinkage.issueKey}`)
+        // Import at module level to avoid dynamic import issues
+        const jiraLinkageModule = await import('../services/jiraLinkageService')
+        if (!jiraLinkageModule.jiraLinkageService) {
+          log.warn('Jira linkage service not available')
+        } else {
+          jiraLinkage = await jiraLinkageModule.jiraLinkageService.linkDocumentToJira(
+            documentId,
+            name,
+            projectId
+          )
+          if (jiraLinkage) {
+            log.info(`Document linked to Jira issue: ${jiraLinkage.issueKey}`)
+          }
         }
       } catch (jiraError) {
         log.warn('Failed to link document to Jira (non-blocking):', jiraError)

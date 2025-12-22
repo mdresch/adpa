@@ -47,13 +47,24 @@ export default function JiraLinkageSettings() {
 
   const loadConfig = async () => {
     setLoading(true)
+    setMessage(null) // Clear previous messages
     try {
       const data = await apiClient.get('/jira-linkage/config')
-      setConfig(data.config)
+      if (!data || typeof data !== 'object') {
+        throw new Error('Invalid response format')
+      }
+      setConfig(data.config || {
+        enabled: false,
+        autoCreateIssues: false,
+        linkConfluencePages: false,
+        defaultIssueType: 'Task',
+        defaultPriority: 'Medium'
+      })
       setAvailableIntegrations(data.availableIntegrations || [])
     } catch (error) {
       console.error('Failed to load Jira linkage config:', error)
-      setMessage({ type: 'error', text: 'Failed to load configuration' })
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load configuration'
+      setMessage({ type: 'error', text: errorMessage })
     } finally {
       setLoading(false)
     }

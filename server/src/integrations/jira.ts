@@ -69,7 +69,10 @@ export class JiraIntegration implements IntegrationProvider {
     documentId: string,
     documentTitle: string,
     projectId: string,
-    confluenceUrl?: string
+    confluenceUrl?: string,
+    issueDescription?: string,
+    issueType?: string,
+    priority?: string
   ): Promise<{ issueKey: string; issueUrl: string; created: boolean }> {
     try {
       const projectKey = this.config.defaultProjectKey
@@ -82,13 +85,19 @@ export class JiraIntegration implements IntegrationProvider {
       let created = false
 
       if (!issue) {
+        // Check if auto-create is enabled before creating a new issue
+        if (!this.config.autoCreateIssues) {
+          logger.info(`Auto-create disabled, skipping Jira issue creation for document ${documentId}`)
+          throw new Error("Auto-create issues is disabled. No existing issue found and creation is not allowed.")
+        }
+        
         // Create a new issue
         const createRequest: CreateJiraIssueRequest = {
           summary: `Document: ${documentTitle}`,
-          description: `Generated document from ADPA project.\n\nDocument ID: ${documentId}\nProject ID: ${projectId}`,
-          issueType: this.config.defaultIssueType || "Task",
+          description: issueDescription || `Generated document from ADPA project.\n\nDocument ID: ${documentId}\nProject ID: ${projectId}`,
+          issueType: issueType || this.config.defaultIssueType || "Task",
           projectKey: projectKey,
-          priority: this.config.defaultPriority,
+          priority: priority || this.config.defaultPriority,
           labels: ["adpa-generated", "document"]
         }
 

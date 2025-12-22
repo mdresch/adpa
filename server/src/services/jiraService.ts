@@ -214,7 +214,7 @@ export class JiraService {
           url: url,
           title: title,
           icon: {
-            url16x16: "https://adpa.ai/favicon.ico",
+            url16x16: `${this.config.baseUrl}/favicon.ico`,
             title: "ADPA Document"
           }
         }

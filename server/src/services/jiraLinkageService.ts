@@ -227,7 +227,10 @@ export class JiraLinkageService {
     documentId: string,
     documentTitle: string,
     projectId: string,
-    confluenceUrl?: string
+    confluenceUrl?: string,
+    issueDescription?: string,
+    issueType?: string,
+    priority?: string
   ): Promise<{ issueKey: string; issueUrl: string; created: boolean } | null> {
     try {
       const config = await this.getJiraLinkageConfig()
@@ -250,10 +253,21 @@ export class JiraLinkageService {
       
       const integration = integrationResult.rows[0]
       
-      // Decrypt credentials
-      const credentials = JSON.parse(
-        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-      )
+      // Decrypt credentials with validation
+      let credentials: any
+      try {
+        const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+        credentials = JSON.parse(decryptedData)
+        
+        // Validate required credential fields
+        if (!credentials.email || !credentials.apiToken) {
+          logger.error("Invalid Jira credentials: missing required fields")
+          return null
+        }
+      } catch (error) {
+        logger.error("Failed to decrypt or validate Jira credentials:", error)
+        return null
+      }
       
       // Create Jira integration instance
       const jiraConfig: JiraIntegrationConfig = {
@@ -274,7 +288,10 @@ export class JiraLinkageService {
         documentId,
         documentTitle,
         projectId,
-        confluenceUrl
+        confluenceUrl,
+        issueDescription,
+        issueType,
+        priority
       )
       
       logger.info(`Document ${documentId} linked to Jira issue ${result.issueKey}`)

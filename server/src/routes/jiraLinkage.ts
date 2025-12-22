@@ -191,7 +191,10 @@ router.post("/create-issue",
         documentId,
         issueTitle || document.name,
         document.project_id,
-        confluenceUrl
+        confluenceUrl,
+        issueDescription,
+        issueType,
+        priority
       )
       
       if (!result) {
@@ -239,10 +242,20 @@ router.post("/test/:integrationId",
       
       const integration = integrationResult.rows[0]
       
-      // Decrypt credentials
-      const credentials = JSON.parse(
-        Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-      )
+      // Decrypt credentials with validation
+      let credentials: any
+      try {
+        const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+        credentials = JSON.parse(decryptedData)
+        
+        // Validate required credential fields
+        if (!credentials.email || !credentials.apiToken) {
+          return res.status(400).json({ error: "Invalid integration credentials: missing required fields" })
+        }
+      } catch (error) {
+        log.error("Failed to decrypt Jira credentials:", error)
+        return res.status(500).json({ error: "Failed to decrypt integration credentials" })
+      }
       
       // Test connection
       const { JiraService } = await import("../services/jiraService")

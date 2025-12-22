@@ -422,3 +422,6 @@
 {"level":"info","message":"Set max listeners on all Bull queue Redis connections","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.266Z"}
 {"level":"info","message":"[EXTRACTION-QUEUE] Registering extraction queue processor for \"extract-project-data\"","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.268Z"}
 {"component":"authRoutes","level":"info","message":"🔧 Auth routes module loaded","service":"adpa-backend","timestamp":"2025-12-12T07:32:17.554Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2025-12-22T20:16:57.135Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2025-12-22T20:17:12.254Z"}
+{"level":"info","message":"✅ Database connected successfully via DATABASE_URL","service":"adpa-backend","timestamp":"2025-12-22T20:17:22.266Z"}
