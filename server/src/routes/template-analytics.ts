@@ -311,5 +311,83 @@ router.post('/analytics/rebuild-entity-profiles', authenticateToken, requirePerm
   }
 });
 
+// Rebuild document purposes for a specific project
+router.post('/analytics/rebuild-document-purposes/:projectId', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { projectId } = req.params;
+    
+    // Validate projectId format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID format' });
+    }
+    
+    const { default: DocumentPurposeService } = await import('../services/documentPurposeService');
+    await DocumentPurposeService.rebuildForProject(projectId);
+    
+    res.json({ 
+      message: 'Document purposes rebuilt successfully for project',
+      projectId 
+    });
+  } catch (error) {
+    log.error('Rebuild document purposes error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Rebuild both document purposes and template entity profiles (full rebuild)
+router.post('/analytics/rebuild-all', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { projectId } = req.body; // Optional - if provided, only rebuild for this project
+    
+    if (projectId) {
+      // Validate projectId format if provided
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({ error: 'Invalid project ID format' });
+      }
+      
+      // Rebuild for specific project
+      const { default: DocumentPurposeService } = await import('../services/documentPurposeService');
+      await DocumentPurposeService.rebuildForProject(projectId);
+      
+      // Update template profiles for templates used in this project
+      const { pool } = await import('../database/connection');
+      const templatesRes = await pool.query(
+        `SELECT DISTINCT template_id
+         FROM documents
+         WHERE project_id = $1 AND template_id IS NOT NULL`,
+        [projectId]
+      );
+      
+      const templateIds = templatesRes.rows.map((row) => row.template_id as string);
+      if (templateIds.length > 0) {
+        for (const templateId of templateIds) {
+          await TemplateAnalyticsService.updateTemplateEntityProfile(templateId);
+        }
+      }
+      
+      res.json({ 
+        message: 'Document purposes and template entity profiles rebuilt successfully for project',
+        projectId,
+        templatesUpdated: templateIds.length
+      });
+    } else {
+      // Full system rebuild - this could be expensive, so we'll just rebuild template profiles
+      await TemplateAnalyticsService.updateTemplateEntityProfile();
+      
+      res.json({ 
+        message: 'Template entity profiles rebuilt successfully for all templates',
+        note: 'To rebuild document purposes, specify a projectId in the request body'
+      });
+    }
+  } catch (error) {
+    log.error('Rebuild all analytics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
 
