@@ -190,27 +190,61 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
         })
       })
 
+      // Track recent status updates to prevent spam
+      const recentStatusUpdates = new Map<string, number>()
+      
       socketInstance.on("job:status", (data) => {
         if (data.userId === user.id) {
-          toast.info(`Job ${data.status}`, {
-            description: `Progress: ${data.progress}%`,
-          })
+          // Only show status toast for significant milestones (0%, 25%, 50%, 75%, 100%)
+          // or if it's been more than 10 seconds since last status update for this job
+          const jobKey = `job-status-${data.jobId}`
+          const now = Date.now()
+          const lastUpdate = recentStatusUpdates.get(jobKey) || 0
+          const progress = data.progress || 0
+          const isMilestone = progress === 0 || progress === 25 || progress === 50 || progress === 75 || progress === 100
+          const timeSinceLastUpdate = now - lastUpdate
+          
+          // Only show toast for milestones or if it's been 10+ seconds
+          if (isMilestone || timeSinceLastUpdate > 10000) {
+            recentStatusUpdates.set(jobKey, now)
+            toast.info(`Job ${data.status}`, {
+              description: `Progress: ${progress}%`,
+              duration: 3000, // Shorter duration for status updates
+            })
+          }
         }
       })
 
+      // Track recent job notifications to prevent duplicate toasts
+      const recentJobNotifications = new Set<string>()
+      
       socketInstance.on("job:completed", (data) => {
         if (data.userId === user.id) {
-          toast.success("Job completed successfully!", {
-            description: `Job ID: ${data.jobId}`,
-          })
+          // Deduplicate: only show toast if we haven't shown it recently for this job
+          const notificationKey = `job-completed-${data.jobId}`
+          if (!recentJobNotifications.has(notificationKey)) {
+            recentJobNotifications.add(notificationKey)
+            toast.success("Job completed successfully!", {
+              description: `Job ID: ${data.jobId}`,
+            })
+            // Remove from set after 5 seconds to allow re-notification if needed
+            setTimeout(() => recentJobNotifications.delete(notificationKey), 5000)
+          }
         }
       })
 
       socketInstance.on("job:failed", (data) => {
         if (data.userId === user.id) {
-          toast.error("Job failed", {
-            description: data.error || `Job ID: ${data.jobId}`,
-          })
+          // Deduplicate: only show toast if we haven't shown it recently for this job
+          const notificationKey = `job-failed-${data.jobId}`
+          if (!recentJobNotifications.has(notificationKey)) {
+            recentJobNotifications.add(notificationKey)
+            toast.error("Job failed", {
+              description: data.error || `Job ID: ${data.jobId}`,
+            })
+            // Remove from set after 5 seconds to allow re-notification if needed
+            setTimeout(() => recentJobNotifications.delete(notificationKey), 5000)
+          }
         }
       })
 

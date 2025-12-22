@@ -311,6 +311,54 @@ router.post('/analytics/rebuild-entity-profiles', authenticateToken, requirePerm
   }
 });
 
+// Rebuild template analytics for a specific template
+router.post('/analytics/rebuild-template/:templateId', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { templateId } = req.params;
+    
+    // Validate templateId format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(templateId)) {
+      return res.status(400).json({ error: 'Invalid template ID format' });
+    }
+    
+    const { pool } = await import('../database/connection');
+    
+    // Find all projects using this template
+    const projectsRes = await pool.query(
+      `SELECT DISTINCT project_id 
+       FROM documents 
+       WHERE template_id = $1 AND project_id IS NOT NULL`,
+      [templateId]
+    );
+    
+    const projectIds = projectsRes.rows.map((row) => row.project_id as string);
+    log.info(`Found ${projectIds.length} projects using template ${templateId}`);
+    
+    // Rebuild document purposes for each project
+    if (projectIds.length > 0) {
+      const { default: DocumentPurposeService } = await import('../services/documentPurposeService');
+      for (const projectId of projectIds) {
+        log.info(`Rebuilding document purposes for project ${projectId}`);
+        await DocumentPurposeService.rebuildForProject(projectId);
+      }
+    }
+    
+    // Rebuild template entity profile
+    await TemplateAnalyticsService.updateTemplateEntityProfile(templateId);
+    
+    res.json({
+      message: 'Template analytics rebuilt successfully',
+      templateId,
+      projectsRebuilt: projectIds.length
+    });
+  } catch (error) {
+    log.error('Rebuild template analytics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Rebuild document purposes for a specific project
 router.post('/analytics/rebuild-document-purposes/:projectId', authenticateToken, requirePermission('admin'), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId });
@@ -385,6 +433,73 @@ router.post('/analytics/rebuild-all', authenticateToken, requirePermission('admi
     }
   } catch (error) {
     log.error('Rebuild all analytics error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Diagnostic endpoint to check template analytics data
+router.get('/analytics/diagnostic/:templateId', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { templateId } = req.params;
+    
+    // Validate templateId format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(templateId)) {
+      return res.status(400).json({ error: 'Invalid template ID format' });
+    }
+    
+    const { pool } = await import('../database/connection');
+    
+    // Check documents for this template
+    const documentsCheck = await pool.query(
+      `SELECT 
+        COUNT(*) as total_documents,
+        COUNT(CASE WHEN template_id IS NOT NULL THEN 1 END) as with_template_id,
+        COUNT(CASE WHEN entity_counts != '{}'::jsonb AND entity_counts IS NOT NULL THEN 1 END) as with_entity_counts,
+        COUNT(CASE WHEN template_id IS NOT NULL AND entity_counts != '{}'::jsonb THEN 1 END) as with_both
+       FROM documents
+       WHERE template_id = $1`,
+      [templateId]
+    );
+    
+    // Check view data
+    const viewCheck = await pool.query(
+      `SELECT * FROM aggregated_template_entity_view WHERE template_id = $1`,
+      [templateId]
+    );
+    
+    // Check template_entity_profile
+    const profileCheck = await pool.query(
+      `SELECT * FROM template_entity_profile WHERE template_id = $1`,
+      [templateId]
+    );
+    
+    // Sample a few documents to see their entity_counts
+    const sampleDocs = await pool.query(
+      `SELECT id, name, template_id, 
+              CASE WHEN entity_counts = '{}'::jsonb THEN 'empty' ELSE 'has_data' END as entity_counts_status,
+              entity_counts
+       FROM documents
+       WHERE template_id = $1
+       LIMIT 5`,
+      [templateId]
+    );
+    
+    res.json({
+      templateId,
+      documents: documentsCheck.rows[0],
+      viewData: viewCheck.rows[0] || null,
+      profileData: profileCheck.rows[0] || null,
+      sampleDocuments: sampleDocs.rows,
+      recommendations: {
+        needsExtraction: documentsCheck.rows[0].with_entity_counts === '0',
+        needsRebuild: viewCheck.rows.length === 0 && documentsCheck.rows[0].with_both > 0,
+        needsDocumentPurposeRebuild: documentsCheck.rows[0].with_template_id > 0 && documentsCheck.rows[0].with_entity_counts === '0'
+      }
+    });
+  } catch (error) {
+    log.error('Diagnostic error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

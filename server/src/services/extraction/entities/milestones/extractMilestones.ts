@@ -133,14 +133,14 @@ export async function extractMilestones(
 
 ${basePrompt}`
 
-    // Call AI
-    const response = await aiService.generate({
+    // Call AI with fallback
+    const response = await aiService.generateWithFallback({
       prompt,
       provider: context.provider,
       model: context.model,
       temperature: options.temperature ?? 0.3,
       max_tokens: options.maxTokens ?? 8000
-    })
+    }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
     // Parse response
     const parsed = parseAIResponse(response.content)

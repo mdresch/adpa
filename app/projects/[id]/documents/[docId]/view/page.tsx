@@ -149,6 +149,9 @@ export default function ProjectDocumentViewer() {
     joinRoom(documentRoom)
     joinRoom(projectRoom)
 
+    // Track recent notifications to prevent duplicate toasts
+    const recentNotifications = new Set<string>()
+
     const handleConflictDetected = (data: {
       jobId: string;
       conflictId: string;
@@ -156,7 +159,14 @@ export default function ProjectDocumentViewer() {
       resolutionOptions: string[];
     }) => {
       try {
-        toast.warning(`Template conflict detected during regeneration: ${data.conflictDetails.template?.name || 'Unknown Template'}`)
+        // Deduplicate: only show toast if we haven't shown it recently for this conflict
+        const notificationKey = `conflict-detected-${data.conflictId}`
+        if (!recentNotifications.has(notificationKey)) {
+          recentNotifications.add(notificationKey)
+          toast.warning(`Template conflict detected during regeneration: ${data.conflictDetails.template?.name || 'Unknown Template'}`)
+          // Remove from set after 5 seconds to allow re-notification if needed
+          setTimeout(() => recentNotifications.delete(notificationKey), 5000)
+        }
         // The conflict dialog will be shown by the project page
       } catch (err) {
         console.warn('Error handling document:regeneration:conflict_detected event', err)
@@ -171,7 +181,14 @@ export default function ProjectDocumentViewer() {
     }) => {
       try {
         if (data.documentId === documentId) {
-          toast.success(`Conflict resolved using ${data.resolutionMethod}`)
+          // Deduplicate: only show toast if we haven't shown it recently for this conflict
+          const notificationKey = `conflict-resolved-${data.conflictId}`
+          if (!recentNotifications.has(notificationKey)) {
+            recentNotifications.add(notificationKey)
+            toast.success(`Conflict resolved using ${data.resolutionMethod}`)
+            // Remove from set after 5 seconds to allow re-notification if needed
+            setTimeout(() => recentNotifications.delete(notificationKey), 5000)
+          }
           fetchDocument() // Refresh document to show updates
         }
       } catch (err) {
@@ -186,7 +203,14 @@ export default function ProjectDocumentViewer() {
       documentName?: string;
     }) => {
       try {
-        toast.success(`Document regeneration completed (v${data.versionNumber})`)
+        // Deduplicate: only show toast if we haven't shown it recently for this version
+        const notificationKey = `regeneration-completed-${data.versionId}`
+        if (!recentNotifications.has(notificationKey)) {
+          recentNotifications.add(notificationKey)
+          toast.success(`Document regeneration completed (v${data.versionNumber})`)
+          // Remove from set after 5 seconds to allow re-notification if needed
+          setTimeout(() => recentNotifications.delete(notificationKey), 5000)
+        }
         fetchDocument() // Refresh document to show the new version
       } catch (err) {
         console.warn('Error handling document:regeneration:completed event', err)

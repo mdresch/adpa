@@ -7,6 +7,8 @@
 import { pool } from '../database/connection';
 import { PMBOK_KNOWLEDGE_DOMAINS, getDomainTier, type PmbokDomain } from '@/types/pmbok';
 import { ENTITY_DOMAIN_WEIGHTS, type EntityDomainWeight } from '@/types/entity-domain-weights';
+import { cache } from '../utils/redis';
+import { logger } from '../utils/logger';
 
 const query = async (text: string, params?: any[]) => {
   return pool.query(text, params);
@@ -87,6 +89,18 @@ export class TemplateAnalyticsService {
       params.push(templateId);
     }
 
+    // Log diagnostic info
+    const { pool } = await import('../database/connection');
+    if (templateId) {
+      const docCheck = await pool.query(
+        `SELECT COUNT(*) as count, COUNT(CASE WHEN entity_counts != '{}'::jsonb THEN 1 END) as with_counts
+         FROM documents
+         WHERE template_id = $1`,
+        [templateId]
+      );
+      console.log(`[TemplateAnalytics] Template ${templateId}: ${docCheck.rows[0].count} documents, ${docCheck.rows[0].with_counts} with entity_counts`);
+    }
+
     const result = await query(
       `
       SELECT template_id, total_documents, total_entities, avg_entity_counts
@@ -95,6 +109,13 @@ export class TemplateAnalyticsService {
       `,
       params
     );
+
+    if (templateId && result.rows.length === 0) {
+      console.warn(`[TemplateAnalytics] No data found in aggregated_template_entity_view for template ${templateId}. This may mean:
+        1. Documents using this template don't have entity_counts populated
+        2. Documents don't have template_id set
+        3. The view query returned no results`);
+    }
 
     const normalize = (coverage: Record<string, number>): Record<string, number> => {
       const total = Object.values(coverage).reduce((sum, v) => sum + v, 0) || 1;
@@ -157,6 +178,28 @@ export class TemplateAnalyticsService {
         .filter(([domain, value]) => domain !== primaryKnowledge && value >= 0.2)
         .map(([domain]) => domain);
 
+      // Ensure all JSONB fields are properly formatted
+      // PostgreSQL's pg library should handle this, but we'll be explicit to avoid issues
+      // Validate and sanitize data before stringifying
+      // Note: avgEntityCounts, knowledgeCoverage, and performanceCoverage are already declared above
+      const secondaryDomains = Array.isArray(secondaryKnowledgeDomains) ? secondaryKnowledgeDomains : [];
+
+      // Stringify with error handling
+      let avgEntityCountsJson: string;
+      let knowledgeCoverageJson: string;
+      let performanceCoverageJson: string;
+      let secondaryDomainsJson: string;
+
+      try {
+        avgEntityCountsJson = JSON.stringify(avgEntityCounts);
+        knowledgeCoverageJson = JSON.stringify(normalizedKnowledge);
+        performanceCoverageJson = JSON.stringify(normalizedPerformance);
+        secondaryDomainsJson = JSON.stringify(secondaryDomains);
+      } catch (jsonError: any) {
+        logger.error(`[TemplateAnalytics] Failed to stringify JSON for template ${row.template_id}:`, jsonError);
+        throw new Error(`Failed to serialize template analytics data: ${jsonError.message}`);
+      }
+
       await query(
         `
         INSERT INTO template_entity_profile (
@@ -170,7 +213,7 @@ export class TemplateAnalyticsService {
           secondary_knowledge_domains,
           primary_performance_domain,
           updated_at
-        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+        ) VALUES ($1,$2,$3,$4::jsonb,$5::jsonb,$6::jsonb,$7,$8::jsonb,$9,NOW())
         ON CONFLICT (template_id) DO UPDATE SET
           total_documents = EXCLUDED.total_documents,
           total_entities = EXCLUDED.total_entities,
@@ -186,14 +229,18 @@ export class TemplateAnalyticsService {
           row.template_id,
           row.total_documents,
           row.total_entities,
-          row.avg_entity_counts || {},
-          normalizedKnowledge,
-          normalizedPerformance,
+          avgEntityCountsJson,
+          knowledgeCoverageJson,
+          performanceCoverageJson,
           primaryKnowledge,
-          secondaryKnowledgeDomains,
+          secondaryDomainsJson,
           primaryPerformance
         ]
       );
+
+      // Invalidate template cache so frontend gets updated analytics data
+      const cacheKey = `template:${row.template_id}`;
+      await cache.del(cacheKey);
     }
   }
 

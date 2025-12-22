@@ -374,42 +374,68 @@ queuesForListeners.forEach((queue) => {
   })
 })
 
-// Create QueueService instance with all dependencies
-const queueServiceInstance = createQueueService(
-  new Map<QueueName, Bull.Queue>([
-    ['ai-processing', aiQueue],
-    ['document-processing', documentQueue],
-    ['pipeline-processing', pipelineQueue],
-    ['baseline-processing', baselineQueue],
-    ['process-flow-processing', processFlowQueue],
-    ['document-regeneration', regenerationQueue],
-    ['quality-audit', qualityAuditQueue],
-    ['project-data-extraction', extractionQueue],
-  ]),
-  pool,
-  io,
-  cache,
-  aiService,
-  ContextAwareAIService
-);
+// Lazy initialization of QueueService instance
+// This ensures the database pool is initialized before creating the service
+let queueServiceInstance: ReturnType<typeof createQueueService> | null = null
 
-// Export the queue service functions
-export const addJob = queueServiceInstance.addJob.bind(queueServiceInstance);
-export const getJobStatus = queueServiceInstance.getJobStatus.bind(queueServiceInstance);
-export const cancelJob = queueServiceInstance.cancelJob.bind(queueServiceInstance);
-export const updateJobStatus = async (
+function getQueueServiceInstance() {
+  if (!queueServiceInstance) {
+    // Ensure pool is initialized - use getDatabasePool which throws if not initialized
+    const { getDatabasePool } = require('../database/connection')
+    const initializedPool = getDatabasePool() // This will throw if not initialized
+    
+    queueServiceInstance = createQueueService(
+      new Map<QueueName, Bull.Queue>([
+        ['ai-processing', aiQueue],
+        ['document-processing', documentQueue],
+        ['pipeline-processing', pipelineQueue],
+        ['baseline-processing', baselineQueue],
+        ['process-flow-processing', processFlowQueue],
+        ['document-regeneration', regenerationQueue],
+        ['quality-audit', qualityAuditQueue],
+        ['project-data-extraction', extractionQueue],
+      ]),
+      initializedPool,
+      io,
+      cache,
+      aiService,
+      ContextAwareAIService
+    )
+  }
+  return queueServiceInstance
+}
+
+// Export the queue service functions with lazy initialization
+export async function addJob(...args: Parameters<ReturnType<typeof createQueueService>['addJob']>) {
+  return getQueueServiceInstance().addJob(...args)
+}
+
+export async function getJobStatus(...args: Parameters<ReturnType<typeof createQueueService>['getJobStatus']>) {
+  return getQueueServiceInstance().getJobStatus(...args)
+}
+
+export async function cancelJob(...args: Parameters<ReturnType<typeof createQueueService>['cancelJob']>) {
+  return getQueueServiceInstance().cancelJob(...args)
+}
+
+export async function updateJobStatus(
   jobId: string,
   status: string,
   progress?: number,
   workerId?: string,
   queueName?: string,
   errorMessage?: string
-): Promise<void> => {
-  await queueServiceInstance.updateJobStatus(jobId, status, progress, workerId, queueName);
-};
+): Promise<void> {
+  await getQueueServiceInstance().updateJobStatus(jobId, status, progress, workerId, queueName);
+}
 
-// Export the queue service instance for internal use
-export { queueServiceInstance as queueService };
+// Export getters for the queue service instance for internal use
+export function getQueueService() {
+  return getQueueServiceInstance()
+}
+
+// Export getQueueServiceInstance for backward compatibility (used in metrics.ts)
+export { getQueueServiceInstance }
 
 // Initialize queues function for backward compatibility (deprecated)
 export async function initializeQueues(): Promise<void> {
@@ -419,7 +445,17 @@ export async function initializeQueues(): Promise<void> {
 }
 
 export async function getQueueServiceDependencies(): Promise<QueueServiceDependencies> {
-  return queueServiceInstance.getDependencies();
+  // Ensure pool is initialized before returning dependencies
+  const { getDatabasePool } = await import('../database/connection')
+  try {
+    getDatabasePool() // This will throw if pool is not initialized
+  } catch (error) {
+    // Pool not initialized - try to connect
+    const { connectDatabase } = await import('../database/connection')
+    await connectDatabase()
+  }
+  
+  return getQueueServiceInstance().getDependencies();
 }
 
 // Job processors

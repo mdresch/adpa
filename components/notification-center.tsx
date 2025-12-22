@@ -64,6 +64,9 @@ export function NotificationCenter() {
   useEffect(() => {
     if (!socket) return
 
+    // Track recent job notifications to prevent duplicate toasts
+    const recentJobNotifications = new Set<string>()
+    
     // Job completion notifications
     socket.on('job:completed', (data) => {
       addNotification({
@@ -81,8 +84,14 @@ export function NotificationCenter() {
         actionLabel: data.documentId && data.projectId ? 'View Document' : 'View Job'
       })
       
-      // Also show toast for immediate feedback
-      toast.success(data.message || 'Job completed!')
+      // Only show toast if we haven't shown it recently for this job (deduplication)
+      const notificationKey = `job-completed-${data.jobId}`
+      if (!recentJobNotifications.has(notificationKey)) {
+        recentJobNotifications.add(notificationKey)
+        toast.success(data.message || 'Job completed!')
+        // Remove from set after 5 seconds to allow re-notification if needed
+        setTimeout(() => recentJobNotifications.delete(notificationKey), 5000)
+      }
     })
 
     // Job failure notifications
@@ -96,7 +105,14 @@ export function NotificationCenter() {
         actionLabel: 'View Details'
       })
       
-      toast.error(data.error || 'Job failed')
+      // Only show toast if we haven't shown it recently for this job (deduplication)
+      const notificationKey = `job-failed-${data.jobId}`
+      if (!recentJobNotifications.has(notificationKey)) {
+        recentJobNotifications.add(notificationKey)
+        toast.error(data.error || 'Job failed')
+        // Remove from set after 5 seconds to allow re-notification if needed
+        setTimeout(() => recentJobNotifications.delete(notificationKey), 5000)
+      }
     })
 
     // Document generated

@@ -80,9 +80,16 @@ export interface QueueServiceDependencies {
  * Adapter for pg.Pool to IDatabase
  */
 export class PoolDatabaseAdapter implements IDatabase {
-  constructor(private pool: Pool) {}
+  constructor(private pool: Pool | null) {
+    if (!pool) {
+      throw new Error('PoolDatabaseAdapter: Database pool cannot be null. Ensure database is connected before creating adapter.')
+    }
+  }
 
   async query(text: string, params?: any[]): Promise<any> {
+    if (!this.pool) {
+      throw new Error('PoolDatabaseAdapter: Database pool is null. Database connection may have been lost.')
+    }
     return this.pool.query(text, params)
   }
 
