@@ -4141,15 +4141,32 @@ Output valid JSON object with "performance_actuals" array only.`
       trimmed = datePatternMatch[1]
     }
 
-    // Try quarter date conversion first
+    // Handle relative week patterns FIRST (before quarter date conversion)
+    // This prevents "Week 2" from being passed to convertQuarterDate which logs warnings
+    // Match patterns like "Week 2", "week 4", "Week2", etc.
+    const weekMatch = trimmed.match(/^week\s*(\d+)$/i)
+    if (weekMatch) {
+      const weekNumber = parseInt(weekMatch[1], 10)
+      if (weekNumber >= 0 && weekNumber <= 100) {
+        // Use current date as reference point, add weeks
+        const referenceDate = new Date()
+        referenceDate.setDate(referenceDate.getDate() + (weekNumber * 7))
+        const result = referenceDate.toISOString().split('T')[0]
+        logger.info(`[EXTRACTION] Converted relative date "${value}" (Week ${weekNumber}) to ${result}`)
+        return result
+      }
+    }
+
+    // Check if it's already a valid YYYY-MM-DD date BEFORE trying quarter conversion
+    // This prevents valid dates from being passed to convertQuarterDate which logs warnings
+    if (isValidDate(trimmed)) {
+      return trimmed
+    }
+
+    // Try quarter date conversion (only for actual quarter strings)
     const quarterDate = convertQuarterDate(trimmed)
     if (quarterDate) {
       return quarterDate
-    }
-
-    // Check if it's already a valid YYYY-MM-DD date
-    if (isValidDate(trimmed)) {
-      return trimmed
     }
 
     // Month name to number mapping
@@ -4214,6 +4231,7 @@ Output valid JSON object with "performance_actuals" array only.`
         }
       }
     }
+
 
     // Attempt to parse other date formats using Date.parse
     const parsed = Date.parse(trimmed)
@@ -8642,18 +8660,22 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'policy_compliance':
       // Scope Domain  
       case 'scope_baselines':
+      case 'scope_baseline': // Singular form
       case 'wbs_nodes':
       case 'scope_change_requests':
       case 'requirements_traceability':
       case 'scope_verification':
       // Schedule Domain
       case 'schedule_baselines':
+      case 'schedule_baseline': // Singular form
       case 'schedule_activities':
       case 'critical_path_activities':
+      case 'critical_path': // Singular form
       case 'schedule_variances':
       case 'schedule_forecasts':
       // Finance Domain
       case 'budget_baselines':
+      case 'budget_baseline': // Singular form
       case 'cost_actuals':
       case 'cost_estimates':
       case 'funding_tranches':

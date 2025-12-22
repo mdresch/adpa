@@ -295,138 +295,209 @@ export function WebSocketProvider({ children }: WebSocketProviderProps) {
   // Re-run when token, isAuthenticated, or user change
   }, [token, isAuthenticated, user])
 
-  const joinRoom = (room: string) => {
-    if (socket && isConnected) {
-      // Emit join and wait for server acknowledgement events (join:ok / join:error)
-      socket.emit("join", room)
+  const joinRoom = React.useCallback((room: string) => {
+    if (!socket || !isConnected) {
+      return
+    }
+
+    // Prevent duplicate joins - check if already joined or pending
+    if (joinedRooms.has(room)) {
+      // Already joined, skip
+      if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+        console.log(`[WS] Skipping duplicate join for room: ${room}`)
+      }
+      return
+    }
+
+    // Check if there's already a pending join attempt
+    if (roomStatuses[room] === 'pending') {
+      if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+        console.log(`[WS] Join already pending for room: ${room}`)
+      }
+      return
+    }
+
+    // Mark as pending
+    setRoomStatuses(prev => {
+      const next = { ...prev, [room]: 'pending' as const }
+      persistStatuses(next)
+      return next
+    })
+
+    // Emit join and wait for server acknowledgement events (join:ok / join:error)
+    socket.emit("join", room)
+
+    // Track if we've already handled this join attempt to prevent duplicate toasts
+    let handled = false
 
     const handleOk = (data: any) => {
-        if (data?.room === room) {
-          // Only log in debug mode to avoid console spam
-          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
-            console.log(`Joined room: ${room}`)
-          }
-      socket.off("join:ok", handleOk)
-      socket.off("join:error", handleError)
-          // Mark room as joined for auto-rejoin and persist
-          setJoinedRooms(prev => {
-            const next = new Set(prev)
-            next.add(room)
-            try {
-              if (typeof window !== 'undefined') {
-                sessionStorage.setItem(WS_JOINED_ROOMS_KEY, JSON.stringify(Array.from(next)))
-              }
-            } catch (e) {
-              // ignore
-            }
-            return next
-          })
+      if (data?.room === room && !handled) {
+        handled = true
+        // Only log in debug mode to avoid console spam
+        if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+          console.log(`Joined room: ${room}`)
         }
-      }
-
-      const handleError = (err: any) => {
-        if (err?.room === room) {
-          // Check if this is a JWT auth error
-          if (err.code === 'JWT_INVALID' || err.message?.includes('Invalid or expired token')) {
-            // Force logout on JWT errors to prevent retry storms
-            toast.error('Session expired', {
-              description: 'Please log in again to continue',
-            })
-            // Clear persisted rooms to prevent auto-rejoin loop
-            try {
-              if (typeof window !== 'undefined') {
-                sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
-                sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':status')
-                sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':attempts')
-              }
-            } catch (e) {
-              // ignore
+        socket.off("join:ok", handleOk)
+        socket.off("join:error", handleError)
+        // Mark room as joined for auto-rejoin and persist
+        setJoinedRooms(prev => {
+          const next = new Set(prev)
+          next.add(room)
+          try {
+            if (typeof window !== 'undefined') {
+              sessionStorage.setItem(WS_JOINED_ROOMS_KEY, JSON.stringify(Array.from(next)))
             }
-            // Redirect to login after a short delay
-            setTimeout(() => {
-              window.location.href = '/auth/login'
-            }, 2000)
-          } else {
-            toast.error(`Failed to join ${room}: ${err.message || 'access denied'}`)
+          } catch (e) {
+            // ignore
+          }
+          return next
+        })
+        setRoomStatuses(prev => {
+          const next = { ...prev, [room]: 'joined' as const }
+          persistStatuses(next)
+          return next
+        })
+      }
+    }
+
+    const handleError = (err: any) => {
+      if (err?.room === room && !handled) {
+        handled = true
+        socket.off("join:ok", handleOk)
+        socket.off("join:error", handleError)
+        
+        // Mark as failed
+        setRoomStatuses(prev => {
+          const next = { ...prev, [room]: 'failed' as const }
+          persistStatuses(next)
+          return next
+        })
+
+        // Check if this is a JWT auth error
+        if (err.code === 'JWT_INVALID' || err.message?.includes('Invalid or expired token')) {
+          // Force logout on JWT errors to prevent retry storms
+          toast.error('Session expired', {
+            description: 'Please log in again to continue',
+          })
+          // Clear persisted rooms to prevent auto-rejoin loop
+          try {
+            if (typeof window !== 'undefined') {
+              sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
+              sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':status')
+              sessionStorage.removeItem(WS_JOINED_ROOMS_KEY + ':attempts')
+            }
+          } catch (e) {
+            // ignore
+          }
+          // Redirect to login after a short delay
+          setTimeout(() => {
+            window.location.href = '/auth/login'
+          }, 2000)
+        } else {
+          // Only show error toast if not already failed (prevent duplicate toasts)
+          const currentStatus = roomStatuses[room]
+          if (currentStatus !== 'failed') {
+            toast.error(`Failed to join ${room}: ${err.message || 'access denied'}`, {
+              id: `join-error-${room}`, // Use toast ID to prevent duplicates
+            })
             console.warn(`Join denied for room ${room}:`, err)
           }
-          socket.off("join:ok", handleOk)
-          socket.off("join:error", handleError)
         }
       }
+    }
 
-      // Register one-time listeners with a safety timeout
-      socket.on("join:ok", handleOk)
-      socket.on("join:error", handleError)
+    // Register one-time listeners with a safety timeout
+    socket.on("join:ok", handleOk)
+    socket.on("join:error", handleError)
 
-      // Remove listeners after 8s to avoid leaks
-      const timeout = setTimeout(() => {
+    // Remove listeners after 8s to avoid leaks
+    const timeout = setTimeout(() => {
+      if (!handled) {
+        handled = true
         try {
           socket.off("join:ok", handleOk)
           socket.off("join:error", handleError)
         } catch (e) {
           // ignore
         }
-      }, 8000)
-
-      // Clear timeout when socket disconnects
-      socket.once("disconnect", () => clearTimeout(timeout))
-    }
-  }
-
-  const leaveRoom = (room: string) => {
-    if (socket && isConnected) {
-      socket.emit("leave", room)
-
-      const handleOk = (data: any) => {
-        if (data?.room === room) {
-          // Only log in debug mode to avoid console spam
-          if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
-            console.log(`Left room: ${room}`)
-          }
-          socket.off("leave:ok", handleOk)
-          socket.off("leave:error", handleError)
-          // Remove from joinedRooms and persist
-          setJoinedRooms(prev => {
-            const next = new Set(prev)
-            next.delete(room)
-            try {
-              if (typeof window !== 'undefined') {
-                const arr = Array.from(next)
-                if (arr.length === 0) sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
-                else sessionStorage.setItem(WS_JOINED_ROOMS_KEY, JSON.stringify(arr))
-              }
-            } catch (e) {
-              // ignore
-            }
+        // Mark as failed if timeout
+        setRoomStatuses(prev => {
+          if (prev[room] === 'pending') {
+            const next = { ...prev, [room]: 'failed' as const }
+            persistStatuses(next)
             return next
-          })
-        }
+          }
+          return prev
+        })
       }
+    }, 8000)
 
-      const handleError = (err: any) => {
-        if (err?.room === room) {
-          toast.error(`Failed to leave ${room}: ${err.message || 'error'}`)
-          socket.off("leave:ok", handleOk)
-          socket.off("leave:error", handleError)
-        }
-      }
+    // Clear timeout when socket disconnects
+    socket.once("disconnect", () => clearTimeout(timeout))
+  }, [socket, isConnected, joinedRooms, roomStatuses])
 
-      socket.on("leave:ok", handleOk)
-      socket.on("leave:error", handleError)
-
-      const timeout = setTimeout(() => {
-        try {
-          socket.off("leave:ok", handleOk)
-          socket.off("leave:error", handleError)
-        } catch (e) {
-          // ignore
-        }
-      }, 8000)
-
-      socket.once("disconnect", () => clearTimeout(timeout))
+  const leaveRoom = React.useCallback((room: string) => {
+    if (!socket || !isConnected) {
+      return
     }
-  }
+
+    socket.emit("leave", room)
+
+    const handleOk = (data: any) => {
+      if (data?.room === room) {
+        // Only log in debug mode to avoid console spam
+        if (process.env.NODE_ENV === 'development' && process.env.NEXT_PUBLIC_DEBUG_WS === 'true') {
+          console.log(`Left room: ${room}`)
+        }
+        socket.off("leave:ok", handleOk)
+        socket.off("leave:error", handleError)
+        // Remove from joinedRooms and persist
+        setJoinedRooms(prev => {
+          const next = new Set(prev)
+          next.delete(room)
+          try {
+            if (typeof window !== 'undefined') {
+              const arr = Array.from(next)
+              if (arr.length === 0) sessionStorage.removeItem(WS_JOINED_ROOMS_KEY)
+              else sessionStorage.setItem(WS_JOINED_ROOMS_KEY, JSON.stringify(arr))
+            }
+          } catch (e) {
+            // ignore
+          }
+          return next
+        })
+        // Update room status
+        setRoomStatuses(prev => {
+          const next = { ...prev }
+          delete next[room]
+          persistStatuses(next)
+          return next
+        })
+      }
+    }
+
+    const handleError = (err: any) => {
+      if (err?.room === room) {
+        console.warn(`Leave error for room ${room}:`, err)
+        socket.off("leave:ok", handleOk)
+        socket.off("leave:error", handleError)
+      }
+    }
+
+    socket.on("leave:ok", handleOk)
+    socket.on("leave:error", handleError)
+
+    const timeout = setTimeout(() => {
+      try {
+        socket.off("leave:ok", handleOk)
+        socket.off("leave:error", handleError)
+      } catch (e) {
+        // ignore
+      }
+    }, 8000)
+
+    socket.once("disconnect", () => clearTimeout(timeout))
+  }, [socket, isConnected])
 
   const emit = (event: string, data: any) => {
     if (socket && isConnected) {

@@ -65,24 +65,46 @@ router.get("/:integrationId/spaces", async (req: Request, res: Response) => {
   try {
     const { integrationId } = req.params
 
-    // Get integration configuration
-    const integration = await getIntegrationConfig(integrationId)
+    // Determine which integration to use: explicit id or latest active
+    const wantLatest = integrationId === 'latest'
+    let integration = wantLatest ? await getLatestActiveIntegrationConfig() : await getIntegrationConfig(integrationId)
+    let fallbackUsed = false
     if (!integration) {
-      return res.status(404).json({ error: "Integration not found" })
+      // Fallback to latest active if explicit id missing or invalid
+      integration = await getLatestActiveIntegrationConfig()
+      fallbackUsed = true
     }
 
-    const confluenceIntegration = new ConfluenceIntegration(integration.config, integrationId)
+    if (!integration) {
+      return res.status(200).json({ success: true, spaces: [], diagnostics: { reason: 'no_active_integration', usedIntegrationId: null, fallbackUsed } })
+    }
+
+    // Basic diagnostics before attempting API
+    const baseUrl = integration.config.baseUrl
+    const username = (integration.config as any).username
+    const apiToken = (integration.config as any).apiToken
+
+    if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) {
+      return res.status(200).json({ success: true, spaces: [], diagnostics: { reason: 'invalid_base_url', usedIntegrationId: wantLatest ? 'latest' : integrationId, fallbackUsed } })
+    }
+    if (!username || !apiToken) {
+      return res.status(200).json({ success: true, spaces: [], diagnostics: { reason: 'missing_credentials', usedIntegrationId: wantLatest ? 'latest' : integrationId, fallbackUsed } })
+    }
+
+    const confluenceIntegration = new ConfluenceIntegration(integration.config, wantLatest ? 'latest' : integrationId)
     const spaces = await confluenceIntegration.getSpaces()
 
     res.json({
       success: true,
-      spaces
+      spaces,
+      diagnostics: { reason: spaces?.length ? 'ok' : 'empty', usedIntegrationId: wantLatest ? 'latest' : integrationId, fallbackUsed }
     })
-  } catch (error) {
+  } catch (error: any) {
     log.error("Failed to get Confluence spaces:", error)
-    res.status(500).json({
-      error: "Failed to get spaces",
-      details: error.message
+    res.status(200).json({
+      success: true,
+      spaces: [],
+      diagnostics: { reason: 'api_error', message: error?.message || 'Unknown error' }
     })
   }
 })
@@ -235,17 +257,24 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
 
     const document = documentResult.rows[0]
 
-    // Get integration configuration
-    const integration = await getIntegrationConfig(integrationId)
+    // Determine integration configuration (supports 'latest' and fallback)
+    const wantLatest = integrationId === 'latest'
+    let integration = wantLatest ? await getLatestActiveIntegrationConfig() : await getIntegrationConfig(integrationId)
     if (!integration) {
-      return res.status(404).json({ error: "Integration not found" })
+      // Fallback to latest active if explicit id missing or invalid
+      integration = await getLatestActiveIntegrationConfig()
+    }
+    if (!integration) {
+      return res.status(404).json({ error: "Integration not found or not active" })
     }
 
-    const confluenceIntegration = new ConfluenceIntegration(integration.config, integrationId)
+    const realIntegrationId = integration.id
+    const confluenceIntegration = new ConfluenceIntegration(integration.config, realIntegrationId)
     const confluenceUrl = await confluenceIntegration.uploadDocument({
       id: document.id,
       title: document.name,
       content: document.content,
+      project_id: document.project_id, 
       project_id: document.project_id,
       framework: document.framework,
       status: document.status,
@@ -258,9 +287,16 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
     })
   } catch (error) {
     log.error("Confluence export failed:", error)
+    const message = (error as any)?.message || 'Unknown error'
+    const reason = /No target space/.test(message) ? 'space_not_configured'
+      : /Space does not exist|404/.test(message) ? 'space_not_found'
+      : /Unauthorized|Forbidden|403/.test(message) ? 'not_authorized'
+      : /already exists/i.test(message) ? 'title_conflict'
+      : 'api_error'
     res.status(500).json({
       error: "Export failed",
-      details: error.message
+      reason,
+      details: message
     })
   }
 })
@@ -315,11 +351,12 @@ router.get("/:integrationId/status", async (req: Request, res: Response) => {
  * Helper function to get integration configuration
  */
 async function getIntegrationConfig(integrationId: string): Promise<{
+  id: string,
   config: ConfluenceConfig
 } | null> {
   try {
     const result = await pool.query(
-      `SELECT configuration, credentials_encrypted FROM integrations WHERE id = $1 AND type = 'confluence' AND is_active = true`,
+      `SELECT id, configuration, credentials_encrypted FROM integrations WHERE id = $1 AND type = 'confluence' AND is_active = true`,
       [integrationId]
     )
 
@@ -356,3 +393,39 @@ async function getIntegrationConfig(integrationId: string): Promise<{
 }
 
 export default router
+
+// Helper: get latest active confluence integration config
+async function getLatestActiveIntegrationConfig(): Promise<{ id: string, config: ConfluenceConfig } | null> {
+  try {
+    const result = await pool.query(
+      `SELECT id, configuration, credentials_encrypted FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
+    )
+    if (result.rows.length === 0) return null
+
+    const config = result.rows[0].configuration
+    const encryptedCredentials = result.rows[0].credentials_encrypted
+
+    let credentials: any = {}
+    if (encryptedCredentials) {
+      try {
+        credentials = JSON.parse(Buffer.from(encryptedCredentials, "base64").toString())
+      } catch (error) {
+        staticLog.error("Failed to decrypt credentials:", error)
+        return null
+      }
+    }
+
+    return {
+      config: {
+        baseUrl: config.base_url,
+        username: credentials.username,
+        apiToken: credentials.api_token,
+        cloudId: config.cloud_id,
+      }
+    }
+  } catch (error) {
+    staticLog.error("Failed to get latest active integration:", error)
+    return null
+  }
+}
+

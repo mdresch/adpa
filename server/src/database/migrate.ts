@@ -4,7 +4,7 @@ dotenv.config()
 import { readFileSync } from "fs"
 import { join, dirname } from "path"
 import { fileURLToPath } from "url"
-import { pool } from "./connection"
+import { connectDatabase, getDatabasePool } from "./connection"
 import { logger } from "../utils/logger"
 
 const __filename = fileURLToPath(import.meta.url)
@@ -13,6 +13,10 @@ const __dirname = dirname(__filename)
 async function runMigrations() {
   try {
     logger.info("Starting database migrations...")
+
+    // Ensure DB connection is established
+    await connectDatabase()
+    const pool = getDatabasePool()
 
     // Read and execute schema.sql
     const schemaPath = join(__dirname, "schema.sql")
@@ -213,6 +217,46 @@ async function runMigrations() {
       }
     } catch (error) {
       logger.warn("Template paragraphs migration failed (may already be applied):", error)
+    }
+
+    // Run project_integrations migration (WA-94)
+    try {
+      const projIntMigrationPath = join(__dirname, "migrations", "032_project_integrations.sql")
+      const projIntMigration = readFileSync(projIntMigrationPath, "utf-8")
+
+      const projIntMigrationCheck = await pool.query(
+        "SELECT id FROM migrations WHERE name = $1",
+        ["032_project_integrations"]
+      )
+
+      if (projIntMigrationCheck.rows.length === 0) {
+        await pool.query(projIntMigration)
+        await pool.query(
+          "INSERT INTO migrations (name) VALUES ($1)",
+          ["032_project_integrations"]
+        )
+        logger.info("project_integrations migration completed")
+      } else {
+        logger.info("project_integrations migration already applied")
+      }
+    } catch (error) {
+      logger.warn("project_integrations migration failed (may already be applied):", error)
+    }
+
+        // Run documents.confluence_page_url migration (WA-92)
+    try {
+      const migPath = join(__dirname, "migrations", "033_documents_confluence_url.sql")
+      const migSql = readFileSync(migPath, "utf-8")
+      const migCheck = await pool.query("SELECT id FROM migrations WHERE name = $1", ["033_documents_confluence_url"]) 
+      if (migCheck.rows.length === 0) {
+        await pool.query(migSql)
+        await pool.query("INSERT INTO migrations (name) VALUES ($1)", ["033_documents_confluence_url"]) 
+        logger.info("documents.confluence_page_url migration completed")
+      } else {
+        logger.info("documents.confluence_page_url migration already applied")
+      }
+    } catch (error) {
+      logger.warn("documents.confluence_page_url migration failed (may already be applied):", error)
     }
 
     logger.info("Database migrations completed successfully")

@@ -115,6 +115,7 @@ export default function ProjectDocumentViewer() {
   const documentId = params.docId as string
 
   const [document, setDocument] = useState<DocumentData | null>(null)
+  const [confluenceUrl, setConfluenceUrl] = useState<string | null>(null)
   const [versions, setVersions] = useState<VersionData[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
@@ -204,7 +205,8 @@ export default function ProjectDocumentViewer() {
       leaveRoom(documentRoom)
       leaveRoom(projectRoom)
     }
-  }, [documentId, projectId, joinRoom, leaveRoom, on, off])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentId, projectId]) // joinRoom, leaveRoom, on, off are stable callbacks
 
   // Mock data for demonstration
   const mockDocument: DocumentData = {
@@ -712,6 +714,34 @@ The ADPA system represents a significant advancement in document processing auto
 
     return () => window.removeEventListener('scroll', handleScroll)
   }, [tableOfContents, isEditing])
+
+  const handlePublishToConfluence = async () => {
+    try {
+      const resp = await apiClient.post(`/integrations/confluence/latest/export`, { documentId })
+      const url = (resp as any)?.confluenceUrl || (resp as any)?.data?.confluenceUrl
+      if (url) {
+        toast.success('Published to Confluence')
+      } else if ((resp as any)?.data?.error) {
+        const r = (resp as any).data
+        const hint = r.reason === 'space_not_configured' ? 'No project mapping or integration target space is set.'
+          : r.reason === 'space_not_found' ? 'Space not found. Check Project Settings → Confluence Space Key or Integration Target Space Key.'
+          : r.reason === 'not_authorized' ? 'Confluence rejected the request. Check API token permissions.'
+          : r.reason === 'title_conflict' ? 'A page with this title already exists. Updated the existing page if found.'
+          : 'See server logs.'
+        toast.error(`Failed to publish to Confluence: ${r.error}. ${hint}`)
+        return
+      }
+      if (url) {
+        setConfluenceUrl(url)
+        setDocument(prev => prev ? ({ ...(prev as any), confluence_page_url: url }) as any : prev)
+      } else {
+        toast.info('Export completed, but URL not returned. Check Confluence.')
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.message || 'Export failed'
+      toast.error(`Failed to publish to Confluence: ${msg}`)
+    }
+  }
 
   const exportToPDF = () => {
     if (!document) return
@@ -1837,6 +1867,20 @@ The ADPA system represents a significant advancement in document processing auto
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-2">
+                        {(document as any)?.confluence_page_url ? (
+                          <Button asChild variant="default" className="w-full justify-start">
+                            <a href={(document as any).confluence_page_url} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              View in Confluence
+                            </a>
+                          </Button>
+                        ) : (
+                          <Button variant="default" className="w-full justify-start" onClick={handlePublishToConfluence}>
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Publish to Confluence
+                          </Button>
+                        )}
+
                         <Button variant="outline" className="w-full justify-start" onClick={exportToPDF}>
                           <Download className="h-4 w-4 mr-2" />
                           Export as PDF

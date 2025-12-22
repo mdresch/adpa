@@ -374,29 +374,58 @@ queuesForListeners.forEach((queue) => {
   })
 })
 
-// Create QueueService instance with all dependencies
-const queueServiceInstance = createQueueService(
-  new Map<QueueName, Bull.Queue>([
-    ['ai-processing', aiQueue],
-    ['document-processing', documentQueue],
-    ['pipeline-processing', pipelineQueue],
-    ['baseline-processing', baselineQueue],
-    ['process-flow-processing', processFlowQueue],
-    ['document-regeneration', regenerationQueue],
-    ['quality-audit', qualityAuditQueue],
-    ['project-data-extraction', extractionQueue],
-  ]),
-  pool,
-  io,
-  cache,
-  aiService,
-  ContextAwareAIService
-);
+// Lazy initialization: Create QueueService instance only when needed
+// This ensures the database pool is initialized before creating the service
+let queueServiceInstance: ReturnType<typeof createQueueService> | null = null
 
-// Export the queue service functions
-export const addJob = queueServiceInstance.addJob.bind(queueServiceInstance);
-export const getJobStatus = queueServiceInstance.getJobStatus.bind(queueServiceInstance);
-export const cancelJob = queueServiceInstance.cancelJob.bind(queueServiceInstance);
+function getQueueServiceInstance(): ReturnType<typeof createQueueService> {
+  if (!queueServiceInstance) {
+    // Ensure pool is available before creating QueueService
+    const { getDatabasePool } = require('../database/connection')
+    let currentPool = pool
+    if (!currentPool) {
+      try {
+        currentPool = getDatabasePool()
+      } catch (error) {
+        logger.error('[QUEUE-SERVICE] Database pool not initialized. Ensure connectDatabase() is called before creating QueueService.', error)
+        throw new Error('Database connection pool is not initialized. Ensure connectDatabase() is called before creating QueueService.')
+      }
+    }
+    
+    queueServiceInstance = createQueueService(
+      new Map<QueueName, Bull.Queue>([
+        ['ai-processing', aiQueue],
+        ['document-processing', documentQueue],
+        ['pipeline-processing', pipelineQueue],
+        ['baseline-processing', baselineQueue],
+        ['process-flow-processing', processFlowQueue],
+        ['document-regeneration', regenerationQueue],
+        ['quality-audit', qualityAuditQueue],
+        ['project-data-extraction', extractionQueue],
+      ]),
+      currentPool, // Use the validated pool
+      io,
+      cache,
+      aiService,
+      ContextAwareAIService
+    )
+  }
+  return queueServiceInstance
+}
+
+// Export the queue service functions with lazy initialization
+export async function addJob(...args: Parameters<ReturnType<typeof createQueueService>['addJob']>) {
+  return (await getQueueServiceInstance()).addJob(...args)
+}
+
+export async function getJobStatus(...args: Parameters<ReturnType<typeof createQueueService>['getJobStatus']>) {
+  return (await getQueueServiceInstance()).getJobStatus(...args)
+}
+
+export async function cancelJob(...args: Parameters<ReturnType<typeof createQueueService>['cancelJob']>) {
+  return (await getQueueServiceInstance()).cancelJob(...args)
+}
+
 export const updateJobStatus = async (
   jobId: string,
   status: string,
@@ -405,11 +434,20 @@ export const updateJobStatus = async (
   queueName?: string,
   errorMessage?: string
 ): Promise<void> => {
-  await queueServiceInstance.updateJobStatus(jobId, status, progress, workerId, queueName);
+  await (await getQueueServiceInstance()).updateJobStatus(jobId, status, progress, workerId, queueName);
 };
 
-// Export the queue service instance for internal use
-export { queueServiceInstance as queueService };
+// Export the queue service instance getter for internal use
+export function getQueueService() {
+  return getQueueServiceInstance()
+}
+
+// Export queueServiceInstance for backward compatibility (deprecated - use getQueueService() instead)
+export const queueService = new Proxy({} as ReturnType<typeof createQueueService>, {
+  get(target, prop) {
+    return (getQueueServiceInstance() as any)[prop]
+  }
+})
 
 // Initialize queues function for backward compatibility (deprecated)
 export async function initializeQueues(): Promise<void> {
@@ -419,7 +457,7 @@ export async function initializeQueues(): Promise<void> {
 }
 
 export async function getQueueServiceDependencies(): Promise<QueueServiceDependencies> {
-  return queueServiceInstance.getDependencies();
+  return (await getQueueServiceInstance()).getDependencies();
 }
 
 // Job processors
@@ -748,6 +786,18 @@ regenerationQueue.on("failed", (job, err) => {
 })
 
 // Quality Audit job processor
+// Publish to Confluence job processor
+documentQueue.process("publish-to-confluence", async (job) => {
+  try {
+    const { PublishToConfluenceJobService } = await import('./jobs/PublishToConfluenceJobService')
+    const result = await PublishToConfluenceJobService.processJob(job)
+    return result
+  } catch (error) {
+    logger.error(`[PUBLISH-CONFLUENCE] Job failed: ${job.id}`, error)
+    throw error
+  }
+})
+
 qualityAuditQueue.process("quality-audit", async (job) => {
   const { jobId, documentId, documentContent, documentType, projectContext, userId } = job.data
 
