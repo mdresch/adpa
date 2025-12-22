@@ -20,8 +20,20 @@ const requiredFiles = [
 console.log('📁 Checking required files...');
 let allFilesExist = true;
 
+// Validate that all file paths are within the project directory
+const projectRoot = path.resolve(__dirname);
+
 for (const file of requiredFiles) {
   const filePath = path.join(__dirname, file);
+  const resolvedPath = path.resolve(filePath);
+  
+  // Ensure path is within project root (prevent directory traversal)
+  if (!resolvedPath.startsWith(projectRoot)) {
+    console.log(`❌ ${file} - Invalid path (outside project root)`);
+    allFilesExist = false;
+    continue;
+  }
+  
   if (fs.existsSync(filePath)) {
     console.log(`✅ ${file}`);
   } else {
@@ -34,8 +46,12 @@ for (const file of requiredFiles) {
 console.log('\n🔧 Checking implementation details...');
 
 try {
-  // Check DocumentPurposeService
-  const docPurposeContent = fs.readFileSync(path.join(__dirname, 'src/services/documentPurposeService.ts'), 'utf8');
+  // Check DocumentPurposeService - validate path
+  const docPurposePath = path.resolve(__dirname, 'src', 'services', 'documentPurposeService.ts');
+  if (!docPurposePath.startsWith(projectRoot)) {
+    throw new Error('Invalid file path');
+  }
+  const docPurposeContent = fs.readFileSync(docPurposePath, 'utf8');
   if (docPurposeContent.includes('rebuildForProject')) {
     console.log('✅ DocumentPurposeService.rebuildForProject - IMPLEMENTED');
   } else {
@@ -50,8 +66,12 @@ try {
     allFilesExist = false;
   }
 
-  // Check TemplateAnalyticsService
-  const templateAnalyticsContent = fs.readFileSync(path.join(__dirname, 'src/services/templateAnalyticsService.ts'), 'utf8');
+  // Check TemplateAnalyticsService - validate path
+  const templateAnalyticsPath = path.resolve(__dirname, 'src', 'services', 'templateAnalyticsService.ts');
+  if (!templateAnalyticsPath.startsWith(projectRoot)) {
+    throw new Error('Invalid file path');
+  }
+  const templateAnalyticsContent = fs.readFileSync(templateAnalyticsPath, 'utf8');
   if (templateAnalyticsContent.includes('updateTemplateEntityProfile')) {
     console.log('✅ TemplateAnalyticsService.updateTemplateEntityProfile - IMPLEMENTED');
   } else {
@@ -59,8 +79,12 @@ try {
     allFilesExist = false;
   }
 
-  // Check integration hooks
-  const orchestrationContent = fs.readFileSync(path.join(__dirname, 'src/services/jobs/ExtractionOrchestrationService.ts'), 'utf8');
+  // Check integration hooks - validate path
+  const orchestrationPath = path.resolve(__dirname, 'src', 'services', 'jobs', 'ExtractionOrchestrationService.ts');
+  if (!orchestrationPath.startsWith(projectRoot)) {
+    throw new Error('Invalid file path');
+  }
+  const orchestrationContent = fs.readFileSync(orchestrationPath, 'utf8');
   if (orchestrationContent.includes('DocumentPurposeService') && orchestrationContent.includes('rebuildForProject')) {
     console.log('✅ Integration hooks in ExtractionOrchestrationService - IMPLEMENTED');
   } else {
@@ -68,8 +92,12 @@ try {
     allFilesExist = false;
   }
 
-  // Check admin endpoints
-  const routesContent = fs.readFileSync(path.join(__dirname, 'src/routes/template-analytics.ts'), 'utf8');
+  // Check admin endpoints - validate path
+  const routesPath = path.resolve(__dirname, 'src', 'routes', 'template-analytics.ts');
+  if (!routesPath.startsWith(projectRoot)) {
+    throw new Error('Invalid file path');
+  }
+  const routesContent = fs.readFileSync(routesPath, 'utf8');
   if (routesContent.includes('rebuild-entity-profiles') && routesContent.includes('rebuild-document-purposes')) {
     console.log('✅ Admin rebuild endpoints - IMPLEMENTED');
   } else {
@@ -77,8 +105,12 @@ try {
     allFilesExist = false;
   }
 
-  // Check migration file
-  const migrationContent = fs.readFileSync(path.join(__dirname, 'src/database/migrations/add_template_purpose_analytics.sql'), 'utf8');
+  // Check migration file - validate path
+  const migrationPath = path.resolve(__dirname, 'src', 'database', 'migrations', 'add_template_purpose_analytics.sql');
+  if (!migrationPath.startsWith(projectRoot)) {
+    throw new Error('Invalid file path');
+  }
+  const migrationContent = fs.readFileSync(migrationPath, 'utf8');
   if (migrationContent.includes('template_entity_profile') && migrationContent.includes('inferred_primary_domain')) {
     console.log('✅ Database migration - READY');
   } else {

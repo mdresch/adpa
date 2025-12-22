@@ -1,9 +1,24 @@
 const { Pool } = require('pg');
 
+// SSL configuration - use proper SSL settings for production
+const getSSLConfig = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, use proper SSL configuration
+    // Only disable certificate validation if explicitly configured (not recommended)
+    if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false') {
+      console.warn('⚠️  WARNING: SSL certificate validation is disabled. This is not recommended for production.');
+      return { rejectUnauthorized: false };
+    }
+    // Default: use SSL with proper certificate validation
+    return { rejectUnauthorized: true };
+  }
+  return false;
+};
+
 // Database configuration
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: getSSLConfig()
 });
 
 async function checkMigrationStatus() {

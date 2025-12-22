@@ -4,9 +4,25 @@ const path = require('path');
 // Simple database connection using environment variables
 const { Pool } = require('pg');
 
+// SSL configuration - use proper SSL settings for production
+// For Supabase and other managed databases, use proper SSL configuration
+const getSSLConfig = () => {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, use proper SSL configuration
+    // Only disable certificate validation if explicitly configured (not recommended)
+    if (process.env.DATABASE_SSL_REJECT_UNAUTHORIZED === 'false') {
+      console.warn('⚠️  WARNING: SSL certificate validation is disabled. This is not recommended for production.');
+      return { rejectUnauthorized: false };
+    }
+    // Default: use SSL with proper certificate validation
+    return { rejectUnauthorized: true };
+  }
+  return false;
+};
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: getSSLConfig()
 });
 
 async function applyMigration() {
@@ -15,14 +31,29 @@ async function applyMigration() {
   try {
     console.log('🚀 Applying Template Purpose Analytics Migration...');
     
-    // Read the migration file
-    const migrationPath = path.join(__dirname, 'src/database/migrations/add_template_purpose_analytics.sql');
+    // Read the migration file - validate path to prevent directory traversal
+    const migrationsDir = path.join(__dirname, 'src', 'database', 'migrations');
+    const migrationFileName = 'add_template_purpose_analytics.sql';
+    
+    // Ensure the path is within the expected migrations directory
+    const migrationPath = path.join(migrationsDir, migrationFileName);
+    const resolvedPath = path.resolve(migrationPath);
+    const resolvedDir = path.resolve(migrationsDir);
+    
+    if (!resolvedPath.startsWith(resolvedDir)) {
+      throw new Error(`Invalid migration path: ${migrationPath}`);
+    }
     
     if (!fs.existsSync(migrationPath)) {
       throw new Error(`Migration file not found: ${migrationPath}`);
     }
     
     const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+    
+    // Validate SQL content doesn't contain dangerous operations (basic check)
+    if (migrationSql.includes('DROP DATABASE') || migrationSql.includes('DROP SCHEMA')) {
+      throw new Error('Migration file contains dangerous DROP operations');
+    }
     
     // Check current state
     const columnCheck = await client.query(`

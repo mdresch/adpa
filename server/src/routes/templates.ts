@@ -536,7 +536,8 @@ router.get("/:id",
             template.secondary_knowledge_domains = []
           }
         }
-        return res.json({ template, recentUsage, versionHistory: [], optimizationHistory: [] })
+        // Return fetched versionHistory and optimizationHistory even for cached templates
+        return res.json({ template, recentUsage, versionHistory, optimizationHistory })
       }
 
       // Check if user is super_admin

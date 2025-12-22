@@ -425,6 +425,7 @@ export default function DocumentEntitiesPage() {
 
         setExtractionProgress(progress)
         // Only set status message if we have a valid message or status
+        // Prevents displaying "Status: undefined" to users
         if (data.message) {
           setExtractionStatus(data.message)
         } else if (status) {
@@ -436,6 +437,8 @@ export default function DocumentEntitiesPage() {
 
         if (status === 'completed') {
           // Guard against multiple completions (race condition with in-flight requests)
+          // This prevents duplicate toast notifications when multiple polling requests
+          // complete simultaneously or when WebSocket and polling both fire
           if (jobCompletedRef.current) {
             return // Already handled, skip this response
           }

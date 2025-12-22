@@ -311,7 +311,24 @@ router.post('/analytics/rebuild-entity-profiles', authenticateToken, requirePerm
   }
 });
 
-// Rebuild template analytics for a specific template
+/**
+ * Rebuild template analytics for a specific template
+ * 
+ * This endpoint rebuilds document purposes for all projects using the template,
+ * then updates the template entity profile. Useful for:
+ * - Recovering from data inconsistencies
+ * - Refreshing analytics after bulk document updates
+ * - Troubleshooting missing template analytics data
+ * 
+ * @route POST /api/template-analytics/analytics/rebuild-template/:templateId
+ * @access Admin only
+ * @param {string} templateId - UUID of the template to rebuild analytics for
+ * @returns {Object} Success message with templateId and projectsRebuilt count
+ * 
+ * @example
+ * POST /api/template-analytics/analytics/rebuild-template/123e4567-e89b-12d3-a456-426614174000
+ * Authorization: Bearer <admin-token>
+ */
 router.post('/analytics/rebuild-template/:templateId', authenticateToken, requirePermission('admin'), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId });
   try {
@@ -353,13 +370,36 @@ router.post('/analytics/rebuild-template/:templateId', authenticateToken, requir
       templateId,
       projectsRebuilt: projectIds.length
     });
-  } catch (error) {
-    log.error('Rebuild template analytics error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    log.error('Rebuild template analytics error:', {
+      templateId,
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to rebuild template analytics',
+      message: error?.message || 'Internal server error',
+      templateId
+    });
   }
 });
 
-// Rebuild document purposes for a specific project
+/**
+ * Rebuild document purposes for a specific project
+ * 
+ * Recomputes entity_counts and inferred_*_domain fields for all documents
+ * in the specified project. This is automatically called after extraction jobs,
+ * but can be manually triggered if needed.
+ * 
+ * @route POST /api/template-analytics/analytics/rebuild-document-purposes/:projectId
+ * @access Admin only
+ * @param {string} projectId - UUID of the project to rebuild document purposes for
+ * @returns {Object} Success message with projectId
+ * 
+ * @example
+ * POST /api/template-analytics/analytics/rebuild-document-purposes/123e4567-e89b-12d3-a456-426614174000
+ * Authorization: Bearer <admin-token>
+ */
 router.post('/analytics/rebuild-document-purposes/:projectId', authenticateToken, requirePermission('admin'), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId });
   try {
@@ -378,13 +418,43 @@ router.post('/analytics/rebuild-document-purposes/:projectId', authenticateToken
       message: 'Document purposes rebuilt successfully for project',
       projectId 
     });
-  } catch (error) {
-    log.error('Rebuild document purposes error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    log.error('Rebuild document purposes error:', {
+      projectId,
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to rebuild document purposes',
+      message: error?.message || 'Internal server error',
+      projectId
+    });
   }
 });
 
-// Rebuild both document purposes and template entity profiles (full rebuild)
+/**
+ * Rebuild both document purposes and template entity profiles (full rebuild)
+ * 
+ * Performs a comprehensive rebuild of analytics data. Can be scoped to a specific
+ * project (recommended) or run system-wide (expensive, use with caution).
+ * 
+ * @route POST /api/template-analytics/analytics/rebuild-all
+ * @access Admin only
+ * @body {string} [projectId] - Optional UUID of project to rebuild. If omitted, rebuilds all template profiles.
+ * @returns {Object} Success message with rebuild details
+ * 
+ * @example
+ * // Rebuild for specific project (recommended)
+ * POST /api/template-analytics/analytics/rebuild-all
+ * Content-Type: application/json
+ * Authorization: Bearer <admin-token>
+ * { "projectId": "123e4567-e89b-12d3-a456-426614174000" }
+ * 
+ * @example
+ * // Full system rebuild (use with caution - can be expensive)
+ * POST /api/template-analytics/analytics/rebuild-all
+ * Authorization: Bearer <admin-token>
+ */
 router.post('/analytics/rebuild-all', authenticateToken, requirePermission('admin'), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId });
   try {
@@ -431,13 +501,43 @@ router.post('/analytics/rebuild-all', authenticateToken, requirePermission('admi
         note: 'To rebuild document purposes, specify a projectId in the request body'
       });
     }
-  } catch (error) {
-    log.error('Rebuild all analytics error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    log.error('Rebuild all analytics error:', {
+      projectId: projectId || 'all',
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to rebuild analytics',
+      message: error?.message || 'Internal server error',
+      scope: projectId ? 'project' : 'system-wide'
+    });
   }
 });
 
-// Diagnostic endpoint to check template analytics data
+/**
+ * Diagnostic endpoint to check template analytics data
+ * 
+ * Provides comprehensive diagnostic information about a template's analytics state,
+ * including document counts, entity counts, view data, and recommendations for
+ * fixing common issues.
+ * 
+ * @route GET /api/template-analytics/analytics/diagnostic/:templateId
+ * @access Admin only
+ * @param {string} templateId - UUID of the template to diagnose
+ * @returns {Object} Diagnostic data with recommendations
+ * 
+ * @example
+ * GET /api/template-analytics/analytics/diagnostic/123e4567-e89b-12d3-a456-426614174000
+ * Authorization: Bearer <admin-token>
+ * 
+ * Response includes:
+ * - documents: Count statistics
+ * - viewData: Aggregated view data
+ * - profileData: Template entity profile
+ * - sampleDocuments: Sample documents with entity_counts
+ * - recommendations: Actionable recommendations (needsExtraction, needsRebuild, etc.)
+ */
 router.get('/analytics/diagnostic/:templateId', authenticateToken, requirePermission('admin'), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId });
   try {
@@ -498,9 +598,17 @@ router.get('/analytics/diagnostic/:templateId', authenticateToken, requirePermis
         needsDocumentPurposeRebuild: documentsCheck.rows[0].with_template_id > 0 && documentsCheck.rows[0].with_entity_counts === '0'
       }
     });
-  } catch (error) {
-    log.error('Diagnostic error:', error);
-    res.status(500).json({ error: 'Internal server error' });
+  } catch (error: any) {
+    log.error('Diagnostic error:', {
+      templateId,
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to retrieve diagnostic information',
+      message: error?.message || 'Internal server error',
+      templateId
+    });
   }
 });
 
