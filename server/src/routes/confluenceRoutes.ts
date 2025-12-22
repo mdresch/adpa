@@ -91,7 +91,9 @@ router.get("/:integrationId/spaces", async (req: Request, res: Response) => {
       return res.status(200).json({ success: true, spaces: [], diagnostics: { reason: 'missing_credentials', usedIntegrationId: wantLatest ? 'latest' : integrationId, fallbackUsed } })
     }
 
-    const confluenceIntegration = new ConfluenceIntegration(integration.config, wantLatest ? 'latest' : integrationId)
+    // Use the actual integration ID from the database, not the route parameter
+    const realIntegrationId = integration.id
+    const confluenceIntegration = new ConfluenceIntegration(integration.config, realIntegrationId)
     const spaces = await confluenceIntegration.getSpaces()
 
     res.json({
@@ -129,7 +131,8 @@ router.get("/:integrationId/search", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Integration not found" })
     }
 
-    const confluenceIntegration = new ConfluenceIntegration(integration.config, integrationId)
+    // Use the actual integration ID from the database
+    const confluenceIntegration = new ConfluenceIntegration(integration.config, integration.id)
     const results = await confluenceIntegration.searchContent(
       query as string,
       spaceKey as string
@@ -163,7 +166,8 @@ router.post("/:integrationId/sync", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Integration not found" })
     }
 
-    const confluenceIntegration = new ConfluenceIntegration(integration.config, integrationId)
+    // Use the actual integration ID from the database
+    const confluenceIntegration = new ConfluenceIntegration(integration.config, integration.id)
     
     // Start sync process
     const syncedDocuments = await confluenceIntegration.syncDocuments()
@@ -214,7 +218,8 @@ router.post("/:integrationId/import", async (req: Request, res: Response) => {
       return res.status(404).json({ error: "Integration not found" })
     }
 
-    const confluenceIntegration = new ConfluenceIntegration(integration.config, integrationId)
+    // Use the actual integration ID from the database
+    const confluenceIntegration = new ConfluenceIntegration(integration.config, integration.id)
     const document = await confluenceIntegration.importPage(pageId, projectId)
 
     res.json({
