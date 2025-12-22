@@ -109,11 +109,26 @@ export class ConfluenceIntegration implements IntegrationProvider {
     try {
       logger.info(`Uploading document ${doc.id} to Confluence...`)
 
-      // Get the target space from integration configuration
-      const spaceKey = await this.getTargetSpaceKey()
-      
+      // Resolve preferred space key: project mapping > integration target
+      let spaceKey: string | null = null
+      try {
+        if (doc.project_id) {
+          const { getByProjectId } = await import('../database/projectIntegrations')
+          const mapping = await getByProjectId(doc.project_id)
+          if (mapping?.confluence_space_key) {
+            spaceKey = mapping.confluence_space_key
+          }
+        }
+      } catch (e) {
+        logger.warn('Failed to read project integration mapping; falling back to integration target space', e)
+      }
+
       if (!spaceKey) {
-        throw new Error("No target space configured for Confluence integration")
+        spaceKey = await this.getTargetSpaceKey()
+      }
+
+      if (!spaceKey) {
+        throw new Error("No target space configured (project mapping or integration target_space_key required)")
       }
 
       // Convert ADPA document content to Confluence storage format
@@ -145,16 +160,39 @@ export class ConfluenceIntegration implements IntegrationProvider {
         )
         logger.info(`Updated existing Confluence page: ${confluencePage.id}`)
       } else {
-        // Create new page
-        confluencePage = await this.service.createPage(
-          spaceKey,
-          doc.title,
-          confluenceContent
-        )
-        logger.info(`Created new Confluence page: ${confluencePage.id}`)
-        
-        // Store sync metadata for future updates
-        await this.storeSyncMetadata(doc.id, confluencePage.id, spaceKey)
+        // Create new page (with duplicate-title fallback)
+        try {
+          confluencePage = await this.service.createPage(
+            spaceKey,
+            doc.title,
+            confluenceContent
+          )
+          logger.info(`Created new Confluence page: ${confluencePage.id}`)
+          // Store sync metadata for future updates
+          await this.storeSyncMetadata(doc.id, confluencePage.id, spaceKey)
+        } catch (createErr: any) {
+          const msg = createErr?.message || ''
+          if (/already exists/i.test(msg)) {
+            // Find existing page by title and update it
+            const matches = await this.service.searchContent(doc.title, spaceKey)
+            const existing = matches?.find(p => p.title?.trim() === doc.title.trim())
+            if (existing) {
+              const full = await this.service.getPage(existing.id)
+              confluencePage = await this.service.updatePage(
+                full.id,
+                doc.title,
+                confluenceContent,
+                full.version.number
+              )
+              logger.info(`Updated existing page due to title conflict: ${confluencePage.id}`)
+              await this.storeSyncMetadata(doc.id, confluencePage.id, spaceKey)
+            } else {
+              throw createErr
+            }
+          } else {
+            throw createErr
+          }
+        }
       }
 
       // Return the Confluence page URL
@@ -453,8 +491,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
       if (result.rows.length > 0) {
         const config = result.rows[0].configuration
-        // Amend here: read from credentials
-        return config.credentials?.base_url || "https://your-domain.atlassian.net"
+        // Prefer configuration.base_url saved by the Integrations UI; fallback to legacy credentials.base_url
+        return config.base_url || config.credentials?.base_url || "https://your-domain.atlassian.net"
       }
 
       return "https://your-domain.atlassian.net"

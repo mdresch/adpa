@@ -70,6 +70,10 @@
 
 ### **📖 User Guides & Training**
 → [`docs/11-user-guides/`](./11-user-guides/)
+- NEW: Epic-Focused Guides
+  - [Governance – Drift Detection & Resolution](./11-user-guides/GOVERNANCE_DRIFT_DETECTION_AND_RESOLUTION_GUIDE.md)
+  - [Digital Signing & Compliance (Documenso)](./11-user-guides/DIGITAL_SIGNING_AND_COMPLIANCE_DOCUMENSO_GUIDE.md)
+  - [Executive Analytics & Dashboards](./11-user-guides/EXECUTIVE_ANALYTICS_AND_DASHBOARDS_GUIDE.md)
 - **Training Materials Index** - Complete guide to all training resources
 - **End User Training** - 2-hour course for template authors (with certification)
 - **Administrator Training** - 4-hour course for system admins (with certification)

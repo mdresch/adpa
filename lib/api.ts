@@ -1069,6 +1069,8 @@ class ApiClient {
   }
 
   async getDocument(id: string): Promise<Document> {
+    // Fetch single document, including optional confluence_page_url if backend provides it
+
     const response = await this.request<{ document: Document }>(`/documents/${id}`)
     return response.document
   }
