@@ -8,6 +8,11 @@
 
 ## Available Guides
 
+### Epic-Focused Guides
+- [Governance – Drift Detection & Resolution](GOVERNANCE_DRIFT_DETECTION_AND_RESOLUTION_GUIDE.md)
+- [Digital Signing & Compliance (Documenso)](DIGITAL_SIGNING_AND_COMPLIANCE_DOCUMENSO_GUIDE.md)
+- [Executive Analytics & Dashboards](EXECUTIVE_ANALYTICS_AND_DASHBOARDS_GUIDE.md)
+
 ### 📚 Core Training Materials
 
 #### 1. [Getting Started Guide](GETTING_STARTED_GUIDE.md)

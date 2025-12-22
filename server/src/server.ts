@@ -225,6 +225,7 @@ app.use("/api/auth", authRoutes)
 console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
+app.use("/api/projects", require("./routes/projectIntegrationRoutes").default)
 app.use("/api/programs", programRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/project-data-extraction", projectDataExtractionRoutes)

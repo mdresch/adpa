@@ -80,7 +80,7 @@ export interface QueueServiceDependencies {
  * Adapter for pg.Pool to IDatabase
  */
 export class PoolDatabaseAdapter implements IDatabase {
-  constructor(private pool: Pool | null) {
+  constructor(private pool: Pool) {
     if (!pool) {
       throw new Error('PoolDatabaseAdapter: Database pool cannot be null. Ensure database is connected before creating adapter.')
     }

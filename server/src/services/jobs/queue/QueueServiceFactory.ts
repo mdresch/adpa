@@ -41,6 +41,11 @@ export function createQueueService(
   documentPurposeService?: any,
   templateAnalyticsService?: any
 ): QueueService {
+  // Ensure pool is initialized before creating adapter
+  if (!pool) {
+    throw new Error('QueueServiceFactory: Database pool is null. Ensure connectDatabase() is called before creating QueueService.')
+  }
+
   // Import logger utilities with fallback
   let effectiveLogger;
   try {

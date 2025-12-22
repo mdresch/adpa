@@ -539,10 +539,23 @@ export class ExtractionOrchestrationService {
   static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
     // Ensure pool is available before creating fallback
-    if (!deps?.database && !pool) {
-      throw new Error('Database connection pool is not initialized and no database dependency provided')
+<<<<<<< HEAD
+    let db: any
+    if (deps?.database) {
+      db = deps.database
+    } else {
+      // Fallback: get fresh pool reference if needed
+      if (!pool) {
+        const { getDatabasePool } = await import('@/database/connection')
+        const freshPool = getDatabasePool()
+        if (!freshPool) {
+          throw new Error('Database connection pool is not initialized. Ensure connectDatabase() is called before processing jobs.')
+        }
+        db = { query: freshPool.query.bind(freshPool) }
+      } else {
+        db = { query: pool.query.bind(pool) }
+      }
     }
-    const db = deps?.database || { query: pool.query.bind(pool) } as any
     const ws = deps?.websocket || io
     const log = deps?.logger || logger
     const { jobId, projectId, userId, aiProvider, aiModel, documentIds, domains } = job.data as ExtendedExtractionJobData

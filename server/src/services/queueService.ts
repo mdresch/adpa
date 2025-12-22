@@ -374,15 +374,23 @@ queuesForListeners.forEach((queue) => {
   })
 })
 
-// Lazy initialization of QueueService instance
+// Lazy initialization: Create QueueService instance only when needed
 // This ensures the database pool is initialized before creating the service
 let queueServiceInstance: ReturnType<typeof createQueueService> | null = null
 
-function getQueueServiceInstance() {
+function getQueueServiceInstance(): ReturnType<typeof createQueueService> {
   if (!queueServiceInstance) {
-    // Ensure pool is initialized - use getDatabasePool which throws if not initialized
+    // Ensure pool is available before creating QueueService
     const { getDatabasePool } = require('../database/connection')
-    const initializedPool = getDatabasePool() // This will throw if not initialized
+    let currentPool = pool
+    if (!currentPool) {
+      try {
+        currentPool = getDatabasePool()
+      } catch (error) {
+        logger.error('[QUEUE-SERVICE] Database pool not initialized. Ensure connectDatabase() is called before creating QueueService.', error)
+        throw new Error('Database connection pool is not initialized. Ensure connectDatabase() is called before creating QueueService.')
+      }
+    }
     
     queueServiceInstance = createQueueService(
       new Map<QueueName, Bull.Queue>([
@@ -395,7 +403,7 @@ function getQueueServiceInstance() {
         ['quality-audit', qualityAuditQueue],
         ['project-data-extraction', extractionQueue],
       ]),
-      initializedPool,
+      currentPool, // Use the validated pool
       io,
       cache,
       aiService,
@@ -407,15 +415,15 @@ function getQueueServiceInstance() {
 
 // Export the queue service functions with lazy initialization
 export async function addJob(...args: Parameters<ReturnType<typeof createQueueService>['addJob']>) {
-  return getQueueServiceInstance().addJob(...args)
+  return (await getQueueServiceInstance()).addJob(...args)
 }
 
 export async function getJobStatus(...args: Parameters<ReturnType<typeof createQueueService>['getJobStatus']>) {
-  return getQueueServiceInstance().getJobStatus(...args)
+  return (await getQueueServiceInstance()).getJobStatus(...args)
 }
 
 export async function cancelJob(...args: Parameters<ReturnType<typeof createQueueService>['cancelJob']>) {
-  return getQueueServiceInstance().cancelJob(...args)
+  return (await getQueueServiceInstance()).cancelJob(...args)
 }
 
 export async function updateJobStatus(
@@ -426,13 +434,20 @@ export async function updateJobStatus(
   queueName?: string,
   errorMessage?: string
 ): Promise<void> {
-  await getQueueServiceInstance().updateJobStatus(jobId, status, progress, workerId, queueName);
+  await (await getQueueServiceInstance()).updateJobStatus(jobId, status, progress, workerId, queueName);
 }
 
-// Export getters for the queue service instance for internal use
+// Export the queue service instance getter for internal use
 export function getQueueService() {
   return getQueueServiceInstance()
 }
+
+// Export queueServiceInstance for backward compatibility (deprecated - use getQueueService() instead)
+export const queueService = new Proxy({} as ReturnType<typeof createQueueService>, {
+  get(target, prop) {
+    return (getQueueServiceInstance() as any)[prop]
+  }
+})
 
 // Export getQueueServiceInstance for backward compatibility (used in metrics.ts)
 export { getQueueServiceInstance }
@@ -455,7 +470,7 @@ export async function getQueueServiceDependencies(): Promise<QueueServiceDepende
     await connectDatabase()
   }
   
-  return getQueueServiceInstance().getDependencies();
+  return (await getQueueServiceInstance()).getDependencies();
 }
 
 // Job processors
@@ -784,6 +799,18 @@ regenerationQueue.on("failed", (job, err) => {
 })
 
 // Quality Audit job processor
+// Publish to Confluence job processor
+documentQueue.process("publish-to-confluence", async (job) => {
+  try {
+    const { PublishToConfluenceJobService } = await import('./jobs/PublishToConfluenceJobService')
+    const result = await PublishToConfluenceJobService.processJob(job)
+    return result
+  } catch (error) {
+    logger.error(`[PUBLISH-CONFLUENCE] Job failed: ${job.id}`, error)
+    throw error
+  }
+})
+
 qualityAuditQueue.process("quality-audit", async (job) => {
   const { jobId, documentId, documentContent, documentType, projectContext, userId } = job.data
 
