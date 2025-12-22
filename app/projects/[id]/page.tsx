@@ -2147,11 +2147,21 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
     const room = `project:${projectId}`
     joinRoom(room)
 
-    const handleDocumentCreated = (data: { document?: { project_id: string; name: string } }) => {
+    // Track recent notifications to prevent duplicate toasts
+    const recentNotifications = new Set<string>()
+
+    const handleDocumentCreated = (data: { document?: { project_id: string; name: string; id?: string } }) => {
       try {
         const doc = data?.document
         if (doc && doc.project_id && doc.name && String(doc.project_id) === String(projectId)) {
-          toast.success(`New document created: ${doc.name}`)
+          // Deduplicate: only show toast if we haven't shown it recently for this document
+          const notificationKey = `document-created-${doc.id || doc.name}`
+          if (!recentNotifications.has(notificationKey)) {
+            recentNotifications.add(notificationKey)
+            toast.success(`New document created: ${doc.name}`)
+            // Remove from set after 5 seconds to allow re-notification if needed
+            setTimeout(() => recentNotifications.delete(notificationKey), 5000)
+          }
           fetchDocuments()
         }
       } catch (err) {
@@ -2201,7 +2211,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       newVersionId?: string;
     }) => {
       try {
-        toast.success(`Conflict resolved using ${data.resolutionMethod}`);
+        // Deduplicate: only show toast if we haven't shown it recently for this conflict
+        const notificationKey = `conflict-resolved-${data.conflictId}`
+        if (!recentNotifications.has(notificationKey)) {
+          recentNotifications.add(notificationKey)
+          toast.success(`Conflict resolved using ${data.resolutionMethod}`);
+          // Remove from set after 5 seconds to allow re-notification if needed
+          setTimeout(() => recentNotifications.delete(notificationKey), 5000)
+        }
         fetchDocuments(); // Refresh documents to show updates
       } catch (err) {
         console.warn('Error handling document:conflict_resolved event', err);
@@ -2215,7 +2232,14 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
       documentName?: string;
     }) => {
       try {
-        toast.success(`Document "${data.documentName}" regeneration completed (v${data.versionNumber})`);
+        // Deduplicate: only show toast if we haven't shown it recently for this version
+        const notificationKey = `regeneration-completed-${data.versionId}`
+        if (!recentNotifications.has(notificationKey)) {
+          recentNotifications.add(notificationKey)
+          toast.success(`Document "${data.documentName}" regeneration completed (v${data.versionNumber})`);
+          // Remove from set after 5 seconds to allow re-notification if needed
+          setTimeout(() => recentNotifications.delete(notificationKey), 5000)
+        }
         fetchDocuments(); // Refresh documents to show updates
       } catch (err) {
         console.warn('Error handling document:regeneration:completed event', err);

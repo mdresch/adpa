@@ -1512,7 +1512,7 @@ class ProcessFlowService {
         provider: activeProvider,
         model: modelName,
         temperature: 0.3, // Lower temperature for more consistent output
-        max_tokens: 4000, // Reasonable output length
+        max_tokens: 8000, // Increased for comprehensive document generation
         system_prompt: template.system_prompt || 'You are an expert document generator. Create a comprehensive, well-structured document based on the provided context and template requirements.'
       }
       
@@ -1520,8 +1520,8 @@ class ProcessFlowService {
       logger.info(`Using model: ${modelName}`)
       logger.info(`Context content length: ${contextContent.length} characters`)
       
-      // Generate the document
-      const response = await aiService.generate(aiRequest)
+      // Generate the document with fallback
+      const response = await aiService.generateWithFallback(aiRequest, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
       
       if (!response.content) {
         throw new Error(`AI generation failed: No content returned`)
@@ -1873,11 +1873,11 @@ class ProcessFlowService {
         })
         
         // Enqueue quality audit job (async, non-blocking)
-        const { queueService } = await import('./queueService')
+        const { getQueueService } = await import('./queueService')
         const { v4: uuidv4 } = await import('uuid')
         const auditJobId = uuidv4()
         
-        queueService.addJob('quality-audit', {
+        getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId: savedDocument.id,
           documentContent: finalContent,

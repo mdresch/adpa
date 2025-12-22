@@ -524,11 +524,19 @@ Identify 3-5 structural improvements. Focus on:
       issueCount: commonIssues.length
     })
 
+    // Get preferred provider (highest priority active)
+    const providerResult = await pool.query(
+      "SELECT provider_type, default_model FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+    )
+    const preferredProvider = providerResult.rows[0]?.provider_type || 'openai'
+    const defaultModel = providerResult.rows[0]?.default_model || 'gpt-4o'
+
     let result: any = null
     try {
-      result = await aiService.generate({
-        provider: 'google',
-        model: 'gemini-2.5-flash',
+      // Use generateWithFallback to handle provider failures gracefully
+      result = await aiService.generateWithFallback({
+        provider: preferredProvider,
+        model: defaultModel,
         prompt: analysisPrompt, // User prompt (required)
         system_prompt: `You are an expert in document template design and AI prompt engineering. You analyze template performance and suggest specific, actionable improvements. Always respond with valid JSON only. Do not include any explanatory text before or after the JSON.`, // System prompt (optional, snake_case)
         temperature: 0.5,
@@ -938,16 +946,29 @@ Focus on the most impactful improvements. Be specific and actionable.`
     const newVersionNumber = latestVersion ? parseInt(latestVersion.version_number) + 1 : 1
 
     // 5. Create new template version
+    // Ensure content is properly formatted as JSONB
+    let contentJsonb: string
+    if (typeof newContent === 'string') {
+      // If content is a string (markdown), wrap it in a JSON object
+      contentJsonb = JSON.stringify({ markdown: newContent })
+    } else if (typeof newContent === 'object' && newContent !== null) {
+      // If content is already an object, stringify it
+      contentJsonb = JSON.stringify(newContent)
+    } else {
+      // Fallback: wrap in object
+      contentJsonb = JSON.stringify({ content: String(newContent) })
+    }
+
     await pool.query(
       `INSERT INTO template_versions (
         template_id, version_number, content, system_prompt,
         avg_quality_before, change_summary, improvement_suggestion_id,
         created_by, name, description, framework, category, change_type
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      ) VALUES ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [
         suggestion.template_id,
         newVersionNumber,
-        typeof newContent === 'string' ? newContent : JSON.stringify(newContent),
+        contentJsonb,
         template.system_prompt,
         suggestion.current_avg_quality,
         this.generateChangesSummary(suggestion.suggested_improvements),
@@ -962,11 +983,24 @@ Focus on the most impactful improvements. Be specific and actionable.`
     )
 
     // 6. Update main template
+    // Ensure content is properly formatted as JSONB for templates table
+    let templateContentJsonb: string
+    if (typeof newContent === 'string') {
+      // If content is a string (markdown), wrap it in a JSON object
+      templateContentJsonb = JSON.stringify({ markdown: newContent })
+    } else if (typeof newContent === 'object' && newContent !== null) {
+      // If content is already an object, stringify it
+      templateContentJsonb = JSON.stringify(newContent)
+    } else {
+      // Fallback: wrap in object
+      templateContentJsonb = JSON.stringify({ content: String(newContent) })
+    }
+
     await pool.query(
       `UPDATE templates
-       SET content = $1, updated_at = NOW()
+       SET content = $1::jsonb, updated_at = NOW()
        WHERE id = $2`,
-      [typeof newContent === 'string' ? newContent : JSON.stringify(newContent), suggestion.template_id]
+      [templateContentJsonb, suggestion.template_id]
     )
 
     // 7. Mark suggestion as implemented
@@ -976,6 +1010,76 @@ Focus on the most impactful improvements. Be specific and actionable.`
        WHERE id = $2`,
       [userId, suggestionId]
     )
+
+    // 🔄 CONTINUOUS IMPROVEMENT CYCLE: Trigger quality audits on recent documents
+    // This will create a new baseline and enable detection of further improvements/regressions
+    try {
+      logger.info('[TEMPLATE-IMPROVEMENT] Triggering continuous improvement cycle - auditing recent documents', {
+        templateId: suggestion.template_id,
+        newVersion: newVersionNumber
+      })
+
+      // Find recent documents using this template (last 7 days, limit 5)
+      const recentDocsResult = await pool.query(
+        `SELECT id, name, content, project_id
+         FROM documents
+         WHERE template_id = $1
+         AND created_at > NOW() - INTERVAL '7 days'
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [suggestion.template_id]
+      )
+
+      if (recentDocsResult.rows.length > 0) {
+        const { getQueueService } = await import('./queueService')
+        const { v4: uuidv4 } = await import('uuid')
+
+        // Get project context for each document
+        for (const doc of recentDocsResult.rows) {
+          const projectResult = await pool.query(
+            'SELECT id, name, framework, description FROM projects WHERE id = $1',
+            [doc.project_id]
+          )
+          const projectContext = projectResult.rows[0] || { id: doc.project_id, name: 'Project' }
+
+          // Enqueue quality audit job (async, non-blocking)
+          const auditJobId = uuidv4()
+          getQueueService().addJob('quality-audit', {
+            jobId: auditJobId,
+            documentId: doc.id,
+            documentContent: doc.content || '',
+            documentType: suggestion.template_id,
+            projectContext,
+            userId
+          }).catch((auditError: any) => {
+            logger.warn('[TEMPLATE-IMPROVEMENT] Failed to enqueue quality audit for continuous improvement', {
+              documentId: doc.id,
+              error: auditError.message
+            })
+          })
+
+          logger.debug('[TEMPLATE-IMPROVEMENT] Enqueued quality audit for continuous improvement', {
+            documentId: doc.id,
+            auditJobId
+          })
+        }
+
+        logger.info('[TEMPLATE-IMPROVEMENT] Continuous improvement cycle initiated', {
+          templateId: suggestion.template_id,
+          documentsAudited: recentDocsResult.rows.length
+        })
+      } else {
+        logger.info('[TEMPLATE-IMPROVEMENT] No recent documents found for continuous improvement cycle', {
+          templateId: suggestion.template_id
+        })
+      }
+    } catch (cycleError: any) {
+      // Don't fail the improvement implementation if continuous improvement cycle fails
+      logger.warn('[TEMPLATE-IMPROVEMENT] Failed to trigger continuous improvement cycle (non-blocking)', {
+        templateId: suggestion.template_id,
+        error: cycleError.message
+      })
+    }
 
     logger.info('[TEMPLATE-IMPROVEMENT] Improvements implemented', {
       templateId: suggestion.template_id,

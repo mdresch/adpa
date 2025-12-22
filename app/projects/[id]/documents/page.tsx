@@ -302,7 +302,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         {
           id: "doc-1",
           name: "Project Requirements Document",
-          template_id: "template-1",
+          template_id: null, // Mock data - no template ID
           template_name: "AI-Enhanced Project Charter Template",
           template_framework: "PMBOK 7",
           status: "published",

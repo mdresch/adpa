@@ -2064,10 +2064,10 @@ router.put("/:projectId/documents/:documentId", authenticateToken, async (req, r
         })
 
         // Enqueue quality audit job (async, non-blocking)
-        const { queueService } = await import('../services/queueService')
+        const { getQueueService } = await import('../services/queueService')
         const auditJobId = require('uuid').v4()
         
-        queueService.addJob('quality-audit', {
+        getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId,
           documentContent: content,

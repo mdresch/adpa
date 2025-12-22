@@ -410,10 +410,10 @@ Please generate a comprehensive, updated version that incorporates all recent pr
         const projectContext = projectQuery.rows[0] || { id: projectId, name: 'Project' }
 
         // Enqueue quality audit job (async, non-blocking)
-        const { queueService } = await import('./queueService')
+        const { getQueueService } = await import('./queueService')
         const auditJobId = uuidv4()
 
-        queueService.addJob('quality-audit', {
+        getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId: newDocumentId,
           documentContent: aiResponse.content,

@@ -158,13 +158,13 @@ async function generateSingleRecommendation(
   try {
     const prompt = buildRecommendationPrompt(context, severity);
 
-    const response = await aiService.generate({
+    const response = await aiService.generateWithFallback({
       provider: 'openai',
       model: 'gpt-4o',
       prompt,
       temperature: 0.7,
-      max_tokens: 2000
-    });
+      max_tokens: 8000
+    }, ['openai', 'google', 'anthropic', 'mistral', 'groq']);
 
     const parsed = parseAIRecommendation(response.content, context, severity);
     return parsed;

@@ -424,9 +424,25 @@ export default function DocumentEntitiesPage() {
         const status = data.status
 
         setExtractionProgress(progress)
-        setExtractionStatus(data.message || `Status: ${status}`)
+        // Only set status message if we have a valid message or status
+        // Prevents displaying "Status: undefined" to users
+        if (data.message) {
+          setExtractionStatus(data.message)
+        } else if (status) {
+          setExtractionStatus(`Status: ${status}`)
+        } else {
+          // Don't set status if both are undefined
+          setExtractionStatus("")
+        }
 
         if (status === 'completed') {
+          // Guard against multiple completions (race condition with in-flight requests)
+          // This prevents duplicate toast notifications when multiple polling requests
+          // complete simultaneously or when WebSocket and polling both fire
+          if (jobCompletedRef.current) {
+            return // Already handled, skip this response
+          }
+          
           jobCompletedRef.current = true
           cleanupPolling() // Clear both interval and timeout
           setIsExtracting(false)
@@ -445,6 +461,11 @@ export default function DocumentEntitiesPage() {
             statusClearTimeoutRef.current = null // Clear ref after execution
           }, 3000)
         } else if (status === 'failed') {
+          // Guard against multiple failures (race condition with in-flight requests)
+          if (jobCompletedRef.current) {
+            return // Already handled, skip this response
+          }
+          
           jobCompletedRef.current = true
           cleanupPolling() // Clear both interval and timeout
           setIsExtracting(false)

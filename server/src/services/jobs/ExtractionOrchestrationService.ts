@@ -538,6 +538,10 @@ export class ExtractionOrchestrationService {
    */
   static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
+    // Ensure pool is available before creating fallback
+    if (!deps?.database && !pool) {
+      throw new Error('Database connection pool is not initialized and no database dependency provided')
+    }
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const ws = deps?.websocket || io
     const log = deps?.logger || logger
@@ -1293,24 +1297,6 @@ export class ExtractionOrchestrationService {
 
       log.info(`[EXTRACTION-PARENT] Total entities extracted: ${totalEntities}`)
 
-      // After we know project-level entity tables are populated, rebuild
-      // per-document entity_counts and inferred_*_domain, then refresh
-      // template_entity_profile using the helper views.
-      try {
-        const { default: DocumentPurposeService } = await import('../documentPurposeService')
-        const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
-
-        log.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
-        await DocumentPurposeService.rebuildForProject(projectId)
-
-        log.info('[EXTRACTION-PARENT] Updating template entity profiles from aggregated_template_entity_view')
-        await TemplateAnalyticsService.updateTemplateEntityProfile()
-      } catch (hookError: any) {
-        log.error(
-          `[EXTRACTION-PARENT] Failed to update document purposes / template profiles for project ${projectId}: ${hookError?.message || hookError}`
-        )
-      }
-
       const userId = jobRow?.created_by
 
       // Prepare result with optional failed entity info
@@ -1330,34 +1316,83 @@ export class ExtractionOrchestrationService {
         })
       }
 
-      // After counts are refreshed, rebuild per-document purpose and template profiles.
+      // After we know project-level entity tables are populated, rebuild
+      // per-document entity_counts and inferred_*_domain, then refresh
+      // template_entity_profile using the helper views.
       // This runs best-effort; failures here should not break the main extraction job.
       try {
         const { default: DocumentPurposeService } = await import('../documentPurposeService')
         const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
 
+        log.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
+        
+        // Check how many documents have entities before rebuild
+        const beforeCheck = await db.query(
+          `SELECT COUNT(*) as doc_count,
+                  COUNT(CASE WHEN source_document_id IS NOT NULL THEN 1 END) as entities_with_source
+           FROM (
+             SELECT DISTINCT source_document_id FROM stakeholders WHERE project_id = $1 AND source_document_id IS NOT NULL
+             UNION
+             SELECT DISTINCT source_document_id FROM requirements WHERE project_id = $1 AND source_document_id IS NOT NULL
+             UNION
+             SELECT DISTINCT source_document_id FROM risks WHERE project_id = $1 AND source_document_id IS NOT NULL
+             LIMIT 100
+           ) sub`,
+          [projectId]
+        )
+        log.info(`[EXTRACTION-PARENT] Pre-rebuild check: Found entities with source_document_id for project ${projectId}`)
+        
         await DocumentPurposeService.rebuildForProject(projectId)
+        
+        // Verify entity_counts were populated
+        const afterCheck = await db.query(
+          `SELECT COUNT(*) as total_docs,
+                  COUNT(CASE WHEN entity_counts != '{}'::jsonb AND entity_counts IS NOT NULL THEN 1 END) as docs_with_counts
+           FROM documents
+           WHERE project_id = $1`,
+          [projectId]
+        )
+        log.info(`[EXTRACTION-PARENT] Post-rebuild check: ${afterCheck.rows[0].docs_with_counts}/${afterCheck.rows[0].total_docs} documents have entity_counts populated`)
 
         // Recompute template_entity_profile rows only for templates used in this project
+        log.info(`[EXTRACTION-PARENT] Finding templates used in project ${projectId}`)
         const templatesRes = await db.query(
-          `SELECT DISTINCT template_id
+          `SELECT DISTINCT template_id,
+                  COUNT(*) as doc_count,
+                  COUNT(CASE WHEN entity_counts != '{}'::jsonb AND entity_counts IS NOT NULL THEN 1 END) as docs_with_counts
            FROM documents
-           WHERE project_id = $1 AND template_id IS NOT NULL`,
+           WHERE project_id = $1 AND template_id IS NOT NULL
+           GROUP BY template_id`,
           [projectId]
         )
 
         const templateIds = templatesRes.rows.map((row) => row.template_id as string)
+        log.info(`[EXTRACTION-PARENT] Found ${templateIds.length} templates to update:`, 
+          templatesRes.rows.map((r: any) => ({
+            templateId: r.template_id,
+            totalDocs: r.doc_count,
+            docsWithCounts: r.docs_with_counts
+          }))
+        )
+        
         if (templateIds.length > 0) {
           for (const templateId of templateIds) {
+            const templateInfo = templatesRes.rows.find((r: any) => r.template_id === templateId)
+            log.info(`[EXTRACTION-PARENT] Updating template entity profile for template ${templateId} (${templateInfo?.docs_with_counts}/${templateInfo?.doc_count} docs have entity_counts)`)
             await TemplateAnalyticsService.updateTemplateEntityProfile(templateId)
           }
+          log.info(`[EXTRACTION-PARENT] Successfully updated ${templateIds.length} template entity profiles`)
+        } else {
+          log.warn(`[EXTRACTION-PARENT] No templates found for project ${projectId} - documents may not have template_id set`)
         }
       } catch (analyticsError: any) {
         log.error('[EXTRACTION-PARENT] Failed to rebuild document/template purpose analytics', {
           jobId,
           projectId,
-          error: analyticsError.message
+          error: analyticsError.message,
+          stack: analyticsError.stack
         })
+        // Don't throw - this is best-effort and shouldn't break the extraction job
       }
 
       // Update job to completed (status is VARCHAR(20), so we use 'completed' and store warnings in result)

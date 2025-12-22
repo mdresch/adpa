@@ -56,6 +56,11 @@ export function createQueueService(
     };
   }
 
+  // Validate pool is initialized before creating adapter
+  if (!pool) {
+    throw new Error('QueueServiceFactory: Database pool is null. Ensure connectDatabase() is called before creating QueueService.')
+  }
+
   // Create adapters
   const databaseAdapter = new PoolDatabaseAdapter(pool)
   const websocketAdapter = new SocketIOWebSocketAdapter(io)

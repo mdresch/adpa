@@ -613,12 +613,20 @@ Format as JSON with these exact fields:
   "confidence": 0.0-1.0
 }`
 
-      const response = await aiService.generate({
+      // Get preferred provider with fallback
+      const providerResult = await pool.query(
+        "SELECT provider_type, default_model FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+      )
+      const preferredProvider = providerResult.rows[0]?.provider_type || 'openai'
+      const defaultModel = providerResult.rows[0]?.default_model || 'gpt-4o'
+
+      const response = await aiService.generateWithFallback({
         prompt,
         system_prompt: 'You are a project management knowledge extraction expert. Generate structured, actionable knowledge base entries.',
-        max_tokens: 2000,
-        provider: 'google'
-      })
+        max_tokens: 8000,
+        provider: preferredProvider,
+        model: defaultModel
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = JSON.parse(response.content)
       return {
@@ -690,12 +698,20 @@ Return JSON array (limit to top ${limit}):
   }
 ]`
 
-      const response = await aiService.generate({
+      // Get preferred provider with fallback
+      const providerResult = await pool.query(
+        "SELECT provider_type, default_model FROM ai_providers WHERE is_active = true ORDER BY priority ASC LIMIT 1"
+      )
+      const preferredProvider = providerResult.rows[0]?.provider_type || 'openai'
+      const defaultModel = providerResult.rows[0]?.default_model || 'gpt-4o'
+
+      const response = await aiService.generateWithFallback({
         prompt,
         system_prompt: 'You are a project management AI that recommends relevant knowledge base entries.',
-        max_tokens: 2000,
-        provider: 'google'
-      })
+        max_tokens: 8000,
+        provider: preferredProvider,
+        model: defaultModel
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const recommendations = JSON.parse(response.content)
 

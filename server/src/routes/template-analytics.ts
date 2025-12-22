@@ -311,5 +311,306 @@ router.post('/analytics/rebuild-entity-profiles', authenticateToken, requirePerm
   }
 });
 
+/**
+ * Rebuild template analytics for a specific template
+ * 
+ * This endpoint rebuilds document purposes for all projects using the template,
+ * then updates the template entity profile. Useful for:
+ * - Recovering from data inconsistencies
+ * - Refreshing analytics after bulk document updates
+ * - Troubleshooting missing template analytics data
+ * 
+ * @route POST /api/template-analytics/analytics/rebuild-template/:templateId
+ * @access Admin only
+ * @param {string} templateId - UUID of the template to rebuild analytics for
+ * @returns {Object} Success message with templateId and projectsRebuilt count
+ * 
+ * @example
+ * POST /api/template-analytics/analytics/rebuild-template/123e4567-e89b-12d3-a456-426614174000
+ * Authorization: Bearer <admin-token>
+ */
+router.post('/analytics/rebuild-template/:templateId', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { templateId } = req.params;
+    
+    // Validate templateId format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(templateId)) {
+      return res.status(400).json({ error: 'Invalid template ID format' });
+    }
+    
+    const { pool } = await import('../database/connection');
+    
+    // Find all projects using this template
+    const projectsRes = await pool.query(
+      `SELECT DISTINCT project_id 
+       FROM documents 
+       WHERE template_id = $1 AND project_id IS NOT NULL`,
+      [templateId]
+    );
+    
+    const projectIds = projectsRes.rows.map((row) => row.project_id as string);
+    log.info(`Found ${projectIds.length} projects using template ${templateId}`);
+    
+    // Rebuild document purposes for each project
+    if (projectIds.length > 0) {
+      const { default: DocumentPurposeService } = await import('../services/documentPurposeService');
+      for (const projectId of projectIds) {
+        log.info(`Rebuilding document purposes for project ${projectId}`);
+        await DocumentPurposeService.rebuildForProject(projectId);
+      }
+    }
+    
+    // Rebuild template entity profile
+    await TemplateAnalyticsService.updateTemplateEntityProfile(templateId);
+    
+    res.json({
+      message: 'Template analytics rebuilt successfully',
+      templateId,
+      projectsRebuilt: projectIds.length
+    });
+  } catch (error: any) {
+    log.error('Rebuild template analytics error:', {
+      templateId,
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to rebuild template analytics',
+      message: error?.message || 'Internal server error',
+      templateId
+    });
+  }
+});
+
+/**
+ * Rebuild document purposes for a specific project
+ * 
+ * Recomputes entity_counts and inferred_*_domain fields for all documents
+ * in the specified project. This is automatically called after extraction jobs,
+ * but can be manually triggered if needed.
+ * 
+ * @route POST /api/template-analytics/analytics/rebuild-document-purposes/:projectId
+ * @access Admin only
+ * @param {string} projectId - UUID of the project to rebuild document purposes for
+ * @returns {Object} Success message with projectId
+ * 
+ * @example
+ * POST /api/template-analytics/analytics/rebuild-document-purposes/123e4567-e89b-12d3-a456-426614174000
+ * Authorization: Bearer <admin-token>
+ */
+router.post('/analytics/rebuild-document-purposes/:projectId', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { projectId } = req.params;
+    
+    // Validate projectId format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(projectId)) {
+      return res.status(400).json({ error: 'Invalid project ID format' });
+    }
+    
+    const { default: DocumentPurposeService } = await import('../services/documentPurposeService');
+    await DocumentPurposeService.rebuildForProject(projectId);
+    
+    res.json({ 
+      message: 'Document purposes rebuilt successfully for project',
+      projectId 
+    });
+  } catch (error: any) {
+    log.error('Rebuild document purposes error:', {
+      projectId,
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to rebuild document purposes',
+      message: error?.message || 'Internal server error',
+      projectId
+    });
+  }
+});
+
+/**
+ * Rebuild both document purposes and template entity profiles (full rebuild)
+ * 
+ * Performs a comprehensive rebuild of analytics data. Can be scoped to a specific
+ * project (recommended) or run system-wide (expensive, use with caution).
+ * 
+ * @route POST /api/template-analytics/analytics/rebuild-all
+ * @access Admin only
+ * @body {string} [projectId] - Optional UUID of project to rebuild. If omitted, rebuilds all template profiles.
+ * @returns {Object} Success message with rebuild details
+ * 
+ * @example
+ * // Rebuild for specific project (recommended)
+ * POST /api/template-analytics/analytics/rebuild-all
+ * Content-Type: application/json
+ * Authorization: Bearer <admin-token>
+ * { "projectId": "123e4567-e89b-12d3-a456-426614174000" }
+ * 
+ * @example
+ * // Full system rebuild (use with caution - can be expensive)
+ * POST /api/template-analytics/analytics/rebuild-all
+ * Authorization: Bearer <admin-token>
+ */
+router.post('/analytics/rebuild-all', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { projectId } = req.body; // Optional - if provided, only rebuild for this project
+    
+    if (projectId) {
+      // Validate projectId format if provided
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!uuidRegex.test(projectId)) {
+        return res.status(400).json({ error: 'Invalid project ID format' });
+      }
+      
+      // Rebuild for specific project
+      const { default: DocumentPurposeService } = await import('../services/documentPurposeService');
+      await DocumentPurposeService.rebuildForProject(projectId);
+      
+      // Update template profiles for templates used in this project
+      const { pool } = await import('../database/connection');
+      const templatesRes = await pool.query(
+        `SELECT DISTINCT template_id
+         FROM documents
+         WHERE project_id = $1 AND template_id IS NOT NULL`,
+        [projectId]
+      );
+      
+      const templateIds = templatesRes.rows.map((row) => row.template_id as string);
+      if (templateIds.length > 0) {
+        for (const templateId of templateIds) {
+          await TemplateAnalyticsService.updateTemplateEntityProfile(templateId);
+        }
+      }
+      
+      res.json({ 
+        message: 'Document purposes and template entity profiles rebuilt successfully for project',
+        projectId,
+        templatesUpdated: templateIds.length
+      });
+    } else {
+      // Full system rebuild - this could be expensive, so we'll just rebuild template profiles
+      await TemplateAnalyticsService.updateTemplateEntityProfile();
+      
+      res.json({ 
+        message: 'Template entity profiles rebuilt successfully for all templates',
+        note: 'To rebuild document purposes, specify a projectId in the request body'
+      });
+    }
+  } catch (error: any) {
+    log.error('Rebuild all analytics error:', {
+      projectId: projectId || 'all',
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to rebuild analytics',
+      message: error?.message || 'Internal server error',
+      scope: projectId ? 'project' : 'system-wide'
+    });
+  }
+});
+
+/**
+ * Diagnostic endpoint to check template analytics data
+ * 
+ * Provides comprehensive diagnostic information about a template's analytics state,
+ * including document counts, entity counts, view data, and recommendations for
+ * fixing common issues.
+ * 
+ * @route GET /api/template-analytics/analytics/diagnostic/:templateId
+ * @access Admin only
+ * @param {string} templateId - UUID of the template to diagnose
+ * @returns {Object} Diagnostic data with recommendations
+ * 
+ * @example
+ * GET /api/template-analytics/analytics/diagnostic/123e4567-e89b-12d3-a456-426614174000
+ * Authorization: Bearer <admin-token>
+ * 
+ * Response includes:
+ * - documents: Count statistics
+ * - viewData: Aggregated view data
+ * - profileData: Template entity profile
+ * - sampleDocuments: Sample documents with entity_counts
+ * - recommendations: Actionable recommendations (needsExtraction, needsRebuild, etc.)
+ */
+router.get('/analytics/diagnostic/:templateId', authenticateToken, requirePermission('admin'), async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId });
+  try {
+    const { templateId } = req.params;
+    
+    // Validate templateId format
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(templateId)) {
+      return res.status(400).json({ error: 'Invalid template ID format' });
+    }
+    
+    const { pool } = await import('../database/connection');
+    
+    // Check documents for this template
+    const documentsCheck = await pool.query(
+      `SELECT 
+        COUNT(*) as total_documents,
+        COUNT(CASE WHEN template_id IS NOT NULL THEN 1 END) as with_template_id,
+        COUNT(CASE WHEN entity_counts != '{}'::jsonb AND entity_counts IS NOT NULL THEN 1 END) as with_entity_counts,
+        COUNT(CASE WHEN template_id IS NOT NULL AND entity_counts != '{}'::jsonb THEN 1 END) as with_both
+       FROM documents
+       WHERE template_id = $1`,
+      [templateId]
+    );
+    
+    // Check view data
+    const viewCheck = await pool.query(
+      `SELECT * FROM aggregated_template_entity_view WHERE template_id = $1`,
+      [templateId]
+    );
+    
+    // Check template_entity_profile
+    const profileCheck = await pool.query(
+      `SELECT * FROM template_entity_profile WHERE template_id = $1`,
+      [templateId]
+    );
+    
+    // Sample a few documents to see their entity_counts
+    const sampleDocs = await pool.query(
+      `SELECT id, name, template_id, 
+              CASE WHEN entity_counts = '{}'::jsonb THEN 'empty' ELSE 'has_data' END as entity_counts_status,
+              entity_counts
+       FROM documents
+       WHERE template_id = $1
+       LIMIT 5`,
+      [templateId]
+    );
+    
+    res.json({
+      templateId,
+      documents: documentsCheck.rows[0],
+      viewData: viewCheck.rows[0] || null,
+      profileData: profileCheck.rows[0] || null,
+      sampleDocuments: sampleDocs.rows,
+      recommendations: {
+        needsExtraction: documentsCheck.rows[0].with_entity_counts === '0',
+        needsRebuild: viewCheck.rows.length === 0 && documentsCheck.rows[0].with_both > 0,
+        needsDocumentPurposeRebuild: documentsCheck.rows[0].with_template_id > 0 && documentsCheck.rows[0].with_entity_counts === '0'
+      }
+    });
+  } catch (error: any) {
+    log.error('Diagnostic error:', {
+      templateId,
+      error: error?.message || String(error),
+      stack: error?.stack
+    });
+    res.status(500).json({ 
+      error: 'Failed to retrieve diagnostic information',
+      message: error?.message || 'Internal server error',
+      templateId
+    });
+  }
+});
+
 export default router;
 

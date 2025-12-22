@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator'
 import { Progress } from '@/components/ui/progress'
 import { Loader2, Sparkles, CheckCircle, XCircle, Clock, TrendingUp, AlertTriangle, Info, Zap, Code, FileText, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
+import { SideBySideDiff } from '@/components/drift/SideBySideDiff'
 
 interface TemplateSuggestion {
   id: string
@@ -19,11 +20,14 @@ interface TemplateSuggestion {
   suggested_improvements: any[]
   priority: 'low' | 'medium' | 'high' | 'critical'
   status: 'pending_review' | 'approved' | 'implemented' | 'rejected'
-  avg_quality_score: number
+  avg_quality_score?: number
+  current_avg_quality?: number
   expected_quality_gain: number
   document_count: number
   created_at: string
   updated_at: string
+  implemented_at?: string
+  implemented_by?: string
   analysis_metadata?: {
     optimization_type?: 'ai_generated'
     trigger?: 'quality_regression'
@@ -75,32 +79,85 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
   }
 
   const viewOptimization = async (suggestion: TemplateSuggestion) => {
-    setSelectedOptimization(suggestion)
+    try {
+      // Fetch detailed optimization data with current vs suggested content
+      const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      const response = await fetch(
+        `${API_BASE_URL}/quality-audits/template-optimization/${suggestion.id}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+          }
+        }
+      )
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // Debug logging
+        if (process.env.NODE_ENV === 'development') {
+          const opt = data.suggestion?.optimization
+          console.log('[TemplateOptimization] Fetched optimization data:', {
+            hasOptimization: !!opt,
+            status: data.suggestion?.status,
+            usingDiffFields: !!(opt?.suggested_system_prompt_for_diff || opt?.suggested_content_for_diff),
+            currentSystemPrompt: opt?.current_system_prompt?.substring(0, 50),
+            suggestedSystemPrompt: (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt)?.substring(0, 50),
+            currentContentLength: opt?.current_content?.length,
+            suggestedContentLength: (opt?.suggested_content_for_diff || opt?.suggested_content)?.length,
+            areDifferent: opt?.current_system_prompt !== (opt?.suggested_system_prompt_for_diff || opt?.suggested_system_prompt)
+          })
+        }
+        
+        // Merge the detailed optimization data with the suggestion
+        const optimizationData = {
+          ...suggestion,
+          optimization: data.suggestion?.optimization
+        }
+        
+        setSelectedOptimization(optimizationData)
+      } else {
+        const errorData = await response.json().catch(() => ({}))
+        console.error('Failed to fetch optimization details:', errorData)
+        toast.error('Failed to load optimization details. Showing basic information.')
+        // Fallback to basic suggestion data
+        setSelectedOptimization(suggestion)
+      }
+    } catch (error) {
+      console.error('Failed to fetch optimization details:', error)
+      toast.error('Failed to load optimization details. Showing basic information.')
+      // Fallback to basic suggestion data
+      setSelectedOptimization(suggestion)
+    }
     setShowOptimizationDialog(true)
   }
 
-  const applyOptimization = async (suggestionId: string) => {
+  const applyOptimization = async (suggestionId: string, isRegularSuggestion = false) => {
     try {
       setApplyingOptimization(true)
 
       const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
-      const response = await fetch(
-        `${API_BASE_URL}/quality-audits/template-optimization/${suggestionId}/apply`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-            'Content-Type': 'application/json'
-          }
+      // Use different endpoint for regular suggestions vs AI optimizations
+      const endpoint = isRegularSuggestion
+        ? `${API_BASE_URL}/quality-audits/template-improvements/${suggestionId}/implement`
+        : `${API_BASE_URL}/quality-audits/template-optimization/${suggestionId}/apply`
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+          'Content-Type': 'application/json'
         }
-      )
+      })
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}))
         throw new Error(errorData.error || 'Failed to apply optimization')
       }
 
-      toast.success('Template optimization applied! Template version incremented.')
+      toast.success(isRegularSuggestion 
+        ? 'Template improvements implemented! New template version created.'
+        : 'Template optimization applied! Template version incremented.')
       setShowOptimizationDialog(false)
       fetchSuggestions() // Reload to show updated status
 
@@ -258,6 +315,10 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                       <CardDescription className="mt-2">
                         Quality regression: {metadata.score_before || 89}% → {metadata.score_after || 80}% 
                         (📉 {metadata.regression_amount || 9}% drop)
+                        <br />
+                        <span className="text-xs text-muted-foreground mt-1 block">
+                          Generated: {new Date(suggestion.created_at).toLocaleString()}
+                        </span>
                       </CardDescription>
                     </div>
                     <div className="text-right">
@@ -334,10 +395,17 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                     )}
 
                     {suggestion.status === 'implemented' && (
-                      <Badge className="bg-green-600">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Applied Successfully
-                      </Badge>
+                      <div className="flex flex-col items-end gap-1">
+                        <Badge className="bg-green-600">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Applied Successfully
+                        </Badge>
+                        {suggestion.implemented_at && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(suggestion.implemented_at).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -385,8 +453,8 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                 <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
                   <span className="text-sm font-medium">Current Avg Quality</span>
                   <div className="flex items-center gap-2">
-                    <Progress value={suggestion.avg_quality_score} className="w-24" />
-                    <span className="text-sm font-bold">{suggestion.avg_quality_score}%</span>
+                    <Progress value={suggestion.current_avg_quality || suggestion.avg_quality_score || 0} className="w-24" />
+                    <span className="text-sm font-bold">{suggestion.current_avg_quality || suggestion.avg_quality_score || 0}%</span>
                   </div>
                 </div>
 
@@ -455,6 +523,45 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                     </div>
                   </div>
                 )}
+
+                {/* Action Buttons */}
+                <Separator />
+                <div className="flex items-center justify-between pt-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => viewOptimization(suggestion)}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    View Full Diff
+                  </Button>
+
+                  {suggestion.status === 'pending_review' && (
+                    <Button 
+                      className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                      onClick={() => applyOptimization(suggestion.id, true)}
+                      disabled={applyingOptimization}
+                    >
+                      {applyingOptimization ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Applying...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4 mr-2" />
+                          ✅ Apply Improvements
+                        </>
+                      )}
+                    </Button>
+                  )}
+
+                  {suggestion.status === 'implemented' && (
+                    <Badge className="bg-green-600">
+                      <CheckCircle className="h-3 w-3 mr-1" />
+                      Applied Successfully
+                    </Badge>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )
@@ -484,62 +591,144 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
 
               <TabsContent value="comparison" className="space-y-4 mt-4">
                 {/* System Prompt Comparison */}
-                <div>
-                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                    <Code className="h-4 w-4" />
-                    System Prompt
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
+                {selectedOptimization.optimization ? (
+                  <>
+                    {selectedOptimization.optimization.is_regular_suggestion ? (
+                      <Alert className="mb-4">
+                        <Info className="h-4 w-4" />
+                        <AlertTitle>Regular Improvement Suggestions</AlertTitle>
+                        <AlertDescription>
+                          This suggestion contains individual improvements rather than a full template replacement. 
+                          View the "Change Summary" tab to see specific proposed changes. The diff view shows the current template.
+                        </AlertDescription>
+                      </Alert>
+                    ) : null}
                     <div>
-                      <Badge variant="outline" className="mb-2">Current (v2)</Badge>
-                      <pre className="text-xs bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto max-h-64">
-                        {typeof selectedOptimization.suggested_improvements[0].system_prompt === 'string'
-                          ? selectedOptimization.suggested_improvements[0].system_prompt
-                          : JSON.stringify(selectedOptimization.suggested_improvements[0].system_prompt || 'No system prompt', null, 2)}
-                      </pre>
+                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                        <Code className="h-4 w-4" />
+                        System Prompt
+                      </h4>
+                      {(() => {
+                        // Use diff-specific fields if available (for implemented suggestions showing original vs current)
+                        // Otherwise use the regular fields (for pending suggestions showing current vs suggested)
+                        let currentPrompt = selectedOptimization.optimization.current_system_prompt || 'No system prompt'
+                        let suggestedPrompt = selectedOptimization.optimization.suggested_system_prompt_for_diff 
+                          || selectedOptimization.optimization.suggested_system_prompt
+                          || currentPrompt
+                        
+                        // If suggested is missing, use current (but warn)
+                        if (!suggestedPrompt || suggestedPrompt === currentPrompt) {
+                          suggestedPrompt = currentPrompt
+                        }
+                        
+                        // Ensure both are strings
+                        currentPrompt = String(currentPrompt)
+                        suggestedPrompt = String(suggestedPrompt)
+                        
+                        const isIdentical = currentPrompt === suggestedPrompt
+                        
+                        return (
+                          <>
+                            {isIdentical && !selectedOptimization.optimization?.is_regular_suggestion && (
+                              <Alert className="mb-2">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertDescription>
+                                  System prompts are identical. The optimization may have already been applied, or no changes were generated.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                            {isIdentical && selectedOptimization.optimization?.is_regular_suggestion && (
+                              <Alert className="mb-2">
+                                <Info className="h-4 w-4" />
+                                <AlertDescription>
+                                  System prompt changes are shown as additions below. View the "Change Summary" tab for detailed proposed changes.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                            <div className="border rounded-lg overflow-hidden">
+                              <SideBySideDiff
+                                oldContent={currentPrompt}
+                                newContent={suggestedPrompt}
+                                filename="system_prompt.txt"
+                              />
+                            </div>
+                          </>
+                        )
+                      })()}
                     </div>
-                    <div>
-                      <Badge className="mb-2 bg-green-600">Suggested (v3)</Badge>
-                      <pre className="text-xs bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto max-h-64">
-                        {typeof selectedOptimization.suggested_improvements[0].system_prompt === 'string' 
-                          ? selectedOptimization.suggested_improvements[0].system_prompt 
-                          : JSON.stringify(selectedOptimization.suggested_improvements[0].system_prompt || 'No changes', null, 2)}
-                      </pre>
-                    </div>
-                  </div>
-                </div>
 
-                <Separator />
+                    <Separator />
 
-                {/* Template Content Comparison */}
-                <div>
-                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                    <FileText className="h-4 w-4" />
-                    Template Content
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
+                    {/* Template Content Comparison */}
                     <div>
-                      <Badge variant="outline" className="mb-2">Current (v2)</Badge>
-                      <pre className="text-xs bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800 overflow-x-auto max-h-96">
-                        {(() => {
-                          const content = selectedOptimization.suggested_improvements[0].template_content
-                          const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2)
-                          return contentStr.substring(0, 2000) + (contentStr.length > 2000 ? '\n\n... (truncated)' : '')
-                        })()}
-                      </pre>
+                      <h4 className="font-semibold mb-2 flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Template Content
+                      </h4>
+                      {(() => {
+                        // Use diff-specific fields if available (for implemented suggestions showing original vs current)
+                        // Otherwise use the regular fields (for pending suggestions showing current vs suggested)
+                        let currentContent = selectedOptimization.optimization.current_content || 'No content'
+                        let suggestedContent = selectedOptimization.optimization.suggested_content_for_diff
+                          || selectedOptimization.optimization.suggested_content
+                          || currentContent
+                        
+                        // If content is an object, try to extract the markdown/text
+                        if (typeof currentContent === 'object' && currentContent !== null) {
+                          currentContent = currentContent.content || currentContent.markdown || JSON.stringify(currentContent, null, 2)
+                        }
+                        if (typeof suggestedContent === 'object' && suggestedContent !== null) {
+                          suggestedContent = suggestedContent.content || suggestedContent.markdown || JSON.stringify(suggestedContent, null, 2)
+                        }
+                        
+                        // If suggested is missing, use current (but warn)
+                        if (!suggestedContent || suggestedContent === currentContent) {
+                          suggestedContent = currentContent
+                        }
+                        
+                        // Ensure both are strings
+                        currentContent = String(currentContent || 'No content')
+                        suggestedContent = String(suggestedContent || currentContent)
+                        
+                        const isIdentical = currentContent === suggestedContent
+                        
+                        return (
+                          <>
+                            {isIdentical && !selectedOptimization.optimization?.is_regular_suggestion && (
+                              <Alert className="mb-2">
+                                <AlertTriangle className="h-4 w-4" />
+                                <AlertDescription>
+                                  Template content is identical. The optimization may have already been applied, or no changes were generated.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                            {isIdentical && selectedOptimization.optimization?.is_regular_suggestion && (
+                              <Alert className="mb-2">
+                                <Info className="h-4 w-4" />
+                                <AlertDescription>
+                                  Proposed template additions are shown below. These are incremental changes (new sections, modifications) rather than a full template replacement. 
+                                  View the "Change Summary" tab for detailed descriptions of each proposed change.
+                                </AlertDescription>
+                              </Alert>
+                            )}
+                            <div className="border rounded-lg overflow-hidden">
+                              <SideBySideDiff
+                                oldContent={currentContent}
+                                newContent={suggestedContent}
+                                filename="template.md"
+                              />
+                            </div>
+                          </>
+                        )
+                      })()}
                     </div>
-                    <div>
-                      <Badge className="mb-2 bg-green-600">Suggested (v3)</Badge>
-                      <pre className="text-xs bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800 overflow-x-auto max-h-96">
-                        {(() => {
-                          const content = selectedOptimization.suggested_improvements[0].template_content
-                          const contentStr = typeof content === 'string' ? content : JSON.stringify(content, null, 2)
-                          return contentStr.substring(0, 2000) + (contentStr.length > 2000 ? '\n\n... (truncated)' : '')
-                        })()}
-                      </pre>
-                    </div>
+                  </>
+                ) : (
+                  <div className="p-8 text-center text-muted-foreground">
+                    <p>Loading optimization details...</p>
+                    <p className="text-xs mt-2">Fetching current and suggested template content for comparison...</p>
                   </div>
-                </div>
+                )}
               </TabsContent>
 
               <TabsContent value="explanation" className="mt-4">
@@ -550,7 +739,11 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
                   <CardContent>
                     <p className="text-sm whitespace-pre-wrap">
                       {(() => {
-                        const improvement = selectedOptimization.suggested_improvements[0]
+                        // Use optimization data if available, otherwise fall back to suggested_improvements
+                        if (selectedOptimization.optimization?.change_explanation) {
+                          return selectedOptimization.optimization.change_explanation
+                        }
+                        const improvement = selectedOptimization.suggested_improvements?.[0]
                         const explanation = improvement?.proposed_change || improvement?.change_explanation || 'No explanation provided'
                         return typeof explanation === 'string' ? explanation : JSON.stringify(explanation, null, 2)
                       })()}
@@ -560,54 +753,68 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
               </TabsContent>
 
               <TabsContent value="changes" className="mt-4">
-                {selectedOptimization.suggested_improvements[0]?.changes_summary && (
-                  <div className="space-y-4">
-                    {selectedOptimization.suggested_improvements[0].changes_summary.system_prompt_changes && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm">System Prompt Changes</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="list-disc list-inside space-y-1 text-sm">
-                            {selectedOptimization.suggested_improvements[0].changes_summary.system_prompt_changes.map((change: any, idx: number) => (
-                              <li key={idx}>{typeof change === 'string' ? change : JSON.stringify(change)}</li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                    )}
+                {(() => {
+                  // Use optimization data if available, otherwise fall back to suggested_improvements
+                  const changesSummary = selectedOptimization.optimization?.changes_summary || 
+                                        selectedOptimization.suggested_improvements?.[0]?.changes_summary
+                  
+                  if (!changesSummary) {
+                    return (
+                      <div className="p-8 text-center text-muted-foreground">
+                        <p>No change summary available</p>
+                      </div>
+                    )
+                  }
 
-                    {selectedOptimization.suggested_improvements[0].changes_summary.content_changes && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm">Template Content Changes</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="list-disc list-inside space-y-1 text-sm">
-                            {selectedOptimization.suggested_improvements[0].changes_summary.content_changes.map((change: any, idx: number) => (
-                              <li key={idx}>{typeof change === 'string' ? change : JSON.stringify(change)}</li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                    )}
+                  return (
+                    <div className="space-y-4">
+                      {changesSummary.system_prompt_changes && changesSummary.system_prompt_changes.length > 0 && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm">System Prompt Changes</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {changesSummary.system_prompt_changes.map((change: any, idx: number) => (
+                                <li key={idx}>{typeof change === 'string' ? change : JSON.stringify(change)}</li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+                      )}
 
-                    {selectedOptimization.suggested_improvements[0].changes_summary.key_improvements && (
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-sm">Expected Quality Improvements</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <ul className="list-disc list-inside space-y-1 text-sm text-green-700 dark:text-green-300">
-                            {selectedOptimization.suggested_improvements[0].changes_summary.key_improvements.map((imp: any, idx: number) => (
-                              <li key={idx}>{typeof imp === 'string' ? imp : JSON.stringify(imp)}</li>
-                            ))}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                    )}
-                  </div>
-                )}
+                      {changesSummary.content_changes && changesSummary.content_changes.length > 0 && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm">Template Content Changes</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="list-disc list-inside space-y-1 text-sm">
+                              {changesSummary.content_changes.map((change: any, idx: number) => (
+                                <li key={idx}>{typeof change === 'string' ? change : JSON.stringify(change)}</li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+                      )}
+
+                      {changesSummary.key_improvements && changesSummary.key_improvements.length > 0 && (
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-sm">Expected Quality Improvements</CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <ul className="list-disc list-inside space-y-1 text-sm text-green-700 dark:text-green-300">
+                              {changesSummary.key_improvements.map((imp: any, idx: number) => (
+                                <li key={idx}>{typeof imp === 'string' ? imp : JSON.stringify(imp)}</li>
+                              ))}
+                            </ul>
+                          </CardContent>
+                        </Card>
+                      )}
+                    </div>
+                  )
+                })()}
               </TabsContent>
             </Tabs>
           )}
@@ -620,7 +827,8 @@ export function TemplateRecommendations({ templateId }: { templateId: string }) 
               <Button
                 className="bg-gradient-to-r from-purple-600 to-blue-600"
                 onClick={() => {
-                  applyOptimization(selectedOptimization.id)
+                  const isRegular = selectedOptimization.optimization?.is_regular_suggestion || false
+                  applyOptimization(selectedOptimization.id, isRegular)
                   setShowOptimizationDialog(false)
                 }}
                 disabled={applyingOptimization}

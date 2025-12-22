@@ -75,14 +75,14 @@ class DocumentGenerationService {
       
       logger.info(`Enriched prompt built (${enrichedPrompt.length} chars)`)
       
-      // 4. Generate via AI Gateway
-      const aiResponse = await aiService.generate({
+      // 4. Generate via AI Gateway with fallback
+      const aiResponse = await aiService.generateWithFallback({
         prompt: enrichedPrompt,
         provider: request.provider,
         model: request.model,
         temperature: request.temperature || 0.7,
         template_id: request.templateId,
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
       
       logger.info(`AI generation successful. Tokens: ${aiResponse.usage?.total_tokens}`)
       

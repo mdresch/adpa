@@ -169,6 +169,8 @@ export default function TemplateDetailPage() {
   
   const [template, setTemplate] = useState<Template | null>(null)
   const [recentUsage, setRecentUsage] = useState<TemplateUsage[]>([])
+  const [versionHistory, setVersionHistory] = useState<any[]>([])
+  const [optimizationHistory, setOptimizationHistory] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [promoting, setPromoting] = useState(false)
   const [archiving, setArchiving] = useState(false)
@@ -190,6 +192,14 @@ export default function TemplateDetailPage() {
       
       if (response.recentUsage) {
         setRecentUsage(response.recentUsage)
+      }
+      
+      if (response.versionHistory) {
+        setVersionHistory(response.versionHistory)
+      }
+      
+      if (response.optimizationHistory) {
+        setOptimizationHistory(response.optimizationHistory)
       }
     } catch (error) {
       console.error('Failed to fetch template:', error)
@@ -703,7 +713,7 @@ export default function TemplateDetailPage() {
                           <TabsList className="grid w-full grid-cols-4">
                             <TabsTrigger value="overview">Overview</TabsTrigger>
                             <TabsTrigger value="content">Content</TabsTrigger>
-                            <TabsTrigger value="variables">Variables</TabsTrigger>
+                            <TabsTrigger value="variables">Purpose & Profile</TabsTrigger>
                             <TabsTrigger value="recommendations">
                               <Sparkles className="h-4 w-4 mr-1" />
                               Recommendations
@@ -817,13 +827,151 @@ export default function TemplateDetailPage() {
                             
                             {/* Raw Content (Debug View) */}
                             <details className="bg-muted rounded-lg p-4">
-                              <summary className="text-sm font-medium cursor-pointer">
-                                Raw Content (Debug View)
+                              <summary className="text-sm font-medium cursor-pointer hover:text-foreground">
+                                📋 Prompt Structure (Debug View)
                               </summary>
-                              <div className="bg-background rounded p-3 mt-2 max-h-96 overflow-y-auto">
-                                <pre className="text-xs">
-                                  {JSON.stringify(template.content || {}, null, 2)}
-                                </pre>
+                              <div className="bg-background rounded p-4 mt-3 space-y-4 max-h-[600px] overflow-y-auto">
+                                {/* System Prompt Section */}
+                                {((template as any).system_prompt || (template.content as any)?.system_prompt) && (
+                                  <div className="border-l-4 border-blue-500 pl-4 py-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <Brain className="h-4 w-4 text-blue-600" />
+                                      <h5 className="font-semibold text-sm">System Prompt</h5>
+                                      <Badge variant="outline" className="text-xs">AI Guidance</Badge>
+                                    </div>
+                                    <div className="bg-muted rounded p-3 mt-2">
+                                      <pre className="text-xs whitespace-pre-wrap font-mono">
+                                        {(template as any).system_prompt || (template.content as any)?.system_prompt}
+                                      </pre>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Template Paragraphs/Sections */}
+                                {((template as any).template_paragraphs || (template.content as any)?.template_paragraphs) && (
+                                  <div className="border-l-4 border-purple-500 pl-4 py-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <FileText className="h-4 w-4 text-purple-600" />
+                                      <h5 className="font-semibold text-sm">Template Sections Structure</h5>
+                                      <Badge variant="outline" className="text-xs">
+                                        {((template as any).template_paragraphs || (template.content as any)?.template_paragraphs || []).length} sections
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-3 mt-3">
+                                      {((template as any).template_paragraphs || (template.content as any)?.template_paragraphs || []).map((section: any, idx: number) => (
+                                        <div key={idx} className="bg-muted rounded p-3 border border-purple-200 dark:border-purple-800">
+                                          <div className="flex items-start justify-between mb-2">
+                                            <div>
+                                              <p className="font-medium text-sm">
+                                                {idx + 1}. {section.section_name || 'Unnamed Section'}
+                                              </p>
+                                              <div className="flex gap-2 mt-1">
+                                                <Badge variant="secondary" className="text-xs">
+                                                  {section.section_type || 'paragraph'}
+                                                </Badge>
+                                                {section.required !== false && (
+                                                  <Badge variant="outline" className="text-xs">Required</Badge>
+                                                )}
+                                                {section.order && (
+                                                  <Badge variant="outline" className="text-xs">Order: {section.order}</Badge>
+                                                )}
+                                              </div>
+                                            </div>
+                                          </div>
+                                          {section.description && (
+                                            <p className="text-xs text-muted-foreground mt-2 mb-2">
+                                              <span className="font-medium">Description:</span> {section.description}
+                                            </p>
+                                          )}
+                                          {section.prompt_guidance && (
+                                            <div className="bg-background rounded p-2 mt-2">
+                                              <p className="text-xs font-medium text-muted-foreground mb-1">AI Guidance:</p>
+                                              <p className="text-xs whitespace-pre-wrap font-mono">{section.prompt_guidance}</p>
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Content Structure */}
+                                {template.content && (
+                                  <div className="border-l-4 border-green-500 pl-4 py-2">
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <FileText className="h-4 w-4 text-green-600" />
+                                      <h5 className="font-semibold text-sm">Content Structure</h5>
+                                    </div>
+                                    <div className="space-y-3 mt-3">
+                                      {/* Markdown Content */}
+                                      {(template.content as any)?.markdown && (
+                                        <div className="bg-muted rounded p-3">
+                                          <p className="text-xs font-medium text-muted-foreground mb-2">Markdown Content:</p>
+                                          <div className="bg-background rounded p-2 max-h-48 overflow-y-auto">
+                                            <pre className="text-xs whitespace-pre-wrap font-mono">
+                                              {(template.content as any).markdown}
+                                            </pre>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Content Blocks */}
+                                      {(template.content as any)?.blocks && Array.isArray((template.content as any).blocks) && (template.content as any).blocks.length > 0 && (
+                                        <div className="bg-muted rounded p-3">
+                                          <p className="text-xs font-medium text-muted-foreground mb-2">
+                                            Content Blocks ({((template.content as any).blocks || []).length}):
+                                          </p>
+                                          <div className="space-y-2">
+                                            {((template.content as any).blocks || []).map((block: any, idx: number) => (
+                                              <div key={idx} className="bg-background rounded p-2 border border-green-200 dark:border-green-800">
+                                                <p className="text-xs font-medium mb-1">
+                                                  Block {idx + 1}: {block.type || 'unknown'}
+                                                </p>
+                                                <pre className="text-xs whitespace-pre-wrap font-mono">
+                                                  {JSON.stringify(block, null, 2)}
+                                                </pre>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Other Content Fields */}
+                                      {Object.keys(template.content || {}).filter(key => 
+                                        !['markdown', 'blocks', 'system_prompt', 'template_paragraphs'].includes(key)
+                                      ).length > 0 && (
+                                        <div className="bg-muted rounded p-3">
+                                          <p className="text-xs font-medium text-muted-foreground mb-2">Other Fields:</p>
+                                          <div className="bg-background rounded p-2">
+                                            <pre className="text-xs font-mono">
+                                              {JSON.stringify(
+                                                Object.fromEntries(
+                                                  Object.entries(template.content || {}).filter(([key]) => 
+                                                    !['markdown', 'blocks', 'system_prompt', 'template_paragraphs'].includes(key)
+                                                  )
+                                                ),
+                                                null,
+                                                2
+                                              )}
+                                            </pre>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Full Raw JSON (Collapsed by default) */}
+                                <details className="border-l-4 border-gray-400 pl-4 py-2">
+                                  <summary className="text-xs font-medium cursor-pointer text-muted-foreground hover:text-foreground">
+                                    🔍 Full Raw JSON (Advanced)
+                                  </summary>
+                                  <div className="bg-muted rounded p-3 mt-2 max-h-64 overflow-y-auto">
+                                    <pre className="text-xs font-mono">
+                                      {JSON.stringify(template.content || {}, null, 2)}
+                                    </pre>
+                                  </div>
+                                </details>
                               </div>
                             </details>
                           </TabsContent>
@@ -937,10 +1085,38 @@ export default function TemplateDetailPage() {
                                       ))}
                                   </div>
                                 ) : (
-                                  <p className="text-sm text-muted-foreground">
-                                    No entity production data available yet. Run extraction on documents generated from
-                                    this template to build its profile.
-                                  </p>
+                                  <div className="space-y-3">
+                                    <p className="text-sm text-muted-foreground">
+                                      No entity production data available yet. Run extraction on documents generated from
+                                      this template to build its profile.
+                                    </p>
+                                    {user?.role === 'admin' || user?.role === 'super_admin' ? (
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={async () => {
+                                          try {
+                                            toast.info('Rebuilding template analytics...')
+                                            
+                                            // Rebuild template analytics for this specific template via API
+                                            const response = await apiClient.request(`/template-analytics/analytics/rebuild-template/${template.id}`, {
+                                              method: 'POST'
+                                            })
+                                            
+                                            // Refresh template data
+                                            await fetchTemplate()
+                                            toast.success(response.message || 'Template analytics rebuilt successfully!')
+                                          } catch (error: any) {
+                                            console.error('Failed to rebuild template analytics:', error)
+                                            toast.error(error?.message || 'Failed to rebuild template analytics')
+                                          }
+                                        }}
+                                      >
+                                        <Sparkles className="h-4 w-4 mr-2" />
+                                        Rebuild Analytics (Admin)
+                                      </Button>
+                                    ) : null}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -1167,6 +1343,87 @@ export default function TemplateDetailPage() {
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-4">
+                          {/* Template Optimizations & Versions */}
+                          {optimizationHistory.length > 0 && optimizationHistory.map((opt) => (
+                            <div 
+                              key={opt.id}
+                              className="flex items-start gap-3 p-3 bg-purple-50 dark:bg-purple-950 rounded-lg border border-purple-200 dark:border-purple-800"
+                            >
+                              <div className="bg-purple-500 rounded-full p-2 mt-1">
+                                <Zap className="h-4 w-4 text-white" />
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">Template Optimized</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {opt.implemented_at 
+                                    ? new Date(opt.implemented_at).toLocaleString()
+                                    : new Date(opt.created_at).toLocaleString()}
+                                </p>
+                                {opt.implemented_by_name && (
+                                  <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
+                                    Applied by {opt.implemented_by_name}
+                                  </p>
+                                )}
+                                {opt.expected_quality_gain && (
+                                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                    +{opt.expected_quality_gain}% Expected Quality Gain
+                                  </p>
+                                )}
+                                {opt.current_avg_quality && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    Quality: {opt.current_avg_quality}%
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+
+                          {versionHistory.length > 0 && versionHistory.map((version) => (
+                            <div 
+                              key={version.id}
+                              className={`flex items-start gap-3 p-3 rounded-lg border ${
+                                version.is_optimization
+                                  ? 'bg-purple-50 dark:bg-purple-950 border-purple-200 dark:border-purple-800'
+                                  : 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800'
+                              }`}
+                            >
+                              <div className={`rounded-full p-2 mt-1 ${
+                                version.is_optimization
+                                  ? 'bg-purple-500'
+                                  : 'bg-blue-500'
+                              }`}>
+                                {version.is_optimization ? (
+                                  <Zap className="h-4 w-4 text-white" />
+                                ) : (
+                                  <FileText className="h-4 w-4 text-white" />
+                                )}
+                              </div>
+                              <div className="flex-1">
+                                <p className="font-semibold text-sm">
+                                  {version.is_optimization ? 'Template Optimized' : 'Template Amended'} - v{version.version_number}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {new Date(version.created_at).toLocaleString()}
+                                </p>
+                                {version.created_by_name && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    By {version.created_by_name}
+                                  </p>
+                                )}
+                                {version.change_summary && (
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {version.change_summary}
+                                  </p>
+                                )}
+                                {version.expected_quality_gain && (
+                                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                    +{version.expected_quality_gain}% Expected Quality Gain
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+
                           {/* Template Usage Entries */}
                           {recentUsage.length > 0 && recentUsage.map((usage) => (
                             <div 
@@ -1287,11 +1544,14 @@ export default function TemplateDetailPage() {
                           </div>
 
                           {/* Empty State */}
-                          {recentUsage.length === 0 && template.validation_count === 0 && (
+                          {recentUsage.length === 0 && 
+                           versionHistory.length === 0 && 
+                           optimizationHistory.length === 0 &&
+                           template.validation_count === 0 && (
                             <div className="text-center py-8 text-muted-foreground">
                               <Clock className="h-12 w-12 mx-auto mb-4 opacity-50" />
                               <p className="text-sm">No activity yet</p>
-                              <p className="text-xs mt-1">Generate documents to see activity</p>
+                              <p className="text-xs mt-1">Generate documents or apply optimizations to see activity</p>
                             </div>
                           )}
                         </div>
