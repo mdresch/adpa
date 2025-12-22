@@ -380,7 +380,7 @@ export default function DocumentMetadataPage({ params }: { params: { id: string;
       const mockDocument: Document = {
         id: docId,
         name: "Project Requirements Document",
-        template_id: "template-1",
+        template_id: null, // Mock data - no template ID
         template_name: "AI-Enhanced Project Charter Template",
         template_framework: "PMBOK 7",
         status: "review",

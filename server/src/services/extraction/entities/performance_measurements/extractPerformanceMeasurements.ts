@@ -126,14 +126,14 @@ export async function extractPerformanceMeasurements(
       requirements
     )
 
-    // Call AI
-    const response = await aiService.generate({
+    // Call AI with fallback
+    const response = await aiService.generateWithFallback({
       prompt,
       provider: context.provider,
       model: context.model,
       temperature: options.temperature ?? 0.2,
       max_tokens: options.maxTokens ?? 8000
-    })
+    }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
     // Check if response was truncated (common with large extractions)
     const responseContent = response.content || ''

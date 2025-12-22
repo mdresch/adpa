@@ -142,6 +142,38 @@ router.get("/",
 
       const result = await pool.query(query, params)
 
+      // Parse JSONB fields if they're strings (PostgreSQL sometimes returns JSONB as strings)
+      result.rows.forEach((template: any) => {
+        if (template.avg_entity_counts && typeof template.avg_entity_counts === 'string') {
+          try {
+            template.avg_entity_counts = JSON.parse(template.avg_entity_counts)
+          } catch (e) {
+            template.avg_entity_counts = {}
+          }
+        }
+        if (template.knowledge_domain_coverage && typeof template.knowledge_domain_coverage === 'string') {
+          try {
+            template.knowledge_domain_coverage = JSON.parse(template.knowledge_domain_coverage)
+          } catch (e) {
+            template.knowledge_domain_coverage = {}
+          }
+        }
+        if (template.performance_domain_coverage && typeof template.performance_domain_coverage === 'string') {
+          try {
+            template.performance_domain_coverage = JSON.parse(template.performance_domain_coverage)
+          } catch (e) {
+            template.performance_domain_coverage = {}
+          }
+        }
+        if (template.secondary_knowledge_domains && typeof template.secondary_knowledge_domains === 'string') {
+          try {
+            template.secondary_knowledge_domains = JSON.parse(template.secondary_knowledge_domains)
+          } catch (e) {
+            template.secondary_knowledge_domains = []
+          }
+        }
+      })
+
       // Get total count (exclude archived templates)
       let countQuery = `
         SELECT COUNT(*) 
@@ -392,8 +424,120 @@ router.get("/:id",
         ai_model: row.ai_model,
       }))
 
+      // Get template version history (optimizations and amendments)
+      const versionHistoryResult = await pool.query(
+        `
+        SELECT 
+          tv.id,
+          tv.version_number,
+          tv.change_type,
+          tv.change_summary,
+          tv.created_at,
+          tv.created_by,
+          u.name as created_by_name,
+          tis.id as optimization_suggestion_id,
+          tis.expected_quality_gain,
+          tis.implemented_at,
+          tis.status as suggestion_status
+        FROM template_versions tv
+        LEFT JOIN users u ON tv.created_by = u.id
+        LEFT JOIN template_improvement_suggestions tis ON tv.improvement_suggestion_id = tis.id
+        WHERE tv.template_id = $1
+        ORDER BY tv.created_at DESC
+        LIMIT 10
+        `,
+        [id]
+      )
+
+      // Get implemented optimization suggestions (AI optimizations)
+      const optimizationHistoryResult = await pool.query(
+        `
+        SELECT 
+          tis.id,
+          tis.status,
+          tis.expected_quality_gain,
+          tis.current_avg_quality,
+          tis.implemented_at,
+          tis.implemented_by,
+          u.name as implemented_by_name,
+          tis.created_at,
+          tis.suggested_improvements
+        FROM template_improvement_suggestions tis
+        LEFT JOIN users u ON tis.implemented_by = u.id
+        WHERE tis.template_id = $1
+          AND tis.status = 'implemented'
+          AND (
+            -- AI optimizations (have full template content in suggested_improvements)
+            EXISTS (
+              SELECT 1 FROM jsonb_array_elements(tis.suggested_improvements) AS imp
+              WHERE (
+                (imp->'metadata'->>'optimization_type')::text = '"ai_generated"'
+                OR (imp->>'change_type')::text = '"template_optimization"'
+              )
+            )
+          )
+        ORDER BY tis.implemented_at DESC NULLS LAST, tis.created_at DESC
+        LIMIT 10
+        `,
+        [id]
+      )
+
+      const versionHistory = versionHistoryResult.rows.map((row: any) => ({
+        id: row.id,
+        version_number: row.version_number,
+        change_type: row.change_type,
+        change_summary: row.change_summary,
+        created_at: row.created_at,
+        created_by: row.created_by,
+        created_by_name: row.created_by_name,
+        is_optimization: !!row.optimization_suggestion_id,
+        expected_quality_gain: row.expected_quality_gain,
+        implemented_at: row.implemented_at,
+      }))
+
+      const optimizationHistory = optimizationHistoryResult.rows.map((row: any) => ({
+        id: row.id,
+        expected_quality_gain: row.expected_quality_gain,
+        current_avg_quality: row.current_avg_quality,
+        implemented_at: row.implemented_at,
+        implemented_by: row.implemented_by,
+        implemented_by_name: row.implemented_by_name,
+        created_at: row.created_at,
+      }))
+
       if (cached) {
-        return res.json({ template: cached, recentUsage })
+        // Ensure JSONB fields are parsed even in cached data
+        const template = { ...cached }
+        if (template.avg_entity_counts && typeof template.avg_entity_counts === 'string') {
+          try {
+            template.avg_entity_counts = JSON.parse(template.avg_entity_counts)
+          } catch (e) {
+            template.avg_entity_counts = {}
+          }
+        }
+        if (template.knowledge_domain_coverage && typeof template.knowledge_domain_coverage === 'string') {
+          try {
+            template.knowledge_domain_coverage = JSON.parse(template.knowledge_domain_coverage)
+          } catch (e) {
+            template.knowledge_domain_coverage = {}
+          }
+        }
+        if (template.performance_domain_coverage && typeof template.performance_domain_coverage === 'string') {
+          try {
+            template.performance_domain_coverage = JSON.parse(template.performance_domain_coverage)
+          } catch (e) {
+            template.performance_domain_coverage = {}
+          }
+        }
+        if (template.secondary_knowledge_domains && typeof template.secondary_knowledge_domains === 'string') {
+          try {
+            template.secondary_knowledge_domains = JSON.parse(template.secondary_knowledge_domains)
+          } catch (e) {
+            template.secondary_knowledge_domains = []
+          }
+        }
+        // Return fetched versionHistory and optimizationHistory even for cached templates
+        return res.json({ template, recentUsage, versionHistory, optimizationHistory })
       }
 
       // Check if user is super_admin
@@ -469,6 +613,40 @@ router.get("/:id",
 
       const template = result.rows[0]
 
+      // Parse JSONB fields if they're strings (PostgreSQL sometimes returns JSONB as strings)
+      if (template.avg_entity_counts && typeof template.avg_entity_counts === 'string') {
+        try {
+          template.avg_entity_counts = JSON.parse(template.avg_entity_counts)
+        } catch (e) {
+          log.warn('Failed to parse avg_entity_counts:', e)
+          template.avg_entity_counts = {}
+        }
+      }
+      if (template.knowledge_domain_coverage && typeof template.knowledge_domain_coverage === 'string') {
+        try {
+          template.knowledge_domain_coverage = JSON.parse(template.knowledge_domain_coverage)
+        } catch (e) {
+          log.warn('Failed to parse knowledge_domain_coverage:', e)
+          template.knowledge_domain_coverage = {}
+        }
+      }
+      if (template.performance_domain_coverage && typeof template.performance_domain_coverage === 'string') {
+        try {
+          template.performance_domain_coverage = JSON.parse(template.performance_domain_coverage)
+        } catch (e) {
+          log.warn('Failed to parse performance_domain_coverage:', e)
+          template.performance_domain_coverage = {}
+        }
+      }
+      if (template.secondary_knowledge_domains && typeof template.secondary_knowledge_domains === 'string') {
+        try {
+          template.secondary_knowledge_domains = JSON.parse(template.secondary_knowledge_domains)
+        } catch (e) {
+          log.warn('Failed to parse secondary_knowledge_domains:', e)
+          template.secondary_knowledge_domains = []
+        }
+      }
+
       // Cache the template
       await cache.set(cacheKey, template, 3600) // 1 hour
 
@@ -477,7 +655,7 @@ router.get("/:id",
         trackActivity.viewTemplate(req.user.id, id)
       }
 
-      res.json({ template, recentUsage })
+      res.json({ template, recentUsage, versionHistory, optimizationHistory })
     } catch (error) {
       log.error("Get template error:", error)
       res.status(500).json({ error: "Internal server error" })

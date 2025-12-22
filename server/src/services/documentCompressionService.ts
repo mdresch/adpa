@@ -262,10 +262,10 @@ class DocumentCompressionService {
         provider: activeProvider,
         model: 'gemini-2.5-flash',
         temperature: 0.1,
-        max_tokens: 200
+        max_tokens: 1000
       }
       
-      const aiResponse = await aiService.generate(aiRequest)
+      const aiResponse = await aiService.generateWithFallback(aiRequest, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
       
       // Strip markdown code blocks if present (AI sometimes wraps JSON in ```json ... ```)
       let jsonContent = aiResponse.content.trim()

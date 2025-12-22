@@ -1266,13 +1266,13 @@ Requirements:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const milestones = parsed.milestones || []
@@ -1541,13 +1541,13 @@ Requirements:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const bestPractices = parsed.best_practices || []
@@ -1734,13 +1734,13 @@ Requirements:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const resources = (parsed.resources || []).map((resource: any) => ({
@@ -2003,13 +2003,13 @@ Requirements:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const qualityStandards = parsed.quality_standards || []
@@ -2169,13 +2169,13 @@ Requirements:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON, no markdown or explanation`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.3,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const complianceSecurityItems = parsed.compliance_security || []
@@ -2878,13 +2878,13 @@ Rules:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const iterations = (parsed.project_iterations || []).map((iteration: any) => ({
@@ -2998,13 +2998,13 @@ Guidelines:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const workItems = (parsed.work_items || []).map((item: any) => ({
@@ -3200,13 +3200,13 @@ Guidelines:
 - Use null where numbers aren't available
 - Return ONLY valid JSON`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
         max_tokens: 8000 // Increased for large performance measurement extractions (was 2600)
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       // Check if response was truncated (common with large extractions)
       const responseContent = response.content || ''
@@ -3316,13 +3316,13 @@ Rules:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.2,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const evm = (parsed.earned_value_metrics || []).map((metric: any) => ({
@@ -3518,13 +3518,13 @@ Guidelines:
 - **source_document MUST match exactly** one of the document titles from AVAILABLE DOCUMENTS list
 - Return ONLY valid JSON.`
 
-      const response = await aiService.generate({
+      const response = await aiService.generateWithFallback({
         prompt,
         provider: options.aiProvider!,
         model: options.aiModel,
         temperature: 0.25,
         max_tokens: 8000 // Increased for large context windows
-      })
+      }, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
 
       const parsed = this.parseAIResponse(response.content)
       const responses = (parsed.risk_responses || []).map((item: any) => ({
@@ -8659,6 +8659,7 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'change_control_boards':
       case 'policy_compliance':
       // Scope Domain  
+      case 'scope_baseline':
       case 'scope_baselines':
       case 'scope_baseline': // Singular form
       case 'wbs_nodes':
@@ -8666,6 +8667,7 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'requirements_traceability':
       case 'scope_verification':
       // Schedule Domain
+      case 'schedule_baseline':
       case 'schedule_baselines':
       case 'schedule_baseline': // Singular form
       case 'schedule_activities':
@@ -8674,6 +8676,7 @@ Output valid JSON object with "performance_actuals" array only.`
       case 'schedule_variances':
       case 'schedule_forecasts':
       // Finance Domain
+      case 'budget_baseline':
       case 'budget_baselines':
       case 'budget_baseline': // Singular form
       case 'cost_actuals':

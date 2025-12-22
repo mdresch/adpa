@@ -426,16 +426,16 @@ export async function cancelJob(...args: Parameters<ReturnType<typeof createQueu
   return (await getQueueServiceInstance()).cancelJob(...args)
 }
 
-export const updateJobStatus = async (
+export async function updateJobStatus(
   jobId: string,
   status: string,
   progress?: number,
   workerId?: string,
   queueName?: string,
   errorMessage?: string
-): Promise<void> => {
+): Promise<void> {
   await (await getQueueServiceInstance()).updateJobStatus(jobId, status, progress, workerId, queueName);
-};
+}
 
 // Export the queue service instance getter for internal use
 export function getQueueService() {
@@ -449,6 +449,9 @@ export const queueService = new Proxy({} as ReturnType<typeof createQueueService
   }
 })
 
+// Export getQueueServiceInstance for backward compatibility (used in metrics.ts)
+export { getQueueServiceInstance }
+
 // Initialize queues function for backward compatibility (deprecated)
 export async function initializeQueues(): Promise<void> {
   // This function is now a no-op as queues are initialized automatically
@@ -457,6 +460,16 @@ export async function initializeQueues(): Promise<void> {
 }
 
 export async function getQueueServiceDependencies(): Promise<QueueServiceDependencies> {
+  // Ensure pool is initialized before returning dependencies
+  const { getDatabasePool } = await import('../database/connection')
+  try {
+    getDatabasePool() // This will throw if pool is not initialized
+  } catch (error) {
+    // Pool not initialized - try to connect
+    const { connectDatabase } = await import('../database/connection')
+    await connectDatabase()
+  }
+  
   return (await getQueueServiceInstance()).getDependencies();
 }
 

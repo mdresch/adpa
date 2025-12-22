@@ -285,10 +285,10 @@ class ContextInjectionService {
         provider: "Google AI Studio",
         model: 'gemini-pro',
         temperature: 0.3,
-        max_tokens: 2000
+        max_tokens: 8000
       }
 
-      const aiResponse = await aiService.generate(aiRequest)
+      const aiResponse = await aiService.generateWithFallback(aiRequest, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
       return aiResponse.content.trim()
     } catch (error) {
       logger.error('Failed to generate cross-references:', error)
@@ -326,10 +326,10 @@ class ContextInjectionService {
         provider: "Google AI Studio",
         model: 'gemini-pro',
         temperature: 0.2,
-        max_tokens: 2000
+        max_tokens: 8000
       }
 
-      const aiResponse = await aiService.generate(aiRequest)
+      const aiResponse = await aiService.generateWithFallback(aiRequest, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
       return aiResponse.content.trim()
     } catch (error) {
       logger.error('Failed to add citations:', error)
@@ -369,10 +369,10 @@ class ContextInjectionService {
         provider: "Google AI Studio",
         model: 'gemini-pro',
         temperature: 0.3,
-        max_tokens: 2000
+        max_tokens: 8000
       }
 
-      const aiResponse = await aiService.generate(aiRequest)
+      const aiResponse = await aiService.generateWithFallback(aiRequest, ['openai', 'google', 'anthropic', 'mistral', 'groq'])
       return aiResponse.content.trim()
     } catch (error) {
       logger.error('Failed to structure content:', error)

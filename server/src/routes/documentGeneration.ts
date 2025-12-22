@@ -7,7 +7,7 @@ import { logger, childLogger } from "../utils/logger"
 import { documentGenerationService } from "../services/documentGenerationService"
 import { DocumentRegenerationService } from "../services/documentRegenerationService"
 import { pool } from "../database/connection"
-import { queueService } from "../services/queueService"
+import { getQueueService } from "../services/queueService"
 import { semanticVersionService } from "../services/semanticVersionService"
 
 const router = express.Router()
@@ -519,7 +519,7 @@ router.post("/generate-new-version",
 
         // Enqueue quality audit job (async, non-blocking)
         const auditJobId = require('uuid').v4()
-        queueService.addJob('quality-audit', {
+        getQueueService().addJob('quality-audit', {
           jobId: auditJobId,
           documentId: existingDocumentId,
           documentContent: result.content,
@@ -733,7 +733,7 @@ router.post("/regenerate/:documentId",
       log.info(`Created regeneration job ${jobId}`)
 
       // Enqueue job for background processing
-      await queueService.addJob('document-regeneration', {
+      await getQueueService().addJob('document-regeneration', {
         documentId,
         templateId: templateId || document.template_id,
         provider,
