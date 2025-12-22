@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiClient } from "@/lib/api"
 import { Loader2, Save, Key, CheckCircle, AlertCircle, Globe, Calendar } from "lucide-react"
 import { COMMON_TIMEZONES, getBrowserTimezone, DATE_FORMAT_OPTIONS, type DateFormat } from "@/lib/utils/timezone"
+import JiraLinkageSettings from "@/components/settings/JiraLinkageSettings"
 
 export default function SettingsPage() {
   const router = useRouter()
@@ -176,8 +177,9 @@ export default function SettingsPage() {
         </p>
 
         <Tabs defaultValue="ai-gateway" className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="ai-gateway">AI Gateway</TabsTrigger>
+            <TabsTrigger value="jira-linkage">Jira Linkage</TabsTrigger>
             <TabsTrigger value="general">General</TabsTrigger>
             <TabsTrigger value="security">Security</TabsTrigger>
           </TabsList>
@@ -310,6 +312,10 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="jira-linkage" className="mt-6">
+            <JiraLinkageSettings />
           </TabsContent>
 
           <TabsContent value="general" className="mt-6">
