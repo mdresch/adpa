@@ -6,6 +6,7 @@
 
 import { logger } from '../../utils/logger'
 import { pool } from '../../database/connection'
+import { randomBytes } from 'crypto'
 import { ContextGatheringStage } from '../contextGathering/contextGatheringStage'
 import { ContextInjectionService } from '../contextInjection/service'
 import { ContextAccessControlManager } from '../contextAccessControl/contextAccessControlManager'
@@ -91,36 +92,94 @@ export class ContextOrchestrator {
 
   constructor(config: ContextOrchestratorConfig) {
     this.config = config
-    this.contextGatheringStage = new ContextGatheringStage()
-    this.contextInjectionService = new ContextInjectionService()
-    this.accessControlManager = new ContextAccessControlManager({
-      enableRoleBasedAccess: true,
-      enableAttributeBasedAccess: true,
-      enableContextBasedAccess: true,
-      enableTimeBasedAccess: true,
-      enableLocationBasedAccess: false,
-      enableDeviceBasedAccess: false,
-      enableAuditLogging: true,
-      enableComplianceChecking: true,
-      enableRiskAssessment: true,
-      enableAnomalyDetection: true,
-      defaultSecurityLevel: 'internal',
-      defaultAccessLevel: 'read',
-      sessionTimeout: 3600000,
-      maxConcurrentSessions: 10
-    })
-    this.freshnessManager = new ContextFreshnessManager({
-      defaultStalenessThreshold: 86400000, // 24 hours
-      defaultRefreshInterval: 3600000, // 1 hour
-      enableAutoRefresh: true,
-      enableStalenessCleanup: true,
-      maxConcurrentRefreshes: 5,
-      refreshTimeout: 30000,
-      cleanupBatchSize: 100,
-      enableAnalytics: true,
-      enableHealthMonitoring: true
-    })
-    this.retrievalService = new ContextRetrievalService()
+    
+    try {
+      this.contextGatheringStage = new ContextGatheringStage()
+      this.contextInjectionService = new ContextInjectionService()
+      this.accessControlManager = new ContextAccessControlManager({
+        enableRoleBasedAccess: true,
+        enableAttributeBasedAccess: true,
+        enableContextBasedAccess: true,
+        enableTimeBasedAccess: true,
+        enableLocationBasedAccess: false,
+        enableDeviceBasedAccess: false,
+        enableAuditLogging: true,
+        enableComplianceChecking: true,
+        enableRiskAssessment: true,
+        enableAnomalyDetection: true,
+        defaultSecurityLevel: 'internal',
+        defaultAccessLevel: 'read',
+        sessionTimeout: 3600000,
+        maxConcurrentSessions: 10
+      })
+      this.freshnessManager = new ContextFreshnessManager({
+        defaultStalenessThreshold: 86400000, // 24 hours
+        defaultRefreshInterval: 3600000, // 1 hour
+        enableAutoRefresh: true,
+        enableStalenessCleanup: true,
+        maxConcurrentRefreshes: 5,
+        refreshTimeout: 30000,
+        cleanupBatchSize: 100,
+        enableAnalytics: true,
+        enableHealthMonitoring: true
+      })
+      // Initialize ContextRetrievalService with default configs
+      const semanticSearchConfig = {
+        model: 'text-embedding-ada-002',
+        embeddingDimensions: 1536,
+        similarityThreshold: 0.7,
+        maxTokens: 8191,
+        temperature: 0.0,
+        topK: 20,
+        includeContext: true,
+        useCache: true,
+        cacheExpiry: 3600000 // 1 hour
+      }
+      
+      const relevanceScoringConfig = {
+        weights: {
+          semanticSimilarity: 0.4,
+          keywordMatch: 0.3,
+          freshness: 0.2,
+          authority: 0.1,
+          popularity: 0.0,
+          userPreference: 0.0,
+          contextRelevance: 0.0
+        },
+        normalization: {
+          minScore: 0.0,
+          maxScore: 1.0,
+          boostFactors: {
+            recentContext: 1.2,
+            highAuthority: 1.15,
+            exactMatch: 1.5
+          }
+        },
+        thresholds: {
+          highRelevance: 0.8,
+          mediumRelevance: 0.5,
+          lowRelevance: 0.3
+        }
+      }
+      
+      // Validate configs before passing
+      if (!semanticSearchConfig || !semanticSearchConfig.model) {
+        throw new Error('Invalid semanticSearchConfig: model is required')
+      }
+      if (!relevanceScoringConfig) {
+        throw new Error('relevanceScoringConfig is required')
+      }
+      
+      this.retrievalService = new ContextRetrievalService(
+        semanticSearchConfig,
+        relevanceScoringConfig
+      )
+    } catch (error) {
+      logger.error('[CONTEXT-ORCHESTRATOR] Failed to initialize dependencies', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw new Error(`Context Orchestrator initialization failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 
   /**
@@ -128,7 +187,8 @@ export class ContextOrchestrator {
    */
   async gatherContextWithValidation(request: EnhancedContextRequest): Promise<EnhancedContextResponse> {
     const startTime = Date.now()
-    const requestId = request.request_id || `ctx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // Generate secure random ID using crypto.randomBytes
+    const requestId = request.request_id || `ctx_${Date.now()}_${randomBytes(6).toString('base64url').substring(0, 9)}`
     
     logger.info('[CONTEXT-ORCHESTRATOR] Starting enhanced context gathering', {
       requestId,
@@ -188,12 +248,13 @@ export class ContextOrchestrator {
       // Step 5: Collect comprehensive metrics
       const metrics = await this.collectMetrics(requestId, gatheringResult, sourceLogs, startTime)
 
-      // Step 6: Validate context size limits
-      if (this.config.maxContextSizeBytes > 0 && metrics.total_data_size_bytes > this.config.maxContextSizeBytes) {
-        warnings.push(`Context size (${metrics.total_data_size_bytes} bytes) exceeds limit (${this.config.maxContextSizeBytes} bytes)`)
+      // Step 6: Validate context size limits (use request-specific limit if provided, otherwise use config)
+      const sizeLimit = request.context_size_limit ?? this.config.maxContextSizeBytes
+      if (sizeLimit > 0 && metrics.total_data_size_bytes > sizeLimit) {
+        warnings.push(`Context size (${metrics.total_data_size_bytes} bytes) exceeds limit (${sizeLimit} bytes)`)
         logger.warn('[CONTEXT-ORCHESTRATOR] Context size limit exceeded', {
           actualSize: metrics.total_data_size_bytes,
-          limit: this.config.maxContextSizeBytes
+          limit: sizeLimit
         })
       }
 
@@ -379,8 +440,28 @@ export class ContextOrchestrator {
       // Extract context IDs from the gathering result
       const contextIds = this.extractContextIds(gatheringResult)
       
+      // Use provided threshold or default (24 hours)
+      const stalenessThreshold = threshold ?? 86400000
+      
       for (const contextId of contextIds) {
         const freshnessAssessment = await this.freshnessManager.assessFreshness(contextId)
+        
+        // Apply threshold to determine if context is stale based on time_since_update
+        // If threshold is provided and context exceeds it, mark as stale
+        if (threshold && freshnessAssessment.time_since_update) {
+          const isStale = freshnessAssessment.time_since_update > threshold
+          if (isStale) {
+            // Update staleness level based on how much it exceeds threshold
+            if (freshnessAssessment.staleness_level === 'fresh') {
+              freshnessAssessment.staleness_level = 'slightly_stale'
+            } else if (freshnessAssessment.staleness_level === 'slightly_stale' && freshnessAssessment.time_since_update > threshold * 2) {
+              freshnessAssessment.staleness_level = 'moderately_stale'
+            } else if (freshnessAssessment.time_since_update > threshold * 3) {
+              freshnessAssessment.staleness_level = 'very_stale'
+            }
+          }
+        }
+        
         results.push(freshnessAssessment)
       }
 
@@ -592,32 +673,44 @@ export class ContextOrchestrator {
    * Store source logs in database
    */
   private async storeSourceLogs(sourceLogs: ContextSourceLog[]): Promise<void> {
+    if (sourceLogs.length === 0) return
+    
     try {
-      for (const log of sourceLogs) {
-        await pool.query(
-          `
-          INSERT INTO context_source_logs (
-            source_id, source_type, source_name, retrieval_timestamp,
-            retrieval_duration_ms, data_size_bytes, success, error_message,
-            freshness_score, access_granted, cache_hit, metadata
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-          `,
-          [
-            log.source_id,
-            log.source_type,
-            log.source_name,
-            log.retrieval_timestamp,
-            log.retrieval_duration_ms,
-            log.data_size_bytes,
-            log.success,
-            log.error_message,
-            log.freshness_score,
-            log.access_granted,
-            log.cache_hit,
-            JSON.stringify(log.metadata)
-          ]
+      // Use batch insert for better performance
+      const values: any[] = []
+      const placeholders: string[] = []
+      
+      sourceLogs.forEach((log, index) => {
+        const start = index * 12 + 1
+        placeholders.push(
+          `($${start}, $${start + 1}, $${start + 2}, $${start + 3}, $${start + 4}, $${start + 5}, $${start + 6}, $${start + 7}, $${start + 8}, $${start + 9}, $${start + 10}, $${start + 11})`
         )
-      }
+        values.push(
+          log.source_id,
+          log.source_type,
+          log.source_name,
+          log.retrieval_timestamp,
+          log.retrieval_duration_ms,
+          log.data_size_bytes,
+          log.success,
+          log.error_message,
+          log.freshness_score,
+          log.access_granted,
+          log.cache_hit,
+          JSON.stringify(log.metadata)
+        )
+      })
+
+      await pool.query(
+        `
+        INSERT INTO context_source_logs (
+          source_id, source_type, source_name, retrieval_timestamp,
+          retrieval_duration_ms, data_size_bytes, success, error_message,
+          freshness_score, access_granted, cache_hit, metadata
+        ) VALUES ${placeholders.join(', ')}
+        `,
+        values
+      )
 
       logger.debug('[CONTEXT-ORCHESTRATOR] Source logs stored successfully', {
         logsCount: sourceLogs.length
@@ -726,15 +819,43 @@ export class ContextOrchestrator {
   }
 }
 
-export const contextOrchestrator = new ContextOrchestrator({
-  enableAccessControl: true,
-  enableFreshnessValidation: true,
-  enableComprehensiveLogging: true,
-  enableMetricsCollection: true,
-  enableCaching: true,
-  maxContextSizeBytes: 10 * 1024 * 1024, // 10MB
-  maxProcessingTimeMs: 30000, // 30 seconds
-  enableParallelProcessing: true,
-  enableRetryLogic: true,
-  maxRetries: 3
+// Lazy initialization to avoid module load-time failures
+let _contextOrchestratorInstance: ContextOrchestrator | null = null
+
+function getContextOrchestrator(): ContextOrchestrator {
+  if (!_contextOrchestratorInstance) {
+    try {
+      _contextOrchestratorInstance = new ContextOrchestrator({
+        enableAccessControl: true,
+        enableFreshnessValidation: true,
+        enableComprehensiveLogging: true,
+        enableMetricsCollection: true,
+        enableCaching: true,
+        maxContextSizeBytes: 10 * 1024 * 1024, // 10MB
+        maxProcessingTimeMs: 30000, // 30 seconds
+        enableParallelProcessing: true,
+        enableRetryLogic: true,
+        maxRetries: 3
+      })
+    } catch (error) {
+      logger.error('[CONTEXT-ORCHESTRATOR] Failed to initialize singleton', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw error
+    }
+  }
+  return _contextOrchestratorInstance
+}
+
+// Export a getter function that lazily initializes the orchestrator
+// This prevents module load-time initialization failures
+export const contextOrchestrator = new Proxy({} as ContextOrchestrator, {
+  get(_target, prop) {
+    const instance = getContextOrchestrator()
+    const value = (instance as any)[prop]
+    if (typeof value === 'function') {
+      return value.bind(instance)
+    }
+    return value
+  }
 })

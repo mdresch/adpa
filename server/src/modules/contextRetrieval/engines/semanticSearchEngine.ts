@@ -19,6 +19,13 @@ export class SemanticSearchEngine implements ISemanticSearchEngine {
   private embeddingsService: MultiProviderEmbeddingsService
 
   constructor(config: SemanticSearchConfig) {
+    if (!config) {
+      throw new Error('SemanticSearchConfig is required')
+    }
+    if (!config.model) {
+      throw new Error('SemanticSearchConfig.model is required')
+    }
+    
     this.config = config
     this.embeddingsService = new MultiProviderEmbeddingsService({
       providers: ['openai', 'google', 'azure'],
