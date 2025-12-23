@@ -44,6 +44,13 @@ export function DriftHighlighter({
   // Track ID usage to ensure uniqueness
   const idCountsRef = React.useRef(new Map<string, number>())
   
+  // Track mounted state to prevent hydration errors
+  const [mounted, setMounted] = React.useState(false)
+  
+  React.useEffect(() => {
+    setMounted(true)
+  }, [])
+  
   // Reset ID counts when content changes
   React.useEffect(() => {
     idCountsRef.current = new Map<string, number>()
@@ -176,7 +183,8 @@ export function DriftHighlighter({
   
   return (
     <div className="markdown-content-wrapper">
-      <style jsx global>{`
+      {mounted && (
+        <style dangerouslySetInnerHTML={{ __html: `
         .markdown-content-wrapper {
           max-width: none;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
@@ -528,7 +536,8 @@ export function DriftHighlighter({
         .dark .markdown-content-wrapper h3 + p {
           color: rgb(156, 163, 175);
         }
-      `}</style>
+      ` }} />
+      )}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{

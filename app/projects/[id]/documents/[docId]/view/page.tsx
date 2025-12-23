@@ -967,7 +967,7 @@ The ADPA system represents a significant advancement in document processing auto
         { suppressNotFoundError: true } as Record<string, unknown>
       ).catch(() => ({ drifts: [] }))
       
-      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'accepted' && d.status !== 'dismissed')
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
       setDrifts(documentDrifts)
     } catch (error: any) {
       console.error('Failed to accept drift:', error)
@@ -1002,7 +1002,7 @@ The ADPA system represents a significant advancement in document processing auto
         { suppressNotFoundError: true } as Record<string, unknown>
       ).catch(() => ({ drifts: [] }))
       
-      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'accepted' && d.status !== 'dismissed')
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
       setDrifts(documentDrifts)
     } catch (error: any) {
       console.error('Failed to remove drift:', error)

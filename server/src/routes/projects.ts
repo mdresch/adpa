@@ -2235,10 +2235,10 @@ router.put("/:id/drift-detections/:driftId/accept", authenticateToken, async (re
       return res.status(404).json({ error: "Drift detection not found" })
     }
 
-    // Update drift status to accepted/resolved
+    // Update drift status to resolved (accepted)
     await pool.query(
       `UPDATE baseline_drift_detection 
-       SET status = 'accepted',
+       SET status = 'resolved',
            resolution_notes = COALESCE($1, 'Drift accepted by user'),
            resolved_at = CURRENT_TIMESTAMP,
            assigned_to = $2
@@ -2275,10 +2275,10 @@ router.put("/:id/drift-detections/:driftId/remove", authenticateToken, async (re
       return res.status(404).json({ error: "Drift detection not found" })
     }
 
-    // Update drift status to dismissed
+    // Update drift status to false_positive (dismissed)
     await pool.query(
       `UPDATE baseline_drift_detection 
-       SET status = 'dismissed',
+       SET status = 'false_positive',
            resolution_notes = COALESCE($1, 'Drift removed by user'),
            resolved_at = CURRENT_TIMESTAMP,
            assigned_to = $2
