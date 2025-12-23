@@ -8,19 +8,27 @@ import styles from './accordion.module.css'
 const PANEL_COLLAPSED_KEY = 'ws_rooms_panel_collapsed'
 
 export default function RoomStatusList() {
+  const [mounted, setMounted] = useState(false)
   const ctx = useWebSocket() as any
   const { roomStatuses = {}, getRoomStatus, joinRoom, leaveRoom } = ctx
 
   const rooms = Object.keys(roomStatuses || {})
 
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
+  const [collapsed, setCollapsed] = useState<boolean>(false)
+
+  // Set mounted state after hydration
+  useEffect(() => {
+    setMounted(true)
+    // Read from sessionStorage after mount
     try {
-      if (typeof window === 'undefined') return false
-      return sessionStorage.getItem(PANEL_COLLAPSED_KEY) === '1'
+      if (typeof window !== 'undefined') {
+        const stored = sessionStorage.getItem(PANEL_COLLAPSED_KEY) === '1'
+        setCollapsed(stored)
+      }
     } catch (e) {
-      return false
+      // ignore
     }
-  })
+  }, [])
 
   useEffect(() => {
     try {
@@ -48,6 +56,11 @@ export default function RoomStatusList() {
       setContentHeight(null)
     }
   }, [collapsed, rooms.length])
+
+  // Don't render until mounted to prevent hydration errors
+  if (!mounted) {
+    return null
+  }
 
   if (!rooms.length && !collapsed) return null
 
