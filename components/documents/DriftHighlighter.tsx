@@ -8,8 +8,9 @@
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { AlertTriangle } from '@/components/ui/icons-shim'
+import { AlertTriangle, Check, Edit, X } from '@/components/ui/icons-shim'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/cjs/styles/prism'
 
@@ -26,9 +27,20 @@ interface DriftHighlighterProps {
   drifts: DriftData[]
   showHighlights: boolean
   onEnhancedContentReady?: (enhancedContent: string) => void
+  onAcceptDrift?: (driftId: string) => void
+  onEditDocument?: () => void
+  onRemoveDrift?: (driftId: string) => void
 }
 
-export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedContentReady }: DriftHighlighterProps) {
+export function DriftHighlighter({ 
+  content, 
+  drifts, 
+  showHighlights, 
+  onEnhancedContentReady,
+  onAcceptDrift,
+  onEditDocument,
+  onRemoveDrift
+}: DriftHighlighterProps) {
   // Track ID usage to ensure uniqueness
   const idCountsRef = React.useRef(new Map<string, number>())
   
@@ -58,8 +70,9 @@ export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedCo
       // Extract first sentence or first 80 chars of description
       const shortDesc = drift.drift_description.split('.')[0].substring(0, 80)
       
-      // Create drift marker heading
-      const driftMarker = `\n\n${headingLevel} ${severityEmoji} DRIFT ${index + 1}: ${shortDesc}${drift.drift_description.length > 80 ? '...' : ''}\n\n` +
+      // Create drift marker heading with unique identifier
+      const driftId = drift.id || `drift-${index}`
+      const driftMarker = `\n\n${headingLevel} ${severityEmoji} DRIFT ${index + 1}: ${shortDesc}${drift.drift_description.length > 80 ? '...' : ''} [DRIFT_ID:${driftId}]\n\n` +
         `**Type:** ${drift.detection_type.replace(/_/g, ' ').toUpperCase()} | ` +
         `**Severity:** ${drift.drift_severity.toUpperCase()}  \n` +
         `**Description:** ${drift.drift_description}  \n` +
@@ -612,19 +625,62 @@ export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedCo
             // Check if this is a drift marker (contains emoji and "DRIFT")
             const isDriftMarker = cleanText.includes('DRIFT') && /[🔴🟠🟡🔵⚪]/.test(cleanText)
             
+            // Extract drift ID from the text
+            const driftIdMatch = cleanText.match(/\[DRIFT_ID:([^\]]+)\]/)
+            const driftId = driftIdMatch ? driftIdMatch[1] : null
+            const driftData = driftId ? drifts.find(d => d.id === driftId) : null
+            
             // Use drift- prefix ONLY for drift markers, otherwise use heading- prefix
             const idPrefix = isDriftMarker ? 'drift-' : 'heading-'
             const id = `${idPrefix}${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
             
-            if (isDriftMarker) {
-              // High severity drift marker (Critical/High)
+            if (isDriftMarker && driftData) {
+              // High severity drift marker (Critical/High) with action buttons
+              const displayText = cleanText.replace(/\[DRIFT_ID:[^\]]+\]/, '').trim()
               return (
-                <h4 
-                  id={id} 
-                  className="text-xl font-bold mb-3 mt-6 p-4 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 scroll-mt-24 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  {children}
-                </h4>
+                <div className="mb-4 mt-6">
+                  <h4 
+                    id={id} 
+                    className="text-xl font-bold mb-3 p-4 rounded-lg border-l-4 border-red-500 bg-red-50 dark:bg-red-900/20 text-red-900 dark:text-red-100 scroll-mt-24 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    {displayText}
+                  </h4>
+                  <div className="flex flex-wrap gap-2 ml-4 mb-4">
+                    {onAcceptDrift && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => onAcceptDrift(driftId)}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Check className="h-3 w-3 mr-1" />
+                        Accept Drift
+                      </Button>
+                    )}
+                    {onEditDocument && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={onEditDocument}
+                        className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit Document
+                      </Button>
+                    )}
+                    {onRemoveDrift && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRemoveDrift(driftId)}
+                        className="border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Remove Drift
+                      </Button>
+                    )}
+                  </div>
+                </div>
               )
             }
             
@@ -643,19 +699,62 @@ export function DriftHighlighter({ content, drifts, showHighlights, onEnhancedCo
             // Check if this is a drift marker
             const isDriftMarker = cleanText.includes('DRIFT') && /[🔴🟠🟡🔵⚪]/.test(cleanText)
             
+            // Extract drift ID from the text
+            const driftIdMatch = cleanText.match(/\[DRIFT_ID:([^\]]+)\]/)
+            const driftId = driftIdMatch ? driftIdMatch[1] : null
+            const driftData = driftId ? drifts.find(d => d.id === driftId) : null
+            
             // Use drift- prefix ONLY for drift markers, otherwise use heading- prefix
             const idPrefix = isDriftMarker ? 'drift-' : 'heading-'
             const id = `${idPrefix}${cleanText.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
             
-            if (isDriftMarker) {
-              // Medium/Low severity drift marker
+            if (isDriftMarker && driftData) {
+              // Medium/Low severity drift marker with action buttons
+              const displayText = cleanText.replace(/\[DRIFT_ID:[^\]]+\]/, '').trim()
               return (
-                <h5 
-                  id={id} 
-                  className="text-lg font-semibold mb-2 mt-4 p-3 rounded-lg border-l-4 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-100 scroll-mt-24 shadow-sm hover:shadow-md transition-shadow"
-                >
-                  {children}
-                </h5>
+                <div className="mb-4 mt-4">
+                  <h5 
+                    id={id} 
+                    className="text-lg font-semibold mb-3 p-3 rounded-lg border-l-4 border-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 text-yellow-900 dark:text-yellow-100 scroll-mt-24 shadow-sm hover:shadow-md transition-shadow"
+                  >
+                    {displayText}
+                  </h5>
+                  <div className="flex flex-wrap gap-2 ml-4 mb-4">
+                    {onAcceptDrift && (
+                      <Button
+                        size="sm"
+                        variant="default"
+                        onClick={() => onAcceptDrift(driftId)}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Check className="h-3 w-3 mr-1" />
+                        Accept Drift
+                      </Button>
+                    )}
+                    {onEditDocument && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={onEditDocument}
+                        className="border-blue-500 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      >
+                        <Edit className="h-3 w-3 mr-1" />
+                        Edit Document
+                      </Button>
+                    )}
+                    {onRemoveDrift && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => onRemoveDrift(driftId)}
+                        className="border-red-500 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Remove Drift
+                      </Button>
+                    )}
+                  </div>
+                </div>
               )
             }
             

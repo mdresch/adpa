@@ -948,6 +948,69 @@ The ADPA system represents a significant advancement in document processing auto
     setIsEditing(false)
   }
 
+  // Handle drift actions
+  const handleAcceptDrift = async (driftId: string) => {
+    try {
+      // Update drift status to 'accepted'
+      await apiClient.request(`/projects/${projectId}/drift-detections/${driftId}/accept`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          resolution_notes: 'Drift accepted by user'
+        })
+      })
+
+      toast.success('Drift accepted successfully')
+      
+      // Refresh drifts list
+      const driftResponse = await apiClient.request<{ drifts: any[] }>(
+        `/projects/${projectId}/drift-detections?limit=100`,
+        { suppressNotFoundError: true } as Record<string, unknown>
+      ).catch(() => ({ drifts: [] }))
+      
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'accepted' && d.status !== 'dismissed')
+      setDrifts(documentDrifts)
+    } catch (error: any) {
+      console.error('Failed to accept drift:', error)
+      const errorMessage = error?.error || error?.message || 'Unknown error'
+      toast.error(`Failed to accept drift: ${errorMessage}`)
+    }
+  }
+
+  const handleEditDocument = () => {
+    if (!document) return
+    setEditedContent(typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2))
+    setIsEditing(true)
+    // Scroll to top of editor
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleRemoveDrift = async (driftId: string) => {
+    try {
+      // Update drift status to 'dismissed'
+      await apiClient.request(`/projects/${projectId}/drift-detections/${driftId}/remove`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          resolution_notes: 'Drift removed by user'
+        })
+      })
+
+      toast.success('Drift removed successfully')
+      
+      // Refresh drifts list
+      const driftResponse = await apiClient.request<{ drifts: any[] }>(
+        `/projects/${projectId}/drift-detections?limit=100`,
+        { suppressNotFoundError: true } as Record<string, unknown>
+      ).catch(() => ({ drifts: [] }))
+      
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'accepted' && d.status !== 'dismissed')
+      setDrifts(documentDrifts)
+    } catch (error: any) {
+      console.error('Failed to remove drift:', error)
+      const errorMessage = error?.error || error?.message || 'Unknown error'
+      toast.error(`Failed to remove drift: ${errorMessage}`)
+    }
+  }
+
   // Handle document regeneration
   const handleRegenerate = async (params: {
     templateId?: string
@@ -1336,6 +1399,9 @@ The ADPA system represents a significant advancement in document processing auto
                             drifts={drifts}
                             showHighlights={showDriftHighlights}
                             onEnhancedContentReady={handleEnhancedContentReady}
+                            onAcceptDrift={handleAcceptDrift}
+                            onEditDocument={handleEditDocument}
+                            onRemoveDrift={handleRemoveDrift}
                           />
                         ) : (
                           <textarea

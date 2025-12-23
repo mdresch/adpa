@@ -2218,6 +2218,86 @@ router.get("/:id/drift-detections", authenticateToken, async (req, res) => {
   }
 })
 
+// Accept a drift detection
+router.put("/:id/drift-detections/:driftId/accept", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: projectId, driftId } = req.params
+    const { resolution_notes } = req.body
+
+    // Verify drift belongs to project
+    const driftCheck = await pool.query(
+      `SELECT id, project_id, status FROM baseline_drift_detection WHERE id = $1 AND project_id = $2`,
+      [driftId, projectId]
+    )
+
+    if (driftCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Drift detection not found" })
+    }
+
+    // Update drift status to accepted/resolved
+    await pool.query(
+      `UPDATE baseline_drift_detection 
+       SET status = 'accepted',
+           resolution_notes = COALESCE($1, 'Drift accepted by user'),
+           resolved_at = CURRENT_TIMESTAMP,
+           assigned_to = $2
+       WHERE id = $3`,
+      [resolution_notes || 'Drift accepted by user', req.user?.id, driftId]
+    )
+
+    log.info(`Drift ${driftId} accepted by user ${req.user?.id}`)
+
+    res.json({
+      success: true,
+      message: "Drift accepted successfully"
+    })
+  } catch (error) {
+    log.error("Error accepting drift:", error)
+    res.status(500).json({ error: "Failed to accept drift" })
+  }
+})
+
+// Remove/dismiss a drift detection
+router.put("/:id/drift-detections/:driftId/remove", authenticateToken, async (req, res) => {
+  const log = childLogger({ requestId: (req as any).requestId })
+  try {
+    const { id: projectId, driftId } = req.params
+    const { resolution_notes } = req.body
+
+    // Verify drift belongs to project
+    const driftCheck = await pool.query(
+      `SELECT id, project_id, status FROM baseline_drift_detection WHERE id = $1 AND project_id = $2`,
+      [driftId, projectId]
+    )
+
+    if (driftCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Drift detection not found" })
+    }
+
+    // Update drift status to dismissed
+    await pool.query(
+      `UPDATE baseline_drift_detection 
+       SET status = 'dismissed',
+           resolution_notes = COALESCE($1, 'Drift removed by user'),
+           resolved_at = CURRENT_TIMESTAMP,
+           assigned_to = $2
+       WHERE id = $3`,
+      [resolution_notes || 'Drift removed by user', req.user?.id, driftId]
+    )
+
+    log.info(`Drift ${driftId} removed by user ${req.user?.id}`)
+
+    res.json({
+      success: true,
+      message: "Drift removed successfully"
+    })
+  } catch (error) {
+    log.error("Error removing drift:", error)
+    res.status(500).json({ error: "Failed to remove drift" })
+  }
+})
+
 // Upgrade project to program (must be before /:id route)
 router.post("/:id/upgrade-to-program", authenticateToken, requirePermission("programs.manage"), async (req, res) => {
   const log = childLogger({ requestId: (req as any).requestId })
