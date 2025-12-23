@@ -233,6 +233,28 @@ const extractionQueueOptions = {
 
 export const extractionQueue = new Bull("project-data-extraction", extractionQueueOptions)
 
+// Confluence Publishing Queue Options
+const confluenceQueueOptions = {
+  redis: bullRedisConfig,
+  defaultJobOptions: {
+    removeOnComplete: 100,
+    removeOnFail: 50,
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 2000,
+    },
+    timeout: 120000, // 2 minutes timeout for Confluence publishing
+  },
+  settings: {
+    lockDuration: 120000, // 2 minutes lock
+    stallInterval: 30000, // Check every 30 seconds
+    maxStalledCount: 2,
+  }
+}
+
+export const confluenceQueue = new Bull("confluence-publishing", confluenceQueueOptions)
+
 // Helper function to set max listeners on all queue Redis connections
 // This prevents MaxListenersExceededWarning when multiple queues share Redis connections
 // Bull queues use ioredis internally, which creates Commander instances that can have many listeners
@@ -246,6 +268,7 @@ function setQueueMaxListeners() {
     regenerationQueue,
     qualityAuditQueue,
     extractionQueue,
+    confluenceQueue,
   ]
 
   queues.forEach((queue) => {
@@ -332,6 +355,7 @@ const queuesForListeners = [
   regenerationQueue,
   qualityAuditQueue,
   extractionQueue,
+  confluenceQueue,
 ]
 
 queuesForListeners.forEach((queue) => {
@@ -402,6 +426,7 @@ function getQueueServiceInstance(): ReturnType<typeof createQueueService> {
         ['document-regeneration', regenerationQueue],
         ['quality-audit', qualityAuditQueue],
         ['project-data-extraction', extractionQueue],
+        ['confluence-publishing', confluenceQueue],
       ]),
       currentPool, // Use the validated pool
       io,
@@ -798,9 +823,8 @@ regenerationQueue.on("failed", (job, err) => {
   logger.error(`Regeneration job failed: ${job.id}`, err)
 })
 
-// Quality Audit job processor
-// Publish to Confluence job processor
-documentQueue.process("publish-to-confluence", async (job) => {
+// Confluence Publishing job processor
+confluenceQueue.process("publish-to-confluence", async (job) => {
   try {
     const { PublishToConfluenceJobService } = await import('./jobs/PublishToConfluenceJobService')
     const result = await PublishToConfluenceJobService.processJob(job)
@@ -810,6 +834,17 @@ documentQueue.process("publish-to-confluence", async (job) => {
     throw error
   }
 })
+
+// Confluence queue event listeners
+confluenceQueue.on("completed", (job, result) => {
+  logger.info(`Confluence publishing job completed: ${job.id}`, { pageUrl: result?.pageUrl })
+})
+
+confluenceQueue.on("failed", (job, err) => {
+  logger.error(`Confluence publishing job failed: ${job.id}`, err)
+})
+
+// Quality Audit job processor
 
 qualityAuditQueue.process("quality-audit", async (job) => {
   const { jobId, documentId, documentContent, documentType, projectContext, userId } = job.data
