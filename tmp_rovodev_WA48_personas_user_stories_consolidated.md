@@ -61,6 +61,9 @@ Use this template to map all current stories. Keep it updated per sprint.
 4) Cross‑link personas/stories to Architecture Overview and Release Notes
 
 ## References
-- Architecture Overview
-- Release Notes (Dec 2025)
+- [Architecture Overview](docs/07-architecture/ARCHITECTURE_OVERVIEW_WITH_PERSONAS.md)
+- [Architecture Cross-Links](docs/11-user-guides/PERSONAS_ARCHITECTURE_CROSSLINKS.md)
+- [Release Notes (Dec 2025)](docs/09-releases/RELEASE_NOTES_v2.0.0.md)
+- [What's New (Dec 2025)](docs/09-releases/WHATS_NEW_v2.0.0.md)
+- [Database Schema Overview](docs/07-architecture/DATABASE_SCHEMA_OVERVIEW.md)
 - Original persona and story attachments in WA‑48
