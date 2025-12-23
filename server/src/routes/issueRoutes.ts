@@ -5,7 +5,7 @@
 
 import { Router, Request, Response } from 'express'
 import { authenticateToken } from '../middleware/auth'
-import { validate } from '../middleware/validation'
+import { validate, validateParams } from '../middleware/validation'
 import Joi from 'joi'
 import {
   getIssues,
@@ -73,7 +73,7 @@ router.get(
 router.get(
   '/stats/:projectId',
   authenticateToken,
-  validate(Joi.object({
+  validateParams(Joi.object({
     projectId: Joi.string().uuid().required()
   })),
   async (req: Request, res: Response) => {

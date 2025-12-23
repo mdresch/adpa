@@ -181,15 +181,24 @@ router.get("/:id/export/pdf",
       let content = ""
 
       // Handle different content formats (string vs object)
+      // Priority: markdown field > content field > text field > string > fallback
       if (typeof doc.content === 'string') {
         content = doc.content
       } else if (doc.content && typeof doc.content === 'object') {
-        content = doc.content.content || doc.content.text || JSON.stringify(doc.content)
+        // Check for markdown field first (most common in JSONB storage)
+        content = doc.content.markdown || doc.content.content || doc.content.text || JSON.stringify(doc.content)
       }
+
+      if (!content || content.trim() === '') {
+        log.warn(`Document ${id} has no content to export`)
+        return res.status(400).json({ error: "Document has no content to export" })
+      }
+
+      log.info(`Exporting document ${id} to PDF (content length: ${content.length} chars)`)
 
       // 2. Generate PDF using service
       const pdfBuffer = await PdfService.generatePdf(
-        content || "",
+        content,
         doc.name,
         {
           project: doc.project_name,

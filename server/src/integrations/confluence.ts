@@ -174,8 +174,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
           const msg = createErr?.message || ''
           if (/already exists/i.test(msg)) {
             // Find existing page by title and update it
-            const matches = await this.service.searchContent(doc.title, spaceKey)
-            const existing = matches?.find(p => p.title?.trim() === doc.title.trim())
+            const searchResponse = await this.service.searchContent(doc.title, spaceKey)
+            const existing = searchResponse?.results?.find(p => p.title?.trim() === doc.title.trim())
             if (existing) {
               const full = await this.service.getPage(existing.id)
               confluencePage = await this.service.updatePage(
@@ -196,8 +196,11 @@ export class ConfluenceIntegration implements IntegrationProvider {
       }
 
       // Return the Confluence page URL
+      // Build URL in format: https://<domain>/wiki/spaces/<SPACE_KEY>/pages/<PAGE_ID>
       const baseUrl = await this.getConfluenceBaseUrl()
-      return `${baseUrl}${confluencePage._links?.webui || `/pages/${confluencePage.id}`}`
+      const siteBase = baseUrl.replace(/\/+$/, '') // Remove trailing slashes
+      const viewUrl = `${siteBase}/wiki/spaces/${spaceKey}/pages/${confluencePage.id}`
+      return viewUrl
 
     } catch (error) {
       logger.error(`Failed to upload document ${doc.id} to Confluence:`, error)

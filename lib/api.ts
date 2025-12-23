@@ -1485,6 +1485,10 @@ class ApiClient {
     return this.requestBlob(`/documents/${id}/export/pdf`)
   }
 
+  async exportDocumentDocx(id: string): Promise<Blob> {
+    return this.requestBlob(`/documents/${id}/export/docx`)
+  }
+
   async fixPendingJobs(action: 're-add' | 'mark-failed', maxAge?: number): Promise<{
     success: boolean
     message: string

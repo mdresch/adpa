@@ -33,6 +33,14 @@ export async function markdownToPdf(
   try {
     logger.info("Starting Markdown to PDF conversion")
 
+    // Configure marked with GFM (GitHub Flavored Markdown) for table support
+    marked.setOptions({
+      gfm: true,
+      breaks: false,
+      headerIds: false,
+      mangle: false
+    })
+
     // Parse Markdown to HTML
     const htmlContent = await marked.parse(markdown)
 

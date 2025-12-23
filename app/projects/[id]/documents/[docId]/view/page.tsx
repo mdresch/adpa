@@ -47,8 +47,6 @@ import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/cjs/styles/prism"
-import { jsPDF } from "jspdf"
-import { Document, Packer, Paragraph, TextRun } from "docx"
 import { saveAs } from "file-saver"
 import { RegenerateVersionModal } from "@/components/documents/RegenerateVersionModal"
 import { RegenerationProgress } from "@/components/documents/RegenerationProgress"
@@ -765,55 +763,135 @@ The ADPA system represents a significant advancement in document processing auto
     }
   }
 
-  const exportToPDF = () => {
+  const exportToPDF = async () => {
     if (!document) return
 
-    const pdf = new jsPDF()
-    pdf.text(document.content, 10, 10, { maxWidth: 180 })
-    pdf.save(`${document.title}.pdf`)
-    toast.success("Document exported to PDF")
+    try {
+      const loadingToast = toast.loading("Generating PDF...")
+      const blob = await apiClient.exportDocumentPdf(documentId)
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${document.title || document.name || 'document'}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast.dismiss(loadingToast)
+      toast.success("Document exported to PDF")
+    } catch (error: any) {
+      console.error("PDF export error:", error)
+      const errorMessage = error?.response?.data?.error || error?.message || "Failed to export PDF"
+      toast.error(`Failed to export PDF: ${errorMessage}`)
+    }
   }
 
   const exportToWord = async () => {
     if (!document) return
 
-    const doc = new Document({
-      sections: [{
-        properties: {},
-        children: [
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: document.title,
-                bold: true,
-                size: 32,
-              }),
-            ],
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({
-                text: document.content,
-                size: 24,
-              }),
-            ],
-          }),
-        ],
-      }],
-    })
+    try {
+      const loadingToast = toast.loading("Generating Word document...")
+      const blob = await apiClient.exportDocumentDocx(documentId)
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${document.title || document.name || 'document'}.docx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
 
-    const buffer = await Packer.toBuffer(doc)
-    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
-    saveAs(blob, `${document.title}.docx`)
-    toast.success("Document exported to Word")
+      toast.dismiss(loadingToast)
+      toast.success("Document exported to Word")
+    } catch (error: any) {
+      console.error("Word export error:", error)
+      const errorMessage = error?.response?.data?.error || error?.message || "Failed to export Word document"
+      toast.error(`Failed to export Word document: ${errorMessage}`)
+    }
   }
 
   const exportToMarkdown = () => {
     if (!document) return
 
-    const blob = new Blob([document.content], { type: "text/markdown" })
-    saveAs(blob, `${document.title}.md`)
+    // Extract markdown content from document
+    let markdownContent = ""
+    if (typeof document.content === 'string') {
+      markdownContent = document.content
+    } else if (document.content && typeof document.content === 'object') {
+      markdownContent = document.content.markdown || document.content.content || document.content.text || JSON.stringify(document.content)
+    }
+
+    const blob = new Blob([markdownContent], { type: "text/markdown" })
+    saveAs(blob, `${document.title || document.name || 'document'}.md`)
     toast.success("Document exported to Markdown")
+  }
+
+  const printDocument = () => {
+    if (!document) return
+
+    // Open print dialog with document content
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) {
+      toast.error("Please allow popups to print")
+      return
+    }
+
+    // Extract markdown content
+    let markdownContent = ""
+    if (typeof document.content === 'string') {
+      markdownContent = document.content
+    } else if (document.content && typeof document.content === 'object') {
+      markdownContent = document.content.markdown || document.content.content || document.content.text || JSON.stringify(document.content)
+    }
+
+    // Convert markdown to HTML for printing
+    // Use a simple markdown-to-HTML conversion for printing
+    const htmlContent = markdownContent
+      .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+      .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+      .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+      .replace(/`(.*?)`/g, '<code>$1</code>')
+      .replace(/\n/g, '<br>')
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>${document.title || document.name || 'Document'}</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px; line-height: 1.6; }
+          h1 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; }
+          h2 { color: #34495e; border-bottom: 1px solid #bdc3c7; padding-bottom: 8px; margin-top: 25px; }
+          h3 { color: #34495e; margin-top: 20px; }
+          table { border-collapse: collapse; width: 100%; margin: 20px 0; }
+          th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+          th { background-color: #3498db; color: white; font-weight: bold; }
+          code { background-color: #f4f4f4; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+          @media print { body { margin: 0; } }
+        </style>
+      </head>
+      <body>
+        <h1>${document.title || document.name || 'Document'}</h1>
+        ${htmlContent}
+      </body>
+      </html>
+    `)
+    printWindow.document.close()
+    printWindow.focus()
+    
+    // Wait for content to load, then print
+    setTimeout(() => {
+      printWindow.print()
+      // Close window after printing (optional)
+      // printWindow.close()
+    }, 250)
   }
 
   const copyToClipboard = () => {
@@ -868,6 +946,69 @@ The ADPA system represents a significant advancement in document processing auto
     if (!document) return
     setEditedContent(document.content)
     setIsEditing(false)
+  }
+
+  // Handle drift actions
+  const handleAcceptDrift = async (driftId: string) => {
+    try {
+      // Update drift status to 'accepted'
+      await apiClient.request(`/projects/${projectId}/drift-detections/${driftId}/accept`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          resolution_notes: 'Drift accepted by user'
+        })
+      })
+
+      toast.success('Drift accepted successfully')
+      
+      // Refresh drifts list
+      const driftResponse = await apiClient.request<{ drifts: any[] }>(
+        `/projects/${projectId}/drift-detections?limit=100`,
+        { suppressNotFoundError: true } as Record<string, unknown>
+      ).catch(() => ({ drifts: [] }))
+      
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
+      setDrifts(documentDrifts)
+    } catch (error: any) {
+      console.error('Failed to accept drift:', error)
+      const errorMessage = error?.error || error?.message || 'Unknown error'
+      toast.error(`Failed to accept drift: ${errorMessage}`)
+    }
+  }
+
+  const handleEditDocument = () => {
+    if (!document) return
+    setEditedContent(typeof document.content === 'string' ? document.content : JSON.stringify(document.content, null, 2))
+    setIsEditing(true)
+    // Scroll to top of editor
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleRemoveDrift = async (driftId: string) => {
+    try {
+      // Update drift status to 'dismissed'
+      await apiClient.request(`/projects/${projectId}/drift-detections/${driftId}/remove`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          resolution_notes: 'Drift removed by user'
+        })
+      })
+
+      toast.success('Drift removed successfully')
+      
+      // Refresh drifts list
+      const driftResponse = await apiClient.request<{ drifts: any[] }>(
+        `/projects/${projectId}/drift-detections?limit=100`,
+        { suppressNotFoundError: true } as Record<string, unknown>
+      ).catch(() => ({ drifts: [] }))
+      
+      const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId && d.status !== 'resolved' && d.status !== 'false_positive')
+      setDrifts(documentDrifts)
+    } catch (error: any) {
+      console.error('Failed to remove drift:', error)
+      const errorMessage = error?.error || error?.message || 'Unknown error'
+      toast.error(`Failed to remove drift: ${errorMessage}`)
+    }
   }
 
   // Handle document regeneration
@@ -1258,6 +1399,9 @@ The ADPA system represents a significant advancement in document processing auto
                             drifts={drifts}
                             showHighlights={showDriftHighlights}
                             onEnhancedContentReady={handleEnhancedContentReady}
+                            onAcceptDrift={handleAcceptDrift}
+                            onEditDocument={handleEditDocument}
+                            onRemoveDrift={handleRemoveDrift}
                           />
                         ) : (
                           <textarea
@@ -1915,7 +2059,7 @@ The ADPA system represents a significant advancement in document processing auto
                           <Download className="h-4 w-4 mr-2" />
                           Export as Markdown
                         </Button>
-                        <Button variant="outline" className="w-full justify-start">
+                        <Button variant="outline" className="w-full justify-start" onClick={printDocument}>
                           <Settings className="h-4 w-4 mr-2" />
                           Print Document
                         </Button>

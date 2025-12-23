@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from "axios"
 import { logger } from "../utils/logger"
+import { marked } from "marked"
 
 export interface ConfluenceConfig {
   baseUrl: string
@@ -395,12 +396,102 @@ export class ConfluenceService {
 
   /**
    * Convert Markdown to Confluence storage format
+   * Uses marked library for proper conversion including tables, code blocks, links, etc.
    */
   convertMarkdownToStorage(markdown: string): string {
-    // Basic conversion from Markdown to Confluence storage format
+    try {
+      // Configure marked with GFM (GitHub Flavored Markdown) for table support
+      // GFM is enabled by default in marked v11, but we explicitly set it
+      marked.setOptions({
+        gfm: true,
+        breaks: false, // Don't convert line breaks to <br>
+        headerIds: false, // Don't add IDs to headers
+        mangle: false
+      })
+
+      // Convert Markdown to HTML using marked (synchronous parse)
+      let html = marked(markdown) as string
+
+      // Post-process HTML for Confluence compatibility
+      html = this.postProcessHtmlForConfluence(html)
+
+      return html
+    } catch (error) {
+      logger.error('Failed to convert markdown to Confluence storage format', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      // Fallback to basic conversion if marked fails
+      return this.fallbackMarkdownConversion(markdown)
+    }
+  }
+
+  /**
+   * Post-process HTML to ensure Confluence compatibility
+   */
+  private postProcessHtmlForConfluence(html: string): string {
+    // Ensure tables have proper structure (Confluence requires tbody)
+    html = html.replace(
+      /<table>/g,
+      '<table><tbody>'
+    )
+    html = html.replace(
+      /<\/table>/g,
+      '</tbody></table>'
+    )
+
+    // Ensure table rows are properly closed
+    html = html.replace(
+      /<tr([^>]*)>/g,
+      '<tr$1>'
+    )
+
+    // Clean up empty paragraphs that might cause issues
+    html = html.replace(/<p>\s*<\/p>/g, '')
+
+    // Ensure code blocks are properly formatted
+    // Confluence uses <code> for inline and <pre><code> for blocks
+    html = html.replace(
+      /<pre><code class="language-(\w+)">/g,
+      '<pre><code class="language-$1">'
+    )
+
+    // Ensure links have proper format
+    html = html.replace(
+      /<a href="([^"]+)"([^>]*)>/g,
+      '<a href="$1"$2>'
+    )
+
+    // Ensure images are properly formatted
+    html = html.replace(
+      /<img src="([^"]+)" alt="([^"]*)"([^>]*)>/g,
+      '<img src="$1" alt="$2"$3 />'
+    )
+
+    // Ensure blockquotes are properly formatted
+    html = html.replace(
+      /<blockquote>/g,
+      '<blockquote><p>'
+    )
+    html = html.replace(
+      /<\/blockquote>/g,
+      '</p></blockquote>'
+    )
+
+    // Clean up any double tbody tags
+    html = html.replace(/<tbody><tbody>/g, '<tbody>')
+    html = html.replace(/<\/tbody><\/tbody>/g, '</tbody>')
+
+    return html
+  }
+
+  /**
+   * Fallback conversion if marked library fails
+   */
+  private fallbackMarkdownConversion(markdown: string): string {
+    logger.warn('Using fallback markdown conversion')
     let storage = markdown
 
-    // Convert Markdown to HTML
+    // Basic conversions
     storage = storage
       .replace(/^# (.*$)/gim, "<h1>$1</h1>")
       .replace(/^## (.*$)/gim, "<h2>$1</h2>")

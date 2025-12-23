@@ -48,8 +48,17 @@ export class MultiProviderEmbeddingsService {
   private rateLimitTracker: Map<string, { count: number, resetTime: number }> = new Map()
 
   constructor(config?: Partial<EmbeddingsConfig>) {
-    this.aiService = new AIService()
-    this.config = {
+    try {
+      this.aiService = new AIService()
+    } catch (error) {
+      logger.error('[MULTI-PROVIDER-EMBEDDINGS] Failed to initialize AIService', {
+        error: error instanceof Error ? error.message : String(error)
+      })
+      throw new Error(`Failed to initialize AIService: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    
+    // Merge config with defaults, ensuring model is always set
+    const defaultConfig: EmbeddingsConfig = {
       providers: ['openai', 'google', 'azure'],
       model: 'text-embedding-ada-002',
       maxTokens: 8191,
@@ -57,8 +66,18 @@ export class MultiProviderEmbeddingsService {
       retryAttempts: 3,
       retryDelay: 1000,
       batchSize: 100,
-      rateLimitPerMinute: 3000,
-      ...config
+      rateLimitPerMinute: 3000
+    }
+    
+    this.config = {
+      ...defaultConfig,
+      ...config,
+      // Ensure model is always set
+      model: config?.model || defaultConfig.model
+    }
+    
+    if (!this.config.model) {
+      throw new Error('EmbeddingsConfig.model is required but was not provided')
     }
   }
 
