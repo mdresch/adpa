@@ -447,9 +447,9 @@ export class ContextOrchestrator {
         const freshnessAssessment = await this.freshnessManager.assessFreshness(contextId)
         
         // Apply threshold to determine if context is stale based on time_since_update
-        // If threshold is provided and context exceeds it, mark as stale
-        if (threshold && freshnessAssessment.time_since_update) {
-          const isStale = freshnessAssessment.time_since_update > threshold
+        // The threshold parameter is used here to override the default staleness assessment
+        if (threshold !== undefined && freshnessAssessment.time_since_update !== undefined) {
+          const isStale = freshnessAssessment.time_since_update > stalenessThreshold
           if (isStale) {
             // Update staleness level based on how much it exceeds threshold
             if (freshnessAssessment.staleness_level === 'fresh') {
