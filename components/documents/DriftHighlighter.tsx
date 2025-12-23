@@ -184,7 +184,8 @@ export function DriftHighlighter({
   return (
     <div className="markdown-content-wrapper">
       {mounted && (
-        <style dangerouslySetInnerHTML={{ __html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
         .markdown-content-wrapper {
           max-width: none;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
@@ -537,7 +538,7 @@ export function DriftHighlighter({
           color: rgb(156, 163, 175);
         }
       ` }} />
-      )}
+        )}
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
