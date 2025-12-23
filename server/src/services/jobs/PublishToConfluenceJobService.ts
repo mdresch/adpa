@@ -56,8 +56,10 @@ export class PublishToConfluenceJobService {
         page = await client.createPage(spaceKey, title, storage, parentId)
       }
 
-      const url = page?._links?.webui ? `${baseUrl.replace(/\/$/, '')}${page._links.webui}` : undefined
-      logger.info(`[PUBLISH-CONFLUENCE] Published page for project ${projectId}: ${url || page?.id}`)
+      // Build URL in format: https://<domain>/wiki/spaces/<SPACE_KEY>/pages/<PAGE_ID>
+      const siteBase = baseUrl.replace(/\/+$/, '') // Remove trailing slashes
+      const url = `${siteBase}/wiki/spaces/${spaceKey}/pages/${page.id}`
+      logger.info(`[PUBLISH-CONFLUENCE] Published page for project ${projectId}: ${url}`)
       // Persist on document if provided
       if (url && job.data.documentId) {
         try {
