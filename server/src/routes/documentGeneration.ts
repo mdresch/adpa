@@ -303,10 +303,32 @@ router.post("/generate",
 
       log.info(`Document generated successfully: ${documentId}`)
 
+      // 🔗 Try to link to Jira if enabled
+      let jiraLinkage = null
+      try {
+        // Import at module level to avoid dynamic import issues
+        const jiraLinkageModule = await import('../services/jiraLinkageService')
+        if (!jiraLinkageModule.jiraLinkageService) {
+          log.warn('Jira linkage service not available')
+        } else {
+          jiraLinkage = await jiraLinkageModule.jiraLinkageService.linkDocumentToJira(
+            documentId,
+            name,
+            projectId
+          )
+          if (jiraLinkage) {
+            log.info(`Document linked to Jira issue: ${jiraLinkage.issueKey}`)
+          }
+        }
+      } catch (jiraError) {
+        log.warn('Failed to link document to Jira (non-blocking):', jiraError)
+      }
+
       res.status(201).json({
         message: "Document generated successfully",
         document: documentResult.rows[0],
         generation: result.metadata,
+        jiraLinkage: jiraLinkage
       })
     } catch (error) {
       log.error("Document generation error:", error)
@@ -584,6 +606,18 @@ router.post("/generate-new-version",
       )
 
       log.info(`Document updated to version ${newVersion}`)
+
+      // 🔗 Update Jira issue if linked
+      try {
+        const { jiraLinkageService } = await import('../services/jiraLinkageService')
+        await jiraLinkageService.updateJiraForDocumentRegeneration(
+          existingDocumentId,
+          newVersion,
+          `Document regenerated using ${provider}${model ? ` (${model})` : ''}`
+        )
+      } catch (jiraError) {
+        log.warn('Failed to update Jira issue (non-blocking):', jiraError)
+      }
 
       res.status(200).json({
         message: "Document updated to new version",

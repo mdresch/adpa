@@ -80,6 +80,7 @@ import pipelineRoutes from "./routes/pipeline"
 import documentGenerationRoutes from "./routes/documentGeneration"
 import templateStatsRoutes from "./routes/template-stats"
 import settingsRoutes from "./routes/settings"
+import jiraLinkageRoutes from "./routes/jiraLinkage"
 import baselinesRoutes from "./routes/baselines"
 import driftRoutes from "./routes/drift"
 import emergencyMeetingsRoutes from "./routes/emergency-meetings"
@@ -274,6 +275,7 @@ app.use("/api/stakeholders", stakeholderRoutes)
 app.use("/api/skills", skillsRoutes)
 app.use("/api/competencies", competenciesRoutes)
 app.use("/api/settings", settingsRoutes)
+app.use("/api/jira-linkage", jiraLinkageRoutes)
 app.use("/api/content-structuring", contentStructuringRoutes)
 app.use("/api/compression", compressionRoutes)
 app.use("/api/context-injection", contextInjectionRoutes)

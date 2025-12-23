@@ -573,6 +573,43 @@ async function testIntegrationConnection(type: string, configuration: any, crede
           details: { type, tested_at: new Date().toISOString(), error: error.message },
         }
       }
+    case "jira":
+      try {
+        const { JiraService } = await import("../services/jiraService")
+        const jiraService = new JiraService({
+          baseUrl: configuration.baseUrl || credentials.baseUrl,
+          email: credentials.email,
+          apiToken: credentials.apiToken
+        })
+        const connected = await jiraService.testConnection()
+        
+        // Also test project access if configured
+        let projectAccess = null
+        if (configuration.defaultProjectKey) {
+          try {
+            await jiraService.getProject(configuration.defaultProjectKey)
+            projectAccess = configuration.defaultProjectKey
+          } catch (projectError) {
+            logger.warn(`Cannot access Jira project ${configuration.defaultProjectKey}:`, projectError)
+          }
+        }
+        
+        return {
+          success: connected,
+          message: connected ? "Jira connection successful" : "Jira connection failed",
+          details: { 
+            type, 
+            tested_at: new Date().toISOString(),
+            projectAccess: projectAccess
+          },
+        }
+      } catch (error: any) {
+        return {
+          success: false,
+          message: `Jira connection test failed: ${error.message}`,
+          details: { type, tested_at: new Date().toISOString(), error: error.message },
+        }
+      }
     default:
       return {
         success: true,
