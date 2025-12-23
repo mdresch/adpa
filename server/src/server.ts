@@ -111,6 +111,7 @@ import portfolioFinancialRoutes from "./routes/portfolioFinancial"
 import taskCostRoutes from "./routes/taskCosts"
 import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
+import contextOrchestratorRoutes from "./routes/contextOrchestrator"
 
 const app = express()
 const server = createServer(app)
@@ -311,6 +312,7 @@ app.use("/api/portfolio", portfolioFinancialRoutes)
 app.use("/api/tasks", taskCostRoutes)
 app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
 app.use("/api/lessons", lessonsLearnedRoutes)
+app.use("/api/context-orchestrator", contextOrchestratorRoutes)
 console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, and review scheduling)")
 
 // WebSocket connection handling
