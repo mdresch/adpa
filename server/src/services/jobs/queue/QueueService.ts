@@ -398,13 +398,19 @@ export class QueueService {
       // If queue add fails, rollback database entry
       const dbInsertTiming = PerformanceMonitor.start('QueueService.addJob.databaseInsert')
       try {
-        // Step 1: Insert into database
+        // Get or create a worker ID for this job
+        // Workers are automatically available when the server is running (processors are registered)
+        // Use a placeholder worker ID that will be updated when processing starts
+        const placeholderWorkerId = `worker-pending-${process.pid}`
+        
+        // Step 1: Insert into database with placeholder worker_id
+        // The worker_id will be updated to the actual worker when processing starts
         await this.dependencies.database.query(
           `
-          INSERT INTO jobs (id, type, status, data, created_by, project_id, project_name, template_name, document_name, queue_name, queued_at)
-          VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)
+          INSERT INTO jobs (id, type, status, data, created_by, project_id, project_name, template_name, document_name, queue_name, queued_at, worker_id)
+          VALUES ($1, $2, 'pending', $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP, $10)
         `,
-          [jobId, validatedType, JSON.stringify(validatedData), validatedData.userId, projectId, projectName, templateName, documentName, queueName]
+          [jobId, validatedType, JSON.stringify(validatedData), validatedData.userId, projectId, projectName, templateName, documentName, queueName, placeholderWorkerId]
         )
         dbInsertTiming()
 

@@ -134,6 +134,7 @@ export default function ProjectDocumentViewer() {
   const [showDriftHighlights, setShowDriftHighlights] = useState(true)
   const [baseContentSnapshot, setBaseContentSnapshot] = useState<string>("")
   const [latestContentSnapshot, setLatestContentSnapshot] = useState<string>("")
+  const [jiraLinkage, setJiraLinkage] = useState<{ issueKey: string; issueUrl: string; created: boolean } | null>(null)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -433,19 +434,34 @@ The ADPA system represents a significant advancement in document processing auto
   const fetchDocument = async () => {
     setIsLoading(true)
     try {
-      // Fetch document from API (including drift data)
-      const [documentResponse, versionsResponse, driftResponse] = await Promise.all([
+      // Fetch document from API (including drift data and Jira linkage)
+      const [documentResponse, versionsResponse, driftResponse, jiraLinkageResponse] = await Promise.all([
         apiClient.get(`/projects/${projectId}/documents/${documentId}`),
         apiClient.get(`/projects/${projectId}/documents/${documentId}/versions`),
         apiClient.request<{ drifts: any[] }>(
           `/projects/${projectId}/drift-detections?limit=100`,
           { suppressNotFoundError: true } as Record<string, unknown>
-        ).catch(() => ({ drifts: [] }))
+        ).catch(() => ({ drifts: [] })),
+        apiClient.request<{ linked: boolean; issueKey?: string; issueUrl?: string }>(
+          `/jira-linkage/document/${documentId}`,
+          { suppressNotFoundError: true } as Record<string, unknown>
+        ).catch(() => ({ linked: false }))
       ])
 
       // Filter drifts for this specific document
       const documentDrifts = (driftResponse.drifts || []).filter((d: any) => d.source_document_id === documentId)
       setDrifts(documentDrifts)
+
+      // Set Jira linkage if available
+      if (jiraLinkageResponse.linked && jiraLinkageResponse.issueKey && jiraLinkageResponse.issueUrl) {
+        setJiraLinkage({
+          issueKey: jiraLinkageResponse.issueKey,
+          issueUrl: jiraLinkageResponse.issueUrl,
+          created: true // We don't track this in the response, but assume it exists
+        })
+      } else {
+        setJiraLinkage(null)
+      }
 
       const documentData = documentResponse
       const versionsData = versionsResponse || []
@@ -2046,6 +2062,15 @@ The ADPA system represents a significant advancement in document processing auto
                             Publish to Confluence
                           </Button>
                         )}
+
+                        {jiraLinkage?.issueUrl ? (
+                          <Button asChild variant="default" className="w-full justify-start">
+                            <a href={jiraLinkage.issueUrl} target="_blank" rel="noopener noreferrer">
+                              <ExternalLink className="h-4 w-4 mr-2" />
+                              View in Jira ({jiraLinkage.issueKey})
+                            </a>
+                          </Button>
+                        ) : null}
 
                         <Button variant="outline" className="w-full justify-start" onClick={exportToPDF}>
                           <Download className="h-4 w-4 mr-2" />
