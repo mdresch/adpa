@@ -2,19 +2,19 @@ import { logger } from '../../utils/logger'
 import { getByProjectId } from '../../database/projectIntegrations'
 import { ConfluenceService } from '../../services/confluenceService'
 import type { IQueueJob } from './queue/IQueue'
-
-interface PublishJobData {
-  documentId?: string
-  projectId: string
-  title: string
-  markdown: string
-  userId?: string
-}
+import type { PublishToConfluenceJobData } from './types'
 
 export class PublishToConfluenceJobService {
-  static async processJob(job: IQueueJob<PublishJobData>): Promise<{ success: boolean; pageUrl?: string }> {
+  static async processJob(job: IQueueJob<PublishToConfluenceJobData>): Promise<{ success: boolean; pageUrl?: string }> {
     const { projectId, title, markdown } = job.data
+    const startTime = Date.now()
+    
     try {
+      logger.info(`[PUBLISH-CONFLUENCE] Starting job ${job.id} for project ${projectId}`, {
+        title,
+        markdownLength: markdown.length
+      })
+
       // Check project mapping
       const mapping = await getByProjectId(projectId)
       if (!mapping || !mapping.confluence_space_key) {
@@ -59,7 +59,15 @@ export class PublishToConfluenceJobService {
       // Build URL in format: https://<domain>/wiki/spaces/<SPACE_KEY>/pages/<PAGE_ID>
       const siteBase = baseUrl.replace(/\/+$/, '') // Remove trailing slashes
       const url = `${siteBase}/wiki/spaces/${spaceKey}/pages/${page.id}`
-      logger.info(`[PUBLISH-CONFLUENCE] Published page for project ${projectId}: ${url}`)
+      const processingTime = Date.now() - startTime
+      
+      logger.info(`[PUBLISH-CONFLUENCE] Published page for project ${projectId}: ${url}`, {
+        pageId: page.id,
+        spaceKey,
+        processingTimeMs: processingTime,
+        title
+      })
+      
       // Persist on document if provided
       if (url && job.data.documentId) {
         try {
@@ -68,6 +76,7 @@ export class PublishToConfluenceJobService {
             `UPDATE documents SET confluence_page_url = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
             [url, job.data.documentId]
           )
+          logger.debug(`[PUBLISH-CONFLUENCE] Updated document ${job.data.documentId} with Confluence URL`)
         } catch (e) {
           logger.warn('[PUBLISH-CONFLUENCE] Failed to persist confluence_page_url', e)
         }
@@ -75,7 +84,14 @@ export class PublishToConfluenceJobService {
 
       return { success: true, pageUrl: url }
     } catch (error) {
-      logger.error('[PUBLISH-CONFLUENCE] Job failed', error)
+      const processingTime = Date.now() - startTime
+      logger.error('[PUBLISH-CONFLUENCE] Job failed', {
+        error: error.message,
+        projectId,
+        title,
+        processingTimeMs: processingTime,
+        jobId: job.id
+      })
       throw error
     }
   }

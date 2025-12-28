@@ -161,6 +161,9 @@ export class DocumentGeneratorService {
       // Record template usage
       await documentTemplateService.recordTemplateUsage(request.template_id, user)
 
+      // Post-generation hook: Enqueue Confluence publishing if project is mapped
+      await this.enqueueConfluencePublishing(response, request, user)
+
       logger.info(`Document generation completed: ${generationId}`, {
         generation_time_ms: generationTime,
         file_size: fileSize,
@@ -710,6 +713,85 @@ export class DocumentGeneratorService {
       }
     } catch (error) {
       logger.error('Failed to cleanup old files', error)
+    }
+  }
+
+  /**
+   * Post-generation hook to enqueue Confluence publishing
+   * Only publishes if project has Confluence mapping
+   */
+  private async enqueueConfluencePublishing(
+    response: DocumentGenerationResponse,
+    request: DocumentGenerationRequest,
+    user: AuthenticatedUser
+  ): Promise<void> {
+    try {
+      // Check if project ID is available in request data
+      const projectId = request.data?.projectId || request.data?.project_id
+      if (!projectId) {
+        logger.debug('No project ID found in request data, skipping Confluence publishing')
+        return
+      }
+
+      // Check if project has Confluence mapping
+      const { getByProjectId } = await import('../../database/projectIntegrations')
+      const mapping = await getByProjectId(projectId)
+      
+      if (!mapping || !mapping.confluence_space_key) {
+        logger.debug(`No Confluence mapping for project ${projectId}, skipping publishing`)
+        return
+      }
+
+      // Only publish markdown format to Confluence
+      if (request.output_format !== OutputFormat.MARKDOWN) {
+        logger.debug(`Document format ${request.output_format} not suitable for Confluence, skipping publishing`)
+        return
+      }
+
+      // Read the generated markdown content
+      const markdownContent = await fs.readFile(response.file_path, 'utf-8')
+      
+      // Generate document title from template name and timestamp
+      const templateName = response.metadata.template_name || 'Generated Document'
+      const timestamp = new Date().toISOString().split('T')[0] // YYYY-MM-DD format
+      const title = `${templateName} - ${timestamp}`
+
+      // Enqueue Confluence publishing job
+      const { addJob } = await import('../../services/queueService')
+      const jobId = await addJob(
+        'confluence-publishing',
+        'publish-to-confluence',
+        {
+          jobId: response.id,
+          userId: user.id,
+          documentId: response.id,
+          projectId,
+          title,
+          markdown: markdownContent
+        },
+        {
+          attempts: 3,
+          backoff: {
+            type: 'exponential',
+            delay: 2000
+          },
+          timeout: 120000 // 2 minutes
+        }
+      )
+
+      logger.info(`Enqueued Confluence publishing job ${jobId} for document ${response.id}`, {
+        projectId,
+        title,
+        confluenceSpace: mapping.confluence_space_key
+      })
+
+    } catch (error) {
+      // Don't fail document generation if Confluence publishing fails to enqueue
+      logger.error('Failed to enqueue Confluence publishing job', {
+        error: error.message,
+        documentId: response.id,
+        userId: user.id
+      })
     }
   }
 }
