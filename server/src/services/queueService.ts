@@ -500,16 +500,29 @@ export async function getQueueServiceDependencies(): Promise<QueueServiceDepende
 
 // Job processors
 // Phase 5: Updated to pass dependencies to job services
-aiQueue.process("ai-generate", async (job) => {
+// Register processor with concurrency to ensure jobs are picked up
+// Concurrency of 1 means process one job at a time per worker
+aiQueue.process("ai-generate", 1, async (job) => {
+  logger.info(`[WORKER] AI generation worker ${WORKER_ID} picked up job: ${job.id} (jobId in data: ${job.data?.jobId})`)
+  
   // Delegate to AIGenerationJobService (extracted in Phase 2 refactoring)
   const { AIGenerationJobService } = await import('./jobs/AIGenerationJobService')
   const deps = await getQueueServiceDependencies()
+  
+  // Ensure jobId matches - use the jobId from job.data if available, otherwise use Bull's job.id
+  const actualJobId = job.data?.jobId || job.id.toString()
+  
+  logger.info(`[WORKER] Processing AI generation job with ID: ${actualJobId} using worker: ${WORKER_ID}`)
+  
   return await AIGenerationJobService.processJob(job, {
     workerId: WORKER_ID,
     updateJobStatus,
     dependencies: deps
   }, deps)
 })
+
+// Log that the processor is registered
+logger.info(`[QUEUE] Registered ai-generate processor on aiQueue with worker ID: ${WORKER_ID}`)
 
 documentQueue.process("document-convert", async (job) => {
   // Delegate to DocumentConversionJobService (extracted in Phase 2 refactoring)

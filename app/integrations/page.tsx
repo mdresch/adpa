@@ -77,11 +77,226 @@ export default function Integrations() {
     syncInterval: 60,
   })
 
+  // Jira configuration state
+  const [jiraConfig, setJiraConfig] = useState({
+    baseUrl: "",
+    email: "",
+    apiToken: "",
+    defaultProjectKey: "",
+    defaultIssueType: "Task",
+    defaultPriority: "Medium",
+    autoCreateIssues: true,
+    linkConfluencePages: true,
+  })
+  const [existingJiraIntegration, setExistingJiraIntegration] = useState<any>(null)
+
   // Projects for Notion sync target selection
   const [projects, setProjects] = useState<any[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<any>(null)
+
+  // New integration form state
+  const [newIntegration, setNewIntegration] = useState({
+    type: "",
+    name: "",
+    baseUrl: "",
+    // Jira-specific fields
+    email: "",
+    apiToken: "",
+    defaultProjectKey: "",
+    defaultIssueType: "Task",
+    defaultPriority: "Medium",
+    // Confluence-specific fields
+    username: "",
+    apiTokenConfluence: "",
+    defaultSpace: "",
+    // SharePoint-specific fields
+    tenantId: "",
+    clientId: "",
+    clientSecret: "",
+    // Notion-specific fields
+    integrationToken: "",
+  })
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [creatingIntegration, setCreatingIntegration] = useState(false)
+
+  // Handle new integration form field changes
+  const handleNewIntegrationChange = (field: string, value: any) => {
+    setNewIntegration(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  // Reset form when dialog closes
+  const resetNewIntegrationForm = () => {
+    setNewIntegration({
+      type: "",
+      name: "",
+      baseUrl: "",
+      email: "",
+      apiToken: "",
+      defaultProjectKey: "",
+      defaultIssueType: "Task",
+      defaultPriority: "Medium",
+      username: "",
+      apiTokenConfluence: "",
+      defaultSpace: "",
+      tenantId: "",
+      clientId: "",
+      clientSecret: "",
+      integrationToken: "",
+    })
+  }
+
+  // Handle form submission for new integration
+  const handleCreateIntegration = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Validation
+    if (!newIntegration.type) {
+      toast.error("Please select an integration type")
+      return
+    }
+    if (!newIntegration.name || newIntegration.name.trim() === "") {
+      toast.error("Please enter an integration name")
+      return
+    }
+
+    setCreatingIntegration(true)
+    try {
+      let configData: any = {
+        name: newIntegration.name.trim(),
+        type: newIntegration.type,
+        configuration: {},
+        credentials: {},
+        is_active: true,
+      }
+
+      // Build configuration and credentials based on integration type
+      switch (newIntegration.type) {
+        case "jira":
+          if (!newIntegration.baseUrl || !newIntegration.email || !newIntegration.apiToken) {
+            toast.error("Please fill in all required Jira fields (Base URL, Email, API Token)")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {
+            baseUrl: newIntegration.baseUrl.trim(),
+            defaultProjectKey: newIntegration.defaultProjectKey.trim() || undefined,
+            defaultIssueType: newIntegration.defaultIssueType || "Task",
+            defaultPriority: newIntegration.defaultPriority || "Medium",
+          }
+          configData.credentials = {
+            email: newIntegration.email.trim(),
+            apiToken: newIntegration.apiToken.trim(),
+          }
+          break
+
+        case "confluence":
+          if (!newIntegration.baseUrl || !newIntegration.username || !newIntegration.apiTokenConfluence) {
+            toast.error("Please fill in all required Confluence fields (Base URL, Username, API Token)")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {
+            base_url: newIntegration.baseUrl.trim(),
+            target_space_key: newIntegration.defaultSpace.trim() || undefined,
+          }
+          configData.credentials = {
+            username: newIntegration.username.trim(),
+            api_token: newIntegration.apiTokenConfluence.trim(),
+          }
+          break
+
+        case "sharepoint":
+          if (!newIntegration.tenantId || !newIntegration.clientId || !newIntegration.clientSecret) {
+            toast.error("Please fill in all required SharePoint fields (Tenant ID, Client ID, Client Secret)")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {
+            tenant_id: newIntegration.tenantId.trim(),
+            client_id: newIntegration.clientId.trim(),
+            client_secret: newIntegration.clientSecret.trim(),
+          }
+          configData.credentials = {
+            tenant_id: newIntegration.tenantId.trim(),
+            client_id: newIntegration.clientId.trim(),
+            client_secret: newIntegration.clientSecret.trim(),
+          }
+          break
+
+        case "notion":
+          if (!newIntegration.integrationToken) {
+            toast.error("Please enter a Notion integration token")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {}
+          configData.credentials = {
+            integration_token: newIntegration.integrationToken.trim(),
+            apiKey: newIntegration.integrationToken.trim(), // Support both formats
+          }
+          break
+
+        case "github":
+        case "gitlab":
+          if (!newIntegration.baseUrl) {
+            toast.error("Please enter a base URL")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {
+            base_url: newIntegration.baseUrl.trim(),
+          }
+          configData.credentials = {
+            // GitHub/GitLab credentials would be added here
+            // For now, just base URL
+          }
+          break
+
+        case "adobe":
+          if (!newIntegration.baseUrl) {
+            toast.error("Please enter a base URL")
+            setCreatingIntegration(false)
+            return
+          }
+          configData.configuration = {
+            base_url: newIntegration.baseUrl.trim(),
+          }
+          configData.credentials = {
+            // Adobe credentials would be added here
+          }
+          break
+
+        default:
+          toast.error(`Integration type "${newIntegration.type}" is not yet fully supported`)
+          setCreatingIntegration(false)
+          return
+      }
+
+      // Create the integration
+      const response = await apiClient.createIntegration(configData)
+      
+      toast.success(`Integration "${newIntegration.name}" created successfully! ✅`)
+      
+      // Close dialog and reset form
+      setIsDialogOpen(false)
+      resetNewIntegrationForm()
+      
+      // Reload integrations list
+      await loadExistingIntegrations()
+
+    } catch (error: any) {
+      console.error("Failed to create integration:", error)
+      const errorMessage = error?.response?.data?.error || error?.message || "Failed to create integration"
+      toast.error(`Failed to create integration: ${errorMessage}`)
+    } finally {
+      setCreatingIntegration(false)
+    }
+  }
 
   // Load existing integrations on component mount (only if user is logged in)
   useEffect(() => {
@@ -256,6 +471,25 @@ export default function Integrations() {
           syncInterval: config.sync_interval || prev.syncInterval,
         }))
       }
+
+      const jiraIntegration = backendIntegrations.find((i: any) => i.type === "jira")
+      if (jiraIntegration) {
+        setExistingJiraIntegration(jiraIntegration)
+        const config = jiraIntegration.configuration || {}
+        setJiraConfig(prev => ({
+          ...prev,
+          baseUrl: config.baseUrl || config.base_url || prev.baseUrl,
+          email: "", // Credentials are encrypted and not returned
+          apiToken: "", // Credentials are encrypted and not returned
+          defaultProjectKey: config.defaultProjectKey || config.default_project_key || prev.defaultProjectKey,
+          defaultIssueType: config.defaultIssueType || config.default_issue_type || prev.defaultIssueType,
+          defaultPriority: config.defaultPriority || config.default_priority || prev.defaultPriority,
+          autoCreateIssues: config.autoCreateIssues !== undefined ? config.autoCreateIssues : prev.autoCreateIssues,
+          linkConfluencePages: config.linkConfluencePages !== undefined ? config.linkConfluencePages : prev.linkConfluencePages,
+        }))
+      } else {
+        setExistingJiraIntegration(null)
+      }
     } catch (error) {
       console.error("Failed to load integrations:", error)
       toast.error("Failed to load existing integrations")
@@ -371,6 +605,139 @@ export default function Integrations() {
 
     } catch (error) {
       console.error("Failed to save configuration:", error)
+      const errorMessage = typeof error === "object" && error !== null && "message" in error
+        ? (error as { message?: string }).message || "Failed to save configuration"
+        : "Failed to save configuration"
+      toast.error(`Save failed: ${errorMessage}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Jira handlers
+  const handleJiraConfigChange = (field: string, value: any) => {
+    setJiraConfig(prev => ({
+      ...prev,
+      [field]: value
+    }))
+  }
+
+  const testJiraConnection = async () => {
+    setTesting(true)
+    try {
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('token')
+      if (!token) {
+        toast.error("Please login first")
+        return
+      }
+
+      const apiBaseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'
+      
+      // Check if we have an existing integration to test with stored credentials
+      const jiraIntegrationToTest = existingJiraIntegration || realIntegrations.find((i: any) => i.type === "jira")
+      
+      if (jiraIntegrationToTest) {
+        // Test using stored integration credentials
+        console.log("Testing Jira connection with stored integration:", jiraIntegrationToTest.id)
+        const response = await fetch(`${apiBaseUrl}/integrations/${jiraIntegrationToTest.id}/test`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+        })
+
+        const data = await response.json()
+
+        if (data.success) {
+          toast.success("Jira connection successful! ✅")
+          if (data.details?.projectAccess) {
+            toast.success(`Project access verified: ${data.details.projectAccess}`)
+          }
+        } else {
+          const errorMessage = data.error || data.message || "Connection failed"
+          toast.error(`Jira connection failed: ${errorMessage}`)
+          console.error("Jira connection test failed:", data)
+        }
+      } else {
+        toast.error("Please save the Jira integration configuration first, then test the connection")
+      }
+    } catch (error) {
+      console.error("Jira connection test failed:", error)
+      toast.error("Connection test failed - please check your network connection")
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  const saveJiraConfiguration = async () => {
+    setSaving(true)
+    try {
+      // Check if a Jira integration already exists (by type or name)
+      let jiraIntegrationToUpdate = existingJiraIntegration
+      
+      // If not found in state, check in realIntegrations
+      if (!jiraIntegrationToUpdate) {
+        jiraIntegrationToUpdate = realIntegrations.find((i: any) => i.type === "jira")
+      }
+
+      const configData = {
+        name: "Jira",
+        type: "jira",
+        configuration: {
+          baseUrl: jiraConfig.baseUrl,
+          defaultProjectKey: jiraConfig.defaultProjectKey || undefined,
+          defaultIssueType: jiraConfig.defaultIssueType || "Task",
+          defaultPriority: jiraConfig.defaultPriority || "Medium",
+          autoCreateIssues: jiraConfig.autoCreateIssues,
+          linkConfluencePages: jiraConfig.linkConfluencePages,
+        },
+        credentials: {
+          email: jiraConfig.email,
+          apiToken: jiraConfig.apiToken,
+        },
+        is_active: true,
+      }
+
+      let response
+      if (jiraIntegrationToUpdate) {
+        // Update existing integration
+        console.log("Updating existing Jira integration:", jiraIntegrationToUpdate.id)
+        response = await apiClient.updateIntegration(jiraIntegrationToUpdate.id, configData)
+        toast.success("Jira configuration updated successfully! ✅")
+      } else {
+        // Create new integration
+        console.log("Creating new Jira integration")
+        try {
+          response = await apiClient.createIntegration(configData)
+          toast.success("Jira configuration saved successfully! ✅")
+        } catch (createError: any) {
+          // If creation fails due to name conflict, try to find and update existing
+          if (createError?.message?.includes("name already exists") || createError?.response?.data?.error?.includes("name already exists")) {
+            // Try to find existing integration by name
+            const allIntegrations = await apiClient.getIntegrations()
+            const existingByName = Array.isArray(allIntegrations) 
+              ? allIntegrations.find((i: any) => i.name === "Jira" || i.type === "jira")
+              : (allIntegrations as any)?.integrations?.find((i: any) => i.name === "Jira" || i.type === "jira")
+            
+            if (existingByName) {
+              console.log("Found existing integration by name, updating:", existingByName.id)
+              response = await apiClient.updateIntegration(existingByName.id, configData)
+              toast.success("Jira configuration updated successfully! ✅")
+            } else {
+              throw createError
+            }
+          } else {
+            throw createError
+          }
+        }
+      }
+
+      // Reload integrations to get the latest data
+      await loadExistingIntegrations()
+
+    } catch (error) {
+      console.error("Failed to save Jira configuration:", error)
       const errorMessage = typeof error === "object" && error !== null && "message" in error
         ? (error as { message?: string }).message || "Failed to save configuration"
         : "Failed to save configuration"
@@ -877,53 +1244,296 @@ export default function Integrations() {
                 <h1 className="text-3xl font-bold">Integrations</h1>
                 <p className="text-muted-foreground">Manage connections to external systems and services</p>
               </div>
-              <Dialog>
+              <Dialog open={isDialogOpen} onOpenChange={(open) => {
+                setIsDialogOpen(open)
+                if (!open) {
+                  resetNewIntegrationForm()
+                }
+              }}>
                 <DialogTrigger asChild>
                   <Button>
                     <Plus className="h-4 w-4 mr-2" />
                     Add Integration
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
-                  <DialogHeader>
-                    <DialogTitle>Add Integration</DialogTitle>
-                    <DialogDescription>Connect ADPA to an external system or service.</DialogDescription>
-                  </DialogHeader>
-                  <div className="grid gap-4 py-4">
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="integration-type" className="text-right">
-                        Type
-                      </Label>
-                      <select
-                        id="integration-type"
-                        className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        aria-label="Integration Type"
+                <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+                  <form onSubmit={handleCreateIntegration}>
+                    <DialogHeader>
+                      <DialogTitle>Add Integration</DialogTitle>
+                      <DialogDescription>Connect ADPA to an external system or service.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="integration-type" className="text-right">
+                          Type <span className="text-red-500">*</span>
+                        </Label>
+                        <select
+                          id="integration-type"
+                          className="col-span-3 flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          aria-label="Integration Type"
+                          value={newIntegration.type}
+                          onChange={(e) => handleNewIntegrationChange("type", e.target.value)}
+                          required
+                        >
+                          <option value="">Select integration type</option>
+                          <option value="confluence">Atlassian Confluence</option>
+                          <option value="jira">Atlassian Jira</option>
+                          <option value="sharepoint">Microsoft SharePoint</option>
+                          <option value="notion">Notion</option>
+                          <option value="adobe">Adobe Document Services</option>
+                          <option value="github">GitHub</option>
+                          <option value="gitlab">GitLab</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="name" className="text-right">
+                          Name <span className="text-red-500">*</span>
+                        </Label>
+                        <Input 
+                          id="name" 
+                          placeholder="Integration name" 
+                          className="col-span-3"
+                          value={newIntegration.name}
+                          onChange={(e) => handleNewIntegrationChange("name", e.target.value)}
+                          required
+                        />
+                      </div>
+
+                      {/* Common fields */}
+                      {(newIntegration.type === "jira" || newIntegration.type === "confluence" || newIntegration.type === "github" || newIntegration.type === "gitlab" || newIntegration.type === "adobe") && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="base-url" className="text-right">
+                            Base URL <span className="text-red-500">*</span>
+                          </Label>
+                          <Input 
+                            id="base-url" 
+                            placeholder="https://your-domain.atlassian.net" 
+                            className="col-span-3"
+                            value={newIntegration.baseUrl}
+                            onChange={(e) => handleNewIntegrationChange("baseUrl", e.target.value)}
+                            required={newIntegration.type === "jira" || newIntegration.type === "confluence"}
+                          />
+                        </div>
+                      )}
+
+                      {/* Jira-specific fields */}
+                      {newIntegration.type === "jira" && (
+                        <>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="jira-email" className="text-right">
+                              Email <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="jira-email" 
+                              type="email"
+                              placeholder="your-email@company.com" 
+                              className="col-span-3"
+                              value={newIntegration.email}
+                              onChange={(e) => handleNewIntegrationChange("email", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="jira-api-token" className="text-right">
+                              API Token <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="jira-api-token" 
+                              type="password"
+                              placeholder="Your Jira API token" 
+                              className="col-span-3"
+                              value={newIntegration.apiToken}
+                              onChange={(e) => handleNewIntegrationChange("apiToken", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="jira-project-key" className="text-right">
+                              Project Key
+                            </Label>
+                            <Input 
+                              id="jira-project-key" 
+                              placeholder="PROJ" 
+                              className="col-span-3"
+                              value={newIntegration.defaultProjectKey}
+                              onChange={(e) => handleNewIntegrationChange("defaultProjectKey", e.target.value)}
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="jira-issue-type" className="text-right">
+                              Default Issue Type
+                            </Label>
+                            <Select
+                              value={newIntegration.defaultIssueType}
+                              onValueChange={(value) => handleNewIntegrationChange("defaultIssueType", value)}
+                            >
+                              <SelectTrigger className="col-span-3">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Task">Task</SelectItem>
+                                <SelectItem value="Story">Story</SelectItem>
+                                <SelectItem value="Bug">Bug</SelectItem>
+                                <SelectItem value="Epic">Epic</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="jira-priority" className="text-right">
+                              Default Priority
+                            </Label>
+                            <Select
+                              value={newIntegration.defaultPriority}
+                              onValueChange={(value) => handleNewIntegrationChange("defaultPriority", value)}
+                            >
+                              <SelectTrigger className="col-span-3">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Highest">Highest</SelectItem>
+                                <SelectItem value="High">High</SelectItem>
+                                <SelectItem value="Medium">Medium</SelectItem>
+                                <SelectItem value="Low">Low</SelectItem>
+                                <SelectItem value="Lowest">Lowest</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </>
+                      )}
+
+                      {/* Confluence-specific fields */}
+                      {newIntegration.type === "confluence" && (
+                        <>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="confluence-username" className="text-right">
+                              Username <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="confluence-username" 
+                              placeholder="your-email@company.com" 
+                              className="col-span-3"
+                              value={newIntegration.username}
+                              onChange={(e) => handleNewIntegrationChange("username", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="confluence-api-token" className="text-right">
+                              API Token <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="confluence-api-token" 
+                              type="password"
+                              placeholder="Your Confluence API token" 
+                              className="col-span-3"
+                              value={newIntegration.apiTokenConfluence}
+                              onChange={(e) => handleNewIntegrationChange("apiTokenConfluence", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="confluence-space" className="text-right">
+                              Default Space
+                            </Label>
+                            <Input 
+                              id="confluence-space" 
+                              placeholder="DOCS" 
+                              className="col-span-3"
+                              value={newIntegration.defaultSpace}
+                              onChange={(e) => handleNewIntegrationChange("defaultSpace", e.target.value)}
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {/* SharePoint-specific fields */}
+                      {newIntegration.type === "sharepoint" && (
+                        <>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="sharepoint-tenant" className="text-right">
+                              Tenant ID <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="sharepoint-tenant" 
+                              placeholder="your-tenant-id" 
+                              className="col-span-3"
+                              value={newIntegration.tenantId}
+                              onChange={(e) => handleNewIntegrationChange("tenantId", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="sharepoint-client-id" className="text-right">
+                              Client ID <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="sharepoint-client-id" 
+                              placeholder="Your Azure AD Client ID" 
+                              className="col-span-3"
+                              value={newIntegration.clientId}
+                              onChange={(e) => handleNewIntegrationChange("clientId", e.target.value)}
+                              required
+                            />
+                          </div>
+                          <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="sharepoint-client-secret" className="text-right">
+                              Client Secret <span className="text-red-500">*</span>
+                            </Label>
+                            <Input 
+                              id="sharepoint-client-secret" 
+                              type="password"
+                              placeholder="Your Azure AD Client Secret" 
+                              className="col-span-3"
+                              value={newIntegration.clientSecret}
+                              onChange={(e) => handleNewIntegrationChange("clientSecret", e.target.value)}
+                              required
+                            />
+                          </div>
+                        </>
+                      )}
+
+                      {/* Notion-specific fields */}
+                      {newIntegration.type === "notion" && (
+                        <div className="grid grid-cols-4 items-center gap-4">
+                          <Label htmlFor="notion-token" className="text-right">
+                            Integration Token <span className="text-red-500">*</span>
+                          </Label>
+                          <Input 
+                            id="notion-token" 
+                            type="password"
+                            placeholder="secret_..." 
+                            className="col-span-3"
+                            value={newIntegration.integrationToken}
+                            onChange={(e) => handleNewIntegrationChange("integrationToken", e.target.value)}
+                            required
+                          />
+                        </div>
+                      )}
+                    </div>
+                    <DialogFooter>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        onClick={() => {
+                          setIsDialogOpen(false)
+                          resetNewIntegrationForm()
+                        }}
+                        disabled={creatingIntegration}
                       >
-                        <option value="">Select integration type</option>
-                        <option value="confluence">Atlassian Confluence</option>
-                        <option value="sharepoint">Microsoft SharePoint</option>
-                        <option value="notion">Notion</option>
-                        <option value="adobe">Adobe Document Services</option>
-                        <option value="github">GitHub</option>
-                        <option value="gitlab">GitLab</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="name" className="text-right">
-                        Name
-                      </Label>
-                      <Input id="name" placeholder="Integration name" className="col-span-3" />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="base-url" className="text-right">
-                        Base URL
-                      </Label>
-                      <Input id="base-url" placeholder="https://..." className="col-span-3" />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit">Add Integration</Button>
-                  </DialogFooter>
+                        Cancel
+                      </Button>
+                      <Button type="submit" disabled={creatingIntegration}>
+                        {creatingIntegration ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          "Add Integration"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </form>
                 </DialogContent>
               </Dialog>
             </div>
@@ -932,6 +1542,7 @@ export default function Integrations() {
               <TabsList>
                 <TabsTrigger value="overview">Overview</TabsTrigger>
                 <TabsTrigger value="confluence">Confluence</TabsTrigger>
+                <TabsTrigger value="jira">Jira</TabsTrigger>
                 <TabsTrigger value="sharepoint">SharePoint</TabsTrigger>
                 <TabsTrigger value="notion">Notion</TabsTrigger>
                 <TabsTrigger value="adobe">Adobe</TabsTrigger>
@@ -1263,6 +1874,195 @@ export default function Integrations() {
                       </Button>
                     </div>
                     </>
+                    )}
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              <TabsContent value="jira" className="space-y-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Jira Configuration</CardTitle>
+                    <CardDescription>
+                      Configure Atlassian Jira integration for issue tracking and document linkage
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <RefreshCw className="h-6 w-6 animate-spin mr-2" />
+                        <span>Loading configuration...</span>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Basic Configuration */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Basic Configuration</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="jira-url">Jira Base URL</Label>
+                              <Input
+                                id="jira-url"
+                                placeholder="https://your-domain.atlassian.net"
+                                value={jiraConfig.baseUrl}
+                                onChange={(e) => handleJiraConfigChange('baseUrl', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="jira-project-key">Default Project Key</Label>
+                              <Input
+                                id="jira-project-key"
+                                placeholder="PROJ"
+                                value={jiraConfig.defaultProjectKey}
+                                onChange={(e) => handleJiraConfigChange('defaultProjectKey', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Authentication */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Authentication</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="jira-email">Email</Label>
+                              <Input
+                                id="jira-email"
+                                placeholder="your-email@company.com"
+                                type="email"
+                                value={jiraConfig.email}
+                                onChange={(e) => handleJiraConfigChange('email', e.target.value)}
+                              />
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="jira-token">API Token</Label>
+                              <Input
+                                id="jira-token"
+                                type="password"
+                                placeholder="Your Jira API token"
+                                value={jiraConfig.apiToken}
+                                onChange={(e) => handleJiraConfigChange('apiToken', e.target.value)}
+                              />
+                            </div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            Generate an API token from your Atlassian account settings.
+                            <a href="https://id.atlassian.com/manage-profile/security/api-tokens" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline ml-1">
+                              Learn more
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Issue Defaults */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Issue Defaults</h4>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <Label htmlFor="jira-issue-type">Default Issue Type</Label>
+                              <Select
+                                value={jiraConfig.defaultIssueType}
+                                onValueChange={(value) => handleJiraConfigChange('defaultIssueType', value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Task">Task</SelectItem>
+                                  <SelectItem value="Story">Story</SelectItem>
+                                  <SelectItem value="Bug">Bug</SelectItem>
+                                  <SelectItem value="Epic">Epic</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-2">
+                              <Label htmlFor="jira-priority">Default Priority</Label>
+                              <Select
+                                value={jiraConfig.defaultPriority}
+                                onValueChange={(value) => handleJiraConfigChange('defaultPriority', value)}
+                              >
+                                <SelectTrigger>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Highest">Highest</SelectItem>
+                                  <SelectItem value="High">High</SelectItem>
+                                  <SelectItem value="Medium">Medium</SelectItem>
+                                  <SelectItem value="Low">Low</SelectItem>
+                                  <SelectItem value="Lowest">Lowest</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Linkage Options */}
+                        <div className="space-y-4">
+                          <h4 className="text-sm font-medium text-muted-foreground">Linkage Options</h4>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Auto-create Issues</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Automatically create Jira issues when documents are generated
+                              </p>
+                            </div>
+                            <Switch
+                              checked={jiraConfig.autoCreateIssues}
+                              onCheckedChange={(checked) => handleJiraConfigChange('autoCreateIssues', checked)}
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between p-4 border rounded-lg">
+                            <div className="space-y-1">
+                              <Label className="text-base font-medium">Link Confluence Pages</Label>
+                              <p className="text-sm text-muted-foreground">
+                                Attach Confluence page URLs to Jira issues as remote links
+                              </p>
+                            </div>
+                            <Switch
+                              checked={jiraConfig.linkConfluencePages}
+                              onCheckedChange={(checked) => handleJiraConfigChange('linkConfluencePages', checked)}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex gap-2 pt-4 border-t">
+                          <Button
+                            variant="outline"
+                            onClick={testJiraConnection}
+                            disabled={testing || (!existingJiraIntegration && !realIntegrations.find((i: any) => i.type === "jira"))}
+                          >
+                            {testing ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Testing...
+                              </>
+                            ) : (
+                              <>
+                                <TestTube className="h-4 w-4 mr-2" />
+                                Test Connection
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            onClick={saveJiraConfiguration}
+                            disabled={saving || !jiraConfig.baseUrl || !jiraConfig.email || !jiraConfig.apiToken}
+                          >
+                            {saving ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Settings className="h-4 w-4 mr-2" />
+                                Save Configuration
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </>
                     )}
                   </CardContent>
                 </Card>

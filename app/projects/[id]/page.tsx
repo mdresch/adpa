@@ -255,6 +255,7 @@ export default function ProjectDetail() {
   const [uploadingDocument, setUploadingDocument] = useState(false)
   const [templates, setTemplates] = useState<Template[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [usedTemplateIds, setUsedTemplateIds] = useState<Set<string>>(new Set())
   const [uploadForm, setUploadForm] = useState<{
     name: string
     file: File | null
@@ -376,12 +377,24 @@ export default function ProjectDetail() {
         pages: 0,
       })
 
+      // Extract used template IDs from documents
+      const usedTemplates = new Set<string>()
+      if (documentsData.documents && Array.isArray(documentsData.documents)) {
+        documentsData.documents.forEach((doc: Document) => {
+          if (doc.template_id) {
+            usedTemplates.add(doc.template_id)
+          }
+        })
+      }
+      setUsedTemplateIds(usedTemplates)
+
       // Fetch stats for accurate counts (not affected by pagination)
       await fetchDocumentStats()
     } catch (error) {
       console.error("Failed to fetch documents:", error)
       // Don't show error toast for documents, just use empty array
       setDocuments([])
+      setUsedTemplateIds(new Set())
     } finally {
       setDocumentsLoading(false)
     }
@@ -407,6 +420,33 @@ export default function ProjectDetail() {
         totalDocuments: documentsPagination.total || 0,
         counts: { draft: 0, published: 0, review: 0, archived: 0 }
       })
+    }
+  }
+
+  // Fetch all used template IDs for the project (for template usage indicator)
+  const fetchUsedTemplateIds = async () => {
+    try {
+      // Fetch all documents (with high limit) to get all template IDs
+      const params = {
+        page: 1,
+        limit: 1000, // High limit to get all documents
+      }
+      const documentsData = await apiClient.getProjectDocuments(projectId, params)
+      
+      // Extract unique template IDs
+      const usedTemplates = new Set<string>()
+      if (documentsData.documents && Array.isArray(documentsData.documents)) {
+        documentsData.documents.forEach((doc: Document) => {
+          if (doc.template_id) {
+            usedTemplates.add(doc.template_id)
+          }
+        })
+      }
+      setUsedTemplateIds(usedTemplates)
+    } catch (error) {
+      console.error("Failed to fetch used template IDs:", error)
+      // Fallback to empty set
+      setUsedTemplateIds(new Set())
     }
   }
 
@@ -2494,6 +2534,7 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   if (open) {
                     fetchTemplatesForUpload()
                     fetchAIProviders()
+                    fetchUsedTemplateIds() // Fetch used template IDs for usage indicator
                   }
                 }}>
                   <DialogTrigger asChild>
@@ -2525,15 +2566,19 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             {loadingTemplates ? (
                               <option disabled>Loading templates...</option>
                             ) : (
-                              templates.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig]
-                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' '
-                                    : ''}
-                                  {template.name} ({template.framework})
-                                  {template.development_status === 'production' ? ' ✓' : ''}
-                                </option>
-                              ))
+                              templates.map((template) => {
+                                const isUsed = usedTemplateIds.has(template.id)
+                                return (
+                                  <option key={template.id} value={template.id}>
+                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig]
+                                      ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' '
+                                      : ''}
+                                    {template.name} ({template.framework})
+                                    {template.development_status === 'production' ? ' ✓' : ''}
+                                    {isUsed ? ' 📄 Used' : ' ✨ New'}
+                                  </option>
+                                )
+                              })
                             )}
                           </select>
 
@@ -3340,11 +3385,15 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                             {loadingTemplates ? (
                               <option disabled>Loading templates...</option>
                             ) : (
-                              templates.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.name} ({template.framework})
-                                </option>
-                              ))
+                              templates.map((template) => {
+                                const isUsed = usedTemplateIds.has(template.id)
+                                return (
+                                  <option key={template.id} value={template.id}>
+                                    {template.name} ({template.framework})
+                                    {isUsed ? ' 📄 Used' : ' ✨ New'}
+                                  </option>
+                                )
+                              })
                             )}
                           </select>
                           <p className="text-xs text-muted-foreground mt-1">

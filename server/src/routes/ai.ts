@@ -104,7 +104,7 @@ router.post("/generate",
         // Continue without caching if Redis is down
       }
       
-      // Add job to queue
+      // Add job to queue using QueueService (creates database record)
       const jobData = {
         jobId,
         userId: req.user?.id,
@@ -124,9 +124,14 @@ router.post("/generate",
       }
       
       try {
-        const { aiQueue } = await import('../services/queueService')
-        const job = await aiQueue.add('ai-generate', jobData)
-        log.info('✅ [BACKEND-8/10] Job added to queue', { jobId: job.id })
+        // Use QueueService.addJob instead of directly adding to Bull queue
+        // This ensures the job record is created in the database for the jobs page
+        const { getQueueService } = await import('../services/queueService')
+        const queueService = getQueueService()
+        const createdJobId = await queueService.addJob('ai-generate', jobData, {
+          jobId, // Use the pre-generated jobId
+        })
+        log.info('✅ [BACKEND-8/10] Job added to queue and database', { jobId: createdJobId })
       } catch (queueError: unknown) {
         log.error('❌ [QUEUE] Failed to add job to queue:', queueError)
         return res.status(500).json({ 

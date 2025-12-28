@@ -83,18 +83,36 @@ export class AIGenerationJobService {
     const ai = deps?.aiService || aiService
     const contextAI = deps?.contextAwareAIService || ContextAwareAIService
     const log = deps?.logger || logger
-    const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = job.data as AIGenerationJobData
+    const jobData = job.data as AIGenerationJobData
+    const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = jobData
     const { workerId, updateJobStatus } = options
+
+    // Log job details for debugging
+    log.info(`[AIGenerationJobService] Processing job:`, {
+      bullJobId: job.id,
+      jobIdFromData: jobId,
+      workerId,
+      hasJobId: !!jobId,
+      jobDataType: typeof jobData,
+      jobDataKeys: Object.keys(jobData || {})
+    })
+
+    // Ensure we have a valid jobId - use the one from job.data if available, otherwise use Bull's job.id
+    const actualJobId = jobId || job.id.toString()
+    
+    if (!actualJobId) {
+      throw new Error(`Cannot process job: no jobId found. Bull job ID: ${job.id}, job.data.jobId: ${jobId}`)
+    }
 
     try {
       // Update job status to processing and assign worker
-      await updateJobStatus(jobId, "processing", 10, workerId, "ai-processing")
+      await updateJobStatus(actualJobId, "processing", 10, workerId, "ai-processing")
 
       // Generate content using AI service
       const result = await this.generateContent(job.data as AIGenerationJobData, deps)
 
       // Update job status to 50%
-      await updateJobStatus(jobId, "processing", 50, workerId, "ai-processing")
+      await updateJobStatus(actualJobId, "processing", 50, workerId, "ai-processing")
 
       // Update usage stats
       if (result.usage) {
@@ -102,7 +120,7 @@ export class AIGenerationJobService {
       }
 
       // Update job status to 90%
-      await updateJobStatus(jobId, "processing", 90, workerId, "ai-processing")
+      await updateJobStatus(actualJobId, "processing", 90, workerId, "ai-processing")
 
       // Create document from generated content
       const { documentId: createdDocumentId, documentRow: createdDocumentRow } = await this.createDocument(job.data as AIGenerationJobData, result, deps)
@@ -128,7 +146,7 @@ export class AIGenerationJobService {
             completed_at = CURRENT_TIMESTAMP
         WHERE id = $2
       `,
-        [JSON.stringify(finalResult), jobId, workerId]
+        [JSON.stringify(finalResult), actualJobId, workerId]
       )
 
       // Create audit log for AI analytics
@@ -137,11 +155,11 @@ export class AIGenerationJobService {
       // Emit real-time updates
       await this.emitCompletionEvents(job.data as AIGenerationJobData, finalResult, createdDocumentId, deps)
 
-      log.info(`AI generation job completed: ${jobId}`)
+      log.info(`AI generation job completed: ${actualJobId}`)
 
       return finalResult
     } catch (error: any) {
-      await this.handleError(jobId, job.data as AIGenerationJobData, error, options, deps)
+      await this.handleError(actualJobId, job.data as AIGenerationJobData, error, options, deps)
       throw error
     }
   }
