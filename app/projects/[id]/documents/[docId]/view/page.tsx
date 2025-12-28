@@ -765,7 +765,20 @@ The ADPA system represents a significant advancement in document processing auto
           : r.reason === 'not_authorized' ? 'Confluence rejected the request. Check API token permissions.'
           : r.reason === 'title_conflict' ? 'A page with this title already exists. Updated the existing page if found.'
           : 'See server logs.'
-        toast.error(`Failed to publish to Confluence: ${r.error}. ${hint}`)
+        
+        // Extract error message safely
+        let errorMsg = 'Unknown error'
+        if (typeof r.error === 'string') {
+          errorMsg = r.error
+        } else if (r.error?.message) {
+          errorMsg = r.error.message
+        } else if (r.error?.details) {
+          errorMsg = r.error.details
+        } else if (typeof r.error === 'object') {
+          errorMsg = JSON.stringify(r.error)
+        }
+        
+        toast.error(`Failed to publish to Confluence: ${errorMsg}. ${hint}`)
         return
       }
       if (url) {
@@ -774,8 +787,74 @@ The ADPA system represents a significant advancement in document processing auto
         toast.info('Export completed, but URL not returned. Check Confluence.')
       }
     } catch (e: any) {
-      const msg = e?.response?.data?.error || e?.message || 'Export failed'
-      toast.error(`Failed to publish to Confluence: ${msg}`)
+      // Extract error message safely
+      let errorMsg = 'Export failed'
+      if (e?.response?.data?.error) {
+        const errorData = e.response.data.error
+        if (typeof errorData === 'string') {
+          errorMsg = errorData
+        } else if (errorData?.message) {
+          errorMsg = errorData.message
+        } else if (errorData?.details) {
+          errorMsg = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMsg = JSON.stringify(errorData)
+        }
+      } else if (e?.message) {
+        errorMsg = e.message
+      }
+      
+      toast.error(`Failed to publish to Confluence: ${errorMsg}`)
+    }
+  }
+
+  const handlePublishToJira = async () => {
+    try {
+      const loadingToast = toast.loading("Creating Jira issue...")
+      const resp = await apiClient.post(`/jira-linkage/create-issue`, {
+        documentId,
+        issueTitle: document?.name || document?.title || 'Document',
+        issueDescription: `Document: ${document?.name || document?.title}\n\nProject: ${projectId}\nDocument ID: ${documentId}`,
+        confluenceUrl: (document as any)?.confluence_page_url || undefined
+      })
+      
+      toast.dismiss(loadingToast)
+      
+      if (resp.issueKey && resp.issueUrl) {
+        toast.success(resp.created ? 'Jira issue created successfully' : 'Document linked to existing Jira issue')
+        setJiraLinkage({
+          issueKey: resp.issueKey,
+          issueUrl: resp.issueUrl,
+          created: resp.created || false
+        })
+        // Refresh document to get updated linkage
+        await fetchDocument()
+      } else {
+        toast.error('Failed to create Jira issue: No issue key returned')
+      }
+    } catch (e: any) {
+      // Extract error message safely
+      let errorMsg = 'Failed to create Jira issue'
+      if (e?.response?.data?.error) {
+        const errorData = e.response.data.error
+        if (typeof errorData === 'string') {
+          errorMsg = errorData
+        } else if (errorData?.message) {
+          errorMsg = errorData.message
+        } else if (errorData?.details) {
+          errorMsg = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMsg = JSON.stringify(errorData)
+        }
+      } else if (e?.response?.data?.details) {
+        errorMsg = typeof e.response.data.details === 'string' 
+          ? e.response.data.details 
+          : JSON.stringify(e.response.data.details)
+      } else if (e?.message) {
+        errorMsg = e.message
+      }
+      
+      toast.error(`Failed to publish to Jira: ${errorMsg}`)
     }
   }
 
@@ -800,7 +879,24 @@ The ADPA system represents a significant advancement in document processing auto
       toast.success("Document exported to PDF")
     } catch (error: any) {
       console.error("PDF export error:", error)
-      const errorMessage = error?.response?.data?.error || error?.message || "Failed to export PDF"
+      
+      // Extract error message safely
+      let errorMessage = "Failed to export PDF"
+      if (error?.response?.data?.error) {
+        const errorData = error.response.data.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details) {
+          errorMessage = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
       toast.error(`Failed to export PDF: ${errorMessage}`)
     }
   }
@@ -826,7 +922,24 @@ The ADPA system represents a significant advancement in document processing auto
       toast.success("Document exported to Word")
     } catch (error: any) {
       console.error("Word export error:", error)
-      const errorMessage = error?.response?.data?.error || error?.message || "Failed to export Word document"
+      
+      // Extract error message safely
+      let errorMessage = "Failed to export Word document"
+      if (error?.response?.data?.error) {
+        const errorData = error.response.data.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details) {
+          errorMessage = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
       toast.error(`Failed to export Word document: ${errorMessage}`)
     }
   }
@@ -987,7 +1100,35 @@ The ADPA system represents a significant advancement in document processing auto
       setDrifts(documentDrifts)
     } catch (error: any) {
       console.error('Failed to accept drift:', error)
-      const errorMessage = error?.error || error?.message || 'Unknown error'
+      
+      // Extract error message safely
+      let errorMessage = 'Unknown error'
+      if (error?.error) {
+        const errorData = error.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details) {
+          errorMessage = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (error?.response?.data?.error) {
+        const errorData = error.response.data.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details) {
+          errorMessage = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
       toast.error(`Failed to accept drift: ${errorMessage}`)
     }
   }
@@ -1022,7 +1163,35 @@ The ADPA system represents a significant advancement in document processing auto
       setDrifts(documentDrifts)
     } catch (error: any) {
       console.error('Failed to remove drift:', error)
-      const errorMessage = error?.error || error?.message || 'Unknown error'
+      
+      // Extract error message safely
+      let errorMessage = 'Unknown error'
+      if (error?.error) {
+        const errorData = error.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details) {
+          errorMessage = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (error?.response?.data?.error) {
+        const errorData = error.response.data.error
+        if (typeof errorData === 'string') {
+          errorMessage = errorData
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        } else if (errorData?.details) {
+          errorMessage = errorData.details
+        } else if (typeof errorData === 'object') {
+          errorMessage = JSON.stringify(errorData)
+        }
+      } else if (error?.message) {
+        errorMessage = error.message
+      }
+      
       toast.error(`Failed to remove drift: ${errorMessage}`)
     }
   }
@@ -2047,6 +2216,17 @@ The ADPA system represents a significant advancement in document processing auto
                           <Download className="h-5 w-5" />
                           <span>Export Options</span>
                         </CardTitle>
+                        <CardDescription className="flex items-center">
+                          Export or publish this document
+                          <Button
+                            variant="link"
+                            className="h-auto p-0 ml-2 text-xs"
+                            onClick={() => router.push(`/projects/${projectId}?tab=integrations`)}
+                          >
+                            <Settings className="h-3 w-3 mr-1" />
+                            Configure Project Settings
+                          </Button>
+                        </CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-2">
                         {(document as any)?.confluence_page_url ? (
@@ -2070,7 +2250,12 @@ The ADPA system represents a significant advancement in document processing auto
                               View in Jira ({jiraLinkage.issueKey})
                             </a>
                           </Button>
-                        ) : null}
+                        ) : (
+                          <Button variant="default" className="w-full justify-start" onClick={handlePublishToJira}>
+                            <ExternalLink className="h-4 w-4 mr-2" />
+                            Publish to Jira
+                          </Button>
+                        )}
 
                         <Button variant="outline" className="w-full justify-start" onClick={exportToPDF}>
                           <Download className="h-4 w-4 mr-2" />

@@ -24,6 +24,7 @@ import { pool } from "./database/connection"
 // Routes
 import authRoutes from "./routes/auth"
 import projectRoutes from "./routes/projects"
+import projectSettingsRoutes from "./routes/projectSettings"
 import programRoutes from "./routes/programRoutes"
 import documentRoutes from "./routes/documents"
 import projectDataExtractionRoutes from "./routes/projectDataExtraction"
@@ -50,6 +51,7 @@ import { documentGeneratorRoutes } from "./modules/documentGenerator"
 import adobePdfRoutes from "./routes/adobe-pdf"
 import { createDocumentFormatRoutes } from "./routes/document-formats"
 import contextAiRoutes from "./routes/context-ai"
+import contextRoutes from "./routes/contextRoutes"
 import costManagementRoutes from "./routes/costManagement"
 import tasksRoutes from "./routes/tasks"
 import resourceCapacityRoutes from "./routes/resourceCapacityRoutes"
@@ -83,6 +85,7 @@ import settingsRoutes from "./routes/settings"
 import jiraLinkageRoutes from "./routes/jiraLinkage"
 import baselinesRoutes from "./routes/baselines"
 import driftRoutes from "./routes/drift"
+import entityBaselineRoutes from "./routes/entityBaselineRoutes"
 import emergencyMeetingsRoutes from "./routes/emergency-meetings"
 import baselineUpdatesRoutes from "./routes/baselineUpdates"
 import escalationRoutes from "./routes/escalation"
@@ -113,6 +116,7 @@ import taskCostRoutes from "./routes/taskCosts"
 import developmentApproachRoutes from "./routes/developmentApproachRoutes"
 import lessonsLearnedRoutes from "./routes/lessonsLearnedRoutes"
 import contextOrchestratorRoutes from "./routes/contextOrchestrator"
+import uxDocumentationRoutes from "./routes/uxDocumentationRoutes"
 
 const app = express()
 const server = createServer(app)
@@ -227,6 +231,7 @@ console.log("✅ Auth routes registered")
 
 app.use("/api/projects", projectRoutes)
 app.use("/api/projects", require("./routes/projectIntegrationRoutes").default)
+app.use("/api/projects", projectSettingsRoutes)
 app.use("/api/programs", programRoutes)
 app.use("/api/documents", documentRoutes)
 app.use("/api/project-data-extraction", projectDataExtractionRoutes)
@@ -260,6 +265,7 @@ app.use("/api/document-generator", documentGeneratorRoutes)
 app.use("/api/adobe-pdf", adobePdfRoutes)
 app.use("/api/documents", createDocumentFormatRoutes(pool))
 app.use("/api/context-ai", contextAiRoutes)
+app.use("/api/contexts", contextRoutes)
 // app.use("/api/ecs-ai", ecsAiRoutes)
 // app.use("/api/quantum-stability", quantumStabilityRoutes)
 // app.use("/api/speed-of-light", speedOfLightRoutes)
@@ -282,6 +288,7 @@ app.use("/api/context-injection", contextInjectionRoutes)
 app.use("/api/pipeline", pipelineRoutes)
 app.use("/api/baselines", baselinesRoutes)
 app.use("/api/drift", driftRoutes)
+app.use("/api/entities", entityBaselineRoutes)
 app.use("/api/emergency-meetings", emergencyMeetingsRoutes)
 app.use("/api/baseline-updates", baselineUpdatesRoutes)
 app.use("/api/escalation", escalationRoutes)
@@ -315,7 +322,8 @@ app.use("/api/tasks", taskCostRoutes)
 app.use("/api/portfolio-domains", require("./routes/portfolioDomains").default)
 app.use("/api/lessons", lessonsLearnedRoutes)
 app.use("/api/context-orchestrator", contextOrchestratorRoutes)
-console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, and review scheduling)")
+app.use("/api/ux-documentation", uxDocumentationRoutes)
+console.log("✅ All API routes registered (including approvals, notifications, email notifications, knowledge base, assessment, executive dashboard, performance actuals, team agreements, OKRs, signatures, search, PMBOK 6, review scheduling, and UX documentation)")
 
 // WebSocket connection handling
 io.on("connection", (socket) => {
@@ -384,19 +392,46 @@ io.on("connection", (socket) => {
           const isCreator = project.created_by === userId
           let isTeamMember = false
           try {
-            const teamMembers = project.team_members || []
+            let teamMembers = project.team_members || []
+            // Handle JSONB: might be string or already parsed array
+            if (typeof teamMembers === 'string') {
+              try {
+                teamMembers = JSON.parse(teamMembers)
+              } catch (parseError) {
+                logger.warn(`Failed to parse team_members for project ${projectId}:`, parseError)
+                teamMembers = []
+              }
+            }
             if (Array.isArray(teamMembers)) {
-              isTeamMember = teamMembers.includes(user.name)
+              // team_members is an array of user IDs, not names
+              isTeamMember = teamMembers.includes(userId) || teamMembers.includes(user.id)
             }
           } catch (e) {
+            logger.warn(`Error checking team membership for project ${projectId}:`, e)
             isTeamMember = false
           }
 
-          if (isOwner || isCreator || isTeamMember || user.role === 'admin') {
+          const hasAccess = isOwner || isCreator || isTeamMember || user.role === 'admin' || user.role === 'super_admin'
+          
+          if (hasAccess) {
             socket.join(room)
-            logger.info(`Client ${socket.id} joined room ${room}`)
+            logger.info(`Client ${socket.id} (user: ${userId}) joined room ${room}`, {
+              isOwner,
+              isCreator,
+              isTeamMember,
+              userRole: user.role
+            })
             socket.emit('join:ok', { room })
           } else {
+            logger.warn(`Access denied for user ${userId} to join room ${room}`, {
+              projectId,
+              isOwner,
+              isCreator,
+              isTeamMember,
+              userRole: user.role,
+              ownerId: project.owner_id,
+              createdBy: project.created_by
+            })
             socket.emit('join:error', { room, message: 'Access denied' })
           }
         } catch (err) {

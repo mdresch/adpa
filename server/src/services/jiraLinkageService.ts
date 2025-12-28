@@ -233,17 +233,59 @@ export class JiraLinkageService {
     priority?: string
   ): Promise<{ issueKey: string; issueUrl: string; created: boolean } | null> {
     try {
-      const config = await this.getJiraLinkageConfig()
+      // Get project-specific settings first (allows project-level override)
+      let projectSettings: any = null
+      let jiraEnabled = false
+      try {
+        const projectSettingsResult = await pool.query(
+          `SELECT 
+            jira_enabled,
+            jira_project_key_override,
+            jira_issue_type_override,
+            jira_priority_override,
+            jira_auto_create,
+            jira_project_key
+           FROM project_integrations 
+           WHERE project_id = $1`,
+          [projectId]
+        )
+        
+        if (projectSettingsResult.rows.length > 0) {
+          projectSettings = projectSettingsResult.rows[0]
+          
+          // Check if Jira is explicitly disabled for this project
+          if (projectSettings.jira_enabled === false) {
+            logger.debug(`Jira integration is disabled for project ${projectId}`)
+            return null
+          }
+          
+          // If project has explicit enable, use it
+          if (projectSettings.jira_enabled === true) {
+            jiraEnabled = true
+          }
+        }
+      } catch (e) {
+        logger.warn('Failed to read project Jira settings, using defaults', e)
+      }
       
-      if (!config.enabled || !config.integrationId) {
-        logger.debug("Jira linkage not enabled or no integration configured")
+      // If no project-specific setting, check global setting
+      const config = await this.getJiraLinkageConfig()
+      if (!jiraEnabled && !config.enabled) {
+        logger.warn(`Jira linkage not enabled: project=${projectId}, global=${config.enabled}, project_enabled=${jiraEnabled}`)
+        return null
+      }
+      
+      // Use project-specific integration if available, otherwise use global
+      let integrationId = config.integrationId
+      if (!integrationId) {
+        logger.warn("No Jira integration configured - integrationId is missing")
         return null
       }
       
       // Get the Jira integration
       const integrationResult = await pool.query(
         `SELECT * FROM integrations WHERE id = $1 AND type = 'jira' AND is_active = true`,
-        [config.integrationId]
+        [integrationId]
       )
       
       if (integrationResult.rows.length === 0) {
@@ -269,21 +311,57 @@ export class JiraLinkageService {
         return null
       }
       
-      // Create Jira integration instance
+      // Create Jira integration instance with project-specific overrides
       const jiraConfig: JiraIntegrationConfig = {
         baseUrl: integration.configuration.baseUrl || credentials.baseUrl,
         email: credentials.email,
         apiToken: credentials.apiToken,
-        defaultProjectKey: integration.configuration.defaultProjectKey,
-        defaultIssueType: config.defaultIssueType,
-        defaultPriority: config.defaultPriority,
-        autoCreateIssues: config.autoCreateIssues,
+        defaultProjectKey: projectSettings?.jira_project_key_override || projectSettings?.jira_project_key || integration.configuration.defaultProjectKey,
+        defaultIssueType: projectSettings?.jira_issue_type_override || config.defaultIssueType,
+        defaultPriority: projectSettings?.jira_priority_override || config.defaultPriority,
+        autoCreateIssues: projectSettings?.jira_auto_create !== undefined ? projectSettings.jira_auto_create : config.autoCreateIssues,
         linkConfluencePages: config.linkConfluencePages
       }
       
+      // Fetch full document details for richer Jira issue creation
+      // Note: template_name, template_framework, and template_category come from templates table (t), not documents (d)
+      const documentResult = await pool.query(
+        `SELECT 
+          d.id, 
+          d.name, 
+          d.project_id, 
+          d.content, 
+          d.status, 
+          d.framework, 
+          d.version, 
+          d.semantic_version,
+          d.word_count, 
+          d.character_count, 
+          d.created_at, 
+          d.updated_at, 
+          d.template_id, 
+          d.metadata, 
+          d.generation_metadata,
+          t.name AS template_name, 
+          t.framework AS template_framework, 
+          t.category AS template_category,
+          p.name AS project_name,
+          cu.email AS created_by_email, 
+          uu.email AS updated_by_email
+         FROM documents d
+         LEFT JOIN templates t ON d.template_id = t.id
+         LEFT JOIN projects p ON d.project_id = p.id
+         LEFT JOIN users cu ON d.created_by = cu.id
+         LEFT JOIN users uu ON d.updated_by = uu.id
+         WHERE d.id = $1`,
+        [documentId]
+      )
+      
+      const document = documentResult.rows.length > 0 ? documentResult.rows[0] : null
+      
       const jiraIntegration = new JiraIntegration(jiraConfig, integration.id)
       
-      // Create or link the issue
+      // Create or link the issue with enhanced document information
       const result = await jiraIntegration.createOrLinkIssueForDocument(
         documentId,
         documentTitle,
@@ -291,15 +369,22 @@ export class JiraLinkageService {
         confluenceUrl,
         issueDescription,
         issueType,
-        priority
+        priority,
+        document // Pass full document metadata
       )
       
       logger.info(`Document ${documentId} linked to Jira issue ${result.issueKey}`)
       return result
-    } catch (error) {
-      logger.error(`Failed to link document ${documentId} to Jira:`, error)
-      // Don't throw - this is a nice-to-have feature
-      return null
+    } catch (error: any) {
+      logger.error(`Failed to link document ${documentId} to Jira:`, {
+        error: error.message,
+        stack: error.stack,
+        documentId,
+        projectId
+      })
+      // Re-throw with context so route handler can provide better error messages
+      const errorMessage = error.message || 'Unknown error'
+      throw new Error(`Failed to link document to Jira: ${errorMessage}`)
     }
   }
 

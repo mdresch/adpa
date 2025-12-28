@@ -6,7 +6,11 @@ export interface IntegrationProvider {
   name: string
   authenticate(): Promise<boolean>
   syncDocuments(): Promise<any[]>
-  uploadDocument(doc: any): Promise<string>
+  uploadDocument(doc: any, projectSettings?: {
+    confluence_enabled?: boolean
+    confluence_space_key_override?: string | null
+    confluence_parent_page_id_override?: string | null
+  }): Promise<string>
   getPermissions(): Promise<any[]>
 }
 
@@ -104,23 +108,62 @@ export class ConfluenceIntegration implements IntegrationProvider {
 
   /**
    * Upload/Export an ADPA document to Confluence
+   * Uses project-specific settings if available, otherwise falls back to integration defaults
    */
-  async uploadDocument(doc: Document): Promise<string> {
+  async uploadDocument(doc: Document, projectSettings?: {
+    confluence_enabled?: boolean
+    confluence_space_key_override?: string | null
+    confluence_parent_page_id_override?: string | null
+  }): Promise<string> {
     try {
       logger.info(`Uploading document ${doc.id} to Confluence...`)
 
-      // Resolve preferred space key: project mapping > integration target
+      // Resolve preferred space key: project settings override > project mapping > integration target
       let spaceKey: string | null = null
+      let parentPageId: string | null = null
+      
       try {
         if (doc.project_id) {
-          const { getByProjectId } = await import('../database/projectIntegrations')
-          const mapping = await getByProjectId(doc.project_id)
-          if (mapping?.confluence_space_key) {
-            spaceKey = mapping.confluence_space_key
+          const { pool } = await import('../database/connection')
+          const settingsResult = await pool.query(
+            `SELECT 
+              confluence_enabled,
+              confluence_space_key_override,
+              confluence_parent_page_id_override,
+              confluence_space_key,
+              confluence_parent_page_id
+             FROM project_integrations 
+             WHERE project_id = $1`,
+            [doc.project_id]
+          )
+          
+          if (settingsResult.rows.length > 0) {
+            const settings = settingsResult.rows[0]
+            
+            // Check if Confluence is enabled for this project
+            if (settings.confluence_enabled === false) {
+              throw new Error("Confluence publishing is disabled for this project. Enable it in Project Settings → Integrations.")
+            }
+            
+            // Use override if available, otherwise use default
+            spaceKey = settings.confluence_space_key_override || settings.confluence_space_key || null
+            parentPageId = settings.confluence_parent_page_id_override || settings.confluence_parent_page_id || null
+          } else {
+            // Fallback to old project_integrations mapping
+            const { getByProjectId } = await import('../database/projectIntegrations')
+            const mapping = await getByProjectId(doc.project_id)
+            if (mapping?.confluence_space_key) {
+              spaceKey = mapping.confluence_space_key
+              parentPageId = mapping.confluence_parent_page_id || null
+            }
           }
         }
-      } catch (e) {
-        logger.warn('Failed to read project integration mapping; falling back to integration target space', e)
+      } catch (e: any) {
+        // If error is about being disabled, re-throw it
+        if (e.message?.includes('disabled')) {
+          throw e
+        }
+        logger.warn('Failed to read project integration settings; falling back to integration target space', e)
       }
 
       if (!spaceKey) {
@@ -128,7 +171,7 @@ export class ConfluenceIntegration implements IntegrationProvider {
       }
 
       if (!spaceKey) {
-        throw new Error("No target space configured (project mapping or integration target_space_key required)")
+        throw new Error("No target space configured (project settings, project mapping, or integration target_space_key required)")
       }
 
       // Convert ADPA document content to Confluence storage format
@@ -165,7 +208,8 @@ export class ConfluenceIntegration implements IntegrationProvider {
           confluencePage = await this.service.createPage(
             spaceKey,
             doc.title,
-            confluenceContent
+            confluenceContent,
+            parentPageId || undefined // Use project-specific parent page if set
           )
           logger.info(`Created new Confluence page: ${confluencePage.id}`)
           // Store sync metadata for future updates

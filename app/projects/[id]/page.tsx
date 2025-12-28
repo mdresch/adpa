@@ -28,6 +28,7 @@ import ProjectFinancialsTab from "@/components/project/ProjectFinancialsTab"
 import { ProjectRisksTab } from "@/components/project/ProjectRisksTab"
 import { ProjectIssuesTab } from "@/components/project/ProjectIssuesTab"
 import { ComplianceSecurityTab } from "./components/ComplianceSecurityTab"
+import { IntegrationsTab } from "./components/IntegrationsTab"
 import { TemplateConflictDialog } from "@/components/document/TemplateConflictDialog"
 import { apiClient, Project, Template } from "@/lib/api"
 import { useAuth } from "@/contexts/AuthContext"
@@ -3486,6 +3487,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
                   <Shield className="h-4 w-4 mr-2" />
                   Compliance & Security
                 </TabsTrigger>
+                <TabsTrigger value="integrations">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Integrations
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="documents" className="space-y-4">
@@ -3584,6 +3589,10 @@ Generate the COMPLETE, DETAILED ${templateContent.title} now. This must be a pro
 
               <TabsContent value="compliance-security" className="space-y-4">
                 <ComplianceSecurityTab projectId={projectId} />
+              </TabsContent>
+
+              <TabsContent value="integrations" className="space-y-4">
+                <IntegrationsTab projectId={projectId} />
               </TabsContent>
             </Tabs>
           </div>

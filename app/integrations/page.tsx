@@ -476,17 +476,24 @@ export default function Integrations() {
       if (jiraIntegration) {
         setExistingJiraIntegration(jiraIntegration)
         const config = jiraIntegration.configuration || {}
-        setJiraConfig(prev => ({
-          ...prev,
-          baseUrl: config.baseUrl || config.base_url || prev.baseUrl,
-          email: "", // Credentials are encrypted and not returned
-          apiToken: "", // Credentials are encrypted and not returned
-          defaultProjectKey: config.defaultProjectKey || config.default_project_key || prev.defaultProjectKey,
-          defaultIssueType: config.defaultIssueType || config.default_issue_type || prev.defaultIssueType,
-          defaultPriority: config.defaultPriority || config.default_priority || prev.defaultPriority,
-          autoCreateIssues: config.autoCreateIssues !== undefined ? config.autoCreateIssues : prev.autoCreateIssues,
-          linkConfluencePages: config.linkConfluencePages !== undefined ? config.linkConfluencePages : prev.linkConfluencePages,
-        }))
+        setJiraConfig(prev => {
+          // Only update fields if backend has actual values (not empty strings)
+          // This preserves user input when scrolling back to the form
+          const newBaseUrl = config.baseUrl || config.base_url
+          const newDefaultProjectKey = config.defaultProjectKey || config.default_project_key
+          return {
+            ...prev,
+            // Only update if backend has a value, otherwise keep user's current input
+            baseUrl: newBaseUrl && newBaseUrl.trim() ? newBaseUrl : prev.baseUrl,
+            email: "", // Credentials are encrypted and not returned
+            apiToken: "", // Credentials are encrypted and not returned
+            defaultProjectKey: newDefaultProjectKey && newDefaultProjectKey.trim() ? newDefaultProjectKey : prev.defaultProjectKey,
+            defaultIssueType: config.defaultIssueType || config.default_issue_type || prev.defaultIssueType,
+            defaultPriority: config.defaultPriority || config.default_priority || prev.defaultPriority,
+            autoCreateIssues: config.autoCreateIssues !== undefined ? config.autoCreateIssues : prev.autoCreateIssues,
+            linkConfluencePages: config.linkConfluencePages !== undefined ? config.linkConfluencePages : prev.linkConfluencePages,
+          }
+        })
       } else {
         setExistingJiraIntegration(null)
       }

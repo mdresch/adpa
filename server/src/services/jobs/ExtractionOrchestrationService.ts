@@ -539,7 +539,6 @@ export class ExtractionOrchestrationService {
   static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
     // Ensure pool is available before creating fallback
-<<<<<<< HEAD
     let db: any
     if (deps?.database) {
       db = deps.database

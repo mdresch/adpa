@@ -484,7 +484,8 @@ Please generate a comprehensive, updated version that incorporates all recent pr
       throw error;
     }
 
-  /**
+  }
+
   /**
    * Detect template conflicts before regeneration
    */

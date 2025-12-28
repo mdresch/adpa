@@ -151,8 +151,11 @@ router.post("/create-issue",
   async (req, res) => {
     const log = childLogger({ requestId: (req as any).requestId })
     
+    // Extract documentId at function scope so it's accessible in catch block
+    const documentId = req.body?.documentId
+    
     try {
-      const { documentId, issueTitle, issueDescription, issueType, priority, confluenceUrl } = req.body
+      const { issueTitle, issueDescription, issueType, priority, confluenceUrl } = req.body
       
       // Check if user has access to the document
       const { pool } = await import("../database/connection")
@@ -180,26 +183,59 @@ router.post("/create-issue",
         return res.status(403).json({ error: "Access denied" })
       }
       
-      // Check if Jira linkage is enabled
-      const config = await jiraLinkageService.getJiraLinkageConfig()
-      if (!config.enabled) {
-        return res.status(400).json({ error: "Jira linkage is not enabled" })
+      // Check project-specific settings first (allows project-level override)
+      const projectSettingsResult = await pool.query(
+        `SELECT jira_enabled, jira_auto_create FROM project_integrations WHERE project_id = $1`,
+        [document.project_id]
+      )
+      
+      let jiraEnabled = false
+      if (projectSettingsResult.rows.length > 0) {
+        const projectSettings = projectSettingsResult.rows[0]
+        // If project has explicit settings, use them
+        if (projectSettings.jira_enabled === false) {
+          return res.status(400).json({ 
+            error: "Jira integration is disabled for this project",
+            details: "Enable it in Project Settings → Integrations"
+          })
+        }
+        if (projectSettings.jira_enabled === true) {
+          jiraEnabled = true
+        }
       }
       
-      // Create or link Jira issue
+      // If no project-specific setting, check global setting
+      if (!jiraEnabled) {
+        const config = await jiraLinkageService.getJiraLinkageConfig()
+        if (!config.enabled) {
+          return res.status(400).json({ 
+            error: "Jira linkage is not enabled",
+            details: "Enable it globally in Settings → Integrations or enable it for this project in Project Settings → Integrations"
+          })
+        }
+        jiraEnabled = true
+      }
+      
+      // Verify a Jira integration exists before attempting to create issue
+      const config = await jiraLinkageService.getJiraLinkageConfig()
+      if (!config.integrationId) {
+        return res.status(400).json({ 
+          error: "No Jira integration configured",
+          details: "Please configure a Jira integration in Settings → Integrations before creating issues. Go to Settings → Integrations and add a Jira integration with valid credentials."
+        })
+      }
+      
+      // Create or link Jira issue (will use project settings if available)
+      // Note: linkDocumentToJira now throws errors instead of returning null
       const result = await jiraLinkageService.linkDocumentToJira(
         documentId,
         issueTitle || document.name,
         document.project_id,
         confluenceUrl,
         issueDescription,
-        issueType,
-        priority
+        issueType || undefined, // Use project settings if not provided
+        priority || undefined   // Use project settings if not provided
       )
-      
-      if (!result) {
-        return res.status(500).json({ error: "Failed to create Jira issue" })
-      }
       
       log.info(`Manually created Jira issue ${result.issueKey} for document ${documentId}`)
       
@@ -209,11 +245,40 @@ router.post("/create-issue",
         issueUrl: result.issueUrl,
         created: result.created
       })
-    } catch (error) {
-      log.error("Failed to create Jira issue:", error)
+    } catch (error: any) {
+      log.error("Failed to create Jira issue:", {
+        error: error.message,
+        stack: error.stack,
+        documentId,
+        userId: req.user?.id
+      })
+      
+      // Provide more specific error messages
+      let errorMessage = "Failed to create Jira issue"
+      let errorDetails = error instanceof Error ? error.message : "Unknown error"
+      
+      // Check for common error types
+      if (error.message?.includes("credentials") || error.message?.includes("authentication")) {
+        errorDetails = "Invalid Jira credentials. Please verify your Jira integration credentials in Settings → Integrations."
+      } else if (error.message?.includes("project") || error.message?.includes("Project")) {
+        errorDetails = "Invalid Jira project key. Please verify the project key in your Jira integration settings."
+      } else if (error.message?.includes("INVALID_INPUT") || error.message?.includes("400")) {
+        errorDetails = "Invalid input to Jira API. This may be due to invalid issue type, priority, or other field values."
+      } else if (error.message?.includes("401") || error.message?.includes("403")) {
+        errorDetails = "Jira authentication failed. Please verify your API token and email in Settings → Integrations."
+      } else if (error.message?.includes("404")) {
+        errorDetails = "Jira project or resource not found. Please verify the project key and Jira instance URL."
+      } else if (error.message?.includes("network") || error.message?.includes("ECONNREFUSED")) {
+        errorDetails = "Network error connecting to Jira. Please verify the Jira instance URL is correct and accessible."
+      }
+      
       res.status(500).json({ 
-        error: "Failed to create Jira issue",
-        details: error instanceof Error ? error.message : "Unknown error"
+        error: errorMessage,
+        details: errorDetails,
+        ...(process.env.NODE_ENV === 'development' && { 
+          originalError: error.message,
+          stack: error.stack 
+        })
       })
     }
   }

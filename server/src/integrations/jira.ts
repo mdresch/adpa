@@ -43,7 +43,7 @@ export class JiraIntegration implements IntegrationProvider {
     return []
   }
 
-  async uploadDocument(doc: Document): Promise<string> {
+  async uploadDocument(doc: Document, projectSettings?: any): Promise<string> {
     // Not applicable for Jira
     throw new Error("Jira integration doesn't support document upload")
   }
@@ -72,7 +72,31 @@ export class JiraIntegration implements IntegrationProvider {
     confluenceUrl?: string,
     issueDescription?: string,
     issueType?: string,
-    priority?: string
+    priority?: string,
+    documentMetadata?: {
+      id?: string
+      name?: string
+      status?: string
+      framework?: string
+      version?: number
+      semantic_version?: string
+      word_count?: number
+      character_count?: number
+      created_at?: string
+      updated_at?: string
+      template_id?: string
+      template_name?: string
+      template_framework?: string
+      template_category?: string
+      metadata?: any
+      generation_metadata?: any
+      confluence_page_url?: string
+      created_by?: string
+      updated_by?: string
+      project_name?: string
+      created_by_email?: string
+      updated_by_email?: string
+    }
   ): Promise<{ issueKey: string; issueUrl: string; created: boolean }> {
     try {
       const projectKey = this.config.defaultProjectKey
@@ -91,14 +115,27 @@ export class JiraIntegration implements IntegrationProvider {
           throw new Error("Auto-create issues is disabled. No existing issue found and creation is not allowed.")
         }
         
+        // Build enhanced description with document metadata
+        const enhancedDescription = this.buildEnhancedDescription(
+          documentId,
+          documentTitle,
+          projectId,
+          issueDescription,
+          confluenceUrl,
+          documentMetadata
+        )
+        
+        // Build labels based on document properties
+        const labels = this.buildLabels(documentMetadata)
+        
         // Create a new issue
         const createRequest: CreateJiraIssueRequest = {
           summary: `Document: ${documentTitle}`,
-          description: issueDescription || `Generated document from ADPA project.\n\nDocument ID: ${documentId}\nProject ID: ${projectId}`,
+          description: enhancedDescription,
           issueType: issueType || this.config.defaultIssueType || "Task",
           projectKey: projectKey,
           priority: priority || this.config.defaultPriority,
-          labels: ["adpa-generated", "document"]
+          labels: labels
         }
 
         issue = await this.service.createIssue(createRequest)
@@ -122,6 +159,20 @@ export class JiraIntegration implements IntegrationProvider {
         }
       }
 
+      // Add ADPA document link as remote link
+      try {
+        const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000'
+        const adpaDocumentUrl = `${frontendUrl}/projects/${projectId}/documents/${documentId}/view`
+        await this.service.addRemoteLink(
+          issue.key,
+          adpaDocumentUrl,
+          `ADPA Document: ${documentTitle}`
+        )
+        logger.info(`Added ADPA document link to Jira issue ${issue.key}`)
+      } catch (linkError) {
+        logger.warn(`Failed to add ADPA document link to Jira issue ${issue.key}:`, linkError)
+      }
+
       // Store the linkage in our database
       await this.storeLinkage(documentId, issue.key, issue.url, projectId)
 
@@ -134,6 +185,204 @@ export class JiraIntegration implements IntegrationProvider {
       logger.error(`Failed to create/link Jira issue for document ${documentId}:`, error)
       throw error
     }
+  }
+
+  /**
+   * Build enhanced ADF description with document metadata
+   */
+  private buildEnhancedDescription(
+    documentId: string,
+    documentTitle: string,
+    projectId: string,
+    customDescription?: string,
+    confluenceUrl?: string,
+    documentMetadata?: any
+  ): any { // Returns ADF (Atlassian Document Format)
+    const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3000'
+    const adpaDocumentUrl = `${frontendUrl}/projects/${projectId}/documents/${documentId}/view`
+
+    const content: any[] = []
+
+    // Original description if provided
+    if (customDescription) {
+      content.push({
+        type: "paragraph",
+        content: [{ type: "text", text: customDescription }]
+      })
+      content.push({ type: "paragraph", content: [] }) // Empty line
+    }
+
+    content.push({
+      type: "paragraph",
+      content: [{ type: "text", text: "Generated document from ADPA (Advanced Document Processing & Automation) platform." }]
+    })
+    content.push({ type: "paragraph", content: [] })
+
+    // Document Details
+    content.push({
+      type: "heading",
+      attrs: { level: 3 },
+      content: [{ type: "text", text: "Document Details" }]
+    })
+    content.push({
+      type: "bulletList",
+      content: [
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Title: ${documentTitle}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `ID: ${documentId}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Project: ${documentMetadata?.project_name || projectId}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Status: ${documentMetadata?.status || 'N/A'}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Framework: ${documentMetadata?.framework || 'N/A'}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Version: ${documentMetadata?.semantic_version || documentMetadata?.version || 'N/A'}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Word Count: ${documentMetadata?.word_count || 'N/A'}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Character Count: ${documentMetadata?.character_count || 'N/A'}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Created: ${documentMetadata?.created_at ? new Date(documentMetadata.created_at).toLocaleString() : 'N/A'} by ${documentMetadata?.created_by_email || 'N/A'}` }] }]
+        },
+        {
+          type: "listItem",
+          content: [{ type: "paragraph", content: [{ type: "text", text: `Last Updated: ${documentMetadata?.updated_at ? new Date(documentMetadata.updated_at).toLocaleString() : 'N/A'} by ${documentMetadata?.updated_by_email || 'N/A'}` }] }]
+        },
+      ]
+    })
+    content.push({ type: "paragraph", content: [] })
+
+    // Links
+    content.push({
+      type: "heading",
+      attrs: { level: 3 },
+      content: [{ type: "text", text: "Links" }]
+    })
+    content.push({
+      type: "bulletList",
+      content: [
+        {
+          type: "listItem",
+          content: [{
+            type: "paragraph",
+            content: [
+              { type: "text", text: "View in ADPA: " },
+              {
+                type: "link",
+                attrs: { href: adpaDocumentUrl },
+                content: [{ type: "text", text: documentTitle }]
+              }
+            ]
+          }]
+        },
+      ]
+    })
+
+    if (confluenceUrl) {
+      content[content.length - 1].content.push({
+        type: "listItem",
+        content: [{
+          type: "paragraph",
+          content: [
+            { type: "text", text: "View in Confluence: " },
+            {
+              type: "link",
+              attrs: { href: confluenceUrl },
+              content: [{ type: "text", text: documentTitle }]
+            }
+          ]
+        }]
+      })
+    }
+    content.push({ type: "paragraph", content: [] })
+
+    // AI Generation Metadata (if available)
+    if (documentMetadata?.generation_metadata) {
+      const genMetadata = documentMetadata.generation_metadata
+      content.push({
+        type: "heading",
+        attrs: { level: 3 },
+        content: [{ type: "text", text: "AI Generation Details" }]
+      })
+      content.push({
+        type: "bulletList",
+        content: [
+          {
+            type: "listItem",
+            content: [{ type: "paragraph", content: [{ type: "text", text: `AI Provider: ${genMetadata.ai_provider || 'N/A'}` }] }]
+          },
+          {
+            type: "listItem",
+            content: [{ type: "paragraph", content: [{ type: "text", text: `Model: ${genMetadata.model || 'N/A'}` }] }]
+          },
+          {
+            type: "listItem",
+            content: [{ type: "paragraph", content: [{ type: "text", text: `Compliance Rating: ${genMetadata.overallComplianceRating || 'N/A'}` }] }]
+          },
+        ]
+      })
+      content.push({ type: "paragraph", content: [] })
+    }
+
+    return {
+      type: "doc",
+      version: 1,
+      content: content
+    }
+  }
+
+  /**
+   * Build labels based on document properties
+   */
+  private buildLabels(documentMetadata?: any): string[] {
+    const labels = ["adpa-generated", "document"]
+    
+    if (documentMetadata) {
+      // Framework labels
+      if (documentMetadata.framework) {
+        const frameworkLabel = documentMetadata.framework.toLowerCase().replace(/\s+/g, '-')
+        labels.push(frameworkLabel)
+      }
+      
+      // Status labels
+      if (documentMetadata.status) {
+        const statusLabel = documentMetadata.status.toLowerCase().replace(/\s+/g, '-')
+        labels.push(`status-${statusLabel}`)
+      }
+      
+      // Template category labels
+      if (documentMetadata.template_category) {
+        const categoryLabel = documentMetadata.template_category.toLowerCase().replace(/\s+/g, '-')
+        labels.push(`template-${categoryLabel}`)
+      }
+      
+      // Template framework labels
+      if (documentMetadata.template_framework) {
+        const templateFrameworkLabel = documentMetadata.template_framework.toLowerCase().replace(/\s+/g, '-')
+        labels.push(`template-${templateFrameworkLabel}`)
+      }
+    }
+    
+    return labels
   }
 
   /**

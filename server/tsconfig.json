@@ -71,7 +71,13 @@
     "node_modules",
     "dist",
     "**/*.test.ts",
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "src/**/examples/**",
+    "src/**/__tests__/**",
+    "src/**/tests/**",
+    "src/modules/**/examples/**",
+    "src/modules/**/__tests__/**",
+    "src/modules/**/tests/**"
   ],
   "ts-node": {
     "transpileOnly": true

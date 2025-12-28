@@ -97,21 +97,13 @@ class DocumentGenerationService {
           const { queueService } = await import('./queueService')
           const title = `${project.name} - ${template?.name || 'Generated Document'}`
           // Attempt to get a documentId if saved downstream; if available upstream, include it
-          let documentId: string | undefined
-          try {
-            const res = await pool.query('SELECT id FROM documents WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1', [request.projectId])
-            documentId = res.rows?.[0]?.id
-          } catch {}
-          await queueService.addJob('publish-to-confluence', {
-            projectId: request.projectId,
-            title,
-            markdown,
-            userId: request.userId,
-            documentId,
-          })
+          // Note: Confluence publishing is now handled by direct auto-integration
+          // in the document creation/update endpoints (documents.ts and projects.ts)
+          // This ensures immediate publishing without requiring a separate job queue
+          logger.debug('[PUBLISH-CONFLUENCE] Skipping queue-based publish - using direct auto-integration instead')
         }
       } catch (e) {
-        logger.warn('[PUBLISH-CONFLUENCE] enqueue failed or mapping missing', e)
+        logger.warn('[PUBLISH-CONFLUENCE] Integration check failed', e)
       }
 
       // 7. Return structured result

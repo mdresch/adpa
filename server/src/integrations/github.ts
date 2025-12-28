@@ -115,7 +115,7 @@ export class GitHubIntegration implements IntegrationProvider {
   /**
    * Upload/commit a document to GitHub
    */
-  async uploadDocument(doc: Document): Promise<string> {
+  async uploadDocument(doc: Document, projectSettings?: any): Promise<string> {
     try {
       logger.info(`Uploading document ${doc.title} to GitHub`)
 

@@ -4233,12 +4233,25 @@ Output valid JSON object with "performance_actuals" array only.`
     }
 
 
+    // Reject strings that are just years (e.g., "2026", "2027") without month/day
+    // These cause PostgreSQL errors when inserted as dates
+    const yearOnlyMatch = trimmed.match(/^\d{4}$/)
+    if (yearOnlyMatch) {
+      const year = parseInt(yearOnlyMatch[0], 10)
+      if (year >= 1900 && year <= 2100) {
+        logger.debug(`[EXTRACTION] Rejecting year-only date "${value}", storing as null`)
+        return null
+      }
+    }
+
     // Attempt to parse other date formats using Date.parse
     const parsed = Date.parse(trimmed)
     if (!Number.isNaN(parsed)) {
       const date = new Date(parsed)
-      if (isValidDate(date.toISOString().split('T')[0])) {
-        return date.toISOString().split('T')[0]
+      const isoString = date.toISOString().split('T')[0]
+      // Double-check: ensure the parsed date is valid YYYY-MM-DD format
+      if (isValidDate(isoString)) {
+        return isoString
       }
     }
 
@@ -5617,12 +5630,15 @@ Output valid JSON object with "performance_actuals" array only.`
       
       // Convert quarter dates like '2025-Q4' to actual dates using utility function
       // due_date is NOT NULL, so provide a default date if missing (1 year from now)
-      let dueDate = convertQuarterDate(m.due_date)
-      if (!dueDate) {
-        // Default to 1 year from now if no date provided
+      let dueDate = this.normalizeDate(m.due_date)
+      if (!dueDate || !isValidDate(dueDate)) {
+        // Default to 1 year from now if no date provided or invalid
         const defaultDate = new Date()
         defaultDate.setFullYear(defaultDate.getFullYear() + 1)
         dueDate = defaultDate.toISOString().split('T')[0]
+        if (m.due_date) {
+          logger.warn(`[EXTRACTION] Milestone "${m.name}" has invalid due_date: ${m.due_date}, using default (1 year from now)`)
+        }
       }
       
       // Map AI status values to database CHECK constraint values
@@ -6613,7 +6629,15 @@ Output valid JSON object with "performance_actuals" array only.`
       
       // Validate and parse due_date using the enhanced normalizeDate function
       // This handles formats like "Mar 15, 2026 (prototype approval)", "Jan 2026", etc.
-      const parsedDueDate = this.normalizeDate(d.due_date)
+      let parsedDueDate = this.normalizeDate(d.due_date)
+      
+      // Double-check: ensure parsed date is valid YYYY-MM-DD format before database insertion
+      // This prevents invalid strings like "2026" from being passed to PostgreSQL
+      if (parsedDueDate && !isValidDate(parsedDueDate)) {
+        logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid parsed due_date: ${parsedDueDate} (original: ${d.due_date}), setting to null`)
+        parsedDueDate = null
+      }
+      
       if (d.due_date && !parsedDueDate) {
         logger.warn(`[EXTRACTION] Deliverable "${d.name}" has invalid due_date: ${d.due_date}, setting to null`)
       }
@@ -6824,8 +6848,18 @@ Output valid JSON object with "performance_actuals" array only.`
       const mappedStatus = statusMap[(a.status || 'not_started').toLowerCase()] || 'not_started'
       
       // Parse and validate dates (handle quarter formats like "Q1 2026")
-      const startDate = a.start_date ? convertQuarterDate(a.start_date) : null
-      const endDate = a.end_date ? convertQuarterDate(a.end_date) : null
+      let startDate = a.start_date ? this.normalizeDate(a.start_date) : null
+      let endDate = a.end_date ? this.normalizeDate(a.end_date) : null
+      
+      // Validate parsed dates - ensure they're valid YYYY-MM-DD format
+      if (startDate && !isValidDate(startDate)) {
+        logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid start_date: ${startDate} (original: ${a.start_date}), setting to null`)
+        startDate = null
+      }
+      if (endDate && !isValidDate(endDate)) {
+        logger.warn(`[EXTRACTION] Activity "${a.name}" has invalid end_date: ${endDate} (original: ${a.end_date}), setting to null`)
+        endDate = null
+      }
       
       // Resolve source_document_id
       const sourceDocumentId = (a as any).source_document_id || null

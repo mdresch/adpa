@@ -308,18 +308,18 @@ export class OpenAIConnector {
       model: openai(request.model),
       messages: request.messages as any, // Cast to any to avoid strict type checks on role
       temperature: request.temperature,
-      maxTokens: request.max_tokens,
+      maxOutputTokens: request.max_tokens, // updated for LanguageModelV2
       topP: request.top_p,
       frequencyPenalty: request.frequency_penalty,
       presencePenalty: request.presence_penalty,
       stopSequences: typeof request.stop === 'string' ? [request.stop] : request.stop,
-    })
+    } as any)
 
     // Normalize usage
     const usage = {
-      prompt_tokens: result.usage.promptTokens,
-      completion_tokens: result.usage.completionTokens,
-      total_tokens: result.usage.totalTokens
+      prompt_tokens: (result as any)?.usage?.promptTokens ?? 0,
+      completion_tokens: (result as any)?.usage?.completionTokens ?? 0,
+      total_tokens: (result as any)?.usage?.totalTokens ?? ((result as any)?.usage?.promptTokens ?? 0) + ((result as any)?.usage?.completionTokens ?? 0)
     }
 
     return {

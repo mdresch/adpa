@@ -42,6 +42,7 @@ import { useDocumentRegeneration } from "@/hooks/use-document-regeneration"
 import { useDriftDetection } from "@/hooks/use-drift-detection"
 import { DriftAlertBanner } from "@/components/drift/DriftAlertBanner"
 import { DriftResolutionDialog } from "@/components/drift/DriftResolutionDialog"
+import { GenerateUXDocumentationDialog } from "@/app/documents/components/GenerateUXDocumentationDialog"
 // @ts-ignore
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 // @ts-ignore
@@ -107,6 +108,7 @@ export default function DocumentViewerPage() {
   const [fontSize, setFontSize] = useState<'sm' | 'base' | 'lg' | 'xl'>('base')
   const [lineHeight, setLineHeight] = useState<'tight' | 'normal' | 'relaxed'>('normal')
   const [showRegenerateModal, setShowRegenerateModal] = useState(false)
+  const [showGenerateUXDialog, setShowGenerateUXDialog] = useState(false)
 
   // Document regeneration hook
   const { regenerate, progress, isRegenerating, error: regenerationError, result, reset: resetRegeneration } = useDocumentRegeneration()
@@ -844,15 +846,23 @@ ${doc.content}
                       <Edit className="h-4 w-4" />
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowRegenerateModal(true)}
-                      disabled={isRegenerating}
-                    >
-                      <Sparkles className="h-4 w-4 mr-2" />
-                      Create new Version
-                    </Button>
-                    <div className="relative group">
+                     variant="outline"
+                     size="sm"
+                     onClick={() => setShowRegenerateModal(true)}
+                     disabled={isRegenerating}
+                   >
+                     <Sparkles className="h-4 w-4 mr-2" />
+                     Create new Version
+                   </Button>
+                   <Button
+                     variant="default"
+                     size="sm"
+                     onClick={() => setShowGenerateUXDialog(true)}
+                   >
+                     <Sparkles className="h-4 w-4 mr-2" />
+                     Generate UX Documentation
+                   </Button>
+                   <div className="relative group">
                       <Button variant="outline" size="sm">
                         <Download className="h-4 w-4" />
                       </Button>
@@ -1292,6 +1302,17 @@ ${doc.content}
         isLoading={isResolving}
         onStrategyChange={onStrategyChange}
         selectedStrategy={selectedStrategy}
+      />
+
+      {/* ⭐ Generate UX Documentation Dialog */}
+      <GenerateUXDocumentationDialog
+        open={showGenerateUXDialog}
+        onOpenChange={setShowGenerateUXDialog}
+        projectId={document?.project_id}
+        onSuccess={() => {
+          // Refresh document or show a toast as needed
+          fetchDocument()
+        }}
       />
     </div>
   )
