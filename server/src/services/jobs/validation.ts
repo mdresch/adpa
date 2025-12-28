@@ -115,6 +115,16 @@ export const pipelineProcessingJobDataSchema = baseJobDataSchema.keys({
 })
 
 /**
+ * Publish to Confluence Job Data Schema
+ */
+export const publishToConfluenceJobDataSchema = baseJobDataSchema.keys({
+  documentId: Joi.string().uuid().optional(),
+  projectId: Joi.string().uuid().required(),
+  title: Joi.string().required(),
+  markdown: Joi.string().required(),
+})
+
+/**
  * Map of job types to their validation schemas
  */
 const jobTypeSchemaMap: Record<JobType, Joi.ObjectSchema> = {
@@ -126,6 +136,7 @@ const jobTypeSchemaMap: Record<JobType, Joi.ObjectSchema> = {
   'document-regeneration': documentRegenerationJobDataSchema,
   'quality-audit': qualityAuditJobDataSchema,
   'pipeline-processing': pipelineProcessingJobDataSchema,
+  'publish-to-confluence': publishToConfluenceJobDataSchema,
 }
 
 /**

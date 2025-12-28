@@ -21,6 +21,7 @@ export type JobType =
   | 'document-regeneration'
   | 'quality-audit'
   | 'pipeline-processing'
+  | 'publish-to-confluence'
 
 /**
  * Base Job Data
@@ -127,6 +128,16 @@ export interface PipelineProcessingJobData extends BaseJobData {
 }
 
 /**
+ * Publish to Confluence Job Data
+ */
+export interface PublishToConfluenceJobData extends BaseJobData {
+  documentId?: string
+  projectId: string
+  title: string
+  markdown: string
+}
+
+/**
  * Union type for all job data types
  */
 export type JobData =
@@ -138,6 +149,7 @@ export type JobData =
   | DocumentRegenerationJobData
   | QualityAuditJobData
   | PipelineProcessingJobData
+  | PublishToConfluenceJobData
 
 /**
  * Bull Queue Job Options
@@ -173,6 +185,7 @@ export type QueueName =
   | 'document-regeneration'
   | 'quality-audit'
   | 'project-data-extraction'
+  | 'confluence-publishing'
 
 /**
  * Type guard to check if data matches a specific job type
@@ -207,6 +220,10 @@ export function isQualityAuditJobData(data: JobData): data is QualityAuditJobDat
 
 export function isPipelineProcessingJobData(data: JobData): data is PipelineProcessingJobData {
   return 'requestId' in data && 'templateId' in data && 'projectId' in data
+}
+
+export function isPublishToConfluenceJobData(data: JobData): data is PublishToConfluenceJobData {
+  return 'projectId' in data && 'title' in data && 'markdown' in data
 }
 
 
