@@ -10,57 +10,13 @@ import { ConfluenceService, type ConfluenceConfig } from '../services/confluence
 const router = express.Router()
 
 // GET /api/projects/:id/integrations
-router.get(
-  '/:id/integrations',
-  authenticateToken,
-  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
-  async (req, res) => {
-    const log = childLogger({ requestId: (req as any).requestId })
-    try {
-      const { id } = req.params
-      const integration = await getByProjectId(id)
-      res.json({ project_id: id, integration })
-    } catch (error) {
-      log.error('Get project integrations failed', error)
-      res.status(500).json({ error: 'Internal server error' })
-    }
-  }
-)
+// NOTE: This route has been REMOVED and replaced by GET /api/projects/:projectId/integrations in projectSettings.ts
+// The new route includes proper access control and returns the enhanced nested structure (confluence/jira objects).
 
 // PUT /api/projects/:id/integrations (upsert)
-router.put(
-  '/:id/integrations',
-  authenticateToken,
-  requirePermission('integrations.update'),
-  validateParams(Joi.object({ id: Joi.string().uuid().required() })),
-  validate(
-    Joi.object({
-      jira_project_key: Joi.string().allow('', null).optional(),
-      jira_issue_type_default: Joi.string().allow('', null).optional(),
-      confluence_space_key: Joi.string().allow('', null).optional(),
-      confluence_parent_page_id: Joi.string().allow('', null).optional(),
-    })
-  ),
-  async (req, res) => {
-    const log = childLogger({ requestId: (req as any).requestId })
-    try {
-      const { id } = req.params
-      const body = req.body || {}
-      const input: UpsertInput = {
-        project_id: id,
-        jira_project_key: body.jira_project_key ?? null,
-        jira_issue_type_default: body.jira_issue_type_default ?? null,
-        confluence_space_key: body.confluence_space_key ?? null,
-        confluence_parent_page_id: body.confluence_parent_page_id ?? null,
-      }
-      const saved = await upsert(input)
-      res.json({ message: 'Project integrations updated', integration: saved })
-    } catch (error) {
-      log.error('Update project integrations failed', error)
-      res.status(500).json({ error: 'Internal server error' })
-    }
-  }
-)
+// NOTE: This route has been REMOVED and replaced by PUT /api/projects/:projectId/integrations in projectSettings.ts
+// The new route supports the enhanced per-project integration settings with nested structure (confluence/jira objects).
+// If you need the old flat structure, use the new route with the nested format instead.
 
 // POST /api/projects/:id/integrations/test
 // Enhanced validation test: validate mapping, DB connectivity, and Confluence space lookup (if credentials available)

@@ -275,6 +275,26 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
 
     const realIntegrationId = integration.id
     const confluenceIntegration = new ConfluenceIntegration(integration.config, realIntegrationId)
+    
+    // Get project settings to pass to uploadDocument
+    let projectSettings: any = null
+    try {
+      const settingsResult = await pool.query(
+        `SELECT 
+          confluence_enabled,
+          confluence_space_key_override,
+          confluence_parent_page_id_override
+         FROM project_integrations 
+         WHERE project_id = $1`,
+        [document.project_id]
+      )
+      if (settingsResult.rows.length > 0) {
+        projectSettings = settingsResult.rows[0]
+      }
+    } catch (e) {
+      log.warn('Failed to read project Confluence settings, using defaults', e)
+    }
+    
     const confluenceUrl = await confluenceIntegration.uploadDocument({
       id: document.id,
       title: document.name,
@@ -282,7 +302,7 @@ router.post("/:integrationId/export", async (req: Request, res: Response) => {
       project_id: document.project_id,
       framework: document.framework,
       status: document.status,
-    })
+    }, projectSettings || undefined)
 
     res.json({
       success: true,

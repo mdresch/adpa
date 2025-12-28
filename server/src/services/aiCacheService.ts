@@ -22,9 +22,12 @@ export class AICacheService {
     aiProvider?: string,
     aiModel?: string
   ): string {
+    // Ensure documentContent is a string (handle undefined/null)
+    const safeContent = documentContent || ''
+    
     // Hash the document content (same documents = same hash)
     const contentHash = createHash('sha256')
-      .update(documentContent)
+      .update(safeContent)
       .digest('hex')
       .substring(0, 16) // First 16 chars for brevity
 
@@ -45,7 +48,13 @@ export class AICacheService {
     aiModel?: string
   ): Promise<any[] | null> {
     try {
-      const cacheKey = this.generateCacheKey(projectId, documentContent, entityType, aiProvider, aiModel)
+      // Validate inputs
+      if (!projectId || !entityType) {
+        logger.debug('[AI-CACHE] Invalid cache parameters, skipping cache', { projectId, entityType })
+        return null
+      }
+      
+      const cacheKey = this.generateCacheKey(projectId, documentContent || '', entityType, aiProvider, aiModel)
       
       const cached = await redis.get(cacheKey)
       

@@ -27,7 +27,9 @@
     "migrate:021": "node scripts/migrate-single.js 021",
     "migrate:030": "node scripts/migrate-030-heartbeats.js",
     "migrate:031": "node scripts/migrate-031-system-metrics.js",
+    "migrate:058": "node scripts/run-migration-058.js",
     "migrate:361": "node scripts/run-migration-361.ts",
+    "migrate:401": "node scripts/run-migration-401.js",
     "check-db": "node scripts/check-database-schema.js",
     "fix-stakeholders": "node scripts/run-stakeholders-fix.ts",
     "clear-failed-jobs": "node scripts/clean-stuck-database-jobs.ts"

@@ -173,6 +173,19 @@ router.post("/",
         [id, name, type, JSON.stringify(configuration), encryptedCredentials, is_active, req.user?.id]
       )
 
+      // If this is a Jira integration and it's active, automatically configure Jira linkage
+      if (type === 'jira' && is_active) {
+        try {
+          const { jiraLinkageService } = await import('../services/jiraLinkageService')
+          await jiraLinkageService.setDefaultJiraIntegration(id, req.user?.email || req.user?.id || 'system')
+          await jiraLinkageService.setJiraLinkageEnabled(true, req.user?.email || req.user?.id || 'system')
+          log.info(`Auto-configured Jira linkage for new integration: ${id}`)
+        } catch (jiraError) {
+          log.warn(`Failed to auto-configure Jira linkage: ${jiraError instanceof Error ? jiraError.message : 'Unknown error'}`)
+          // Don't fail the integration creation if linkage config fails
+        }
+      }
+
   log.info(`Integration created: ${name} (${type}) by ${req.user?.email}`)
 
       res.status(201).json({
@@ -204,15 +217,19 @@ router.put("/:id",
       const { id } = req.params
       const { name, configuration, credentials, is_active } = req.body
 
-      // Check if integration exists
+      // Check if integration exists and get its current state
       const existingIntegration = await pool.query(
-        "SELECT name FROM integrations WHERE id = $1",
+        "SELECT name, type, is_active FROM integrations WHERE id = $1",
         [id]
       )
 
       if (existingIntegration.rows.length === 0) {
         return res.status(404).json({ error: "Integration not found" })
       }
+
+      const existingType = existingIntegration.rows[0]?.type
+      const existingIsActive = existingIntegration.rows[0]?.is_active
+      const newIsActive = is_active !== undefined ? is_active : existingIsActive
 
       // Check if name is already taken by another integration
       if (name) {
@@ -251,6 +268,29 @@ router.put("/:id",
           id,
         ]
       )
+
+      // If this is a Jira integration, update Jira linkage settings
+      if (existingType === 'jira') {
+        try {
+          const { jiraLinkageService } = await import('../services/jiraLinkageService')
+          if (newIsActive) {
+            // If integration is now active, set it as default and enable linkage
+            await jiraLinkageService.setDefaultJiraIntegration(id, req.user?.email || req.user?.id || 'system')
+            await jiraLinkageService.setJiraLinkageEnabled(true, req.user?.email || req.user?.id || 'system')
+            log.info(`Auto-configured Jira linkage for updated integration: ${id}`)
+          } else {
+            // If integration is now inactive, check if it's the default and disable linkage if so
+            const config = await jiraLinkageService.getJiraLinkageConfig()
+            if (config.integrationId === id) {
+              await jiraLinkageService.setJiraLinkageEnabled(false, req.user?.email || req.user?.id || 'system')
+              log.info(`Disabled Jira linkage because default integration ${id} was deactivated`)
+            }
+          }
+        } catch (jiraError) {
+          log.warn(`Failed to update Jira linkage config: ${jiraError instanceof Error ? jiraError.message : 'Unknown error'}`)
+          // Don't fail the integration update if linkage config fails
+        }
+      }
 
     log.info(`Integration updated: ${id} by ${req.user?.email}`)
 
