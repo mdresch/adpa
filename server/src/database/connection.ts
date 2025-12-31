@@ -58,7 +58,7 @@ const createPool = (host: string) => {
       // - Disable cert validation for Supabase (trusted provider)
       // - For custom databases, enable validation unless explicitly disabled
       ssl: buildSslConfig(databaseUrl),
-      max: 20,
+      max: 50,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
     })
@@ -71,7 +71,7 @@ const createPool = (host: string) => {
     database: process.env.DB_NAME || "adpa_db",
     user: process.env.DB_USER || "postgres",
     password: process.env.DB_PASSWORD || "password",
-    max: 20,
+    max: 50,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000, // Reduced to 10 seconds per attempt for Railway
     // SSL configuration for Supabase and other cloud providers
@@ -81,6 +81,22 @@ const createPool = (host: string) => {
 }
 
 let pool: Pool | null = null // Initialize lazily to prevent hanging on module load
+
+function patchPoolQuery(p: Pool) {
+  try {
+    const orig = (p as any).query.bind(p)
+    ;(p as any).query = async (text: any, params?: any) => {
+      try {
+        return await orig(text, params)
+      } catch (err: any) {
+        logger.error('[DB-GUARD] Unhandled pool.query error', { sql: text, params, message: err?.message })
+        return null
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+}
 
 export function getDatabasePool(): Pool {
   if (!pool) {
@@ -101,7 +117,7 @@ export async function connectDatabase() {
     // This allows us to force IPv4 by explicitly setting the family option
     let poolConfig: PoolConfig & { family?: number } = {
       ssl: buildSslConfig(databaseUrl),
-      max: 20,
+      max: 50,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 30000,
     }
@@ -175,7 +191,7 @@ export async function connectDatabase() {
           user: dbUrl.username,
           password: dbUrl.password,
           ssl: buildSslConfig(databaseUrl),
-          max: 20,
+          max: 50,
           idleTimeoutMillis: 30000,
           connectionTimeoutMillis: 30000,
         }
@@ -205,7 +221,49 @@ export async function connectDatabase() {
       client.release()
       
       pool = testPool
+      // Patch pool.query to avoid unhandled promise rejections from direct calls
+      try { patchPoolQuery(pool) } catch (e) {}
       logger.info(`✅ Database connected successfully via DATABASE_URL`)
+
+      // Diagnostic: estimate expected queue concurrency by scanning queueService.ts
+      try {
+        const fs = await import('fs')
+        const path = await import('path')
+        const queueFile = path.resolve(__dirname, '..', 'services', 'queueService.ts')
+        if (fs.existsSync(queueFile)) {
+          const content = fs.readFileSync(queueFile, 'utf8')
+          // Match .process(<name>, <concurrency>, ...) where name can be quoted or template literal
+          const processCallRegex = /\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*(\d+)/g
+          let match
+          let total = 0
+          let found = 0
+          while ((match = processCallRegex.exec(content)) !== null) {
+            const c = parseInt(match[1], 10)
+            if (!Number.isNaN(c)) {
+              total += c
+              found++
+            }
+          }
+
+          // Also count .process calls without explicit concurrency => default 1
+          const processNoConcurrencyRegex = /\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*async|\.process\(\s*(?:[`'"])[^`'"`]+(?:[`'"`])\s*,\s*\(/g
+          const noConcurMatches = content.match(processNoConcurrencyRegex)
+          const noConcurCount = noConcurMatches ? noConcurMatches.length : 0
+
+          const expectedConcurrency = total + noConcurCount
+
+          const poolMax = (pool as any)?.options?.max || Number(process.env.PG_MAX) || 20
+
+          if (expectedConcurrency && poolMax < expectedConcurrency) {
+            logger.warn(`[DB-CONCURRENCY] Pool max (${poolMax}) is less than estimated queue concurrency (${expectedConcurrency}).`)
+            logger.warn('  Suggestion: reduce per-queue concurrency, split workers, or increase pool max in connection.ts or via env PG_MAX.')
+          } else {
+            logger.info(`[DB-CONCURRENCY] Pool max (${poolMax}) >= estimated queue concurrency (${expectedConcurrency}).`)
+          }
+        }
+      } catch (diagErr) {
+        logger.debug('Could not run DB concurrency diagnostic', { error: (diagErr as any).message })
+      }
       return
     } catch (error) {
       console.error(`❌ DATABASE_URL connection error:`, error)
@@ -252,6 +310,7 @@ export async function connectDatabase() {
         
         // If successful, update the global pool and return
         pool = testPool
+        try { patchPoolQuery(pool) } catch (e) {}
         logger.info(`Database connection established successfully via ${method.description}`)
         return
       } catch (error) {

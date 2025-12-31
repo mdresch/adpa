@@ -619,12 +619,13 @@ export class ExtractionOrchestrationService {
         ; (job.data as ExtendedExtractionJobData).domains = selectedDomains
         ; (job.data as ExtendedExtractionJobData).domainRunIds = domainRunIds
 
-      // Dynamically import extractionQueue to avoid circular dependency
-      const { extractionQueue } = await import('../queueService')
+      // Use queue service to persist DB rows and create child jobs with canonical UUID jobIds
+      const { addJob, getQueueService } = await import('../queueService')
+      const queueSvc = getQueueService()
 
-      // Create child jobs for each entity type (resilient, independent extraction)
-      const childJobPromises = entityTypesForRun.map((entityType, index) => {
-        return extractionQueue.add(`extract-entity-${entityType}`, {
+      // Create child jobs for each entity type via QueueService.addJob (creates DB row + enqueues)
+      const childJobPromises = entityTypesForRun.map(async (entityType, index) => {
+        const jobData = {
           parentJobId: jobId,
           projectId,
           userId,
@@ -634,16 +635,26 @@ export class ExtractionOrchestrationService {
           entityType,
           entityIndex: index,
           totalEntities: entityTypesForRun.length
-        }, {
-          attempts: 3, // Retry each entity extraction up to 3 times
-          backoff: {
-            type: 'exponential',
-            delay: 5000 // Start with 5s delay
-          }
+        }
+
+        // addJob will insert a DB row and enqueue with jobId set to the inserted UUID
+        const childJobId = await addJob(`extract-entity-${entityType}` as any, jobData, {
+          attempts: 3,
+          backoff: { type: 'exponential', delay: 5000 }
         })
+
+        // Retrieve the queued job wrapper so we can monitor its state
+        const childQueue = (queueSvc as any).getQueue('project-data-extraction')
+        try {
+          const queued = await childQueue.getJob(childJobId)
+          return queued || ({ id: childJobId, data: jobData, getState: async () => 'unknown' })
+        } catch (err) {
+          // If we cannot get the job wrapper, return a lightweight object compatible with monitoring
+          return ({ id: childJobId, data: jobData, getState: async () => 'unknown' })
+        }
       })
 
-      // Wait for all child jobs to be created
+      // Wait for all child jobs to be created (returned as IQueueJob wrappers or placeholders)
       const childJobs = await Promise.all(childJobPromises)
 
       log.info(`[EXTRACTION-PARENT] Created ${childJobs.length} child extraction jobs`, { jobId })
@@ -670,7 +681,11 @@ export class ExtractionOrchestrationService {
         let checkInterval: NodeJS.Timeout | null = null
         let isResolved = false // Prevent multiple resolutions
         const jobStartTimes = new Map<string, number>() // Track when each child job started processing
-        const STUCK_JOB_TIMEOUT = 10 * 60 * 1000 // 10 minutes - consider a job stuck if active this long
+        // Configurable timeouts (minutes -> ms)
+        const STUCK_JOB_TIMEOUT = (parseInt(process.env.EXTRACTION_STUCK_TIMEOUT_MINUTES || '10') || 10) * 60 * 1000
+        const CRITICAL_JOB_TIMEOUT = (parseInt(process.env.EXTRACTION_CRITICAL_TIMEOUT_MINUTES || '20') || 20) * 60 * 1000
+        const PARTIAL_SUCCESS_TIMEOUT_MS = (parseInt(process.env.EXTRACTION_PARTIAL_TIMEOUT_MINUTES || '20') || 20) * 60 * 1000
+        const FULL_TIMEOUT_MS = (parseInt(process.env.EXTRACTION_FULL_TIMEOUT_MINUTES || '30') || 30) * 60 * 1000
 
         let partialSuccessTimeout: NodeJS.Timeout | null = null
         let fullTimeout: NodeJS.Timeout | null = null
@@ -726,8 +741,9 @@ export class ExtractionOrchestrationService {
                     log.debug(`[EXTRACTION-PARENT] Child job ${j.id} (${entityType}) started processing`)
                   }
 
-                  const STUCK_JOB_TIMEOUT = 10 * 60 * 1000 // 10 minutes - consider a job stuck if active this long
-                  const CRITICAL_JOB_TIMEOUT = 20 * 60 * 1000 // 20 minutes - definitely stuck, force fail in monitor
+                  // use configured timeouts above
+                  const STUCK_JOB_TIMEOUT_LOCAL = STUCK_JOB_TIMEOUT
+                  const CRITICAL_JOB_TIMEOUT_LOCAL = CRITICAL_JOB_TIMEOUT
 
                   // Check for stuck jobs (active for too long)
                   if (state === 'active') {
@@ -981,18 +997,18 @@ export class ExtractionOrchestrationService {
               log.error(`[EXTRACTION-PARENT] Error checking partial success at 20-minute timeout: ${err?.message || err}`)
             }
           }
-        }, 20 * 60 * 1000) // 20 minutes - check for partial success
+        }, PARTIAL_SUCCESS_TIMEOUT_MS) // check for partial success (configurable)
 
         fullTimeout = setTimeout(() => {
           if (!isResolved) {
             clearTimeout(partialSuccessTimeout)
             cleanup()
             isResolved = true
-            const timeoutError = 'Extraction job timed out after 45 minutes'
+            const timeoutError = `Extraction job timed out after ${Math.floor(FULL_TIMEOUT_MS / 60000)} minutes`
             log.error(`[EXTRACTION-PARENT] ${timeoutError}: ${jobId}`)
             reject(new Error(timeoutError))
           }
-        }, 45 * 60 * 1000) // 45 minute timeout
+        }, FULL_TIMEOUT_MS)
       })
 
       log.info(`[EXTRACTION-PARENT] Monitoring completed for job ${jobId}`, { result: monitoringResult })

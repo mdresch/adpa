@@ -29,6 +29,7 @@ import { cache } from "../utils/redis"
 // Phase 5: Performance monitoring utilities
 import { PerformanceMonitor } from "../utils/performanceMonitor"
 import { WorkerMonitoring } from "../utils/workerMonitoring"
+import { safeQuery, safeUpdate } from './jobs/dbGuards'
 
 // Forward declarations for functions used before their definition
 // These will be implemented by the QueueService instance below
@@ -567,11 +568,11 @@ processFlowQueue.process("process-flow", async (job) => {
     let projectName = 'Unknown Project'
     let documentName = config.documentName || config.templateName || 'Process Flow Document'
     try {
-      const projectResult = await pool.query(
+      const projectResult = await safeQuery(pool,
         'SELECT name FROM projects WHERE id = $1',
         [config.projectId]
       )
-      if (projectResult.rows.length > 0) {
+      if (projectResult && projectResult.rows && projectResult.rows.length > 0) {
         projectName = projectResult.rows[0].name
       }
     } catch (error) {
@@ -582,7 +583,7 @@ processFlowQueue.process("process-flow", async (job) => {
 
     // Update job data with initial steps
     const totalSteps = config.includeStakeholders ? 7 : 6
-    await pool.query(
+    await safeUpdate(pool,
       `UPDATE jobs 
        SET data = jsonb_set(
          COALESCE(data, '{}'::jsonb), 
@@ -603,7 +604,7 @@ processFlowQueue.process("process-flow", async (job) => {
     const updateStepProgress = async (stepName: string, stepNumber: number, totalSteps: number) => {
       const progress = Math.floor(10 + (stepNumber / totalSteps) * 80) // 10% to 90%
 
-      await pool.query(
+      await safeUpdate(pool,
         `UPDATE jobs 
          SET data = jsonb_set(
            jsonb_set(
@@ -654,7 +655,7 @@ processFlowQueue.process("process-flow", async (job) => {
         ? `AI providers processing ${providerAssignments.length} document${providerAssignments.length > 1 ? 's' : ''} (${current}/${total} completed)`
         : `${stepName}: ${current}/${total} - ${details?.documentName || 'processing...'}`
 
-      await pool.query(
+      await safeUpdate(pool,
         `UPDATE jobs 
          SET data = jsonb_set(
            jsonb_set(
@@ -716,7 +717,7 @@ processFlowQueue.process("process-flow", async (job) => {
     await updateStepProgress('Finalizing document...', totalSteps, totalSteps)
 
     // Update job to completed with detailed result
-    await pool.query(
+      await safeUpdate(pool,
       `UPDATE jobs 
        SET status = 'completed', 
            result = $1, 
@@ -760,7 +761,7 @@ processFlowQueue.process("process-flow", async (job) => {
 
     // Only update database if pool is available
     if (pool) {
-      await pool.query(
+      await safeUpdate(pool,
         `UPDATE jobs 
          SET status = 'failed', 
              error_message = $1, 
@@ -975,7 +976,7 @@ extractionQueue.process("extract-project-data", 3, async (job) => {
  */
 // Register processors for specific missing entity types
 if (true) {
-  extractionQueue.process(`extract-entity-schedule_baselines`, 10, async (job) => {
+  extractionQueue.process(`extract-entity-schedule_baselines`, 3, async (job) => {
     const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
     try {
       logger.info(`[EXTRACTION-CHILD] Extracting schedule_baselines for job ${parentJobId}`)
@@ -1026,7 +1027,7 @@ if (true) {
   })
 }
 
-extractionQueue.process(`extract-entity-critical_path_activities`, 10, async (job) => {
+extractionQueue.process(`extract-entity-critical_path_activities`, 3, async (job) => {
   const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
   try {
     logger.info(`[EXTRACTION-CHILD] Extracting critical_path_activities for job ${parentJobId}`)
@@ -1077,7 +1078,7 @@ extractionQueue.process(`extract-entity-critical_path_activities`, 10, async (jo
 })
 
 if (true) {
-  extractionQueue.process(`extract-entity-budget_baselines`, 10, async (job) => {
+  extractionQueue.process(`extract-entity-budget_baselines`, 3, async (job) => {
     const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
     try {
       logger.info(`[EXTRACTION-CHILD] Extracting budget_baselines for job ${parentJobId}`)
@@ -1135,7 +1136,7 @@ ENTITY_TYPES.forEach((entityType) => {
     return;
   }
 
-  extractionQueue.process(`extract-entity-${entityType}`, 10, async (job) => {
+  extractionQueue.process(`extract-entity-${entityType}`, 3, async (job) => {
     const { parentJobId, projectId, userId, aiProvider, aiModel, documentIds } = job.data
 
     try {

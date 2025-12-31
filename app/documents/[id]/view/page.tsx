@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -61,12 +60,16 @@ interface DocumentData {
   updated_at: string
   status: string
   project_id?: string
+  template_id?: string
+  template_name?: string
+  version?: number;
   metadata?: {
     generatedAt: Date
     compressionStats: CompressionStats
     sourceDocuments: string[]
     workflowId: string
     templateId: string
+    template_name?: string
     projectId: string
   }
 }
@@ -89,9 +92,23 @@ interface DocumentVersion {
 
 export default function DocumentViewerPage() {
   const { user, loading: authLoading } = useAuth()
-  const params = useParams()
   const router = useRouter()
-  const documentId = params.id as string
+
+  const [documentId, setDocumentId] = useState<string>('')
+
+  useEffect(() => {
+    // Derive document id from the URL path (e.g. /documents/:id/...)
+    try {
+      if (typeof window === 'undefined') return
+      const parts = window.location.pathname.split('/').filter(Boolean)
+      const docIndex = parts.findIndex((p) => p === 'documents')
+      if (docIndex !== -1 && parts.length > docIndex + 1) {
+        setDocumentId(parts[docIndex + 1])
+      }
+    } catch (err) {
+      console.warn('Could not determine document id from pathname', err)
+    }
+  }, [])
 
   const [document, setDocument] = useState<DocumentData | null>(null)
   const [versions, setVersions] = useState<DocumentVersion[]>([])
@@ -203,7 +220,7 @@ export default function DocumentViewerPage() {
     }
   }, [user, authLoading, router])
 
-  const fetchDocument = async () => {
+  async function fetchDocument() {
     try {
       setLoading(true)
       const response = await apiClient.request<{
@@ -1273,8 +1290,8 @@ ${doc.content}
         documentId={documentId}
         currentTemplate={document?.template_id}
         currentTemplateName={
-          document?.metadata?.templateId ||
-          (document && 'template_name' in document ? (document as { template_name?: string }).template_name : undefined)
+          document?.template_name ||
+          document?.metadata?.template_name
         }
         currentVersion={document ? String(document.version) : '1.0'}
         projectId={document?.project_id}

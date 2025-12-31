@@ -8796,6 +8796,18 @@ Output valid JSON object with "performance_actuals" array only.`
     entityType: string,
     entities: any[]
   ): Promise<void> {
+    // Prefer orchestrator/registry savers when available to avoid legacy misses
+    try {
+      const orchestrator = await import('./extraction/ExtractionOrchestrator')
+      const registry = await import('./extraction/ExtractionRegistry')
+      if (registry && (registry as any).extractionRegistry && (registry as any).extractionRegistry.hasEntity(entityType)) {
+        await (orchestrator as any).saveSingleEntityType(projectId, userId, entityType, entities)
+        return
+      }
+    } catch (err) {
+      // fall back to legacy logic below
+      logger.debug(`[EXTRACTION-LEGACY] Orchestrator not available for ${entityType}, using legacy saver`)
+    }
     // Ensure pool is connected before saving
     if (!pool) {
       const { connectDatabase } = await import('@/database/connection')
@@ -8898,18 +8910,21 @@ Output valid JSON object with "performance_actuals" array only.`
         case 'change_control_boards':
         case 'policy_compliance':
         // Scope Domain  
+        case 'scope_baseline': // singular
         case 'scope_baselines':
         case 'wbs_nodes':
         case 'scope_change_requests':
         case 'requirements_traceability':
         case 'scope_verification':
         // Schedule Domain
+        case 'schedule_baseline': // singular
         case 'schedule_baselines':
         case 'schedule_activities':
         case 'critical_path_activities':
         case 'schedule_variances':
         case 'schedule_forecasts':
         // Finance Domain
+        case 'budget_baseline': // singular
         case 'budget_baselines':
         case 'cost_actuals':
         case 'cost_estimates':

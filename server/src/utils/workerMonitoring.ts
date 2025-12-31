@@ -1,5 +1,6 @@
 import { pool } from '../database/connection';
 import { logger } from './logger';
+import { safeUpdate } from '../services/jobs/dbGuards';
 
 /**
  * Worker Monitoring Utility
@@ -26,7 +27,7 @@ export class WorkerMonitoring {
             try {
                 const stats = await this.collectStats();
 
-                await pool.query(
+                                await safeUpdate(pool,
                     `INSERT INTO worker_heartbeats (
             worker_id, 
             worker_process_id, 
@@ -46,7 +47,7 @@ export class WorkerMonitoring {
                         stats.cpuPercent,
                         stats.memoryMB
                     ]
-                );
+                                );
             } catch (error) {
                 logger.error('Failed to report worker heartbeat:', error);
             }
@@ -110,7 +111,7 @@ export class WorkerMonitoring {
             const memoryUsage = process.memoryUsage();
             const memoryMB = Math.round(memoryUsage.rss / 1024 / 1024 * 100) / 100;
 
-            await pool.query(
+                        await safeUpdate(pool,
                 `INSERT INTO worker_heartbeats (
           worker_id, 
           worker_process_id, 
@@ -122,7 +123,7 @@ export class WorkerMonitoring {
         ON CONFLICT (worker_id) DO UPDATE SET
           last_heartbeat = NOW()`,
                 [workerId, process.pid, queueName, memoryMB]
-            );
+                        );
         } catch (error) {
             // Silent fail for initial report
         }

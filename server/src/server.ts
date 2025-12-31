@@ -20,6 +20,7 @@ import { addJob, getJobStatus, cancelJob, updateJobStatus } from "./services/que
 import { aiService } from "./services/aiService"
 import jwt from "jsonwebtoken"
 import { pool } from "./database/connection"
+import { safeQuery, safeUpdate } from './services/jobs/dbGuards'
 
 // Routes
 import authRoutes from "./routes/auth"
@@ -372,16 +373,16 @@ io.on("connection", (socket) => {
           }
 
           // Fetch user and project to validate membership
-          const userRes = await pool.query('SELECT id, name, role FROM users WHERE id = $1', [userId])
-          if (userRes.rows.length === 0) {
+          const userRes = await safeQuery(pool, 'SELECT id, name, role FROM users WHERE id = $1', [userId])
+          if (!userRes || userRes.rows.length === 0) {
             socket.emit('join:error', { room, message: 'User not found' })
             return
           }
 
           const user = userRes.rows[0]
 
-          const projRes = await pool.query('SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [projectId])
-          if (projRes.rows.length === 0) {
+          const projRes = await safeQuery(pool, 'SELECT id, owner_id, created_by, team_members FROM projects WHERE id = $1', [projectId])
+          if (!projRes || projRes.rows.length === 0) {
             socket.emit('join:error', { room, message: 'Project not found' })
             return
           }
@@ -477,7 +478,7 @@ async function startServer() {
 
       // Auto-create document_summaries table if it doesn't exist
       try {
-        await pool.query(`
+        await safeQuery(pool, `
           CREATE TABLE IF NOT EXISTS document_summaries (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             document_id UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
@@ -514,10 +515,10 @@ async function startServer() {
 
       // Auto-migrate is_curated column on risks table
       try {
-        await pool.query(`
+        await safeQuery(pool, `
           ALTER TABLE risks ADD COLUMN IF NOT EXISTS is_curated BOOLEAN DEFAULT FALSE
         `)
-        await pool.query(`
+        await safeQuery(pool, `
           CREATE INDEX IF NOT EXISTS idx_risks_is_curated ON risks(is_curated)
         `)
         console.log("✅ risks.is_curated column ready (auto-migration)")
@@ -603,6 +604,20 @@ async function startServer() {
       const { initializeTemplateAnalysisJob } = require('./jobs/templateAnalysisJob')
       initializeTemplateAnalysisJob()
       console.log("✅ Template analysis job scheduled (Mondays at 2:00 AM)")
+
+      // Start stuck-job health monitor
+      try {
+        // Require here to avoid circular import during module init
+        const { StuckJobMonitor } = require('./services/stuckJobMonitor')
+        const monitor = new StuckJobMonitor(pool, io, {
+          intervalMs: Number(process.env.STUCK_JOB_MONITOR_INTERVAL_MS || 300000),
+          thresholdMinutes: Number(process.env.STUCK_JOB_THRESHOLD_MINUTES || 30),
+        })
+        monitor.start()
+        console.log('✅ Stuck-job monitor started')
+      } catch (err) {
+        console.warn('⚠️ Could not start stuck-job monitor', err)
+      }
     })
   } catch (error) {
     console.error("❌ Failed to start server:", error)
