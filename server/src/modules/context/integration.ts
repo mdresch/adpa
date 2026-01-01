@@ -28,6 +28,7 @@ export interface EnhancedAIRequest extends AIGenerateRequest {
   custom_context?: Record<string, any>
   context_config?: Partial<ContextConfig>
   user_id: string // Required for context extraction
+  fallback_providers?: string[]
 }
 
 export interface EnhancedAIResponse extends AIGenerateResponse {
@@ -83,7 +84,7 @@ export class ContextAwareAIService {
       }
 
       // Generate AI response with multi-provider fallback
-      const aiResponse = await aiService.generateWithFallback(aiRequest)
+      const aiResponse = await aiService.generateWithFallback(aiRequest, request.fallback_providers)
 
       // Combine responses
       const enhancedResponse: EnhancedAIResponse = {
@@ -102,10 +103,10 @@ export class ContextAwareAIService {
 
     } catch (error) {
       logger.error('Context-aware AI generation failed:', error)
-      
+
       // Fallback to regular AI generation without context
       logger.info('Falling back to regular AI generation without context')
-      
+
       try {
         const fallbackRequest: AIGenerateRequest = {
           prompt: request.prompt,
@@ -118,7 +119,7 @@ export class ContextAwareAIService {
         }
 
         const fallbackResponse = await aiService.generate(fallbackRequest)
-        
+
         return {
           ...fallbackResponse,
           context_summary: 'Context injection failed, using original prompt',

@@ -136,12 +136,12 @@ export enum ContextPriority {
 }
 
 export interface PriorityConfig {
-  project: ContextPriority
-  documents: ContextPriority
-  templates: ContextPriority
-  user: ContextPriority
-  integrations: ContextPriority
-  custom: ContextPriority
+  project?: ContextPriority
+  documents?: ContextPriority
+  templates?: ContextPriority
+  user?: ContextPriority
+  integrations?: ContextPriority
+  custom?: ContextPriority
 }
 
 export interface ContextSection {

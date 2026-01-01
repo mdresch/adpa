@@ -40,8 +40,10 @@ export class ContextInjector {
   /**
    * Inject context into AI prompt
    */
-  static async injectContext(request: ContextRequest, config: ContextConfig = this.DEFAULT_CONFIG): Promise<ContextResponse> {
+  static async injectContext(request: ContextRequest, config: Partial<ContextConfig> = {}): Promise<ContextResponse> {
     try {
+      const fullConfig: ContextConfig = { ...this.DEFAULT_CONFIG, ...config }
+
       logger.debug(`[Context] Starting injection for user ${request.user_id}`)
 
       // Calculate available tokens for context
@@ -49,7 +51,7 @@ export class ContextInjector {
         request.prompt,
         request.provider,
         request.model || 'gpt-3.5-turbo',
-        config.max_context_ratio
+        fullConfig.max_context_ratio
       )
 
       if (request.max_context_tokens && request.max_context_tokens < availableTokens) {
@@ -64,7 +66,7 @@ export class ContextInjector {
       )
 
       // Extract context data
-      const contextData = await this.extractContextData(request, config)
+      const contextData = await this.extractContextData(request, fullConfig)
 
       // Prioritize and select context sections
       const priorityConfig = request.priority_config || this.getDefaultPriorityConfig()
@@ -78,7 +80,7 @@ export class ContextInjector {
       const enhancedPrompt = this.buildEnhancedPrompt(
         request.prompt,
         contextSections,
-        config
+        fullConfig
       )
 
       // Validate final token usage
@@ -225,20 +227,20 @@ ${originalPrompt}`
   private static formatContextSection(section: ContextSection): string {
     const typeLabel = section.type.toUpperCase()
     let formatted = `[${typeLabel}]`
-    
+
     if (section.metadata) {
       const metaInfo = []
       if (section.metadata.framework) metaInfo.push(`Framework: ${section.metadata.framework}`)
       if (section.metadata.status) metaInfo.push(`Status: ${section.metadata.status}`)
       if (section.metadata.category) metaInfo.push(`Category: ${section.metadata.category}`)
-      
+
       if (metaInfo.length > 0) {
         formatted += ` (${metaInfo.join(', ')})`
       }
     }
-    
+
     formatted += `:\n${section.content}`
-    
+
     return formatted
   }
 
@@ -265,7 +267,7 @@ ${originalPrompt}`
       totalTokens += section.tokens
     }
 
-    const summaryParts = Object.entries(typeCounts).map(([type, count]) => 
+    const summaryParts = Object.entries(typeCounts).map(([type, count]) =>
       `${count} ${type}${count > 1 ? 's' : ''}`
     )
 

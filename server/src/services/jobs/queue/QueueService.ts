@@ -110,13 +110,15 @@ export class QueueService {
            )
            LIMIT 1`
         )
-        
-        const stuckCount = parseInt(stuckJobsCheck.rows[0]?.count || '0')
+
+        const stuckCount = (stuckJobsCheck && stuckJobsCheck.rows && stuckJobsCheck.rows.length > 0)
+          ? parseInt(stuckJobsCheck.rows[0]?.count || '0')
+          : 0
         if (stuckCheckTiming) stuckCheckTiming()
-        
+
         if (stuckCount > 0) {
           this.dependencies.logger.warn(`⚠️  Blocking new job creation: ${stuckCount} stuck jobs detected. Run cleanup script first.`)
-          
+
           // Auto-cleanup: Mark stuck jobs as failed before blocking
           const cleanupTiming = PerformanceMonitor.start('QueueService.addJob.stuckJobCleanup')
           try {
@@ -148,7 +150,7 @@ export class QueueService {
             cleanupTiming()
             this.dependencies.logger.error('Failed to auto-clean stuck jobs:', cleanupError)
           }
-          
+
           // Re-check after cleanup
           const recheckTiming = PerformanceMonitor.start('QueueService.addJob.stuckJobRecheck')
           const recheckResult = await this.dependencies.database.query(
@@ -164,7 +166,7 @@ export class QueueService {
           )
           const remainingStuck = parseInt(recheckResult.rows[0]?.count || '0')
           recheckTiming()
-          
+
           if (remainingStuck > 0) {
             throw new StuckJobsError(
               remainingStuck,
@@ -205,7 +207,12 @@ export class QueueService {
           queueName = "project-data-extraction"
           break
         default:
-          throw new JobTypeError(type, `No queue mapping for job type: ${type}`)
+          // Handle dynamic extract-entity types
+          if (typeof validatedType === 'string' && (validatedType as string).startsWith('extract-entity-')) {
+            queueName = "project-data-extraction"
+          } else {
+            throw new JobTypeError(type, `No queue mapping for job type: ${type}`)
+          }
       }
 
       queue = this.getQueue(queueName)
@@ -338,7 +345,7 @@ export class QueueService {
 
             const result = await this.dependencies.database.query(query, params)
             dbQueryTiming()
-            
+
             if (result.rows.length > 0) {
               const row = result.rows[0]
               if (row.project_name && !projectName) {
@@ -402,7 +409,7 @@ export class QueueService {
         // Workers are automatically available when the server is running (processors are registered)
         // Use a placeholder worker ID that will be updated when processing starts
         const placeholderWorkerId = `worker-pending-${process.pid}`
-        
+
         // Step 1: Insert into database with placeholder worker_id
         // The worker_id will be updated to the actual worker when processing starts
         await this.dependencies.database.query(
@@ -431,7 +438,7 @@ export class QueueService {
           queueAddTiming()
 
           this.dependencies.logger.info(`Job added to queue: ${jobId} (${validatedType})`)
-          
+
           // Log cache performance periodically
           const cacheStats = PerformanceMonitor.getCacheStats('QueueService.addJob.projectName')
           if (cacheStats && (cacheStats.hits + cacheStats.misses) % 50 === 0) {
@@ -441,7 +448,7 @@ export class QueueService {
               documentName: PerformanceMonitor.getCacheStats('QueueService.addJob.documentName'),
             })
           }
-          
+
           return jobId
         } catch (queueError: unknown) {
           // Queue add failed - rollback database entry

@@ -199,10 +199,15 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       if (providers.length > 0) {
         setGenerateForm(prev => ({ ...prev, provider: providers[0].name }))
         // Fetch models for first provider
-        const models = await apiClient.getModelsForProvider?.(providers[0].id) || []
-        setModels(models)
-        if (models.length > 0) {
-          setGenerateForm(prev => ({ ...prev, model: models[0].name }))
+        try {
+          const response = await apiClient.getProviderModels(providers[0].id)
+          setModels(response.models || [])
+          if (response.models && response.models.length > 0) {
+            setGenerateForm(prev => ({ ...prev, model: response.models[0].name }))
+          }
+        } catch (err) {
+          console.error("Failed to fetch models for initial provider", err)
+          setModels([])
         }
       }
     })()
@@ -214,10 +219,15 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       (async () => {
         const provider = aiProviders.find(p => p.name === generateForm.provider)
         if (provider) {
-          const models = await apiClient.getModelsForProvider?.(provider.id) || []
-          setModels(models)
-          if (models.length > 0) {
-            setGenerateForm(prev => ({ ...prev, model: models[0].name }))
+          try {
+            const response = await apiClient.getProviderModels(provider.id)
+            setModels(response.models || [])
+            if (response.models && response.models.length > 0) {
+              setGenerateForm(prev => ({ ...prev, model: response.models[0].name }))
+            }
+          } catch (err) {
+            console.error("Failed to fetch models for selected provider", err)
+            setModels([])
           }
         }
       })()
@@ -243,12 +253,12 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         `/projects/${projectId}/drift-detections`,
         { suppressNotFoundError: true } as Record<string, unknown>
       )
-      
+
       const drifts = driftResponse.drifts || []
-      
+
       // Count drifts per document
       const driftsByDoc = new Map<string, { count: number, hasCritical: boolean, hasHigh: boolean }>()
-      
+
       drifts.forEach((drift: any) => {
         if (drift.source_document_id) {
           const existing = driftsByDoc.get(drift.source_document_id) || { count: 0, hasCritical: false, hasHigh: false }
@@ -258,7 +268,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
           driftsByDoc.set(drift.source_document_id, existing)
         }
       })
-      
+
       // Enrich documents with drift data
       docs.forEach(doc => {
         const driftData = driftsByDoc.get(doc.id)
@@ -286,13 +296,13 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       if (templateFilter !== "all") params.template = templateFilter
       if (gradeFilter !== "all") params.grade = gradeFilter
       if (frameworkFilter !== "all") params.framework = frameworkFilter
-      
+
       const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
       const docs = response.documents || []
-      
+
       // Fetch drift counts for each document
       await enrichDocumentsWithDriftData(docs)
-      
+
       setDocuments(docs)
       setPagination(response.pagination || pagination)
     } catch (error) {
@@ -378,7 +388,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     try {
       setLoadingTemplates(true)
       console.log('🔵 [Documents Page] Calling apiClient.getTemplates with limit=100')
-      const response = await apiClient.getTemplates({ 
+      const response = await apiClient.getTemplates({
         limit: 100  // Increased limit to get all templates
       })
       console.log('📊 [Documents Page] Templates loaded:', response.templates?.length || 0, 'templates')
@@ -407,14 +417,14 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   const handleUploadSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     console.log('🚀 [UPLOAD] handleUploadSubmit called', {
       fileName: uploadForm.file?.name,
       fileType: uploadForm.file?.type,
       hasFile: !!uploadForm.file,
       fileInstance: uploadForm.file instanceof File
     })
-    
+
     if (!uploadForm.name || !uploadForm.file || !uploadForm.template_id) {
       toast.error("Please fill in all required fields including template selection")
       return
@@ -422,7 +432,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
     try {
       setUploadingDocument(true)
-      
+
       // CRITICAL: Validate file object is actually a File, not a metadata object
       if (!(uploadForm.file instanceof File)) {
         console.error('❌ Invalid file object:', uploadForm.file)
@@ -434,25 +444,25 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       // Use case-insensitive file extension checks as primary detection method
       const fileName = uploadForm.file.name.toLowerCase()
       const fileType = uploadForm.file.type?.toLowerCase() || ''
-      
+
       // Check file extension first (more reliable than MIME type)
       const isPDF = fileName.endsWith('.pdf')
       const isDOCX = fileName.endsWith('.docx') || fileName.endsWith('.doc')
       const isTXT = fileName.endsWith('.txt')
       const isMD = fileName.endsWith('.md') || fileName.endsWith('.markdown')
-      
+
       // Also check MIME types as secondary check
       const isPDFMime = fileType === 'application/pdf'
-      const isDOCXMime = fileType.includes('wordprocessingml') || 
-                         fileType.includes('msword') ||
-                         fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-                         fileType === 'application/msword'
+      const isDOCXMime = fileType.includes('wordprocessingml') ||
+        fileType.includes('msword') ||
+        fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        fileType === 'application/msword'
       const isTextMime = fileType === 'text/plain' || fileType === 'text/markdown'
-      
+
       // Determine file category (prioritize extension over MIME type)
       const isBinaryFile = isPDF || isDOCX || isPDFMime || isDOCXMime
       const isTextFile = isTXT || isMD || isTextMime
-      
+
       console.log('📄 File upload detection:', {
         fileName: uploadForm.file.name,
         fileType: uploadForm.file.type,
@@ -463,7 +473,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         isBinaryFile,
         isTextFile
       })
-      
+
       if (isBinaryFile) {
         // Use the upload endpoint that converts PDFs/DOCX to Markdown
         console.log('📤 Uploading binary file via file upload endpoint:', {
@@ -481,7 +491,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         formData.append('files', uploadForm.file)
         formData.append('projectId', projectId)
         formData.append('assessmentName', uploadForm.name)
-        
+
         try {
           const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/onboarding/upload`, {
             method: 'POST',
@@ -503,7 +513,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
           const result = await response.json()
           console.log('✅ Upload endpoint success:', result)
-          
+
           toast.success("Document uploaded successfully! Processing will begin shortly.")
           setUploadDialogOpen(false)
           setUploadForm({
@@ -511,7 +521,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
             file: null,
             template_id: "",
           })
-          
+
           // Wait a moment for processing, then refresh documents
           setTimeout(() => {
             fetchDocuments()
@@ -537,7 +547,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
         // For text files, read content and create document directly with Markdown
         const textContent = await uploadForm.file.text()
-        
+
         // CRITICAL: Ensure content is a string, never an object
         if (typeof textContent !== 'string' || textContent.trim() === '') {
           throw new Error("File content is empty or invalid. Cannot create document.")
@@ -552,9 +562,9 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         }
 
         // Final validation: ensure content is not a file metadata object
-        if (typeof documentData.content === 'object' || 
-            (typeof documentData.content === 'string' && 
-             (documentData.content.includes('"fileName"') || 
+        if (typeof documentData.content === 'object' ||
+          (typeof documentData.content === 'string' &&
+            (documentData.content.includes('"fileName"') ||
               documentData.content.includes('"fileSize"') ||
               documentData.content.includes('"fileType"')))) {
           console.error('❌ Attempted to send file metadata as content:', documentData)
@@ -569,7 +579,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         })
 
         await apiClient.createDocument(projectId, documentData)
-        
+
         toast.success("Document uploaded successfully!")
         setUploadDialogOpen(false)
         setUploadForm({
@@ -610,7 +620,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
   const handleGenerateSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!generateForm.name || !generateForm.prompt) {
       toast.error("Please fill in required fields")
       return
@@ -618,7 +628,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
     try {
       setGeneratingDocument(true)
-      
+
       const aiResponse = await apiClient.generateContent({
         prompt: generateForm.prompt,
         provider: generateForm.provider || "Groq AI",
@@ -626,9 +636,54 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
         temperature: generateForm.temperature || 0.7,
         max_tokens: generateForm.max_tokens || 8000,
         template_id: generateForm.template_id || undefined,
+        projectId: projectId,
       })
 
-      // Extract Markdown content from response
+      // Handle async job response
+      if (aiResponse.jobId && aiResponse.status === 'queued') {
+        const jobId = aiResponse.jobId
+        let jobStatus = 'queued'
+        let attempts = 0
+        const maxAttempts = 60 // 2 minutes timeout
+
+        while (jobStatus !== 'completed' && jobStatus !== 'failed' && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 2000))
+          try {
+            const job = await apiClient.getJob(jobId)
+            jobStatus = job.status
+
+            if (jobStatus === 'completed') {
+              toast.success("Document generated successfully!")
+              setGenerateDialogOpen(false)
+              setGenerateForm({
+                name: "",
+                template_id: "",
+                prompt: "",
+                provider: "Groq AI",
+                model: "llama-3.1-8b-instant",
+                temperature: 0.7,
+              })
+              await fetchDocuments()
+              return
+            } else if (jobStatus === 'failed') {
+              throw new Error(job.error_message || "Generation job failed")
+            }
+            attempts++
+          } catch (err) {
+            console.error("Error polling job status:", err)
+            // Continue polling unless it's a critical error
+            attempts++
+          }
+        }
+
+        if (attempts >= maxAttempts) {
+          toast.info("Generation is taking longer than expected. It will continue in the background.")
+          setGenerateDialogOpen(false)
+          return
+        }
+      }
+
+      // Legacy synchronous handling (fallback)
       const content = aiResponse.result?.content || aiResponse.result?.text || aiResponse.content || aiResponse.text || "# Document content not generated"
 
       await apiClient.createDocument(projectId, {
@@ -662,7 +717,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
     if (!confirm("Are you sure you want to move this document to trash? You can restore it later from the Deleted Items page.")) {
       return
     }
-    
+
     try {
       await apiClient.deleteDocument(documentId)
       toast.success("Document moved to trash. You can restore it later from the Deleted Items page.")
@@ -706,7 +761,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
     try {
       setSelectingAll(true)
-      
+
       // Fetch all document IDs (without content for performance)
       const params: Record<string, string> = {
         page: '1',
@@ -718,11 +773,11 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
       if (templateFilter !== "all") params.template = templateFilter
       if (gradeFilter !== "all") params.grade = gradeFilter
       if (frameworkFilter !== "all") params.framework = frameworkFilter
-      
+
       const response = await apiClient.get(`/documents/project/${projectId}?${new URLSearchParams(params).toString()}`)
       const allDocs = response.documents || []
       const allIds = allDocs.map((doc: any) => doc.id)
-      
+
       setAllDocumentIds(allIds)
       setSelectedDocuments(new Set(allIds))
       toast.success(`Selected all ${allIds.length} documents across all pages`)
@@ -741,11 +796,11 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
   }
 
   // Check if all documents on current page are selected
-  const isAllOnPageSelected = displayDocuments.length > 0 && 
+  const isAllOnPageSelected = displayDocuments.length > 0 &&
     displayDocuments.every(doc => selectedDocuments.has(doc.id))
-  
+
   // Check if ALL documents across all pages are selected
-  const isAllDocumentsSelected = pagination.total > 0 && 
+  const isAllDocumentsSelected = pagination.total > 0 &&
     selectedDocuments.size === pagination.total
 
   const isSomeSelected = selectedDocuments.size > 0 && !isAllDocumentsSelected
@@ -785,7 +840,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
 
       // Determine file name based on format
       // DOCX exports are single combined files, PDF/Markdown exports are ZIP archives
-      const fileName = format === 'docx' 
+      const fileName = format === 'docx'
         ? `combined-documents-${Date.now()}.docx`
         : `documents-export-${Date.now()}.zip`
 
@@ -960,8 +1015,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <Button 
-                        variant="ghost" 
+                      <Button
+                        variant="ghost"
                         size="sm"
                         onClick={() => router.push(`/projects/${projectId}`)}
                       >
@@ -988,8 +1043,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         <Upload className="h-4 w-4 mr-2" />
                         Upload Document
                       </Button>
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         onClick={() => router.push(`/projects/${projectId}/documents/deleted`)}
                         className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                       >
@@ -1031,7 +1086,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                 'bg-teal-500',
                               ]
                               const color = colors[index % colors.length]
-                              
+
                               return (
                                 <div key={index} className="bg-gradient-to-br from-white to-gray-50 rounded-lg p-4 border shadow-sm">
                                   <div className="flex items-center space-x-2 mb-3">
@@ -1157,13 +1212,13 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         className="pl-10"
                       />
                     </div>
-                    
+
                     {/* Filter Icon */}
                     <div className="flex items-center">
                       <Filter className="h-4 w-4 text-muted-foreground mr-2" />
                       <span className="text-sm text-muted-foreground mr-2">Filters:</span>
                     </div>
-                    
+
                     {/* Status Filter */}
                     <select
                       className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[120px]"
@@ -1176,7 +1231,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       <option value="approved">Approved</option>
                       <option value="published">Published</option>
                     </select>
-                    
+
                     {/* Framework Filter */}
                     <select
                       className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[140px]"
@@ -1190,7 +1245,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </option>
                       ))}
                     </select>
-                    
+
                     {/* Template Filter */}
                     <select
                       className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[160px]"
@@ -1204,7 +1259,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </option>
                       ))}
                     </select>
-                    
+
                     {/* Audit Grade Filter */}
                     <select
                       className="flex h-10 rounded-md border border-input bg-background px-3 py-2 text-sm min-w-[130px]"
@@ -1219,7 +1274,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       <option value="F">✗ Grade F (0-59)</option>
                       <option value="not_audited">📋 Not Audited</option>
                     </select>
-                    
+
                     {/* Clear Filters Button */}
                     {(statusFilter !== "all" || frameworkFilter !== "all" || templateFilter !== "all" || gradeFilter !== "all" || searchTerm) && (
                       <Button
@@ -1239,7 +1294,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       </Button>
                     )}
                   </div>
-                  
+
                   {/* Active Filters Summary */}
                   {(statusFilter !== "all" || frameworkFilter !== "all" || templateFilter !== "all" || gradeFilter !== "all") && (
                     <div className="flex flex-wrap items-center gap-2 mt-3">
@@ -1247,8 +1302,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       {statusFilter !== "all" && (
                         <Badge variant="secondary" className="text-xs">
                           Status: {statusFilter}
-                          <button 
-                            onClick={() => setStatusFilter("all")} 
+                          <button
+                            onClick={() => setStatusFilter("all")}
                             className="ml-1 hover:text-destructive"
                           >
                             ×
@@ -1258,8 +1313,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       {frameworkFilter !== "all" && (
                         <Badge variant="secondary" className="text-xs">
                           Framework: {frameworkFilter}
-                          <button 
-                            onClick={() => setFrameworkFilter("all")} 
+                          <button
+                            onClick={() => setFrameworkFilter("all")}
                             className="ml-1 hover:text-destructive"
                           >
                             ×
@@ -1269,8 +1324,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       {templateFilter !== "all" && (
                         <Badge variant="secondary" className="text-xs">
                           Template: {templateFilter}
-                          <button 
-                            onClick={() => setTemplateFilter("all")} 
+                          <button
+                            onClick={() => setTemplateFilter("all")}
                             className="ml-1 hover:text-destructive"
                           >
                             ×
@@ -1280,8 +1335,8 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                       {gradeFilter !== "all" && (
                         <Badge variant="secondary" className="text-xs">
                           Grade: {gradeFilter}
-                          <button 
-                            onClick={() => setGradeFilter("all")} 
+                          <button
+                            onClick={() => setGradeFilter("all")}
                             className="ml-1 hover:text-destructive"
                           >
                             ×
@@ -1355,10 +1410,10 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                 {isAllOnPageSelected ? 'Deselect Page' : 'Select Page'}
                               </span>
                             </button>
-                            
+
                             {/* Divider */}
                             <div className="h-6 w-px bg-border" />
-                            
+
                             {/* Select All Across Pages */}
                             {pagination.total > displayDocuments.length && (
                               <button
@@ -1374,16 +1429,16 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                   <Square className="h-5 w-5" />
                                 )}
                                 <span className="text-sm font-medium">
-                                  {selectingAll 
-                                    ? 'Selecting...' 
-                                    : isAllDocumentsSelected 
-                                      ? 'Deselect All' 
+                                  {selectingAll
+                                    ? 'Selecting...'
+                                    : isAllDocumentsSelected
+                                      ? 'Deselect All'
                                       : `Select All ${pagination.total} Documents`}
                                 </span>
                               </button>
                             )}
                           </div>
-                          
+
                           {/* Selection Summary */}
                           <div className="text-sm text-muted-foreground">
                             {selectedDocuments.size > 0 ? (
@@ -1458,7 +1513,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                     </Badge>
                                   )}
                                 </div>
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                   <div className="flex items-center space-x-2">
                                     <Tag className="h-4 w-4 text-muted-foreground" />
@@ -1553,7 +1608,7 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                                       <User className="h-4 w-4 mr-2" />
                                       Share
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem 
+                                    <DropdownMenuItem
                                       className="text-destructive"
                                       onClick={() => handleDeleteDocument(document.id)}
                                     >
@@ -1612,158 +1667,158 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </p>
                       </div>
                       <form onSubmit={handleUploadSubmit} className="space-y-4">
-                      <div className="grid gap-6 py-4">
-                        <div>
-                          <Label htmlFor="upload-doc-name">Document Name *</Label>
-                          <Input
-                            id="upload-doc-name"
-                            placeholder="Enter document name"
-                            value={uploadForm.name}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({...uploadForm, name: e.target.value})}
-                            className="mt-2"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="upload-template-select">Template *</Label>
-                          <select 
-                            id="upload-template-select"
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                            value={uploadForm.template_id}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUploadForm({...uploadForm, template_id: e.target.value})}
-                            required
-                          >
-                            <option value="">Select a template (required)</option>
-                            {loadingTemplates ? (
-                              <option disabled>Loading templates...</option>
-                            ) : (
-                              templates.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
-                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
-                                    : ''}
-                                  {template.name} ({template.framework})
-                                  {template.development_status === 'production' ? ' ✓' : ''}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Template selection is required to ensure proper document metadata and review compliance
-                          </p>
-                          
-                          {/* Template Status Information Panel */}
-                          {uploadForm.template_id && templates.find(t => t.id === uploadForm.template_id) && (() => {
-                            const selectedTemplate = templates.find(t => t.id === uploadForm.template_id)!
-                            return (
-                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">Template Status:</span>
-                                    {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                        <div className="grid gap-6 py-4">
+                          <div>
+                            <Label htmlFor="upload-doc-name">Document Name *</Label>
+                            <Input
+                              id="upload-doc-name"
+                              placeholder="Enter document name"
+                              value={uploadForm.name}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                              className="mt-2"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="upload-template-select">Template *</Label>
+                            <select
+                              id="upload-template-select"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={uploadForm.template_id}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUploadForm({ ...uploadForm, template_id: e.target.value })}
+                              required
+                            >
+                              <option value="">Select a template (required)</option>
+                              {loadingTemplates ? (
+                                <option disabled>Loading templates...</option>
+                              ) : (
+                                templates.map((template) => (
+                                  <option key={template.id} value={template.id}>
+                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig]
+                                      ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' '
+                                      : ''}
+                                    {template.name} ({template.framework})
+                                    {template.development_status === 'production' ? ' ✓' : ''}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Template selection is required to ensure proper document metadata and review compliance
+                            </p>
+
+                            {/* Template Status Information Panel */}
+                            {uploadForm.template_id && templates.find(t => t.id === uploadForm.template_id) && (() => {
+                              const selectedTemplate = templates.find(t => t.id === uploadForm.template_id)!
+                              return (
+                                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">Template Status:</span>
+                                      {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                        // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                        <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                          {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
                                       // @ts-expect-error - Badge accepts children via HTMLAttributes
-                                      <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
-                                        {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                      <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                        {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
                                       </Badge>
                                     )}
                                   </div>
-                                  {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
-                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
-                                      {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
-                                    </Badge>
+
+                                  {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      <div className="flex flex-col">
+                                        <span className="text-muted-foreground text-xs">Success Rate</span>
+                                        <span className="font-semibold">
+                                          {selectedTemplate.success_rate !== undefined
+                                            ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                            : selectedTemplate.success_count && selectedTemplate.validation_count
+                                              ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                              : 'N/A'}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-muted-foreground text-xs">Test Runs</span>
+                                        <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Info for production templates */}
+                                  {selectedTemplate.development_status === 'production' && (
+                                    <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                          Production Template - Recommended for Uploads
+                                        </p>
+                                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                          Using this template ensures proper metadata tagging and compliance tracking.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Note for non-production templates */}
+                                  {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                    <div className="flex items-start gap-2 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                                      <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-blue-800 dark:text-blue-200">
+                                          Template Status: {selectedTemplate.development_status === 'draft' && 'Draft'}
+                                          {selectedTemplate.development_status === 'testing' && 'Testing'}
+                                          {selectedTemplate.development_status === 'validated' && 'Validated'}
+                                        </p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                                          Metadata tagging will use this template's structure. Consider using a production template for better compliance tracking.
+                                        </p>
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
-                                
-                                {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
-                                  <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className="flex flex-col">
-                                      <span className="text-muted-foreground text-xs">Success Rate</span>
-                                      <span className="font-semibold">
-                                        {selectedTemplate.success_rate !== undefined 
-                                          ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
-                                          : selectedTemplate.success_count && selectedTemplate.validation_count
-                                            ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
-                                            : 'N/A'}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                      <span className="text-muted-foreground text-xs">Test Runs</span>
-                                      <span className="font-semibold">{selectedTemplate.validation_count}</span>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Info for production templates */}
-                                {selectedTemplate.development_status === 'production' && (
-                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
-                                        Production Template - Recommended for Uploads
-                                      </p>
-                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                                        Using this template ensures proper metadata tagging and compliance tracking.
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Note for non-production templates */}
-                                {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
-                                  <div className="flex items-start gap-2 p-3 rounded-md bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
-                                    <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-blue-800 dark:text-blue-200">
-                                        Template Status: {selectedTemplate.development_status === 'draft' && 'Draft'}
-                                        {selectedTemplate.development_status === 'testing' && 'Testing'}
-                                        {selectedTemplate.development_status === 'validated' && 'Validated'}
-                                      </p>
-                                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                                        Metadata tagging will use this template's structure. Consider using a production template for better compliance tracking.
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
+                              )
+                            })()}
+                          </div>
+                          <div>
+                            <Label htmlFor="file-upload">File *</Label>
+                            <Input
+                              id="file-upload"
+                              type="file"
+                              accept=".pdf,.doc,.docx,.txt,.md"
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                                const file = e.target.files?.[0] || null
+                                setUploadForm({ ...uploadForm, file })
+                              }}
+                              className="mt-2"
+                              required
+                            />
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Supported formats: PDF, DOC, DOCX, TXT, MD
+                            </p>
+                          </div>
                         </div>
-                        <div>
-                          <Label htmlFor="file-upload">File *</Label>
-                          <Input
-                            id="file-upload"
-                            type="file"
-                            accept=".pdf,.doc,.docx,.txt,.md"
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                              const file = e.target.files?.[0] || null
-                              setUploadForm({...uploadForm, file})
-                            }}
-                            className="mt-2"
-                            required
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Supported formats: PDF, DOC, DOCX, TXT, MD
-                          </p>
+                        <div className="flex justify-end space-x-2 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setUploadDialogOpen(false)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={uploadingDocument}
+                          >
+                            {uploadingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            Upload Document
+                          </Button>
                         </div>
-                      </div>
-                    <div className="flex justify-end space-x-2 pt-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setUploadDialogOpen(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={uploadingDocument}
-                      >
-                        {uploadingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        Upload Document
-                      </Button>
-                    </div>
-                    </form>
+                      </form>
                     </div>
                   </DialogContent>
                 </Dialog>
@@ -1779,205 +1834,205 @@ export default function ProjectDocuments({ params }: { params: { id: string } })
                         </p>
                       </div>
                       <form onSubmit={handleGenerateSubmit} className="space-y-4">
-                      <div className="grid gap-6 py-4">
-                        <div>
-                          <Label htmlFor="generate-doc-name">Document Name *</Label>
-                          <Input
-                            id="generate-doc-name"
-                            placeholder="Enter document name"
-                            value={generateForm.name}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({...generateForm, name: e.target.value})}
-                            className="mt-2"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="generate-template-select">Template (Optional)</Label>
-                          <select 
-                            id="generate-template-select"
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                            value={generateForm.template_id}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({...generateForm, template_id: e.target.value})}
-                          >
-                            <option value="">Select a template</option>
-                            {loadingTemplates ? (
-                              <option disabled>Loading templates...</option>
-                            ) : (
-                              templates.map((template) => (
-                                <option key={template.id} value={template.id}>
-                                  {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig] 
-                                    ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' ' 
-                                    : ''}
-                                  {template.name} ({template.framework})
-                                  {template.development_status === 'production' ? ' ✓' : ''}
-                                </option>
-                              ))
-                            )}
-                          </select>
-                          
-                          {/* Template Status Information Panel */}
-                          {generateForm.template_id && templates.find(t => t.id === generateForm.template_id) && (() => {
-                            const selectedTemplate = templates.find(t => t.id === generateForm.template_id)!
-                            return (
-                              <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">Template Status:</span>
-                                    {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                        <div className="grid gap-6 py-4">
+                          <div>
+                            <Label htmlFor="generate-doc-name">Document Name *</Label>
+                            <Input
+                              id="generate-doc-name"
+                              placeholder="Enter document name"
+                              value={generateForm.name}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, name: e.target.value })}
+                              className="mt-2"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="generate-template-select">Template (Optional)</Label>
+                            <select
+                              id="generate-template-select"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={generateForm.template_id}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, template_id: e.target.value })}
+                            >
+                              <option value="">Select a template</option>
+                              {loadingTemplates ? (
+                                <option disabled>Loading templates...</option>
+                              ) : (
+                                templates.map((template) => (
+                                  <option key={template.id} value={template.id}>
+                                    {template.development_status && statusConfig[template.development_status as keyof typeof statusConfig]
+                                      ? statusConfig[template.development_status as keyof typeof statusConfig].emoji + ' '
+                                      : ''}
+                                    {template.name} ({template.framework})
+                                    {template.development_status === 'production' ? ' ✓' : ''}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+
+                            {/* Template Status Information Panel */}
+                            {generateForm.template_id && templates.find(t => t.id === generateForm.template_id) && (() => {
+                              const selectedTemplate = templates.find(t => t.id === generateForm.template_id)!
+                              return (
+                                <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">Template Status:</span>
+                                      {selectedTemplate.development_status && statusConfig[selectedTemplate.development_status as keyof typeof statusConfig] && (
+                                        // @ts-expect-error - Badge accepts children via HTMLAttributes
+                                        <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
+                                          {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
                                       // @ts-expect-error - Badge accepts children via HTMLAttributes
-                                      <Badge variant={statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].variant}>
-                                        {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].emoji} {statusConfig[selectedTemplate.development_status as keyof typeof statusConfig].label}
+                                      <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
+                                        {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
                                       </Badge>
                                     )}
                                   </div>
-                                  {selectedTemplate.health_rating && healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig] && (
-                                    // @ts-expect-error - Badge accepts children via HTMLAttributes
-                                    <Badge variant="outline" className={`text-xs ${healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].color}`}>
-                                      {healthConfig[selectedTemplate.health_rating as keyof typeof healthConfig].icon} {selectedTemplate.health_rating}
-                                    </Badge>
+
+                                  {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
+                                    <div className="grid grid-cols-2 gap-3 text-sm">
+                                      <div className="flex flex-col">
+                                        <span className="text-muted-foreground text-xs">Success Rate</span>
+                                        <span className="font-semibold">
+                                          {selectedTemplate.success_rate !== undefined
+                                            ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
+                                            : selectedTemplate.success_count && selectedTemplate.validation_count
+                                              ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
+                                              : 'N/A'}
+                                        </span>
+                                      </div>
+                                      <div className="flex flex-col">
+                                        <span className="text-muted-foreground text-xs">Test Runs</span>
+                                        <span className="font-semibold">{selectedTemplate.validation_count}</span>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Warning for non-production templates */}
+                                  {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
+                                    <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
+                                      <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
+                                          {selectedTemplate.development_status === 'draft' && 'Draft Template - Untested'}
+                                          {selectedTemplate.development_status === 'testing' && 'Testing Template - Limited validation'}
+                                          {selectedTemplate.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
+                                          {selectedTemplate.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
+                                        </p>
+                                        <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
+                                          This template is still being tested. Results may vary in quality.
+                                        </p>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Success indicator for production templates */}
+                                  {selectedTemplate.development_status === 'production' && (
+                                    <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
+                                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                                      <div className="flex-1">
+                                        <p className="text-xs font-medium text-green-800 dark:text-green-200">
+                                          Production Template - Fully Validated
+                                        </p>
+                                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                                          This template has been thoroughly tested and is ready for production use.
+                                        </p>
+                                      </div>
+                                    </div>
                                   )}
                                 </div>
-                                
-                                {selectedTemplate.validation_count !== undefined && selectedTemplate.validation_count > 0 && (
-                                  <div className="grid grid-cols-2 gap-3 text-sm">
-                                    <div className="flex flex-col">
-                                      <span className="text-muted-foreground text-xs">Success Rate</span>
-                                      <span className="font-semibold">
-                                        {selectedTemplate.success_rate !== undefined 
-                                          ? `${Number(selectedTemplate.success_rate).toFixed(1)}%`
-                                          : selectedTemplate.success_count && selectedTemplate.validation_count
-                                            ? `${Math.round((selectedTemplate.success_count / selectedTemplate.validation_count) * 100)}%`
-                                            : 'N/A'}
-                                      </span>
-                                    </div>
-                                    <div className="flex flex-col">
-                                      <span className="text-muted-foreground text-xs">Test Runs</span>
-                                      <span className="font-semibold">{selectedTemplate.validation_count}</span>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Warning for non-production templates */}
-                                {selectedTemplate.development_status && selectedTemplate.development_status !== 'production' && (
-                                  <div className="flex items-start gap-2 p-3 rounded-md bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800">
-                                    <AlertCircle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-yellow-800 dark:text-yellow-200">
-                                        {selectedTemplate.development_status === 'draft' && 'Draft Template - Untested'}
-                                        {selectedTemplate.development_status === 'testing' && 'Testing Template - Limited validation'}
-                                        {selectedTemplate.development_status === 'validated' && 'Validated Template - Not yet production-ready'}
-                                        {selectedTemplate.development_status === 'deprecated' && 'Deprecated Template - Not recommended'}
-                                      </p>
-                                      <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-1">
-                                        This template is still being tested. Results may vary in quality.
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Success indicator for production templates */}
-                                {selectedTemplate.development_status === 'production' && (
-                                  <div className="flex items-start gap-2 p-3 rounded-md bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800">
-                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                                    <div className="flex-1">
-                                      <p className="text-xs font-medium text-green-800 dark:text-green-200">
-                                        Production Template - Fully Validated
-                                      </p>
-                                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                                        This template has been thoroughly tested and is ready for production use.
-                                      </p>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )
-                          })()}
+                              )
+                            })()}
+                          </div>
+                          <div>
+                            <Label htmlFor="ai_provider">AI Provider</Label>
+                            <select
+                              id="ai_provider"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={generateForm.provider}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, provider: e.target.value })}
+                            >
+                              {aiProviders.map((provider) => (
+                                <option key={provider.id} value={provider.name}>{provider.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <Label htmlFor="ai_model">Model</Label>
+                            <select
+                              id="ai_model"
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={generateForm.model}
+                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, model: e.target.value })}
+                            >
+                              {models.map((model) => (
+                                <option key={model.name} value={model.name}>{model.name}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <Label htmlFor="temperature">Temperature</Label>
+                            <input
+                              id="temperature"
+                              type="number"
+                              min={0}
+                              max={2}
+                              step={0.01}
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={generateForm.temperature}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, temperature: parseFloat(e.target.value) })}
+                            />
+                            <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="max_tokens">Max Output Tokens</Label>
+                            <input
+                              id="max_tokens"
+                              type="number"
+                              min={100}
+                              max={32000}
+                              step={100}
+                              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
+                              value={generateForm.max_tokens}
+                              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, max_tokens: parseInt(e.target.value) })}
+                            />
+                            <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
+                          </div>
+                          <div>
+                            <Label htmlFor="generate-prompt">Generation Prompt *</Label>
+                            <Textarea
+                              id="generate-prompt"
+                              placeholder="Describe what you want the document to contain..."
+                              value={generateForm.prompt}
+                              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGenerateForm({ ...generateForm, prompt: e.target.value })}
+                              className="mt-2"
+                              rows={4}
+                              required
+                            />
+                          </div>
                         </div>
-                        <div>
-                          <Label htmlFor="ai_provider">AI Provider</Label>
-                          <select
-                            id="ai_provider"
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                            value={generateForm.provider}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, provider: e.target.value })}
+                        <div className="flex justify-end space-x-2 pt-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setGenerateDialogOpen(false)}
                           >
-                            {aiProviders.map((provider) => (
-                              <option key={provider.id} value={provider.name}>{provider.name}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <Label htmlFor="ai_model">Model</Label>
-                          <select
-                            id="ai_model"
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                            value={generateForm.model}
-                            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setGenerateForm({ ...generateForm, model: e.target.value })}
+                            Cancel
+                          </Button>
+                          <Button
+                            type="submit"
+                            disabled={generatingDocument}
                           >
-                            {models.map((model) => (
-                              <option key={model.name} value={model.name}>{model.name}</option>
-                            ))}
-                          </select>
+                            {generatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                            <Wand2 className="h-4 w-4 mr-2" />
+                            Generate Document
+                          </Button>
                         </div>
-                        <div>
-                          <Label htmlFor="temperature">Temperature</Label>
-                          <input
-                            id="temperature"
-                            type="number"
-                            min={0}
-                            max={2}
-                            step={0.01}
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                            value={generateForm.temperature}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, temperature: parseFloat(e.target.value) })}
-                          />
-                          <p className="text-xs text-muted-foreground">Lower = more focused, Higher = more creative</p>
-                        </div>
-                        <div>
-                          <Label htmlFor="max_tokens">Max Output Tokens</Label>
-                          <input
-                            id="max_tokens"
-                            type="number"
-                            min={100}
-                            max={32000}
-                            step={100}
-                            className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-2"
-                            value={generateForm.max_tokens}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGenerateForm({ ...generateForm, max_tokens: parseInt(e.target.value) })}
-                          />
-                          <p className="text-xs text-muted-foreground">Maximum number of tokens the model can generate</p>
-                        </div>
-                        <div>
-                          <Label htmlFor="generate-prompt">Generation Prompt *</Label>
-                          <Textarea
-                            id="generate-prompt"
-                            placeholder="Describe what you want the document to contain..."
-                            value={generateForm.prompt}
-                            onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setGenerateForm({...generateForm, prompt: e.target.value})}
-                            className="mt-2"
-                            rows={4}
-                            required
-                          />
-                        </div>
-                      </div>
-                    <div className="flex justify-end space-x-2 pt-4">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => setGenerateDialogOpen(false)}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={generatingDocument}
-                      >
-                        {generatingDocument && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                        <Wand2 className="h-4 w-4 mr-2" />
-                        Generate Document
-                      </Button>
-                    </div>
-                    </form>
+                      </form>
                     </div>
                   </DialogContent>
                 </Dialog>

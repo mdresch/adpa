@@ -79,12 +79,9 @@ export class AIGenerationJobService {
   static async processJob(job: Bull.Job, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<any> {
     // Phase 5: Use injected dependencies or fall back to global imports
     const db = deps?.database || { query: pool.query.bind(pool) } as any
-    const ws = deps?.websocket || io
-    const ai = deps?.aiService || aiService
-    const contextAI = deps?.contextAwareAIService || ContextAwareAIService
     const log = deps?.logger || logger
     const jobData = job.data as AIGenerationJobData
-    const { jobId, userId, prompt, provider, model, temperature, max_tokens, template_id, variables } = jobData
+    const { jobId, provider } = jobData
     const { workerId, updateJobStatus } = options
 
     // Log job details for debugging
@@ -92,42 +89,56 @@ export class AIGenerationJobService {
       bullJobId: job.id,
       jobIdFromData: jobId,
       workerId,
-      hasJobId: !!jobId,
-      jobDataType: typeof jobData,
-      jobDataKeys: Object.keys(jobData || {})
     })
 
-    // Ensure we have a valid jobId - use the one from job.data if available, otherwise use Bull's job.id
+    // Ensure we have a valid jobId
     const actualJobId = jobId || job.id.toString()
-    
-    if (!actualJobId) {
-      throw new Error(`Cannot process job: no jobId found. Bull job ID: ${job.id}, job.data.jobId: ${jobId}`)
-    }
 
     try {
       // Update job status to processing and assign worker
       await updateJobStatus(actualJobId, "processing", 10, workerId, "ai-processing")
 
-      // Generate content using AI service
-      const result = await this.generateContent(job.data as AIGenerationJobData, deps)
+      // Phase 6: Start incremental progress heartbeat for AI generation (10% -> 45%)
+      const aiHeartbeat = AIGenerationJobService.startProgressHeartbeat(
+        actualJobId, 10, 45, updateJobStatus, workerId, deps, jobData
+      )
+
+      let result;
+      try {
+        // Generate content using AI service
+        result = await AIGenerationJobService.generateContent(jobData, deps)
+      } finally {
+        clearInterval(aiHeartbeat)
+      }
 
       // Update job status to 50%
       await updateJobStatus(actualJobId, "processing", 50, workerId, "ai-processing")
 
       // Update usage stats
       if (result.usage) {
+        const ai = deps?.aiService || aiService
         await ai.updateUsageStats(provider || 'openai', result.usage)
+      }
+
+      // Phase 6: Start incremental progress heartbeat for document processing (50% -> 85%)
+      const docHeartbeat = AIGenerationJobService.startProgressHeartbeat(
+        actualJobId, 50, 85, updateJobStatus, workerId, deps, jobData
+      )
+
+      let createdDocumentId;
+      try {
+        // Create document from generated content
+        createdDocumentId = await AIGenerationJobService.createDocument(jobData, result, deps)
+      } finally {
+        clearInterval(docHeartbeat)
       }
 
       // Update job status to 90%
       await updateJobStatus(actualJobId, "processing", 90, workerId, "ai-processing")
 
-      // Create document from generated content
-      const { documentId: createdDocumentId, documentRow: createdDocumentRow } = await this.createDocument(job.data as AIGenerationJobData, result, deps)
-
       // Validate document against baseline
       if (createdDocumentId) {
-        await this.validateAgainstBaseline(job.data as AIGenerationJobData, createdDocumentId, result, deps)
+        await AIGenerationJobService.validateAgainstBaseline(jobData, createdDocumentId, result, deps)
       }
 
       // Save result to database
@@ -150,23 +161,22 @@ export class AIGenerationJobService {
       )
 
       // Create audit log for AI analytics
-      await this.createAuditLog(job.data as AIGenerationJobData, result, createdDocumentId, deps)
+      await AIGenerationJobService.createAuditLog(jobData, result, createdDocumentId, deps)
 
       // Emit real-time updates
-      await this.emitCompletionEvents(job.data as AIGenerationJobData, finalResult, createdDocumentId, deps)
+      await AIGenerationJobService.emitCompletionEvents(jobData, finalResult, createdDocumentId, deps)
 
       log.info(`AI generation job completed: ${actualJobId}`)
 
       return finalResult
     } catch (error: any) {
-      await this.handleError(actualJobId, job.data as AIGenerationJobData, error, options, deps)
+      await AIGenerationJobService.handleError(actualJobId, jobData, error, options, deps)
       throw error
     }
   }
 
   /**
    * Generate content using AI service
-   * Phase 5: Accepts optional dependencies
    */
   private static async generateContent(jobData: AIGenerationJobData, deps?: QueueServiceDependencies): Promise<any> {
     const { prompt, provider, model, temperature, max_tokens, template_id, variables, userId, projectId, documentIds, use_context, include_integrations, custom_context } = jobData
@@ -174,6 +184,9 @@ export class AIGenerationJobService {
     const useContext = !!use_context || !!projectId || !!documentIds || !!template_id
     const contextAI = deps?.contextAwareAIService || ContextAwareAIService
     const ai = deps?.aiService || aiService
+
+    const fallbackProvider = jobData.fallback_provider
+    const fallbackProviders = fallbackProvider ? [fallbackProvider] : undefined
 
     if (useContext) {
       return await contextAI.generateWithContext({
@@ -189,7 +202,8 @@ export class AIGenerationJobService {
         document_ids: documentIds,
         include_integrations,
         custom_context,
-      })
+        fallback_providers: fallbackProviders
+      } as any)
     } else {
       return await ai.generateWithFallback({
         prompt,
@@ -199,37 +213,32 @@ export class AIGenerationJobService {
         max_tokens,
         template_id,
         variables,
-      })
+      }, fallbackProviders)
     }
   }
 
   /**
    * Create a document from generated content
-   * Phase 5: Accepts optional dependencies
    */
   private static async createDocument(jobData: AIGenerationJobData, result: any, deps?: QueueServiceDependencies): Promise<string | null> {
-    // Phase 5: Extract dependencies or use fallbacks
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const log = deps?.logger || logger
-    const { jobId, userId, template_id, variables, projectId, documentIds, name, description, framework } = jobData
+    const { jobId, userId, template_id, variables, projectId, documentIds, name, framework } = jobData
 
     let createdDocumentId: string | null = null
 
     try {
-      // Determine document name and content
       const docNameProvided = name && name.trim() ? name.trim() : null
-      const templateName = variables?.template_name || jobData.template_name || null
+      const templateName = (variables?.template_name as string) || jobData.template_name || null
       const docName = docNameProvided || templateName || (template_id ? `Generated Document - ${template_id}` : `AI Generated Document ${new Date().toISOString()}`)
 
       const rawContent = result?.content ? result.content : result
       const docContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
       const projectIdForDoc = projectId || variables?.project_id || null
 
-      // Calculate content statistics
-      const { wordCount, characterCount, sentenceCount, paragraphCount } = this.calculateContentStats(docContent)
+      const { wordCount, characterCount, sentenceCount, paragraphCount } = AIGenerationJobService.calculateContentStats(docContent)
 
-      // Calculate quality metrics
-      const qualityMetrics = await this.calculateQualityMetrics(docContent, {
+      const qualityMetrics = await AIGenerationJobService.calculateQualityMetrics(docContent, {
         wordCount,
         characterCount,
         sentenceCount,
@@ -239,21 +248,16 @@ export class AIGenerationJobService {
         sourceDocCount: documentIds?.length || 0
       })
 
-      // Calculate AI cost
       const { provider, model } = jobData
       const inputTokens = result?.usage?.prompt_tokens || result?.usage?.input_tokens || 0
       const outputTokens = result?.usage?.completion_tokens || result?.usage?.output_tokens || 0
       const totalTokens = result?.usage?.total_tokens || (inputTokens + outputTokens)
-      const estimatedCost = this.calculateAICost(provider || 'openai', model || 'unknown', inputTokens, outputTokens)
+      const estimatedCost = AIGenerationJobService.calculateAICost(provider || 'openai', model || 'unknown', inputTokens, outputTokens)
 
-      // Calculate processing duration
       const jobStartTime = jobData.started_at ? new Date(jobData.started_at) : new Date(jobData.timestamp || Date.now())
-      const jobEndTime = new Date()
-      const processingTimeMs = jobEndTime.getTime() - jobStartTime.getTime()
-      const processingTimeSec = (processingTimeMs / 1000).toFixed(2)
+      const processingTimeSec = ((new Date().getTime() - jobStartTime.getTime()) / 1000).toFixed(2)
 
-      // Build generation metadata
-      const generationMetadata = this.buildGenerationMetadata({
+      const generationMetadata = AIGenerationJobService.buildGenerationMetadata({
         result,
         provider: provider || 'openai',
         model: model || 'unknown',
@@ -262,7 +266,7 @@ export class AIGenerationJobService {
         outputTokens,
         totalTokens,
         estimatedCost,
-        processingTimeMs,
+        processingTimeMs: new Date().getTime() - jobStartTime.getTime(),
         processingTimeSec,
         wordCount,
         characterCount,
@@ -273,7 +277,6 @@ export class AIGenerationJobService {
         documentIds
       })
 
-      // Insert document into database
       const insertResult = await db.query(
         `
         INSERT INTO documents (project_id, name, content, template_id, status, created_by, updated_by, generation_metadata, word_count, character_count, sentence_count, paragraph_count)
@@ -285,69 +288,44 @@ export class AIGenerationJobService {
 
       if (insertResult.rows.length > 0) {
         createdDocumentId = insertResult.rows[0].id
-        const createdDocumentRow = insertResult.rows[0]
-        log.info(`Document created: ${createdDocumentId} (project: ${projectIdForDoc || 'none'}) - ${wordCount} words, ${characterCount} chars`)
-
-        // Increment template usage count
-        if (template_id) {
-          await this.incrementTemplateUsage(template_id, deps)
-        }
-
-        // Trigger automatic entity extraction
-        if (projectIdForDoc && docContent && docContent.trim().length > 0) {
-          await this.triggerAutoExtraction(jobId, projectIdForDoc, userId, createdDocumentId, docName, deps)
+        if (template_id) await AIGenerationJobService.incrementTemplateUsage(template_id, deps)
+        if (projectIdForDoc && docContent.trim() && createdDocumentId) {
+          await AIGenerationJobService.triggerAutoExtraction(
+            jobId || 'unknown',
+            projectIdForDoc as string,
+            (userId || undefined) as string | undefined,
+            createdDocumentId,
+            docName,
+            deps
+          )
         }
       }
     } catch (docErr: any) {
       log.error(`Failed to create document for job ${jobId}:`, docErr)
-      // Continue - document creation failure shouldn't block marking job as completed
     }
 
     return createdDocumentId
   }
 
-  /**
-   * Calculate content statistics
-   */
-  private static calculateContentStats(content: string): {
-    wordCount: number
-    characterCount: number
-    sentenceCount: number
-    paragraphCount: number
-  } {
-    const wordCount = content.split(/\s+/).filter((word: string) => word.length > 0).length
+  private static calculateContentStats(content: string) {
+    const wordCount = content.split(/\s+/).filter(w => w.length > 0).length
     const characterCount = content.length
     const sentenceCount = (content.match(/[.!?]+/g) || []).length
     const paragraphCount = (content.match(/\n\n/g) || []).length + 1
-
     return { wordCount, characterCount, sentenceCount, paragraphCount }
   }
 
-  /**
-   * Calculate quality metrics for document
-   */
   private static async calculateQualityMetrics(content: string, metadata: any): Promise<any> {
     const { analyzeDocumentQuality } = await import('../../utils/documentMetadata')
-
     const tempMetadata = {
-      wordCount: metadata.wordCount,
-      characterCount: metadata.characterCount,
-      sentenceCount: metadata.sentenceCount,
-      paragraphCount: metadata.paragraphCount,
+      ...metadata,
       lineCount: (content.match(/\n/g) || []).length + 1,
-      estimatedReadingTime: Math.ceil(metadata.wordCount / 200),
-      templateId: metadata.templateId || undefined,
-      framework: metadata.framework || undefined
+      estimatedReadingTime: Math.ceil(metadata.wordCount / 200)
     }
-
     return analyzeDocumentQuality(content, tempMetadata, metadata.sourceDocCount || 0)
   }
 
-  /**
-   * Calculate AI cost based on token usage
-   */
   private static calculateAICost(provider: string, model: string, inputTokens: number, outputTokens: number): string {
-    // Pricing per 1M tokens (as of 2024)
     const pricing: Record<string, { input: number, output: number }> = {
       'openai-gpt-4': { input: 30, output: 60 },
       'openai-gpt-4-turbo': { input: 10, output: 30 },
@@ -361,397 +339,142 @@ export class AIGenerationJobService {
       'anthropic-claude-3-sonnet': { input: 3, output: 15 },
       'anthropic-claude-3-haiku': { input: 0.25, output: 1.25 }
     }
-
     const key = `${provider.toLowerCase()}-${model.toLowerCase()}`.replace(/\s+/g, '-')
     const rates = pricing[key] || { input: 1, output: 3 }
-
-    const inputCost = (inputTokens / 1_000_000) * rates.input
-    const outputCost = (outputTokens / 1_000_000) * rates.output
-    const totalCost = inputCost + outputCost
-
+    const totalCost = ((inputTokens / 1_000_000) * rates.input) + ((outputTokens / 1_000_000) * rates.output)
     return totalCost < 0.01 ? '$0.00' : `$${totalCost.toFixed(4)}`
   }
 
-  /**
-   * Build generation metadata object
-   */
   private static buildGenerationMetadata(options: any): any {
-    const {
-      result,
-      provider,
-      model,
-      temperature,
-      inputTokens,
-      outputTokens,
-      totalTokens,
-      estimatedCost,
-      processingTimeMs,
-      processingTimeSec,
-      wordCount,
-      characterCount,
-      sentenceCount,
-      paragraphCount,
-      qualityMetrics,
-      jobId,
-      documentIds
-    } = options
-
+    const { result, provider, model, temperature, inputTokens, outputTokens, totalTokens, estimatedCost, processingTimeMs, processingTimeSec, wordCount, characterCount, sentenceCount, paragraphCount, qualityMetrics, jobId, documentIds } = options
     return {
       aiProcessing: {
         provider: result?.provider || provider,
         model: result?.model || model,
         temperature: temperature || 0.7,
-        tokens: {
-          input: inputTokens,
-          output: outputTokens,
-          total: totalTokens,
-          cost: estimatedCost
-        },
+        tokens: { input: inputTokens, output: outputTokens, total: totalTokens, cost: estimatedCost },
         processingTime: `${processingTimeSec}s`,
-        processingTimeMs: processingTimeMs
+        processingTimeMs
       },
-      generation: {
-        generated_at: new Date().toISOString(),
-        job_id: jobId,
-        status: 'completed',
-        duration: processingTimeMs,
-        durationFormatted: `${processingTimeSec}s`
-      },
-      context: {
-        summary: result?.context_summary || null,
-        warnings: result?.context_warnings || [],
-        token_usage: result?.context_token_usage || null
-      },
-      contentMetrics: {
-        wordCount,
-        characterCount,
-        sentenceCount,
-        paragraphCount,
-        avgWordsPerSentence: sentenceCount > 0 ? (wordCount / sentenceCount).toFixed(1) : 'N/A',
-        readingTime: `${Math.ceil(wordCount / 200)} min`
-      },
-      qualityMetrics: {
-        overallQuality: qualityMetrics.overallQuality,
-        completeness: qualityMetrics.completeness,
-        structureScore: qualityMetrics.structureScore,
-        formattingScore: qualityMetrics.formattingScore,
-        contentDepth: qualityMetrics.contentDepth,
-        accuracy: qualityMetrics.accuracy,
-        consistency: qualityMetrics.consistency,
-        contextRelevance: qualityMetrics.contextRelevance,
-        professionalQuality: qualityMetrics.professionalQuality,
-        standardsCompliance: qualityMetrics.standardsCompliance,
-        complexityScore: qualityMetrics.complexityScore,
-        recommendations: qualityMetrics.recommendations
-      },
-      complianceMetrics: {
-        pmbokGuide: qualityMetrics.complianceMetrics.pmbokGuide,
-        gdpr: qualityMetrics.complianceMetrics.gdpr,
-        hipaa: qualityMetrics.complianceMetrics.hipaa,
-        soc2: qualityMetrics.complianceMetrics.soc2,
-        industryStandards: qualityMetrics.complianceMetrics.industryStandards,
-        bestPractices: qualityMetrics.complianceMetrics.bestPractices,
-        templateAdherence: qualityMetrics.complianceMetrics.templateAdherence,
-        overallComplianceRating: qualityMetrics.complianceMetrics.overallComplianceRating
-      },
-      sourceDocuments: (documentIds || []).map((docId: string, idx: number) => ({
-        id: docId,
-        order: idx + 1
-      }))
+      generation: { generated_at: new Date().toISOString(), job_id: jobId, status: 'completed' },
+      contentMetrics: { wordCount, characterCount, sentenceCount, paragraphCount },
+      qualityMetrics,
+      sourceDocuments: (documentIds || []).map((id: string, idx: number) => ({ id, order: idx + 1 }))
     }
   }
 
-  /**
-   * Increment template usage count
-   * Phase 5: Accepts optional dependencies
-   */
   private static async incrementTemplateUsage(templateId: string, deps?: QueueServiceDependencies): Promise<void> {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
-    const log = deps?.logger || logger
     try {
-      await db.query(
-        `UPDATE templates 
-         SET usage_count = usage_count + 1,
-             last_used_at = CURRENT_TIMESTAMP,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [templateId]
-      )
-      log.info(`✅ Template usage incremented: ${templateId}`)
-    } catch (templateErr: any) {
-      log.error(`Failed to increment template usage for ${templateId}:`, templateErr)
-      // Don't fail the job if template update fails
-    }
+      await db.query(`UPDATE templates SET usage_count = usage_count + 1, last_used_at = CURRENT_TIMESTAMP WHERE id = $1`, [templateId])
+    } catch (err) { }
   }
 
-  /**
-   * Trigger automatic entity extraction for newly created document
-   * Phase 5: Accepts optional dependencies
-   */
-  private static async triggerAutoExtraction(
-    sourceJobId: string,
-    projectId: string,
-    userId: string | undefined,
-    documentId: string,
-    documentName: string,
-    deps?: QueueServiceDependencies
-  ): Promise<void> {
+  private static async triggerAutoExtraction(sourceJobId: string, projectId: string, userId: string | undefined, documentId: string, documentName: string, deps?: QueueServiceDependencies): Promise<void> {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const log = deps?.logger || logger
     try {
-      log.info(`[AUTO-EXTRACTION] Triggering extraction for document ${documentId} in project ${projectId}`)
-
-      // Create extraction job record
       const extractionJobId = uuidv4()
-      await db.query(
-        `INSERT INTO jobs (
-          id, type, status, data, created_by, project_id
-        ) VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id`,
-        [
-          extractionJobId,
-          'project-data-extraction',
-          'pending',
-          JSON.stringify({
-            jobId: extractionJobId,
-            projectId,
-            documentIds: [documentId],
-            autoTriggered: true,
-            sourceDocumentId: documentId,
-            sourceDocumentName: documentName,
-            sourceJobId
-          }),
-          userId || null,
-          projectId
-        ]
-      )
-
-      // Enqueue extraction job (dynamic import to avoid circular dependency)
+      await db.query(`INSERT INTO jobs (id, type, status, data, created_by, project_id) VALUES ($1, $2, $3, $4, $5, $6)`, [extractionJobId, 'project-data-extraction', 'pending', JSON.stringify({ jobId: extractionJobId, projectId, documentIds: [documentId], sourceJobId }), userId || null, projectId])
       const { extractionQueue } = await import('../queueService')
-      await extractionQueue.add('extract-project-data', {
-        jobId: extractionJobId,
-        projectId,
-        userId: userId || null,
-        documentIds: [documentId],
-        autoTriggered: true,
-        sourceDocumentId: documentId,
-        sourceDocumentName: documentName,
-        sourceJobId
-      }, {
-        jobId: extractionJobId,
-        priority: 5 // Lower priority than manual extractions
-      })
-
-      log.info(`✅ [AUTO-EXTRACTION] Extraction job ${extractionJobId} queued for document ${documentId}`)
-    } catch (extractionErr: any) {
-      log.error(`❌ [AUTO-EXTRACTION] Failed to trigger extraction for document ${documentId}:`, extractionErr)
-      // Don't fail the AI generation job if extraction trigger fails
+      await extractionQueue.add('extract-project-data', { jobId: extractionJobId, projectId, userId: userId || null, documentIds: [documentId], sourceJobId }, { jobId: extractionJobId, priority: 5 })
+    } catch (err) {
+      log.error(`Auto-extraction failed`, err)
     }
   }
 
-  /**
-   * Validate document against project baseline
-   * Phase 5: Accepts optional dependencies
-   */
-  private static async validateAgainstBaseline(
-    jobData: AIGenerationJobData,
-    documentId: string,
-    result: any,
-    deps?: QueueServiceDependencies
-  ): Promise<void> {
+  private static async validateAgainstBaseline(jobData: AIGenerationJobData, documentId: string, result: any, deps?: QueueServiceDependencies): Promise<void> {
     const ws = deps?.websocket || io
-    const log = deps?.logger || logger
-    const projectIdForValidation = jobData.projectId || jobData.variables?.project_id
-
-    if (!projectIdForValidation) {
-      return
-    }
-
+    const projectId = (jobData.projectId || jobData.variables?.project_id) as string
+    if (!projectId) return
     try {
       const { baselineService } = await import('../baselineService')
-      const rawContent = result?.content ? result.content : result
-      const documentContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent)
-      const docName = (jobData.name && jobData.name.trim()) ? jobData.name.trim() : 'Generated Document'
-
-      log.info(`[Baseline Validation] Checking document ${documentId} against project ${projectIdForValidation} baseline`)
-
-      const drifts = await baselineService.validateDocumentAgainstBaseline(
-        projectIdForValidation,
-        documentId,
-        documentContent,
-        docName
-      )
-
+      const docContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content || result)
+      const drifts = await baselineService.validateDocumentAgainstBaseline(projectId, documentId, docContent, jobData.name || 'Document')
       if (drifts.length > 0) {
-        log.warn(`[Baseline Validation] Detected ${drifts.length} drift(s) in document ${documentId}`)
-        // Emit drift alert to project room
-        ws.to(`project:${projectIdForValidation}`).emit("baseline:drift", {
-          documentId,
-          driftCount: drifts.length,
-          drifts: drifts.map((d: any) => ({
-            type: d.detection_type,
-            severity: d.drift_severity,
-            description: d.drift_description
-          }))
-        })
-      } else {
-        log.info(`[Baseline Validation] No drift detected in document ${documentId}`)
+        ws.to(`project:${projectId}`).emit("baseline:drift", { documentId, driftCount: drifts.length, drifts: drifts.map((d: any) => ({ type: d.detection_type, severity: d.drift_severity, description: d.drift_description })) })
       }
-    } catch (baselineErr: any) {
-      log.error(`[Baseline Validation] Failed to validate document ${documentId}:`, baselineErr)
-      // Don't fail the job if baseline validation fails
+    } catch (err) {
+      const log = deps?.logger || logger
+      log.error(`Baseline validation failed for project ${projectId}:`, err)
     }
   }
 
-  /**
-   * Create audit log for AI analytics
-   * Phase 5: Accepts optional dependencies
-   */
-  private static async createAuditLog(
-    jobData: AIGenerationJobData,
-    result: any,
-    documentId: string | null,
-    deps?: QueueServiceDependencies
-  ): Promise<void> {
+  private static async createAuditLog(jobData: AIGenerationJobData, result: any, documentId: string | null, deps?: QueueServiceDependencies): Promise<void> {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
-    const log = deps?.logger || logger
     try {
-      const provider = jobData.provider || 'openai'
-
-      // Get provider ID for audit log
-      const providerResult = await db.query(
-        'SELECT id FROM ai_providers WHERE name = $1 LIMIT 1',
-        [provider]
-      )
-
+      const providerResult = await db.query('SELECT id FROM ai_providers WHERE name = $1 LIMIT 1', [jobData.provider || 'openai'])
       if (providerResult.rows.length > 0) {
-        await db.query(
-          `INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [
-            jobData.userId || null,
-            'ai_generate',
-            'ai_provider',
-            providerResult.rows[0].id,
-            JSON.stringify({
-              prompt_length: jobData.prompt?.length || 0,
-              provider,
-              model: jobData.model,
-              template_id: jobData.template_id,
-              document_id: documentId,
-              job_id: jobData.jobId,
-              usage: result?.usage || {},
-              success: true,
-              response_time: result?.response_time || 0
-            })
-          ]
-        )
-        log.info(`✅ Audit log created for AI generation (job: ${jobData.jobId})`)
+        await db.query(`INSERT INTO audit_logs (user_id, action, resource_type, resource_id, new_values) VALUES ($1, $2, $3, $4, $5)`, [jobData.userId || null, 'ai_generate', 'ai_provider', providerResult.rows[0].id, JSON.stringify({ provider: jobData.provider, model: jobData.model, template_id: jobData.template_id, document_id: documentId, job_id: jobData.jobId, usage: result?.usage || {} })])
       }
-    } catch (auditErr: any) {
-      log.error(`Failed to create audit log for job ${jobData.jobId}:`, auditErr)
-      // Don't fail the job if audit logging fails
+    } catch (err) { }
+  }
+
+  private static async emitCompletionEvents(jobData: AIGenerationJobData, finalResult: any, createdDocumentId: string | null, deps?: QueueServiceDependencies): Promise<void> {
+    const ws = deps?.websocket || io
+    const db = deps?.database || { query: pool.query.bind(pool) } as any
+    const projectId = jobData.projectId || jobData.variables?.project_id || null
+    ws.emit("job:completed", { jobId: jobData.jobId, userId: jobData.userId, status: "completed", result: finalResult, documentId: createdDocumentId, projectId })
+    if (createdDocumentId && projectId) {
+      const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [createdDocumentId])
+      ws.to(`project:${projectId}`).emit("document:created", { document: docResult.rows[0] || null, documentId: createdDocumentId, projectId })
     }
   }
 
-  /**
-   * Emit completion events via WebSocket
-   * Phase 5: Accepts optional dependencies
-   */
-  private static async emitCompletionEvents(
-    jobData: AIGenerationJobData,
-    finalResult: any,
-    createdDocumentId: string | null,
-    deps?: QueueServiceDependencies
-  ): Promise<void> {
-    const ws = deps?.websocket || io
-    const db = deps?.database || { query: pool.query.bind(pool) } as any
-    const log = deps?.logger || logger
-    const templateName = jobData.variables?.template_name || jobData.template_name || null
-    const projectName = jobData.variables?.project_name || jobData.projectName || null
-    const documentName = templateName || 'Document'
-    const projectIdForNotification = jobData.projectId || jobData.variables?.project_id || null
-
-    // Emit job completion event
-    ws.emit("job:completed", {
-      jobId: jobData.jobId,
-      userId: jobData.userId,
-      status: "completed",
-      result: finalResult,
-      message: `${documentName} generated successfully`,
-      documentId: createdDocumentId,
-      projectId: projectIdForNotification,
-      provider: jobData.provider,
-      model: jobData.model,
-    })
-
-    // Emit document created event if document was created
-    if (createdDocumentId && projectIdForNotification) {
-      try {
-        // Fetch document row for complete event data
-        const docResult = await db.query('SELECT * FROM documents WHERE id = $1', [createdDocumentId])
-        const createdDocumentRow = docResult.rows[0] || null
-
-        ws.to(`project:${projectIdForNotification}`).emit("document:created", {
-          document: createdDocumentRow,
-          documentId: createdDocumentId,
-          documentName,
-          projectId: projectIdForNotification,
-          projectName,
-          provider: jobData.provider,
-          model: jobData.model,
-        })
-      } catch (emitErr: any) {
-        log.error(`Failed to emit document:created for job ${jobData.jobId}:`, emitErr)
-      }
-    }
-  }
-
-  /**
-   * Handle errors during job processing
-   * Phase 5: Accepts optional dependencies
-   */
-  private static async handleError(
-    jobId: string,
-    jobData: AIGenerationJobData,
-    error: any,
-    options: ProcessJobOptions,
-    deps?: QueueServiceDependencies
-  ): Promise<void> {
+  private static async handleError(jobId: string, jobData: AIGenerationJobData, error: any, options: ProcessJobOptions, deps?: QueueServiceDependencies): Promise<void> {
     const db = deps?.database || { query: pool.query.bind(pool) } as any
     const ws = deps?.websocket || io
     const log = deps?.logger || logger
-    log.error(`AI generation job failed: ${jobId}`, error)
-
     const errorMessage = error instanceof Error ? error.message : "Unknown error"
+    log.error(`AI generation job failed: ${jobId}`, error)
+    await db.query(`UPDATE jobs SET status = 'failed', error_message = $1, failed_at = CURRENT_TIMESTAMP WHERE id = $2`, [errorMessage, jobId])
+    ws.emit("job:failed", { jobId, userId: jobData.userId, status: "failed", error: errorMessage, projectId: jobData.projectId || jobData.variables?.project_id })
+  }
 
-    // Update job with error
-    await db.query(
-      `
-      UPDATE jobs 
-      SET status = 'failed', error_message = $1, 
-          started_at = COALESCE(started_at, CURRENT_TIMESTAMP),
-          processing_started_at = COALESCE(processing_started_at, CURRENT_TIMESTAMP),
-          failed_at = CURRENT_TIMESTAMP
-      WHERE id = $2
-    `,
-      [errorMessage, jobId]
-    )
+  /**
+   * Start a progress heartbeat to give the user visual feedback for long-running tasks
+   * Phase 6: Continuous progress updates
+   */
+  private static startProgressHeartbeat(
+    jobId: string,
+    startProgress: number,
+    maxProgress: number,
+    updateJobStatus: ProcessJobOptions['updateJobStatus'],
+    workerId: string,
+    deps?: QueueServiceDependencies,
+    jobData?: AIGenerationJobData
+  ): NodeJS.Timeout {
+    const ws = deps?.websocket || io
+    const log = deps?.logger || logger
+    let currentProgress = startProgress
 
-    // Emit real-time update
-    const templateName = jobData.variables?.template_name || jobData.template_name || null
-    const documentName = templateName || 'Document'
+    return setInterval(async () => {
+      // Small random increments to make it feel natural (1-3%)
+      const increment = Math.floor(Math.random() * 2) + 1
+      if (currentProgress + increment < maxProgress) {
+        currentProgress += increment
 
-    ws.emit("job:failed", {
-      jobId,
-      userId: jobData.userId,
-      status: "failed",
-      error: errorMessage,
-      message: `Failed to generate ${documentName}`,
-      projectId: jobData.projectId || jobData.variables?.project_id,
-      provider: jobData.provider,
-      model: jobData.model,
-    })
+        try {
+          // Update database
+          await updateJobStatus(jobId, "processing", currentProgress, workerId, "ai-processing")
+          log.info(`[HEARTBEAT] Job ${jobId} progress: ${currentProgress}%`)
+
+          // Emit WebSocket event for real-time UI updates
+          if (ws) {
+            ws.emit("job:status", {
+              jobId,
+              userId: jobData?.userId,
+              progress: currentProgress,
+              status: "processing",
+              projectId: jobData?.projectId || jobData?.variables?.project_id,
+              message: "Processing..."
+            })
+          }
+        } catch (err) {
+          // Ignore heartbeat errors - not critical if we miss a step
+          log.debug(`[HEARTBEAT] Failed to update progress for job ${jobId}`)
+        }
+      }
+    }, 4000) // Update every 4 seconds
   }
 }
-

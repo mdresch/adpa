@@ -22,6 +22,7 @@ export type JobType =
   | 'quality-audit'
   | 'pipeline-processing'
   | 'publish-to-confluence'
+  | `extract-entity-${string}`
 
 /**
  * Base Job Data
@@ -36,14 +37,30 @@ export interface BaseJobData {
  * AI Generation Job Data
  */
 export interface AIGenerationJobData extends BaseJobData {
-  projectId: string
+  projectId?: string | null
   prompt?: string
   provider?: string
   model?: string | null
+  temperature?: number
+  fallback_provider?: string
+  fallback_model?: string
   template_id?: string | null
   max_tokens?: number
   variables?: Record<string, unknown>
   documentId?: string
+
+  // Additional fields used in AIGenerationJobService
+  name?: string
+  description?: string
+  framework?: string
+  template_name?: string
+  projectName?: string
+  started_at?: string
+  timestamp?: number
+  documentIds?: string[]
+  use_context?: boolean
+  include_integrations?: boolean
+  custom_context?: Record<string, unknown>
 }
 
 /**
@@ -64,6 +81,8 @@ export interface BaselineExtractionJobData extends BaseJobData {
   document_ids: string[]
   ai_provider?: string
   ai_model?: string
+  fallback_provider?: string
+  fallback_model?: string
 }
 
 /**
@@ -73,6 +92,8 @@ export interface ProjectDataExtractionJobData extends BaseJobData {
   projectId: string
   aiProvider?: string
   aiModel?: string
+  fallbackProvider?: string
+  fallbackModel?: string
   documentIds?: string[]
   domains?: string[]
 }
@@ -100,6 +121,8 @@ export interface DocumentRegenerationJobData extends BaseJobData {
   templateId: string
   provider: string
   model: string
+  fallback_provider?: string
+  fallback_model?: string
   versionType: 'major' | 'minor' | 'patch'
   temperature?: number
 }

@@ -53,13 +53,16 @@ export interface Program {
   owner_name?: string
   budget?: number
   currency_code?: string
+  currency?: string
   start_date?: string
   end_date?: string
-  rag_status: 'green' | 'amber' | 'red'
-  status: string
+  rag_status?: 'green' | 'amber' | 'red'
+  status: 'green' | 'amber' | 'red'
   created_at: string
   updated_at: string
   project_count?: number
+  created_by?: string
+  updated_by?: string
 }
 
 export interface Document {
@@ -154,22 +157,7 @@ export interface Template {
   }
 }
 
-export interface Program {
-  id: string
-  name: string
-  description?: string
-  status: 'green' | 'amber' | 'red'
-  owner_id: string
-  owner_name?: string
-  start_date?: string
-  end_date?: string
-  budget?: number
-  currency?: string
-  created_at: string
-  updated_at: string
-  created_by?: string
-  updated_by?: string
-}
+
 
 export interface ProgramMetrics {
   budget: {
@@ -225,6 +213,44 @@ export interface ApiResponse<T> {
     pages: number
   }
 }
+
+export interface PendingJobsDiagnostics {
+  diagnostics: {
+    totalPending: number
+    jobs: Array<{
+      jobId: string
+      type: string
+      queueName: string
+      ageMinutes: number
+      inQueue: boolean
+      queueStatus: string
+      queuePosition: number | null
+      issues: string[]
+      createdAt: string
+      hasError: boolean
+    }>
+    summary: {
+      inQueue: number
+      notInQueue: number
+      oldPending: number
+      withErrors: number
+    }
+  }
+  queueStats: Record<string, any>
+  recommendations: string[]
+}
+
+export interface FixPendingJobsResponse {
+  success: boolean
+  message: string
+  results: {
+    processed: number
+    reAdded: number
+    markedFailed: number
+    errors: string[]
+  }
+}
+
 
 // PMBOK 8 Performance Domain Types
 export interface PMBOK8EntityCounts {
@@ -563,11 +589,11 @@ class ApiClient {
   }
 
   // HTTP method shortcuts
-  async get<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  async get<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'GET' })
   }
 
-  async post<T>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
+  async post<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
       method: 'POST',
@@ -575,7 +601,7 @@ class ApiClient {
     })
   }
 
-  async put<T>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
+  async put<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PUT',
@@ -583,11 +609,11 @@ class ApiClient {
     })
   }
 
-  async delete<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  async delete<T = any>(endpoint: string, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, { ...options, method: 'DELETE' })
   }
 
-  async patch<T>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
+  async patch<T = any>(endpoint: string, body?: any, options?: RequestInit): Promise<T> {
     return this.request<T>(endpoint, {
       ...options,
       method: 'PATCH',
@@ -968,12 +994,7 @@ class ApiClient {
   // Duplicate createTemplate method removed
 
   // AI endpoints
-  async generateDocument(prompt: string, templateId?: string) {
-    return this.request<any>("/ai/generate", {
-      method: "POST",
-      body: JSON.stringify({ prompt, templateId }),
-    })
-  }
+
 
   // Analytics endpoints
   async getAnalytics(timeRange?: string) {
@@ -1223,42 +1244,45 @@ class ApiClient {
   // AI API
   async getAIProviders(): Promise<any[]> {
     // The /api/ai-providers endpoint returns providers array directly, not wrapped
-    const response = await this.request<any[]>("/ai-providers")
+    const response = await this.request<any>("/ai-providers")
     // Handle both direct array response and wrapped response
-    return Array.isArray(response) ? response : (response.providers || [])
+    if (Array.isArray(response)) {
+      return response
+    }
+    return response?.providers || []
   }
 
   // AI Model Configuration API
   async getProviderModels(providerId: string): Promise<{ models: any[], provider: any }> {
-    return await this.request(`/ai-models/providers/${providerId}/models`)
+    return await this.request<{ models: any[], provider: any }>(`/ai-models/providers/${providerId}/models`)
   }
 
   async getModelConfiguration(providerId: string, modelId: string): Promise<{ model: any }> {
-    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`)
+    return await this.request<{ model: any }>(`/ai-models/providers/${providerId}/models/${modelId}`)
   }
 
   async createModelConfiguration(providerId: string, modelData: any): Promise<{ model: any, message: string }> {
-    return await this.request(`/ai-models/providers/${providerId}/models`, {
+    return await this.request<{ model: any, message: string }>(`/ai-models/providers/${providerId}/models`, {
       method: "POST",
       body: JSON.stringify(modelData)
     })
   }
 
   async updateModelConfiguration(providerId: string, modelId: string, modelData: any): Promise<{ model: any, message: string }> {
-    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`, {
+    return await this.request<{ model: any, message: string }>(`/ai-models/providers/${providerId}/models/${modelId}`, {
       method: "PUT",
       body: JSON.stringify(modelData)
     })
   }
 
   async deleteModelConfiguration(providerId: string, modelId: string): Promise<{ message: string }> {
-    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}`, {
+    return await this.request<{ message: string }>(`/ai-models/providers/${providerId}/models/${modelId}`, {
       method: "DELETE"
     })
   }
 
   async testModelConfiguration(providerId: string, modelId: string, testData?: any): Promise<{ test: any, message: string }> {
-    return await this.request(`/ai-models/providers/${providerId}/models/${modelId}/test`, {
+    return await this.request<{ test: any, message: string }>(`/ai-models/providers/${providerId}/models/${modelId}/test`, {
       method: "POST",
       body: JSON.stringify(testData || {})
     })
@@ -1272,10 +1296,15 @@ class ApiClient {
     max_tokens?: number
     template_id?: string
     variables?: Record<string, any>
+    projectId?: string
   }): Promise<any> {
-    const response = await this.request("/ai/generate", {
+    const payload = {
+      ...data,
+      project_id: data.projectId
+    }
+    const response = await this.request<any>("/ai/generate", {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     })
     return response
   }
@@ -1440,7 +1469,7 @@ class ApiClient {
   }
 
   async getQueueMetrics(): Promise<any> {
-    const response = await this.request("/queue-stats/metrics")
+    const response = await this.request<any>("/queue-stats/metrics")
     return response
   }
 
@@ -1450,32 +1479,8 @@ class ApiClient {
   }
 
   // Job Diagnostics API
-  async getPendingJobsDiagnostics(): Promise<{
-    diagnostics: {
-      totalPending: number
-      jobs: Array<{
-        jobId: string
-        type: string
-        queueName: string
-        ageMinutes: number
-        inQueue: boolean
-        queueStatus: string
-        queuePosition: number | null
-        issues: string[]
-        createdAt: string
-        hasError: boolean
-      }>
-      summary: {
-        inQueue: number
-        notInQueue: number
-        oldPending: number
-        withErrors: number
-      }
-    }
-    queueStats: Record<string, any>
-    recommendations: string[]
-  }> {
-    const response = await this.request("/jobs/diagnostics/pending")
+  async getPendingJobsDiagnostics(): Promise<PendingJobsDiagnostics> {
+    const response = await this.request<PendingJobsDiagnostics>("/jobs/diagnostics/pending")
     return response
   }
 
@@ -1489,17 +1494,8 @@ class ApiClient {
     return this.requestBlob(`/documents/${id}/export/docx`)
   }
 
-  async fixPendingJobs(action: 're-add' | 'mark-failed', maxAge?: number): Promise<{
-    success: boolean
-    message: string
-    results: {
-      processed: number
-      reAdded: number
-      markedFailed: number
-      errors: string[]
-    }
-  }> {
-    const response = await this.request("/jobs/diagnostics/fix-pending", {
+  async fixPendingJobs(action: 're-add' | 'mark-failed', maxAge?: number): Promise<FixPendingJobsResponse> {
+    const response = await this.request<FixPendingJobsResponse>("/jobs/diagnostics/fix-pending", {
       method: "POST",
       body: JSON.stringify({ action, maxAge }),
     })
@@ -1508,28 +1504,28 @@ class ApiClient {
 
   // Analytics API
   async getDashboardAnalytics(): Promise<any> {
-    const response = await this.request("/analytics/dashboard")
+    const response = await this.request<any>("/analytics/dashboard")
     return response
   }
 
   async getSystemAnalytics(period: string = "30d"): Promise<any> {
-    const response = await this.request(`/analytics/system?period=${period}`)
+    const response = await this.request<any>(`/analytics/system?period=${period}`)
     return response
   }
 
   // AI Analytics API
   async getAIModelAnalytics(period: string = "30d"): Promise<any> {
-    const response = await this.request(`/ai-analytics/models?period=${period}`)
+    const response = await this.request<any>(`/ai-analytics/models?period=${period}`)
     return response
   }
 
   async getAIProviderAnalytics(providerId: string, period: string = "30d"): Promise<any> {
-    const response = await this.request(`/ai-analytics/providers/${providerId}?period=${period}`)
+    const response = await this.request<any>(`/ai-analytics/providers/${providerId}?period=${period}`)
     return response
   }
 
   async getAITrends(period: string = "30d"): Promise<any> {
-    const response = await this.request(`/ai-analytics/trends?period=${period}`)
+    const response = await this.request<any>(`/ai-analytics/trends?period=${period}`)
     return response
   }
 
@@ -1553,30 +1549,7 @@ class ApiClient {
     return this.request<T>(endpoint, options)
   }
 
-  // Convenience methods
-  async get<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "GET" })
-  }
 
-  async post<T = any>(endpoint: string, body?: any, options: RequestInit = {}): Promise<T> {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: "POST",
-      body: body ? JSON.stringify(body) : undefined
-    })
-  }
-
-  async put<T = any>(endpoint: string, body?: any, options: RequestInit = {}): Promise<T> {
-    return this.request<T>(endpoint, {
-      ...options,
-      method: "PUT",
-      body: body ? JSON.stringify(body) : undefined
-    })
-  }
-
-  async delete<T = any>(endpoint: string, options: RequestInit = {}): Promise<T> {
-    return this.request<T>(endpoint, { ...options, method: "DELETE" })
-  }
 
   // Stakeholder Management Methods
   async getProjectStakeholders(projectId: string): Promise<{ stakeholders: Stakeholder[]; count: number }> {

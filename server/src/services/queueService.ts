@@ -226,8 +226,8 @@ const extractionQueueOptions = {
     timeout: 2700000, // 45 minutes - accommodate parent orchestration monitoring
   },
   settings: {
-    lockDuration: 30000, // 30s lock
-    stallInterval: 15000, // check for stalls every 15s
+    lockDuration: 300000, // 5 minutes lock - accommodate long AI extractions
+    stallInterval: 30000, // check for stalls every 30s
     maxStalledCount: 3, // allow 3 stalls
   }
 }
@@ -416,7 +416,7 @@ function getQueueServiceInstance(): ReturnType<typeof createQueueService> {
         throw new Error('Database connection pool is not initialized. Ensure connectDatabase() is called before creating QueueService.')
       }
     }
-    
+
     queueServiceInstance = createQueueService(
       new Map<QueueName, Bull.Queue>([
         ['ai-processing', aiQueue],
@@ -495,7 +495,7 @@ export async function getQueueServiceDependencies(): Promise<QueueServiceDepende
     const { connectDatabase } = await import('../database/connection')
     await connectDatabase()
   }
-  
+
   return (await getQueueServiceInstance()).getDependencies();
 }
 
@@ -505,16 +505,16 @@ export async function getQueueServiceDependencies(): Promise<QueueServiceDepende
 // Concurrency of 1 means process one job at a time per worker
 aiQueue.process("ai-generate", 1, async (job) => {
   logger.info(`[WORKER] AI generation worker ${WORKER_ID} picked up job: ${job.id} (jobId in data: ${job.data?.jobId})`)
-  
+
   // Delegate to AIGenerationJobService (extracted in Phase 2 refactoring)
   const { AIGenerationJobService } = await import('./jobs/AIGenerationJobService')
   const deps = await getQueueServiceDependencies()
-  
+
   // Ensure jobId matches - use the jobId from job.data if available, otherwise use Bull's job.id
   const actualJobId = job.data?.jobId || job.id.toString()
-  
+
   logger.info(`[WORKER] Processing AI generation job with ID: ${actualJobId} using worker: ${WORKER_ID}`)
-  
+
   return await AIGenerationJobService.processJob(job, {
     workerId: WORKER_ID,
     updateJobStatus,
@@ -717,7 +717,7 @@ processFlowQueue.process("process-flow", async (job) => {
     await updateStepProgress('Finalizing document...', totalSteps, totalSteps)
 
     // Update job to completed with detailed result
-      await safeUpdate(pool,
+    await safeUpdate(pool,
       `UPDATE jobs 
        SET status = 'completed', 
            result = $1, 

@@ -689,6 +689,8 @@ export class ExtractionOrchestrationService {
 
         let partialSuccessTimeout: NodeJS.Timeout | null = null
         let fullTimeout: NodeJS.Timeout | null = null
+        let currentHeartbeatProgress = 10
+        let lastRealProgress = 10
 
         const cleanup = () => {
           if (checkInterval) {
@@ -814,6 +816,29 @@ export class ExtractionOrchestrationService {
               log.debug(`[EXTRACTION-PARENT] Job ${jobId} progress: ${completed} completed, ${failed} failed out of ${childJobs.length}`)
             }
 
+            const activeEntities = childJobs
+              .map((j, i) => ({ entity: (j.data as any).entityType, state: states[i] }))
+              .filter(s => s.state === 'active')
+              .map(s => s.entity)
+              .slice(0, 3) // Show first 3 active entities
+
+            const activeMessage = activeEntities.length > 0
+              ? `Extracting ${activeEntities.join(', ')}${activeEntities.length < active ? '...' : ''}`
+              : 'Orchestrating extractions...'
+
+            const realProgress = 10 + Math.floor(((completed + failed) / childJobs.length) * 85)
+
+            // Sync heartbeat with real progress if real progress moved forward
+            if (realProgress > lastRealProgress) {
+              lastRealProgress = realProgress
+              currentHeartbeatProgress = Math.max(currentHeartbeatProgress, realProgress)
+            } else {
+              // Otherwise, slowly increment heartbeat progress (max 1% every check)
+              if (currentHeartbeatProgress < 95 && currentHeartbeatProgress < realProgress + 5) {
+                currentHeartbeatProgress += 0.5
+              }
+            }
+
             if (completed + failed === childJobs.length) {
               // All children done - clean up and finalize
               cleanup()
@@ -886,9 +911,26 @@ export class ExtractionOrchestrationService {
                 resolve({ success: true })
               }
             } else {
-              // Update progress based on completed child jobs
-              const progress = 10 + Math.floor((completed / childJobs.length) * 85)
-              await updateJobStatus(jobId, "processing", progress, workerId)
+              // Update progress based on completed child jobs + heartbeat
+              const displayProgress = Math.floor(currentHeartbeatProgress)
+
+              // Only update DB if progress milestone reached or every few cycles to reduce load
+              if (displayProgress > (job as any).lastReportedProgress || now % 9000 < 3000) {
+                await updateJobStatus(jobId, "processing", displayProgress, workerId, "project-data-extraction")
+                  ; (job as any).lastReportedProgress = displayProgress
+              }
+
+              // Always emit WebSocket for real-time feel
+              if (ws) {
+                ws.emit("job:status", {
+                  jobId,
+                  userId: (job.data as any).userId,
+                  progress: displayProgress,
+                  status: "processing",
+                  projectId,
+                  message: `${activeMessage} (${completed}/${childJobs.length} done)`
+                })
+              }
               completedCount = completed
             }
           } catch (error: any) {
@@ -1353,7 +1395,7 @@ export class ExtractionOrchestrationService {
         const { default: TemplateAnalyticsService } = await import('../templateAnalyticsService')
 
         log.info(`[EXTRACTION-PARENT] Rebuilding document purposes for project ${projectId}`)
-        
+
         // Check how many documents have entities before rebuild
         const beforeCheck = await db.query(
           `SELECT COUNT(*) as doc_count,
@@ -1369,9 +1411,9 @@ export class ExtractionOrchestrationService {
           [projectId]
         )
         log.info(`[EXTRACTION-PARENT] Pre-rebuild check: Found entities with source_document_id for project ${projectId}`)
-        
+
         await DocumentPurposeService.rebuildForProject(projectId)
-        
+
         // Verify entity_counts were populated
         const afterCheck = await db.query(
           `SELECT COUNT(*) as total_docs,
@@ -1395,14 +1437,14 @@ export class ExtractionOrchestrationService {
         )
 
         const templateIds = templatesRes.rows.map((row) => row.template_id as string)
-        log.info(`[EXTRACTION-PARENT] Found ${templateIds.length} templates to update:`, 
+        log.info(`[EXTRACTION-PARENT] Found ${templateIds.length} templates to update:`,
           templatesRes.rows.map((r: any) => ({
             templateId: r.template_id,
             totalDocs: r.doc_count,
             docsWithCounts: r.docs_with_counts
           }))
         )
-        
+
         if (templateIds.length > 0) {
           for (const templateId of templateIds) {
             const templateInfo = templatesRes.rows.find((r: any) => r.template_id === templateId)

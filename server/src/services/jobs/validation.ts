@@ -22,14 +22,16 @@ const baseJobDataSchema = Joi.object({
  * AI Generation Job Data Schema
  */
 export const aiGenerationJobDataSchema = baseJobDataSchema.keys({
-  projectId: Joi.string().uuid().required(),
+  projectId: Joi.string().uuid().allow(null).optional(),
   prompt: Joi.string().optional(),
-  provider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'xai', 'mistral', 'groq', 'ollama').optional(),
+  provider: Joi.string().optional(),
   model: Joi.string().allow(null).optional(),
+  fallback_provider: Joi.string().optional(),
+  fallback_model: Joi.string().optional(),
   template_id: Joi.string().uuid().allow(null).optional(),
   max_tokens: Joi.number().integer().min(1).max(100000).optional(),
   variables: Joi.object().unknown(true).optional(),
-  documentId: Joi.string().uuid().optional(),
+  documentId: Joi.string().uuid().allow(null).optional(),
 })
 
 /**
@@ -48,8 +50,10 @@ export const documentConversionJobDataSchema = baseJobDataSchema.keys({
 export const baselineExtractionJobDataSchema = baseJobDataSchema.keys({
   project_id: Joi.string().uuid().required(),
   document_ids: Joi.array().items(Joi.string().uuid()).min(1).required(),
-  ai_provider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'xai', 'mistral', 'groq', 'ollama').optional(),
+  ai_provider: Joi.string().optional(),
   ai_model: Joi.string().optional(),
+  fallback_provider: Joi.string().optional(),
+  fallback_model: Joi.string().optional(),
 })
 
 /**
@@ -57,8 +61,10 @@ export const baselineExtractionJobDataSchema = baseJobDataSchema.keys({
  */
 export const projectDataExtractionJobDataSchema = baseJobDataSchema.keys({
   projectId: Joi.string().uuid().required(),
-  aiProvider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'xai', 'mistral', 'groq', 'ollama').optional(),
+  aiProvider: Joi.string().optional(),
   aiModel: Joi.string().optional(),
+  fallbackProvider: Joi.string().optional(),
+  fallbackModel: Joi.string().optional(),
   documentIds: Joi.array().items(Joi.string().uuid()).optional(),
   domains: Joi.array()
     .items(Joi.string().valid(...PMBOK_DOMAINS))
@@ -86,8 +92,10 @@ export const processFlowJobDataSchema = baseJobDataSchema.keys({
 export const documentRegenerationJobDataSchema = baseJobDataSchema.keys({
   documentId: Joi.string().uuid().required(),
   templateId: Joi.string().uuid().required(),
-  provider: Joi.string().valid('openai', 'google', 'azure', 'anthropic', 'deepseek', 'moonshot', 'xai', 'mistral', 'groq', 'ollama').required(),
+  provider: Joi.string().required(),
   model: Joi.string().required(),
+  fallback_provider: Joi.string().optional(),
+  fallback_model: Joi.string().optional(),
   versionType: Joi.string().valid('major', 'minor', 'patch').required(),
   temperature: Joi.number().min(0).max(2).optional(),
 })
@@ -271,6 +279,10 @@ export function validateJobType(type: string): JobType {
     'quality-audit',
     'pipeline-processing',
   ]
+
+  if (normalizedType.startsWith('extract-entity-')) {
+    return normalizedType as JobType
+  }
 
   if (!validTypes.includes(normalizedType as JobType)) {
     throw new Error(`Invalid job type: ${type}. Valid types are: ${validTypes.join(', ')}`)

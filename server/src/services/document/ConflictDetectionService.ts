@@ -75,7 +75,7 @@ export class ConflictDetectionService {
             // 1. Get template configuration
             const templateResult = await pool.query(
                 `SELECT id, name, conflict_resolution_strategy, governance_level
-         FROM document_templates WHERE id = $1`,
+         FROM templates WHERE id = $1`,
                 [templateId]
             );
 
@@ -183,7 +183,7 @@ export class ConflictDetectionService {
             // Get template details
             const templateResult = await pool.query(
                 `SELECT id, name, conflict_resolution_strategy, governance_level
-         FROM document_templates WHERE id = $1`,
+         FROM templates WHERE id = $1`,
                 [templateId]
             );
 
@@ -276,7 +276,7 @@ export class ConflictDetectionService {
             // 2. Get template and document information
             const templateResult = await client.query(
                 `SELECT id, name, conflict_resolution_strategy, governance_level
-         FROM document_templates WHERE id = $1`,
+         FROM templates WHERE id = $1`,
                 [conflict.template_id]
             );
 

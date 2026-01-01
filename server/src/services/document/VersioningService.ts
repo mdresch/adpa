@@ -48,7 +48,7 @@ export type ConflictResolutionMethod =
 export interface DocumentVersion {
     id: string;
     document_id: string;
-    version_number: number;
+    version: number;
     semantic_version: string;
     change_description: string;
     content: string;
@@ -193,7 +193,7 @@ export class VersioningService {
             const currentVersionResult = await client.query(
                 `SELECT * FROM document_versions
          WHERE document_id = $1
-         ORDER BY version_number DESC
+         ORDER BY version DESC
          LIMIT 1`,
                 [documentId]
             );
@@ -209,7 +209,7 @@ export class VersioningService {
             );
 
             // 3. Calculate next version number
-            const nextVersionNumber = currentVersion ? currentVersion.version_number + 1 : 1;
+            const nextVersionNumber = currentVersion ? currentVersion.version + 1 : 1;
 
             // 4. Generate content hash
             const contentHash = this.generateContentHash(options.content);
@@ -220,7 +220,7 @@ export class VersioningService {
 
             const newVersionResult = await client.query(
                 `INSERT INTO document_versions (
-          id, document_id, version_number, semantic_version, change_description, 
+          id, document_id, version, semantic_version, change_description, 
           content, content_hash, created_by, change_type, parent_version_id, metadata
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *`,
@@ -326,7 +326,7 @@ export class VersioningService {
         const result = await pool.query(
             `SELECT * FROM document_versions
        WHERE document_id = $1
-       ORDER BY version_number DESC
+       ORDER BY version DESC
        LIMIT 1`,
             [documentId]
         );
@@ -345,7 +345,7 @@ export class VersioningService {
         const result = await pool.query(
             `SELECT * FROM document_versions
        WHERE document_id = $1
-       ORDER BY version_number DESC
+       ORDER BY version DESC
        LIMIT $2 OFFSET $3`,
             [documentId, limit, offset]
         );
@@ -419,9 +419,9 @@ export class VersioningService {
                 [
                     newVersionId,
                     documentId,
-                    targetVersion.version_number + 1, // Increment from the rolled back version
+                    targetVersion.version + 1, // Increment from the rolled back version
                     targetVersion.semantic_version, // Keep same semantic version
-                    `Rollback to version ${targetVersion.version_number}: ${notes || 'No notes provided'}`,
+                    `Rollback to version ${targetVersion.version}: ${notes || 'No notes provided'}`,
                     targetVersion.content,
                     targetVersion.content_hash,
                     userId,
@@ -430,7 +430,7 @@ export class VersioningService {
                     {
                         rollbackFrom: targetVersion.id,
                         rollbackReason: notes,
-                        originalVersionNumber: targetVersion.version_number
+                        originalVersionNumber: targetVersion.version
                     }
                 ]
             );
@@ -442,7 +442,7 @@ export class VersioningService {
                 `UPDATE documents
          SET current_version_id = $1, semantic_version = $2, version = $3, updated_at = NOW()
          WHERE id = $4`,
-                [newVersionId, newVersion.semantic_version, newVersion.version_number, documentId]
+                [newVersionId, newVersion.semantic_version, newVersion.version, documentId]
             );
 
             // 4. Create audit trail entry
@@ -471,15 +471,15 @@ export class VersioningService {
                 documentId,
                 versionId: newVersionId,
                 rolledBackFrom: targetVersion.id,
-                rolledBackTo: targetVersion.version_number,
+                rolledBackTo: targetVersion.version,
                 semanticVersion: newVersion.semantic_version,
                 performedBy: userId
             });
 
-            logger.info(`Document rolled back: ${documentId} to version ${targetVersion.version_number}`, {
+            logger.info(`Document rolled back: ${documentId} to version ${targetVersion.version}`, {
                 documentId,
                 rollbackFrom: targetVersion.id,
-                rollbackTo: targetVersion.version_number
+                rollbackTo: targetVersion.version
             });
 
             return newVersion;
@@ -520,14 +520,14 @@ export class VersioningService {
             documentId,
             version1: {
                 id: version1.id,
-                versionNumber: version1.version_number,
+                versionNumber: version1.version,
                 semanticVersion: version1.semantic_version,
                 changeType: version1.change_type,
                 createdAt: version1.created_at
             },
             version2: {
                 id: version2.id,
-                versionNumber: version2.version_number,
+                versionNumber: version2.version,
                 semanticVersion: version2.semantic_version,
                 changeType: version2.change_type,
                 createdAt: version2.created_at

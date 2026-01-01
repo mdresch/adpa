@@ -1488,7 +1488,7 @@ router.post("/project/:projectId",
             '1.0.0',
             contentString,
             req.user?.id,
-            'initial_version',
+            'initial',
             'Initial version - document created',
             generationMetadata ? JSON.stringify(generationMetadata) : null
           ]
@@ -1714,85 +1714,85 @@ router.post("/project/:projectId",
 
               // Auto-publish to Confluence if enabled
               if (settings.confluence_enabled === true && settings.confluence_auto_publish === true) {
-              try {
-                log.info('🔗 [AUTO-INTEGRATION] Auto-publishing document to Confluence', {
-                  documentId: id,
-                  documentName: name,
-                  projectId
-                })
-
-                // Get latest active Confluence integration
-                const integrationResult = await pool.query(
-                  `SELECT * FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
-                )
-
-                if (integrationResult.rows.length > 0) {
-                  const integration = integrationResult.rows[0]
-                  
-                  // Parse configuration (JSONB might be string or object)
-                  const config = typeof integration.configuration === 'string' 
-                    ? JSON.parse(integration.configuration) 
-                    : integration.configuration || {}
-                  
-                  // Decrypt credentials
-                  let credentials: any = {}
-                  try {
-                    if (integration.credentials_encrypted) {
-                      const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
-                      credentials = JSON.parse(decryptedData)
-                    }
-                  } catch (e) {
-                    log.warn('Failed to decrypt Confluence credentials for auto-publish', e)
-                    throw new Error('Invalid credentials')
-                  }
-
-                  const { ConfluenceIntegration } = await import('../integrations/confluence')
-                  const confluenceIntegration = new ConfluenceIntegration(
-                    {
-                      baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
-                      username: credentials.username,
-                      apiToken: credentials.api_token,
-                      cloudId: config.cloud_id || config.cloudId
-                    },
-                    integration.id
-                  )
-
-                  const projectSettings = {
-                    confluence_enabled: settings.confluence_enabled,
-                    confluence_space_key_override: settings.confluence_space_key_override,
-                    confluence_parent_page_id_override: settings.confluence_parent_page_id_override
-                  }
-
-                  confluenceUrl = await confluenceIntegration.uploadDocument({
-                    id: document.id,
-                    title: document.name,
-                    content: document.content,
-                    project_id: projectId,
-                    framework: document.framework,
-                    status: document.status,
-                  }, projectSettings)
-
-                  // Update document with Confluence URL
-                  await pool.query(
-                    `UPDATE documents SET confluence_page_url = $1 WHERE id = $2`,
-                    [confluenceUrl, id]
-                  )
-
-                  log.info('✅ [AUTO-INTEGRATION] Document auto-published to Confluence', {
+                try {
+                  log.info('🔗 [AUTO-INTEGRATION] Auto-publishing document to Confluence', {
                     documentId: id,
-                    confluenceUrl
+                    documentName: name,
+                    projectId
                   })
-                } else {
-                  log.warn('⚠️ [AUTO-INTEGRATION] No active Confluence integration found for auto-publish')
+
+                  // Get latest active Confluence integration
+                  const integrationResult = await pool.query(
+                    `SELECT * FROM integrations WHERE type = 'confluence' AND is_active = true ORDER BY updated_at DESC LIMIT 1`
+                  )
+
+                  if (integrationResult.rows.length > 0) {
+                    const integration = integrationResult.rows[0]
+
+                    // Parse configuration (JSONB might be string or object)
+                    const config = typeof integration.configuration === 'string'
+                      ? JSON.parse(integration.configuration)
+                      : integration.configuration || {}
+
+                    // Decrypt credentials
+                    let credentials: any = {}
+                    try {
+                      if (integration.credentials_encrypted) {
+                        const decryptedData = Buffer.from(integration.credentials_encrypted, "base64").toString("utf-8")
+                        credentials = JSON.parse(decryptedData)
+                      }
+                    } catch (e) {
+                      log.warn('Failed to decrypt Confluence credentials for auto-publish', e)
+                      throw new Error('Invalid credentials')
+                    }
+
+                    const { ConfluenceIntegration } = await import('../integrations/confluence')
+                    const confluenceIntegration = new ConfluenceIntegration(
+                      {
+                        baseUrl: config.base_url || config.baseUrl || credentials.baseUrl,
+                        username: credentials.username,
+                        apiToken: credentials.api_token,
+                        cloudId: config.cloud_id || config.cloudId
+                      },
+                      integration.id
+                    )
+
+                    const projectSettings = {
+                      confluence_enabled: settings.confluence_enabled,
+                      confluence_space_key_override: settings.confluence_space_key_override,
+                      confluence_parent_page_id_override: settings.confluence_parent_page_id_override
+                    }
+
+                    confluenceUrl = await confluenceIntegration.uploadDocument({
+                      id: document.id,
+                      title: document.name,
+                      content: document.content,
+                      project_id: projectId,
+                      framework: document.framework,
+                      status: document.status,
+                    }, projectSettings)
+
+                    // Update document with Confluence URL
+                    await pool.query(
+                      `UPDATE documents SET confluence_page_url = $1 WHERE id = $2`,
+                      [confluenceUrl, id]
+                    )
+
+                    log.info('✅ [AUTO-INTEGRATION] Document auto-published to Confluence', {
+                      documentId: id,
+                      confluenceUrl
+                    })
+                  } else {
+                    log.warn('⚠️ [AUTO-INTEGRATION] No active Confluence integration found for auto-publish')
+                  }
+                } catch (confluenceError: any) {
+                  // Don't fail document creation if auto-publish fails
+                  log.error('❌ [AUTO-INTEGRATION] Failed to auto-publish to Confluence', {
+                    documentId: id,
+                    error: confluenceError.message,
+                    stack: confluenceError.stack
+                  })
                 }
-              } catch (confluenceError: any) {
-                // Don't fail document creation if auto-publish fails
-                log.error('❌ [AUTO-INTEGRATION] Failed to auto-publish to Confluence', {
-                  documentId: id,
-                  error: confluenceError.message,
-                  stack: confluenceError.stack
-                })
-              }
               }
 
               // Auto-create Jira issue if enabled
@@ -1834,9 +1834,9 @@ router.post("/project/:projectId",
                   })
                 }
               }
-              } else {
-                log.debug('ℹ️ [AUTO-INTEGRATION] No project integration settings found, skipping auto-integration')
-              }
+            } else {
+              log.debug('ℹ️ [AUTO-INTEGRATION] No project integration settings found, skipping auto-integration')
+            }
           } catch (integrationError: any) {
             // Don't fail document creation if integration check fails
             log.error('❌ [AUTO-INTEGRATION] Error checking project integration settings', {
@@ -2216,7 +2216,7 @@ router.put("/:id",
       // 🔗 AUTO-INTEGRATION: Trigger Confluence and Jira integration after document update
       const updatedDocument = result.rows[0]
       const projectId = updatedDocument.project_id
-      
+
       setImmediate(() => {
         (async () => {
           try {
@@ -2257,12 +2257,12 @@ router.put("/:id",
 
                   if (integrationResult.rows.length > 0) {
                     const integration = integrationResult.rows[0]
-                    
+
                     // Parse configuration (JSONB might be string or object)
-                    const config = typeof integration.configuration === 'string' 
-                      ? JSON.parse(integration.configuration) 
+                    const config = typeof integration.configuration === 'string'
+                      ? JSON.parse(integration.configuration)
                       : integration.configuration || {}
-                    
+
                     // Decrypt credentials
                     let credentials: any = {}
                     try {
