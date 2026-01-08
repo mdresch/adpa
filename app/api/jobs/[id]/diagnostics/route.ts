@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server'
 import { Client } from 'pg'
-import Queue from 'bull'
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   const id = params.id
   const DATABASE_URL = process.env.DATABASE_URL
-  const REDIS_URL = process.env.REDIS_URL || process.env.REDIS
 
   if (!DATABASE_URL) {
     return NextResponse.json({ error: 'DATABASE_URL not configured' }, { status: 500 })
@@ -20,36 +18,25 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const data = typeof job.data === 'string' ? JSON.parse(job.data || '{}') : job.data || {}
     const childIds: string[] = data.childJobIds || data.childJobs || []
 
-    const results: Array<any> = []
+    // Note: This endpoint previously checked child job status in Redis/Bull queues.
+    // The system now uses RabbitMQ for queue management.
+    // Child job status should be checked via the database jobs table or RabbitMQ management UI.
+    
+    const results: Array<any> = childIds.map(cid => ({
+      id: cid,
+      note: 'Queue system migrated to RabbitMQ. Check database jobs table or RabbitMQ UI for status.'
+    }))
 
-    if (!REDIS_URL) {
-      // Return basic info only if no Redis configured
-      for (const cid of childIds) {
-        results.push({ id: cid, found: false, reason: 'no_redis' })
-      }
-      return NextResponse.json({ job: { id: job.id, type: job.type, status: job.status }, children: results })
-    }
-
-    const queue = new Queue('project-data-extraction', REDIS_URL)
-    for (const cid of childIds) {
-      let found = false
-      let state: string | null = null
-      try {
-        // try as string id first, then numeric
-        let qjob = await queue.getJob(cid)
-        if (!qjob && /^\d+$/.test(cid)) qjob = await queue.getJob(Number(cid))
-        if (qjob) {
-          found = true
-          try { state = await qjob.getState() } catch (e) { state = 'unknown' }
-        }
-      } catch (e) {
-        // ignore per-child failures
-      }
-      results.push({ id: cid, found, state, legacyNumeric: /^\d+$/.test(cid) })
-    }
-    await queue.close()
-
-    return NextResponse.json({ job: { id: job.id, type: job.type, status: job.status }, children: results })
+    return NextResponse.json({ 
+      job: { 
+        id: job.id, 
+        type: job.type, 
+        status: job.status,
+        worker_id: job.worker_id,
+        worker_process_id: job.worker_process_id
+      }, 
+      children: results 
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || String(e) }, { status: 500 })
   } finally {
