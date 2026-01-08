@@ -202,7 +202,11 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
           const backoffType = headers.backoffType ?? 'exponential'
 
           if (!payload || !jobType) {
-            channel.ack(msg)
+            try {
+              channel.ack(msg)
+            } catch (ackErr) {
+              console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+            }
             return
           }
 
@@ -211,26 +215,38 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
 
           const runHandler = this.handlers.get(jobType)
           if (!runHandler) {
-            channel.ack(msg)
+            try {
+              channel.ack(msg)
+            } catch (ackErr) {
+              console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+            }
             return
           }
 
           try {
             await runHandler(queueJob as any)
-            channel.ack(msg)
+            try {
+              channel.ack(msg)
+            } catch (ackErr) {
+              console.error('[RABBIT] Failed to ack message (channel closed):', ackErr)
+            }
             this.emit('completed', queueJob)
           } catch (err) {
             const nextAttempt = attemptsUsed + 1
             if (nextAttempt >= maxAttempts) {
               // Send to DLQ
-              await this.channel.sendToQueue(this.getDlqName(), payload, {
-                persistent: true,
-                headers: {
-                  ...headers,
-                  attemptsUsed: nextAttempt,
-                },
-              } as Options.Publish)
-              channel.ack(msg)
+              try {
+                await this.channel.sendToQueue(this.getDlqName(), payload, {
+                  persistent: true,
+                  headers: {
+                    ...headers,
+                    attemptsUsed: nextAttempt,
+                  },
+                } as Options.Publish)
+                channel.ack(msg)
+              } catch (dlqErr) {
+                console.error('[RABBIT] Failed to send to DLQ or ack (channel closed):', dlqErr)
+              }
               this.emit('failed', queueJob, err)
               return
             }
@@ -240,16 +256,20 @@ export class RabbitQueueAdapter extends EventEmitter implements IQueue {
               ? backoffDelay * Math.pow(2, attemptsUsed)
               : backoffDelay
 
-            await this.ensureDelayQueue(nextDelay)
-            await this.channel.sendToQueue(this.getDelayQueueName(nextDelay), payload, {
-              persistent: true,
-              headers: {
-                ...headers,
-                attemptsUsed: nextAttempt,
-                backoffDelay: nextDelay,
-              },
-            } as Options.Publish)
-            channel.ack(msg)
+            try {
+              await this.ensureDelayQueue(nextDelay)
+              await this.channel.sendToQueue(this.getDelayQueueName(nextDelay), payload, {
+                persistent: true,
+                headers: {
+                  ...headers,
+                  attemptsUsed: nextAttempt,
+                  backoffDelay: nextDelay,
+                },
+              } as Options.Publish)
+              channel.ack(msg)
+            } catch (retryErr) {
+              console.error('[RABBIT] Failed to requeue or ack (channel closed):', retryErr)
+            }
             this.emit('failed', queueJob, err)
           }
         })

@@ -4196,6 +4196,20 @@ Output valid JSON object with "performance_actuals" array only.`
       return trimmed
     }
 
+    // Handle YYYY-MM format (year-month without day, e.g., "2025-11" -> "2025-11-01")
+    const yearMonthMatch = trimmed.match(/^(\d{4})-(\d{2})$/)
+    if (yearMonthMatch) {
+      const [, year, month] = yearMonthMatch
+      const monthNum = parseInt(month, 10)
+      if (monthNum >= 1 && monthNum <= 12) {
+        const result = `${year}-${month}-01`
+        logger.info(`[EXTRACTION] Converted year-month date "${value}" to ${result}`)
+        if (isValidDate(result)) {
+          return result
+        }
+      }
+    }
+
     // Try quarter date conversion (only for actual quarter strings)
     const quarterDate = convertQuarterDate(trimmed)
     if (quarterDate) {

@@ -158,7 +158,7 @@ export const schemas = {
   
   // AI schemas
   aiGenerate: Joi.object({
-    prompt: Joi.string().min(10).max(50000).required(),  // Support very comprehensive prompts
+    prompt: Joi.string().min(10).max(200000).required(),  // Increased for large document extraction (200K chars)
     provider: Joi.string().required(),  // Allow any provider name - AI Gateway handles validation
     model: Joi.string().optional(),
     temperature: Joi.number().min(0).max(2).default(0.7),

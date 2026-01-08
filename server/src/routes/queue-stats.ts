@@ -213,18 +213,12 @@ router.get("/workers", authenticateToken, async (req, res) => {
       if (hb) {
         w.cpu = Math.round(hb.cpu_usage_percent)
         w.memory = Math.round(hb.memory_usage_mb)
-        // If it hasn't beaten in 30 seconds, mark as degraded
-        const heartbeatAge = (Date.now() - new Date(hb.last_heartbeat).getTime()) / 1000
-        if (heartbeatAge > 30) {
-          w.health = 'degraded'
-          w.status = 'stale'
-        }
+        w.lastHeartbeat = hb.last_heartbeat
       } else {
         // Fallback for workers without recent heartbeat
         w.cpu = 0
         w.memory = 0
-        w.status = 'stale'
-        w.health = 'unhealthy'
+        w.lastHeartbeat = null
       }
     })
 
@@ -247,7 +241,7 @@ router.get("/workers", authenticateToken, async (req, res) => {
         return {
           id: hb.worker_id,
           name: hb.worker_id,
-          processId: hb.worker_process_id, // This column is missing in my manual select, but in my heartbeat table it exists
+          processId: hb.worker_process_id,
           status: 'idle',
           queue: hb.queue_name || 'unknown',
           currentJob: null,
@@ -260,7 +254,7 @@ router.get("/workers", authenticateToken, async (req, res) => {
           memory: Math.round(hb.memory_usage_mb),
           health: 'healthy',
           currentTasks: [],
-          lastSeen: hb.last_heartbeat
+          lastHeartbeat: hb.last_heartbeat
         }
       })
 
